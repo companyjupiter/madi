@@ -1,0 +1,267 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// Flash Cross-Attention for decoder (M=1 query)
+// Grid: NH blocks (20). Block: 256 threads.
+// Q=[1,head_dim], K=[1500,D], V=[1500,D], head_dim=64
+// Phase 1: score[t] = dot(Q[h*hd..], K[t*D + kvh*hd..]) / sqrt(hd)
+//   - 256 threads split 1500 positions, each does 64-dim dot
+// Phase 2: online softmax (max -> exp -> sum -> normalize)
+// Phase 3: out[d] = sum_t( score[t] * V[t*D + kvh*hd + d] )
+//   - 256 threads split head_dim=64, each sums over 1500 positions
+//   - BUT 64 < 256, so we use 64 threads and idle rest
+//   OR: split 1500 positions across threads and reduce per d
+
+.visible .entry flash_cross_attn(
+    .param .u64 p_out,
+    .param .u64 p_q,
+    .param .u64 p_kc,
+    .param .u64 p_vc,
+    .param .u64 p_pos_ptr,
+    .param .u32 p_hdd,
+    .param .u32 p_kvd,
+    .param .u32 p_nkv,
+    .param .u32 p_nh
+)
+{
+    .reg .b64 %ro, %rq, %rkc, %rvc, %rpos, %a64, %b64, %off;
+    .reg .b32 %pos, %hdd, %kvd, %nkv, %nh, %h, %kvh, %lt, %t, %d, %r0, %r1, %seqlen;
+    .reg .f32 %sum, %qv, %kv, %sc, %mx, %ex, %inv, %rsq, %fhdd, %tmp;
+    .reg .f32 %local_max, %local_sum, %shfl, %v;
+    .reg .pred %p0, %p1;
+    .shared .align 4 .f32 scores[1504];
+    .shared .align 4 .f32 s_max[8];
+    .shared .align 4 .f32 s_sum[8];
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %rq, [p_q];
+    ld.param.u64 %rkc, [p_kc];
+    ld.param.u64 %rvc, [p_vc];
+    ld.param.u64 %rpos, [p_pos_ptr];
+    ld.global.u32 %pos, [%rpos];
+    ld.param.u32 %hdd, [p_hdd];
+    ld.param.u32 %kvd, [p_kvd];
+    ld.param.u32 %nkv, [p_nkv];
+    ld.param.u32 %nh,  [p_nh];
+
+    // Cross-attn: pos >= 1500, seqlen = 1500
+    mov.u32 %seqlen, 1500;
+
+    mov.u32 %h, %ctaid.x;
+    mov.u32 %lt, %tid.x;
+
+    mul.lo.u32 %kvh, %h, %nkv;
+    div.u32 %kvh, %kvh, %nh;
+
+    cvt.rn.f32.u32 %fhdd, %hdd;
+    rsqrt.approx.f32 %rsq, %fhdd;
+
+    // Phase 1: Parallel score computation
+    // Each thread handles t = lt, lt+256, lt+512, ...
+    mov.u32 %t, %lt;
+SCR:
+    setp.ge.u32 %p0, %t, %seqlen;
+    @%p0 bra SCR_DONE;
+
+    mov.f32 %sum, 0f00000000;
+    mov.u32 %d, 0;
+DOT:
+    setp.ge.u32 %p1, %d, %hdd;
+    @%p1 bra DOT_END;
+
+    // Q[h*hdd + d]
+    mul.lo.u32 %r0, %h, %hdd;
+    add.u32 %r0, %r0, %d;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rq, %off;
+    ld.global.f32 %qv, [%a64];
+
+    // K[t*kvd + kvh*hdd + d]
+    mul.lo.u32 %r0, %t, %kvd;
+    mul.lo.u32 %r1, %kvh, %hdd;
+    add.u32 %r0, %r0, %r1;
+    add.u32 %r0, %r0, %d;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rkc, %off;
+    ld.global.f32 %kv, [%a64];
+
+    fma.rn.f32 %sum, %qv, %kv, %sum;
+    add.u32 %d, %d, 1;
+    bra DOT;
+
+DOT_END:
+    mul.f32 %sum, %sum, %rsq;
+
+    // Store score to shared
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    st.shared.f32 [%a64], %sum;
+
+    add.u32 %t, %t, 256;
+    bra SCR;
+
+SCR_DONE:
+    bar.sync 0;
+
+    // Phase 2a: Parallel max
+    mov.f32 %local_max, 0fFF800000;
+    mov.u32 %t, %lt;
+PMX:
+    setp.ge.u32 %p0, %t, %seqlen;
+    @%p0 bra PMX_END;
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    ld.shared.f32 %v, [%a64];
+    max.f32 %local_max, %local_max, %v;
+    add.u32 %t, %t, 256;
+    bra PMX;
+PMX_END:
+    // Warp reduction max
+    shfl.sync.bfly.b32 %shfl, %local_max, 16, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_max, 8, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_max, 4, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_max, 2, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_max, 1, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    and.b32 %r0, %lt, 31;
+    setp.ne.u32 %p0, %r0, 0;
+    @%p0 bra SK_MX;
+    shr.u32 %r1, %lt, 5;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off, %r1;
+    mov.u64 %a64, s_max;
+    add.u64 %a64, %a64, %off;
+    st.shared.f32 [%a64], %local_max;
+SK_MX:
+    bar.sync 0;
+    setp.ne.u32 %p0, %lt, 0;
+    @%p0 bra SK_FM;
+    ld.shared.f32 %local_max, [s_max];
+    ld.shared.f32 %shfl, [s_max+4]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+8]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+12]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+16]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+20]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+24]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+28]; max.f32 %local_max, %local_max, %shfl;
+    st.shared.f32 [s_max], %local_max;
+SK_FM:
+    bar.sync 0;
+    ld.shared.f32 %mx, [s_max];
+
+    // Phase 2b: exp + sum
+    mov.f32 %local_sum, 0f00000000;
+    mov.u32 %t, %lt;
+PEX:
+    setp.ge.u32 %p0, %t, %seqlen;
+    @%p0 bra PEX_END;
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    ld.shared.f32 %v, [%a64];
+    sub.f32 %v, %v, %mx;
+    mul.f32 %v, %v, 0f3FB8AA3B;
+    ex2.approx.f32 %v, %v;
+    st.shared.f32 [%a64], %v;
+    add.f32 %local_sum, %local_sum, %v;
+    add.u32 %t, %t, 256;
+    bra PEX;
+PEX_END:
+    shfl.sync.bfly.b32 %shfl, %local_sum, 16, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_sum, 8, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_sum, 4, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_sum, 2, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_sum, 1, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    and.b32 %r0, %lt, 31;
+    setp.ne.u32 %p0, %r0, 0;
+    @%p0 bra SK_SM;
+    shr.u32 %r1, %lt, 5;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off, %r1;
+    mov.u64 %a64, s_sum;
+    add.u64 %a64, %a64, %off;
+    st.shared.f32 [%a64], %local_sum;
+SK_SM:
+    bar.sync 0;
+    setp.ne.u32 %p0, %lt, 0;
+    @%p0 bra SK_FS;
+    ld.shared.f32 %local_sum, [s_sum];
+    ld.shared.f32 %shfl, [s_sum+4]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+8]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+12]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+16]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+20]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+24]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+28]; add.f32 %local_sum, %local_sum, %shfl;
+    st.shared.f32 [s_sum], %local_sum;
+SK_FS:
+    bar.sync 0;
+    ld.shared.f32 %v, [s_sum];
+    rcp.rn.f32 %inv, %v;
+
+    // Phase 2c: normalize scores
+    mov.u32 %t, %lt;
+PNR:
+    setp.ge.u32 %p0, %t, %seqlen;
+    @%p0 bra PNR_END;
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    ld.shared.f32 %v, [%a64];
+    mul.f32 %v, %v, %inv;
+    st.shared.f32 [%a64], %v;
+    add.u32 %t, %t, 256;
+    bra PNR;
+PNR_END:
+    bar.sync 0;
+
+    // Phase 3: weighted sum - parallel over head_dim
+    // Thread d handles out[h*hdd + d] = sum_t score[t] * V[t*kvd + kvh*hdd + d]
+    mov.u32 %d, %lt;
+    setp.ge.u32 %p0, %d, %hdd;
+    @%p0 bra DONE;
+
+    mov.f32 %sum, 0f00000000;
+    mov.u32 %t, 0;
+WST:
+    setp.ge.u32 %p0, %t, %seqlen;
+    @%p0 bra WSS;
+
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    ld.shared.f32 %sc, [%a64];
+
+    mul.lo.u32 %r0, %t, %kvd;
+    mul.lo.u32 %r1, %kvh, %hdd;
+    add.u32 %r0, %r0, %r1;
+    add.u32 %r0, %r0, %d;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rvc, %off;
+    ld.global.f32 %v, [%a64];
+
+    fma.rn.f32 %sum, %v, %sc, %sum;
+    add.u32 %t, %t, 1;
+    bra WST;
+
+WSS:
+    mul.lo.u32 %r0, %h, %hdd;
+    add.u32 %r0, %r0, %d;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %ro, %off;
+    st.global.f32 [%a64], %sum;
+
+DONE:
+    ret;
+}

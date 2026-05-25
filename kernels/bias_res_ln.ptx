@@ -1,0 +1,211 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// bias_res_ln(X, MO, bias, Y, gamma, beta, D, eps)
+// Grid: (rows, 1, 1), Block: (256, 1, 1)
+.visible .entry bias_res_ln(
+    .param .u64 param_x,
+    .param .u64 param_mo,
+    .param .u64 param_bias,
+    .param .u64 param_y,
+    .param .u64 param_gamma,
+    .param .u64 param_beta,
+    .param .u32 param_D,
+    .param .f32 param_eps
+)
+{
+    .reg .b64 %px, %pmo, %pbias, %py, %pg, %pb, %addr, %off;
+    .reg .u32 %D, %tid_v, %ctaid_v, %i, %ntid_v;
+    .reg .f32 %eps, %val, %mean, %var, %inv, %g, %b, %y, %tmp, %df;
+    .reg .pred %p;
+
+    .shared .align 4 .f32 sh_buf[256];
+
+    ld.param.u64 %px,     [param_x];
+    ld.param.u64 %pmo,    [param_mo];
+    ld.param.u64 %pbias,  [param_bias];
+    ld.param.u64 %py,     [param_y];
+    ld.param.u64 %pg,     [param_gamma];
+    ld.param.u64 %pb,     [param_beta];
+    ld.param.u32 %D,      [param_D];
+    ld.param.f32 %eps,    [param_eps];
+
+    mov.u32 %tid_v,   %tid.x;
+    mov.u32 %ctaid_v, %ctaid.x;
+    mov.u32 %ntid_v,  %ntid.x;
+
+    // Row offset for X, MO, Y (D elements each)
+    // row_bytes = ctaid * D * 4 (bytes)
+    .reg .u64 %row_bytes;
+    cvt.u64.u32 %row_bytes, %ctaid_v;
+    cvt.u64.u32 %off, %D;
+    mul.lo.u64 %row_bytes, %row_bytes, %off;
+    shl.b64 %row_bytes, %row_bytes, 2;
+    
+    add.u64 %px, %px, %row_bytes;
+    add.u64 %pmo, %pmo, %row_bytes;
+    add.u64 %py, %py, %row_bytes;
+
+    // Pre-loop: X[i] = X[i] + MO[i] + bias[i]
+    // Note: bias is 1D tensor of D elements, shared across rows, so NO row offset for param_bias
+    mov.u32 %i, %tid_v;
+PRE_LOOP:
+    setp.ge.u32 %p, %i, %D;
+    @%p bra PRE_DONE;
+    
+    mul.wide.u32 %off, %i, 4;
+    
+    // Read MO[i]
+    add.u64 %addr, %pmo, %off;
+    ld.global.f32 %tmp, [%addr];
+    
+    // Read bias[i] (no row offset)
+    add.u64 %addr, %pbias, %off;
+    ld.global.f32 %b, [%addr];
+    
+    // Add bias
+    add.f32 %tmp, %tmp, %b;
+    
+    // Read X[i]
+    add.u64 %addr, %px, %off;
+    ld.global.f32 %val, [%addr];
+    
+    // Residual Add
+    add.f32 %val, %val, %tmp;
+    
+    // Write back to X[i]
+    st.global.f32 [%addr], %val;
+    
+    add.u32 %i, %i, %ntid_v;
+    bra PRE_LOOP;
+PRE_DONE:
+    bar.sync 0;
+
+    // Now proceed with normal layer norm on updated X (%px)
+
+    // Pass 1: sum for mean
+    mov.f32 %mean, 0f00000000;
+    mov.u32 %i, %tid_v;
+MEAN_LOOP:
+    setp.ge.u32 %p, %i, %D;
+    @%p bra MEAN_DONE;
+    mul.wide.u32 %off, %i, 4;
+    add.u64 %addr, %px, %off;
+    ld.global.f32 %val, [%addr];
+    add.f32 %mean, %mean, %val;
+    add.u32 %i, %i, %ntid_v;
+    bra MEAN_LOOP;
+MEAN_DONE:
+    // Warp reduce sum for mean
+    mul.wide.u32 %off, %tid_v, 4;
+    mov.u64 %addr, sh_buf;
+    add.u64 %addr, %addr, %off;
+    st.shared.f32 [%addr], %mean;
+    bar.sync 0;
+
+    // Thread 0 accumulates
+    setp.ne.u32 %p, %tid_v, 0;
+    @%p bra MEAN_REDUCE_DONE;
+    mov.f32 %mean, 0f00000000;
+    mov.u32 %i, 0;
+MEAN_REDUCE_LOOP:
+    setp.ge.u32 %p, %i, %ntid_v;
+    @%p bra MEAN_REDUCE_DONE;
+    mul.wide.u32 %off, %i, 4;
+    mov.u64 %addr, sh_buf;
+    add.u64 %addr, %addr, %off;
+    ld.shared.f32 %tmp, [%addr];
+    add.f32 %mean, %mean, %tmp;
+    add.u32 %i, %i, 1;
+    bra MEAN_REDUCE_LOOP;
+MEAN_REDUCE_DONE:
+    // Broadcast mean via shared[0]
+    setp.ne.u32 %p, %tid_v, 0;
+    @%p bra BCAST_SKIP;
+    cvt.u64.u32 %off, %D;
+    cvt.rn.f32.u32 %df, %D;
+    div.approx.f32 %mean, %mean, %df;
+    mov.u64 %addr, sh_buf;
+    st.shared.f32 [%addr], %mean;
+BCAST_SKIP:
+    bar.sync 0;
+    mov.u64 %addr, sh_buf;
+    ld.shared.f32 %mean, [%addr];
+
+    // Pass 2: variance
+    mov.f32 %var, 0f00000000;
+    mov.u32 %i, %tid_v;
+VAR_LOOP:
+    setp.ge.u32 %p, %i, %D;
+    @%p bra VAR_DONE;
+    mul.wide.u32 %off, %i, 4;
+    add.u64 %addr, %px, %off;
+    ld.global.f32 %val, [%addr];
+    sub.f32 %val, %val, %mean;
+    mul.f32 %val, %val, %val;
+    add.f32 %var, %var, %val;
+    add.u32 %i, %i, %ntid_v;
+    bra VAR_LOOP;
+VAR_DONE:
+    mul.wide.u32 %off, %tid_v, 4;
+    mov.u64 %addr, sh_buf;
+    add.u64 %addr, %addr, %off;
+    st.shared.f32 [%addr], %var;
+    bar.sync 0;
+
+    setp.ne.u32 %p, %tid_v, 0;
+    @%p bra VAR_REDUCE_DONE;
+    mov.f32 %var, 0f00000000;
+    mov.u32 %i, 0;
+VAR_REDUCE_LOOP:
+    setp.ge.u32 %p, %i, %ntid_v;
+    @%p bra VAR_REDUCE_DONE;
+    mul.wide.u32 %off, %i, 4;
+    mov.u64 %addr, sh_buf;
+    add.u64 %addr, %addr, %off;
+    ld.shared.f32 %tmp, [%addr];
+    add.f32 %var, %var, %tmp;
+    add.u32 %i, %i, 1;
+    bra VAR_REDUCE_LOOP;
+VAR_REDUCE_DONE:
+    setp.ne.u32 %p, %tid_v, 0;
+    @%p bra BCAST_VAR_SKIP;
+    cvt.rn.f32.u32 %df, %D;
+    div.approx.f32 %var, %var, %df;
+    add.f32 %var, %var, %eps;
+    sqrt.approx.f32 %inv, %var;
+    rcp.approx.f32 %inv, %inv;
+    mov.u64 %addr, sh_buf;
+    st.shared.f32 [%addr], %inv;
+BCAST_VAR_SKIP:
+    bar.sync 0;
+    mov.u64 %addr, sh_buf;
+    ld.shared.f32 %inv, [%addr];
+
+    // Pass 3: normalize + scale + shift
+    mov.u32 %i, %tid_v;
+NORM_LOOP:
+    setp.ge.u32 %p, %i, %D;
+    @%p bra NORM_DONE;
+    mul.wide.u32 %off, %i, 4;
+    add.u64 %addr, %px, %off;
+    ld.global.f32 %val, [%addr];
+    sub.f32 %val, %val, %mean;
+    mul.f32 %val, %val, %inv;
+
+    add.u64 %addr, %pg, %off;
+    ld.global.f32 %g, [%addr];
+    mul.f32 %val, %val, %g;
+
+    add.u64 %addr, %pb, %off;
+    ld.global.f32 %b, [%addr];
+    add.f32 %y, %val, %b;
+
+    add.u64 %addr, %py, %off;
+    st.global.f32 [%addr], %y;
+    add.u32 %i, %i, %ntid_v;
+    bra NORM_LOOP;
+NORM_DONE:
+    ret;
+}

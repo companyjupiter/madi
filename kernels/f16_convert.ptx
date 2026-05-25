@@ -1,0 +1,154 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// f32_to_f16: Convert N floats from F32 to F16
+// Grid: ceil(N/256), Block: 256
+.visible .entry f32_to_f16(
+    .param .u64 param_dst,   // F16 output
+    .param .u64 param_src,   // F32 input
+    .param .u32 param_N      // number of elements
+)
+{
+    .reg .b64 %pD, %pS, %addr;
+    .reg .u32 %_tid_tmp;
+    .reg .b32 %N, %i, %t;
+    .reg .b64 %off;
+    .reg .f32 %f;
+    .reg .b16 %h;
+    .reg .pred %p;
+
+    ld.param.u64 %pD, [param_dst];
+    ld.param.u64 %pS, [param_src];
+    ld.param.u32 %N, [param_N];
+
+    mov.u32 %i, %ctaid.x;
+    shl.b32 %i, %i, 8;
+    mov.u32 %_tid_tmp, %tid.x;
+    add.u32 %i, %i, %_tid_tmp;
+
+    setp.ge.u32 %p, %i, %N;
+    @%p bra DONE;
+
+    // Load F32
+    shl.b32 %t, %i, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pS, %off;
+    ld.global.f32 %f, [%addr];
+
+    // Convert to F16
+    cvt.rn.f16.f32 %h, %f;
+
+    // Store F16
+    shl.b32 %t, %i, 1;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pD, %off;
+    st.global.b16 [%addr], %h;
+
+DONE:
+    ret;
+}
+
+// f32_to_f16_batch16: Convert D floats and replicate to 16 rows
+// Input: F32[D], Output: F16[16*D] (same row repeated 16 times)
+// Grid: ceil(D/256), Block: 256
+.visible .entry f32_to_f16_batch16(
+    .param .u64 param_dst,   // F16 output [16*D]
+    .param .u64 param_src,   // F32 input [D]
+    .param .u32 param_D      // dimension
+)
+{
+    .reg .b64 %pD, %pS, %addr;
+    .reg .u32 %_tid_tmp;
+    .reg .b32 %D, %i, %t, %r;
+    .reg .b64 %off;
+    .reg .f32 %f;
+    .reg .b16 %h;
+    .reg .pred %p;
+
+    ld.param.u64 %pD, [param_dst];
+    ld.param.u64 %pS, [param_src];
+    ld.param.u32 %D, [param_D];
+
+    mov.u32 %i, %ctaid.x;
+    shl.b32 %i, %i, 8;
+    mov.u32 %_tid_tmp, %tid.x;
+    add.u32 %i, %i, %_tid_tmp;
+
+    setp.ge.u32 %p, %i, %D;
+    @%p bra BDONE;
+
+    // Load F32
+    shl.b32 %t, %i, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pS, %off;
+    ld.global.f32 %f, [%addr];
+    cvt.rn.f16.f32 %h, %f;
+
+    // Replicate to 16 rows: dst[r*D + i] = h
+    mov.u32 %r, 0;
+REP:
+    setp.ge.u32 %p, %r, 16;
+    @%p bra BDONE;
+    mul.lo.u32 %t, %r, %D;
+    add.u32 %t, %t, %i;
+    shl.b32 %t, %t, 1;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pD, %off;
+    st.global.b16 [%addr], %h;
+    add.u32 %r, %r, 1;
+    bra REP;
+
+BDONE:
+    ret;
+}
+
+
+
+
+// f16_to_f32: Convert N floats from F16 to F32
+// Grid: ceil(N/256), Block: 256
+.visible .entry f16_to_f32(
+    .param .u64 param_dst,   // F32 output
+    .param .u64 param_src,   // F16 input
+    .param .u32 param_N      // number of elements
+)
+{
+    .reg .b64 %pD, %pS, %addr;
+    .reg .u32 %_tid_tmp;
+    .reg .b32 %N, %i, %t;
+    .reg .b64 %off;
+    .reg .f32 %f;
+    .reg .b16 %h;
+    .reg .pred %p;
+
+    ld.param.u64 %pD, [param_dst];
+    ld.param.u64 %pS, [param_src];
+    ld.param.u32 %N, [param_N];
+
+    mov.u32 %i, %ctaid.x;
+    shl.b32 %i, %i, 8;
+    mov.u32 %_tid_tmp, %tid.x;
+    add.u32 %i, %i, %_tid_tmp;
+
+    setp.ge.u32 %p, %i, %N;
+    @%p bra CDONE;
+
+    // Load F16
+    shl.b32 %t, %i, 1;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pS, %off;
+    ld.global.b16 %h, [%addr];
+
+    // Convert to F32
+    cvt.f32.f16 %f, %h;
+
+    // Store F32
+    shl.b32 %t, %i, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pD, %off;
+    st.global.f32 [%addr], %f;
+
+CDONE:
+    ret;
+}

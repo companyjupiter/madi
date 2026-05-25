@@ -1,0 +1,323 @@
+// graph_helpers.ptx - GPU-indirect kernels for sync-free CUDA Graph replay
+.version 7.1
+.target sm_86
+.address_size 64
+
+// emb_lookup_indirect: out[tid] = emb_table[tokens[*pos_ptr] * dim + tid]
+.visible .entry emb_lookup_indirect(
+    .param .u64 p_out,
+    .param .u64 p_emb,
+    .param .u64 p_tokens,
+    .param .u64 p_pos_ptr,
+    .param .u32 p_dim
+) {
+    .reg .u64 %rd<12>;
+    .reg .u32 %r<10>;
+    .reg .f32 %f1;
+    .reg .pred %p1;
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    ld.param.u32 %r5, [p_dim];
+    setp.ge.u32 %p1, %r4, %r5;
+    @%p1 bra DONE_EMB;
+
+    ld.param.u64 %rd1, [p_pos_ptr];
+    ld.global.u32 %r6, [%rd1];
+
+    ld.param.u64 %rd2, [p_tokens];
+    mul.wide.u32 %rd3, %r6, 4;
+    add.u64 %rd4, %rd2, %rd3;
+    ld.global.u32 %r7, [%rd4];
+
+    mul.lo.u32 %r8, %r7, %r5;
+    add.u32 %r8, %r8, %r4;
+    ld.param.u64 %rd5, [p_emb];
+    mul.wide.u32 %rd6, %r8, 4;
+    add.u64 %rd7, %rd5, %rd6;
+    ld.global.f32 %f1, [%rd7];
+
+    ld.param.u64 %rd8, [p_out];
+    mul.wide.u32 %rd9, %r4, 4;
+    add.u64 %rd10, %rd8, %rd9;
+    st.global.f32 [%rd10], %f1;
+
+DONE_EMB:
+    ret;
+}
+
+// pos_embed_add_indirect: out[tid] += pos_emb[*pos_ptr * dim + tid]
+.visible .entry pos_embed_add_indirect(
+    .param .u64 p_out,
+    .param .u64 p_pos_emb,
+    .param .u64 p_pos_ptr,
+    .param .u32 p_dim
+) {
+    .reg .u64 %rd<10>;
+    .reg .u32 %r<8>;
+    .reg .f32 %f1, %f2, %f3;
+    .reg .pred %p1;
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    ld.param.u32 %r5, [p_dim];
+    setp.ge.u32 %p1, %r4, %r5;
+    @%p1 bra DONE_PE;
+
+    ld.param.u64 %rd1, [p_pos_ptr];
+    ld.global.u32 %r6, [%rd1];
+
+    mul.lo.u32 %r7, %r6, %r5;
+    add.u32 %r7, %r7, %r4;
+    ld.param.u64 %rd2, [p_pos_emb];
+    mul.wide.u32 %rd3, %r7, 4;
+    add.u64 %rd4, %rd2, %rd3;
+    ld.global.f32 %f1, [%rd4];
+
+    ld.param.u64 %rd5, [p_out];
+    mul.wide.u32 %rd6, %r4, 4;
+    add.u64 %rd7, %rd5, %rd6;
+    ld.global.f32 %f2, [%rd7];
+    add.f32 %f3, %f2, %f1;
+    st.global.f32 [%rd7], %f3;
+
+DONE_PE:
+    ret;
+}
+
+// step_advance: *pos_ptr += 1
+.visible .entry step_advance(
+    .param .u64 p_pos_ptr
+) {
+    .reg .u64 %rd1;
+    .reg .u32 %r1, %r2;
+
+    ld.param.u64 %rd1, [p_pos_ptr];
+    ld.global.u32 %r1, [%rd1];
+    add.u32 %r2, %r1, 1;
+    st.global.u32 [%rd1], %r2;
+    ret;
+}
+
+// argmax_no_inc: argmax over logits, write to tokens[*pos], NO pos increment
+// Grid: 1, Block: 1024
+.visible .entry argmax_no_inc(
+    .param .u64 param_logits,
+    .param .u64 param_tokens,
+    .param .u64 param_seq_len_ptr,
+    .param .u32 param_max_len
+) {
+    .reg .b64 %logits_ptr, %tokens_ptr, %seq_len_ptr;
+    .reg .u32 %max_len, %t_id, %i, %vocab_size;
+    .reg .b64 %off, %addr;
+    .reg .f32 %val, %local_max;
+    .reg .u32 %local_idx;
+    .reg .pred %p;
+
+    .shared .f32 shared_max_vals[1024];
+    .shared .u32 shared_max_idxs[1024];
+
+    ld.param.u64 %logits_ptr, [param_logits];
+    ld.param.u64 %tokens_ptr, [param_tokens];
+    ld.param.u64 %seq_len_ptr, [param_seq_len_ptr];
+    ld.param.u32 %max_len, [param_max_len];
+
+    mov.u32 %t_id, %tid.x;
+    mov.u32 %vocab_size, 51866;
+    mov.f32 %local_max, 0fFF800000;
+    mov.u32 %local_idx, 0;
+    mov.u32 %i, %t_id;
+
+ARGLOOP:
+    setp.ge.u32 %p, %i, %vocab_size;
+    @%p bra ARGLOOP_END;
+    mul.wide.u32 %off, %i, 4;
+    add.u64 %addr, %logits_ptr, %off;
+    ld.global.f32 %val, [%addr];
+    setp.le.f32 %p, %val, %local_max;
+    @%p bra ARGNEXT;
+    mov.f32 %local_max, %val;
+    mov.u32 %local_idx, %i;
+ARGNEXT:
+    add.u32 %i, %i, 1024;
+    bra ARGLOOP;
+ARGLOOP_END:
+
+    // Store to shared
+    mul.wide.u32 %off, %t_id, 4;
+    mov.u64 %addr, shared_max_vals;
+    add.u64 %addr, %addr, %off;
+    st.shared.f32 [%addr], %local_max;
+    mov.u64 %addr, shared_max_idxs;
+    add.u64 %addr, %addr, %off;
+    st.shared.u32 [%addr], %local_idx;
+    bar.sync 0;
+
+    // Reduction
+    .reg .u32 %s, %neighbor;
+    .reg .f32 %v_self, %v_other;
+    .reg .u32 %idx_other;
+    mov.u32 %s, 512;
+AREDUCE:
+    setp.eq.u32 %p, %s, 0;
+    @%p bra AREDUCE_END;
+    setp.ge.u32 %p, %t_id, %s;
+    @%p bra AREDSYNC;
+    add.u32 %neighbor, %t_id, %s;
+
+    mul.wide.u32 %off, %t_id, 4;
+    mov.u64 %addr, shared_max_vals;
+    add.u64 %addr, %addr, %off;
+    ld.shared.f32 %v_self, [%addr];
+
+    mul.wide.u32 %off, %neighbor, 4;
+    mov.u64 %addr, shared_max_vals;
+    add.u64 %addr, %addr, %off;
+    ld.shared.f32 %v_other, [%addr];
+    mov.u64 %addr, shared_max_idxs;
+    add.u64 %addr, %addr, %off;
+    ld.shared.u32 %idx_other, [%addr];
+
+    setp.ge.f32 %p, %v_self, %v_other;
+    @%p bra AREDSYNC;
+
+    mul.wide.u32 %off, %t_id, 4;
+    mov.u64 %addr, shared_max_vals;
+    add.u64 %addr, %addr, %off;
+    st.shared.f32 [%addr], %v_other;
+    mov.u64 %addr, shared_max_idxs;
+    add.u64 %addr, %addr, %off;
+    st.shared.u32 [%addr], %idx_other;
+
+AREDSYNC:
+    bar.sync 0;
+    shr.u32 %s, %s, 1;
+    bra AREDUCE;
+AREDUCE_END:
+
+    // Thread 0: write token to tokens[*pos], NO pos increment
+    setp.ne.u32 %p, %t_id, 0;
+    @%p bra ARGDONE;
+
+    .reg .u32 %current_len, %best_idx;
+    ld.global.u32 %current_len, [%seq_len_ptr];
+    setp.ge.u32 %p, %current_len, %max_len;
+    @%p bra ARGDONE;
+
+    mov.u64 %addr, shared_max_idxs;
+    ld.shared.u32 %best_idx, [%addr];
+
+    mul.wide.u32 %off, %current_len, 4;
+    add.u64 %addr, %tokens_ptr, %off;
+    st.global.u32 [%addr], %best_idx;
+    // NOTE: no pos increment here, handled by step_advance
+
+ARGDONE:
+    ret;
+}
+
+// logit_filter_indirect: same as logit_filter but reads step from GPU pointer
+// Grid: 1, Block: 256
+.visible .entry logit_filter_indirect(
+    .param .u64 param_logits,
+    .param .u64 param_past_tokens,
+    .param .u32 param_num_suppress,
+    .param .u64 param_step_ptr,
+    .param .u32 param_sample_begin
+) {
+    .reg .b64 %logits_ptr, %tokens_ptr, %step_ptr;
+    .reg .u32 %N, %step, %sample_begin, %i, %token_id, %my_tid, %my_ctaid;
+    .reg .b64 %off, %addr;
+    .reg .pred %p;
+    .reg .f32 %min_val;
+
+    ld.param.u64 %logits_ptr, [param_logits];
+    ld.param.u64 %tokens_ptr, [param_past_tokens];
+    ld.param.u32 %N, [param_num_suppress];
+    ld.param.u64 %step_ptr, [param_step_ptr];
+    ld.global.u32 %step, [%step_ptr];
+    ld.param.u32 %sample_begin, [param_sample_begin];
+
+    mov.u32 %my_ctaid, %ctaid.x;
+    mov.u32 %my_tid, %tid.x;
+    mov.u32 %i, %my_ctaid;
+    shl.b32 %i, %i, 8;
+    add.u32 %i, %i, %my_tid;
+
+    mov.f32 %min_val, 0fCF49F2CA;
+
+    // Thread 0: Anti-Loop Logic
+    setp.ne.u32 %p, %i, 0;
+    @%p bra LFI_CHECK_FIRST;
+
+    setp.lt.u32 %p, %step, 3;
+    @%p bra LFI_CHECK_FIRST;
+
+    .reg .u32 %t1, %t2, %t3, %idx;
+
+    sub.u32 %idx, %step, 1;
+    mul.wide.u32 %off, %idx, 4;
+    add.u64 %addr, %tokens_ptr, %off;
+    ld.global.u32 %t1, [%addr];
+
+    sub.u32 %idx, %step, 2;
+    mul.wide.u32 %off, %idx, 4;
+    add.u64 %addr, %tokens_ptr, %off;
+    ld.global.u32 %t2, [%addr];
+
+    sub.u32 %idx, %step, 3;
+    mul.wide.u32 %off, %idx, 4;
+    add.u64 %addr, %tokens_ptr, %off;
+    ld.global.u32 %t3, [%addr];
+
+    setp.ne.u32 %p, %t1, %t2;
+    @%p bra LFI_CHECK_FIRST;
+    setp.ne.u32 %p, %t2, %t3;
+    @%p bra LFI_CHECK_FIRST;
+
+    mul.wide.u32 %off, %t1, 4;
+    add.u64 %addr, %logits_ptr, %off;
+    st.global.f32 [%addr], %min_val;
+
+LFI_CHECK_FIRST:
+    .reg .u32 %spec_tok, %spec_end;
+    mov.u32 %spec_end, 51866;
+    add.u32 %spec_tok, %i, 50258;
+
+LFI_SUPPRESS_LOOP:
+    setp.ge.u32 %p, %spec_tok, %spec_end;
+    @%p bra LFI_SUPPRESS_DONE;
+    mul.wide.u32 %off, %spec_tok, 4;
+    add.u64 %addr, %logits_ptr, %off;
+    st.global.f32 [%addr], %min_val;
+    add.u32 %spec_tok, %spec_tok, 256;
+    bra LFI_SUPPRESS_LOOP;
+
+LFI_SUPPRESS_DONE:
+    .reg .u32 %early_end;
+    add.u32 %early_end, %sample_begin, 4;
+    setp.ge.u32 %p, %step, %early_end;
+    @%p bra LFI_DONE;
+
+    setp.ne.u32 %p, %i, 0;
+    @%p bra LFI_CHECK_EOT;
+    mov.u64 %off, 880;
+    add.u64 %addr, %logits_ptr, %off;
+    st.global.f32 [%addr], %min_val;
+
+LFI_CHECK_EOT:
+    setp.ne.u32 %p, %i, 1;
+    @%p bra LFI_DONE;
+    mov.u64 %off, 201028;
+    add.u64 %addr, %logits_ptr, %off;
+    st.global.f32 [%addr], %min_val;
+
+LFI_DONE:
+    ret;
+}

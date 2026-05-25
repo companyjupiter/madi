@@ -1,0 +1,133 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+.visible .entry flash_attention_enc(
+    .param .u64 p_out,
+    .param .u64 p_q,
+    .param .u64 p_k,
+    .param .u64 p_v,
+    .param .u32 p_seq_len,
+    .param .u32 p_hdd,
+    .param .u32 p_nh
+)
+{
+    .reg .b64 %ro, %rq, %rk, %rv, %a64, %b64, %off0, %off1;
+    .reg .b32 %seq_len, %hdd, %nh, %h, %ltid, %i, %j, %r0, %r1, %tid32;
+    .reg .f32 %qv0, %qv1, %kv0, %kv1, %vv0, %vv1, %scale, %mi, %li, %ov0, %ov1;
+    .reg .f32 %prod, %shfl, %sum, %m_new, %eprev, %ecurr, %eprev_arg, %ecurr_arg, %inv_l;
+    .reg .pred %p_loop_j;
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %rq, [p_q];
+    ld.param.u64 %rk, [p_k];
+    ld.param.u64 %rv, [p_v];
+    ld.param.u32 %seq_len, [p_seq_len];
+    ld.param.u32 %hdd, [p_hdd];
+    ld.param.u32 %nh, [p_nh];
+
+    mov.u32 %h, %ctaid.x;
+    mov.u32 %i, %ctaid.y;
+    mov.u32 %ltid, %tid.x;
+    add.u32 %tid32, %ltid, 32;
+
+    mov.f32 %scale, 0f3E000000;
+
+    // Load Q
+    mul.lo.u32 %r0, %i, %nh;
+    add.u32 %r0, %r0, %h;
+    mul.lo.u32 %r0, %r0, %hdd;
+    add.u32 %r1, %r0, %ltid;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off0, %r1;
+    add.u64 %a64, %rq, %off0;
+    ld.global.f32 %qv0, [%a64];
+
+    add.u32 %r1, %r0, %tid32;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off1, %r1;
+    add.u64 %a64, %rq, %off1;
+    ld.global.f32 %qv1, [%a64];
+
+    mov.f32 %mi, 0fFF800000;
+    mov.f32 %li, 0f00000000;
+    mov.f32 %ov0, 0f00000000;
+    mov.f32 %ov1, 0f00000000;
+
+    mov.u32 %j, 0;
+
+LOOP_J:
+    setp.ge.u32 %p_loop_j, %j, %seq_len;
+    @%p_loop_j bra END_J;
+
+    mul.lo.u32 %r0, %j, %nh;
+    add.u32 %r0, %r0, %h;
+    mul.lo.u32 %r0, %r0, %hdd;
+    add.u32 %r1, %r0, %ltid;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off0, %r1;
+    add.u64 %a64, %rk, %off0;
+    ld.global.f32 %kv0, [%a64];
+
+    add.u32 %r1, %r0, %tid32;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off1, %r1;
+    add.u64 %a64, %rk, %off1;
+    ld.global.f32 %kv1, [%a64];
+
+    mul.rn.f32 %prod, %qv0, %kv0;
+    fma.rn.f32 %prod, %qv1, %kv1, %prod;
+
+    shfl.sync.bfly.b32 %shfl, %prod, 16, 31, 0xffffffff; add.rn.f32 %prod, %prod, %shfl;
+    shfl.sync.bfly.b32 %shfl, %prod, 8, 31, 0xffffffff;  add.rn.f32 %prod, %prod, %shfl;
+    shfl.sync.bfly.b32 %shfl, %prod, 4, 31, 0xffffffff;  add.rn.f32 %prod, %prod, %shfl;
+    shfl.sync.bfly.b32 %shfl, %prod, 2, 31, 0xffffffff;  add.rn.f32 %prod, %prod, %shfl;
+    shfl.sync.bfly.b32 %shfl, %prod, 1, 31, 0xffffffff;  add.rn.f32 %prod, %prod, %shfl;
+
+    mul.rn.f32 %sum, %prod, %scale;
+
+    max.f32 %m_new, %mi, %sum;
+    sub.rn.f32 %eprev_arg, %mi, %m_new;
+    mul.rn.f32 %eprev_arg, %eprev_arg, 0f3FB8AA3B;
+    ex2.approx.f32 %eprev, %eprev_arg;
+    sub.rn.f32 %ecurr_arg, %sum, %m_new;
+    mul.rn.f32 %ecurr_arg, %ecurr_arg, 0f3FB8AA3B;
+    ex2.approx.f32 %ecurr, %ecurr_arg;
+    mul.rn.f32 %li, %li, %eprev;
+    add.rn.f32 %li, %li, %ecurr;
+
+    add.u64 %a64, %rv, %off0;
+    ld.global.f32 %vv0, [%a64];
+    add.u64 %a64, %rv, %off1;
+    ld.global.f32 %vv1, [%a64];
+    mul.rn.f32 %ov0, %ov0, %eprev;
+    fma.rn.f32 %ov0, %vv0, %ecurr, %ov0;
+    mul.rn.f32 %ov1, %ov1, %eprev;
+    fma.rn.f32 %ov1, %vv1, %ecurr, %ov1;
+
+    mov.f32 %mi, %m_new;
+    add.u32 %j, %j, 1;
+    bra LOOP_J;
+
+END_J:
+    rcp.approx.f32 %inv_l, %li;
+    mul.rn.f32 %ov0, %ov0, %inv_l;
+    mul.rn.f32 %ov1, %ov1, %inv_l;
+
+    mul.lo.u32 %r0, %i, %nh;
+    add.u32 %r0, %r0, %h;
+    mul.lo.u32 %r0, %r0, %hdd;
+    add.u32 %r1, %r0, %ltid;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off0, %r1;
+    add.u64 %a64, %ro, %off0;
+    st.global.f32 [%a64], %ov0;
+
+    add.u32 %r1, %r0, %tid32;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off1, %r1;
+    add.u64 %a64, %ro, %off1;
+    st.global.f32 [%a64], %ov1;
+
+    ret;
+}

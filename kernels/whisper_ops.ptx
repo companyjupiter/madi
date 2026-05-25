@@ -1,0 +1,305 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// Logit Filter: logits[suppress_tokens[idx]] = -1e9f
+// Grid: ceil(num_suppress/256), Block: 256
+.visible .entry logit_filter(
+    .param .u64 param_logits,
+    .param .u64 param_suppress_tokens,
+    .param .u32 param_num_suppress,
+    .param .u32 param_step,
+    .param .u32 param_sample_begin
+)
+{
+    .reg .b64 %logits_ptr, %suppress_ptr;
+    .reg .u32 %N, %step, %sample_begin, %i, %token_id, %my_tid, %my_ctaid;
+    .reg .b64 %off, %addr;
+    .reg .pred %p;
+    .reg .f32 %min_val;
+
+    ld.param.u64 %logits_ptr, [param_logits];
+    ld.param.u64 %suppress_ptr, [param_suppress_tokens];
+    ld.param.u32 %N, [param_num_suppress];
+    ld.param.u32 %step, [param_step];
+    ld.param.u32 %sample_begin, [param_sample_begin];
+
+    mov.u32 %my_ctaid, %ctaid.x;
+    mov.u32 %my_tid, %tid.x;
+    mov.u32 %i, %my_ctaid;
+    shl.b32 %i, %i, 8; // * 256
+    add.u32 %i, %i, %my_tid;
+
+    mov.f32 %min_val, 0fCF49F2CA; // -3.4e38 approx (-inf)
+
+    setp.ge.u32 %p, %i, %N;
+    @%p bra CHECK_FIRST_STEP;
+
+    // Load token_id = suppress_tokens[i]
+    mul.wide.u32 %off, %i, 4;
+    add.u64 %addr, %suppress_ptr, %off;
+    ld.global.u32 %token_id, [%addr];
+
+    // logits[token_id] = -inf
+    mul.wide.u32 %off, %token_id, 4;
+    add.u64 %addr, %logits_ptr, %off;
+    st.global.f32 [%addr], %min_val;
+
+CHECK_FIRST_STEP:
+    setp.ne.u32 %p, %step, %sample_begin;
+    @%p bra DONE;
+
+    // First step blank suppression
+    // Thread 0: space (220), Thread 1: EOT (50257)
+    setp.ne.u32 %p, %i, 0;
+    @%p bra CHECK_EOT;
+    
+    mov.u64 %off, 880; // 220 * 4
+    add.u64 %addr, %logits_ptr, %off;
+    st.global.f32 [%addr], %min_val;
+
+CHECK_EOT:
+    setp.ne.u32 %p, %i, 1;
+    @%p bra DONE;
+    
+    mov.u64 %off, 201028; // 50257 * 4
+    add.u64 %addr, %logits_ptr, %off;
+    st.global.f32 [%addr], %min_val;
+
+DONE:
+    ret;
+}
+
+// Argmax and Append: find max in logits, append to tokens, update seq_len
+// Grid: 1, Block: 1024
+.visible .entry argmax_append(
+    .param .u64 param_logits,
+    .param .u64 param_tokens,
+    .param .u64 param_seq_len_ptr,
+    .param .u32 param_max_len
+)
+{
+    .reg .b64 %logits_ptr, %tokens_ptr, %seq_len_ptr;
+    .reg .u32 %max_len, %t_id, %i, %vocab_size, %my_tid;
+    .reg .b64 %off, %addr;
+    .reg .f32 %val, %local_max;
+    .reg .u32 %local_idx;
+    .reg .pred %p;
+
+    .shared .f32 shared_max_vals[1024];
+    .shared .u32 shared_max_idxs[1024];
+
+    ld.param.u64 %logits_ptr, [param_logits];
+    ld.param.u64 %tokens_ptr, [param_tokens];
+    ld.param.u64 %seq_len_ptr, [param_seq_len_ptr];
+    ld.param.u32 %max_len, [param_max_len];
+
+    mov.u32 %my_tid, %tid.x;
+    mov.u32 %t_id, %my_tid;
+    mov.u32 %vocab_size, 51866;
+    mov.f32 %local_max, 0fFF800000; // -inf
+    mov.u32 %local_idx, 0;
+
+    mov.u32 %i, %t_id;
+
+LOOP_START:
+    setp.ge.u32 %p, %i, %vocab_size;
+    @%p bra LOOP_END;
+
+    mul.wide.u32 %off, %i, 4;
+    add.u64 %addr, %logits_ptr, %off;
+    ld.global.f32 %val, [%addr];
+
+    setp.le.f32 %p, %val, %local_max;
+    @%p bra LOOP_NEXT;
+
+    mov.f32 %local_max, %val;
+    mov.u32 %local_idx, %i;
+
+LOOP_NEXT:
+    add.u32 %i, %i, 1024;
+    bra LOOP_START;
+
+LOOP_END:
+    // Store to shared
+    mul.wide.u32 %off, %t_id, 4;
+    mov.u64 %addr, shared_max_vals;
+    add.u64 %addr, %addr, %off;
+    st.shared.f32 [%addr], %local_max;
+
+    mov.u64 %addr, shared_max_idxs;
+    add.u64 %addr, %addr, %off;
+    st.shared.u32 [%addr], %local_idx;
+
+    bar.sync 0;
+
+    // Reduction
+    .reg .u32 %s;
+    mov.u32 %s, 512;
+REDUCE_LOOP:
+    setp.eq.u32 %p, %s, 0;
+    @%p bra REDUCE_END;
+
+    setp.ge.u32 %p, %t_id, %s;
+    @%p bra REDUCE_SYNC;
+
+    .reg .u32 %neighbor;
+    add.u32 %neighbor, %t_id, %s;
+
+    .reg .f32 %v_self, %v_other;
+    .reg .u32 %idx_self, %idx_other;
+
+    mul.wide.u32 %off, %t_id, 4;
+    mov.u64 %addr, shared_max_vals;
+    add.u64 %addr, %addr, %off;
+    ld.shared.f32 %v_self, [%addr];
+
+    mov.u64 %addr, shared_max_idxs;
+    add.u64 %addr, %addr, %off;
+    ld.shared.u32 %idx_self, [%addr];
+
+    mul.wide.u32 %off, %neighbor, 4;
+    mov.u64 %addr, shared_max_vals;
+    add.u64 %addr, %addr, %off;
+    ld.shared.f32 %v_other, [%addr];
+
+    mov.u64 %addr, shared_max_idxs;
+    add.u64 %addr, %addr, %off;
+    ld.shared.u32 %idx_other, [%addr];
+
+    setp.ge.f32 %p, %v_self, %v_other;
+    @%p bra REDUCE_SYNC;
+
+    // self < other -> swap
+    mul.wide.u32 %off, %t_id, 4;
+    mov.u64 %addr, shared_max_vals;
+    add.u64 %addr, %addr, %off;
+    st.shared.f32 [%addr], %v_other;
+
+    mov.u64 %addr, shared_max_idxs;
+    add.u64 %addr, %addr, %off;
+    st.shared.u32 [%addr], %idx_other;
+
+REDUCE_SYNC:
+    bar.sync 0;
+    shr.u32 %s, %s, 1;
+    bra REDUCE_LOOP;
+
+REDUCE_END:
+    // Thread 0 appends to sequence
+    setp.ne.u32 %p, %t_id, 0;
+    @%p bra DONE2;
+
+    .reg .u32 %current_len, %best_idx;
+    ld.global.u32 %current_len, [%seq_len_ptr];
+
+    setp.ge.u32 %p, %current_len, %max_len;
+    @%p bra DONE2;
+
+    mov.u64 %addr, shared_max_idxs;
+    ld.shared.u32 %best_idx, [%addr];
+
+    mul.wide.u32 %off, %current_len, 4;
+    add.u64 %addr, %tokens_ptr, %off;
+    st.global.u32 [%addr], %best_idx;
+
+    add.u32 %current_len, %current_len, 1;
+    st.global.u32 [%seq_len_ptr], %current_len;
+
+DONE2:
+    ret;
+}
+
+// Causal Mask: scores[b, h, i, j] = -inf if j > i
+// Grid: (SEQ, SEQ, NH), Block: 256
+.visible .entry add_causal_mask(
+    .param .u64 param_scores,
+    .param .u32 param_seq_len,
+    .param .u32 param_NH
+)
+{
+    .reg .b64 %scores_ptr, %addr;
+    .reg .u32 %seq_len, %NH, %h, %i, %j, %idx, %my_tid, %my_ctaid;
+    .reg .pred %p;
+    .reg .f32 %min_val;
+    .reg .b64 %off;
+
+    ld.param.u64 %scores_ptr, [param_scores];
+    ld.param.u32 %seq_len, [param_seq_len];
+    ld.param.u32 %NH, [param_NH];
+
+    mov.u32 %my_ctaid, %ctaid.x;
+    mov.u32 %my_tid, %tid.x;
+
+    mov.u32 %idx, %my_ctaid;
+    shl.b32 %idx, %idx, 8;
+    add.u32 %idx, %idx, %my_tid;
+
+    .reg .u32 %total;
+    mul.lo.u32 %total, %seq_len, %seq_len;
+    mul.lo.u32 %total, %total, %NH;
+
+    setp.ge.u32 %p, %idx, %total;
+    @%p bra MASK_DONE;
+
+    // Decode idx -> h, i, j
+    .reg .u32 %tmp;
+    rem.u32 %j, %idx, %seq_len;
+    div.u32 %tmp, %idx, %seq_len;
+    rem.u32 %i, %tmp, %seq_len;
+
+    setp.le.u32 %p, %j, %i;
+    @%p bra MASK_DONE;
+
+    // Apply mask (-inf)
+    mov.f32 %min_val, 0fCF49F2CA; // -3.4e38 approx (-inf)
+    mul.wide.u32 %off, %idx, 4;
+    add.u64 %addr, %scores_ptr, %off;
+    st.global.f32 [%addr], %min_val;
+
+MASK_DONE:
+    ret;
+}
+
+.visible .entry gpu_kv_store(
+	.param .u64 cache,
+	.param .u64 src,
+	.param .u32 kvd,
+	.param .u64 pos_ptr
+)
+{
+	.reg .pred 	%p<2>;
+	.reg .u64 	%rd<10>;
+	.reg .u32 	%r<10>;
+	.reg .f32 	%f<2>;
+
+	ld.param.u64 	%rd1, [cache];
+	ld.param.u64 	%rd2, [src];
+	ld.param.u32 	%r1, [kvd];
+	ld.param.u64 	%rd3, [pos_ptr];
+
+	mov.u32 	%r2, %ctaid.x;
+	mov.u32 	%r3, %ntid.x;
+	mov.u32 	%r4, %tid.x;
+	mad.lo.s32 	%r5, %r2, %r3, %r4;
+
+	setp.ge.u32 	%p1, %r5, %r1;
+	@%p1 bra 	END;
+
+	ld.global.u32 	%r6, [%rd3]; // pos
+
+	// cache index = pos * kvd + idx
+	mad.lo.s32 	%r7, %r6, %r1, %r5;
+	
+	mul.wide.u32 	%rd4, %r5, 4;
+	add.s64 	%rd5, %rd2, %rd4; // src + idx
+	
+	mul.wide.u32 	%rd6, %r7, 4;
+	add.s64 	%rd7, %rd1, %rd6; // cache + (pos*kvd+idx)
+
+	ld.global.f32 	%f1, [%rd5];
+	st.global.f32 	[%rd7], %f1;
+
+END:
+	ret;
+}

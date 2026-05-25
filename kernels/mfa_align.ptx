@@ -1,0 +1,288 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// extract_ca_head: extract ONE specific head's cross-attention
+// param_step_ptr: GPU pointer to current step (for CUDA Graph compat)
+.visible .entry extract_ca_head(
+    .param .u64 param_q,
+    .param .u64 param_k,
+    .param .u64 param_out,
+    .param .u64 param_step_ptr,
+    .param .u32 param_head,
+    .param .f32 param_inv_n
+)
+{
+    .shared .align 4 .f32 s_scores[1500];
+    .shared .align 4 .f32 s_reduce[256];
+
+    .reg .u32 %tidv, %headv, %tv, %dv, %off32, %stepv, %out_off, %rdv;
+    .reg .u64 %q_base, %k_base, %out_base, %addr, %off64, %saddr, %step_ptr;
+    .reg .f32 %dot, %qv, %kv, %score, %max_val, %sum_val, %exp_val, %inv, %result, %inv_n;
+    .reg .pred %p0, %p1;
+
+    ld.param.u64 %q_base, [param_q];
+    ld.param.u64 %k_base, [param_k];
+    ld.param.u64 %out_base, [param_out];
+    ld.param.u64 %step_ptr, [param_step_ptr];
+    ld.global.u32 %stepv, [%step_ptr];
+    ld.param.u32 %headv, [param_head];
+    ld.param.f32 %inv_n, [param_inv_n];
+    mov.u32 %tidv, %tid.x;
+
+    // Phase 1: dot(Q[head], K[t][head]) for each encoder position t
+    mov.f32 %max_val, 0fC7800000;
+    mov.u32 %tv, %tidv;
+LP_DOT:
+    setp.ge.u32 %p0, %tv, 1500;
+    @%p0 bra LP_DOT_END;
+    mov.f32 %dot, 0f00000000;
+    mov.u32 %dv, 0;
+LP_DIM:
+    setp.ge.u32 %p1, %dv, 64;
+    @%p1 bra LP_DIM_END;
+    // Q[head*64 + d]
+    mad.lo.u32 %off32, %headv, 64, %dv;
+    mul.wide.u32 %off64, %off32, 4;
+    add.u64 %addr, %q_base, %off64;
+    ld.global.f32 %qv, [%addr];
+    // K[t*1280 + head*64 + d]
+    mad.lo.u32 %off32, %tv, 1280, 0;
+    mad.lo.u32 %off32, %headv, 64, %off32;
+    add.u32 %off32, %off32, %dv;
+    mul.wide.u32 %off64, %off32, 4;
+    add.u64 %addr, %k_base, %off64;
+    ld.global.f32 %kv, [%addr];
+    fma.rn.f32 %dot, %qv, %kv, %dot;
+    add.u32 %dv, %dv, 1;
+    bra LP_DIM;
+LP_DIM_END:
+    // Q already scaled by kScale, no extra scaling needed
+    mul.wide.u32 %off64, %tv, 4;
+    mov.u64 %saddr, s_scores;
+    add.u64 %addr, %saddr, %off64;
+    st.shared.f32 [%addr], %dot;
+    max.f32 %max_val, %max_val, %dot;
+    add.u32 %tv, %tv, 256;
+    bra LP_DOT;
+LP_DOT_END:
+
+    // Phase 2: reduce max across threads
+    mul.wide.u32 %off64, %tidv, 4;
+    mov.u64 %saddr, s_reduce;
+    add.u64 %addr, %saddr, %off64;
+    st.shared.f32 [%addr], %max_val;
+    bar.sync 0;
+    mov.u32 %rdv, 128;
+LP_RMAX:
+    setp.eq.u32 %p0, %rdv, 0;
+    @%p0 bra LP_RMAX_END;
+    setp.ge.u32 %p1, %tidv, %rdv;
+    @%p1 bra LP_SMAX;
+    mul.wide.u32 %off64, %tidv, 4;
+    mov.u64 %saddr, s_reduce;
+    add.u64 %addr, %saddr, %off64;
+    ld.shared.f32 %qv, [%addr];
+    add.u32 %off32, %tidv, %rdv;
+    mul.wide.u32 %off64, %off32, 4;
+    mov.u64 %saddr, s_reduce;
+    add.u64 %addr, %saddr, %off64;
+    ld.shared.f32 %kv, [%addr];
+    max.f32 %qv, %qv, %kv;
+    mul.wide.u32 %off64, %tidv, 4;
+    mov.u64 %saddr, s_reduce;
+    add.u64 %addr, %saddr, %off64;
+    st.shared.f32 [%addr], %qv;
+LP_SMAX:
+    bar.sync 0;
+    shr.u32 %rdv, %rdv, 1;
+    bra LP_RMAX;
+LP_RMAX_END:
+    mov.u64 %addr, s_reduce;
+    ld.shared.f32 %max_val, [%addr];
+    bar.sync 0;
+
+    // Phase 3: exp(score - max) + local sum
+    mov.f32 %sum_val, 0f00000000;
+    mov.u32 %tv, %tidv;
+LP_EXP:
+    setp.ge.u32 %p0, %tv, 1500;
+    @%p0 bra LP_EXP_END;
+    mul.wide.u32 %off64, %tv, 4;
+    mov.u64 %saddr, s_scores;
+    add.u64 %addr, %saddr, %off64;
+    ld.shared.f32 %score, [%addr];
+    sub.f32 %score, %score, %max_val;
+    // exp(x) = 2^(x * log2(e)), log2(e) = 1.4426950..  = 0x3FB8AA3B
+    mul.rn.f32 %score, %score, 0f3FB8AA3B;
+    ex2.approx.f32 %exp_val, %score;
+    st.shared.f32 [%addr], %exp_val;
+    add.f32 %sum_val, %sum_val, %exp_val;
+    add.u32 %tv, %tv, 256;
+    bra LP_EXP;
+LP_EXP_END:
+
+    // Phase 4: reduce sum
+    mul.wide.u32 %off64, %tidv, 4;
+    mov.u64 %saddr, s_reduce;
+    add.u64 %addr, %saddr, %off64;
+    st.shared.f32 [%addr], %sum_val;
+    bar.sync 0;
+    mov.u32 %rdv, 128;
+LP_RSUM:
+    setp.eq.u32 %p0, %rdv, 0;
+    @%p0 bra LP_RSUM_END;
+    setp.ge.u32 %p1, %tidv, %rdv;
+    @%p1 bra LP_SSUM;
+    mul.wide.u32 %off64, %tidv, 4;
+    mov.u64 %saddr, s_reduce;
+    add.u64 %addr, %saddr, %off64;
+    ld.shared.f32 %qv, [%addr];
+    add.u32 %off32, %tidv, %rdv;
+    mul.wide.u32 %off64, %off32, 4;
+    mov.u64 %saddr, s_reduce;
+    add.u64 %addr, %saddr, %off64;
+    ld.shared.f32 %kv, [%addr];
+    add.f32 %qv, %qv, %kv;
+    mul.wide.u32 %off64, %tidv, 4;
+    mov.u64 %saddr, s_reduce;
+    add.u64 %addr, %saddr, %off64;
+    st.shared.f32 [%addr], %qv;
+LP_SSUM:
+    bar.sync 0;
+    shr.u32 %rdv, %rdv, 1;
+    bra LP_RSUM;
+LP_RSUM_END:
+    mov.u64 %addr, s_reduce;
+    ld.shared.f32 %sum_val, [%addr];
+    bar.sync 0;
+    // inv = 1/sum (pure softmax, no head averaging here)
+    rcp.approx.f32 %inv, %sum_val;
+
+    // Phase 5: atomicAdd softmax * inv_n to global output
+    mov.u32 %tv, %tidv;
+LP_WR:
+    setp.ge.u32 %p0, %tv, 1500;
+    @%p0 bra LP_WR_END;
+    mul.wide.u32 %off64, %tv, 4;
+    mov.u64 %saddr, s_scores;
+    add.u64 %addr, %saddr, %off64;
+    ld.shared.f32 %exp_val, [%addr];
+    mul.rn.f32 %result, %exp_val, %inv;
+    mul.rn.f32 %result, %result, %inv_n;
+    mad.lo.u32 %out_off, %stepv, 1500, %tv;
+    mul.wide.u32 %off64, %out_off, 4;
+    add.u64 %addr, %out_base, %off64;
+    atom.global.add.f32 %qv, [%addr], %result;
+    add.u32 %tv, %tv, 256;
+    bra LP_WR;
+LP_WR_END:
+    ret;
+}
+
+// suppress_apply: set logits[suppress_ids[i]] = -inf for all suppress tokens
+// Grid=1, Block=256. Loops over suppress_ids array.
+// param_logits: [VOCAB] float32
+// param_ids:    [N] uint32 (suppress token IDs, on GPU)
+// param_n:      number of suppress tokens
+.visible .entry suppress_apply(
+    .param .u64 param_logits,
+    .param .u64 param_ids,
+    .param .u32 param_n
+)
+{
+    .reg .u32 %tidv, %nv, %iv, %tokid, %off32;
+    .reg .u64 %logits_base, %ids_base, %addr, %off64;
+    .reg .f32 %neg_inf;
+    .reg .pred %p0;
+
+    ld.param.u64 %logits_base, [param_logits];
+    ld.param.u64 %ids_base, [param_ids];
+    ld.param.u32 %nv, [param_n];
+    mov.u32 %tidv, %tid.x;
+    mov.f32 %neg_inf, 0fFF800000;
+
+    mov.u32 %iv, %tidv;
+LP_SUPP:
+    setp.ge.u32 %p0, %iv, %nv;
+    @%p0 bra LP_SUPP_END;
+    // load token id
+    mul.wide.u32 %off64, %iv, 4;
+    add.u64 %addr, %ids_base, %off64;
+    ld.global.u32 %tokid, [%addr];
+    // write -inf to logits[tokid]
+    mul.wide.u32 %off64, %tokid, 4;
+    add.u64 %addr, %logits_base, %off64;
+    st.global.f32 [%addr], %neg_inf;
+    add.u32 %iv, %iv, 256;
+    bra LP_SUPP;
+LP_SUPP_END:
+    ret;
+}
+
+// GELU activation: y = 0.5*x*(1 + erf(x/sqrt(2))).
+// erf is evaluated with the Abramowitz-Stegun 7.1.26 polynomial.
+.visible .entry gelu_f32(
+    .param .u64 param_x,
+    .param .u32 param_N
+)
+{
+    .reg .b64 %pX, %addr;
+    .reg .b32 %N, %i, %t;
+    .reg .b64 %off;
+    .reg .f32 %x, %z, %az, %sign, %tt, %poly, %exp_arg, %exp_val, %erf, %cdf, %tmp, %one, %half;
+    .reg .pred %p;
+    .reg .pred %is_neg;
+
+    ld.param.u64 %pX, [param_x];
+    ld.param.u32 %N, [param_N];
+
+    mov.u32 %i, %ctaid.x;
+    shl.b32 %i, %i, 8;
+    mov.u32 %t, %tid.x;
+    add.u32 %i, %i, %t;
+
+    setp.ge.u32 %p, %i, %N;
+    @%p bra GELU_DONE;
+
+    shl.b32 %t, %i, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pX, %off;
+    ld.global.f32 %x, [%addr];
+
+    mov.f32 %one, 0f3F800000;
+    mov.f32 %half, 0f3F000000;
+
+    mul.rn.f32 %z, %x, 0f3F3504F3;
+    abs.f32 %az, %z;
+    setp.lt.f32 %is_neg, %z, 0f00000000;
+    selp.f32 %sign, 0fBF800000, 0f3F800000, %is_neg;
+
+    fma.rn.f32 %tmp, %az, 0f3EA7BA05, %one;
+    div.rn.f32 %tt, %one, %tmp;
+
+    fma.rn.f32 %poly, 0f3F87DC22, %tt, 0fBFBA00E3;
+    fma.rn.f32 %poly, %poly, %tt, 0f3FB5F0E3;
+    fma.rn.f32 %poly, %poly, %tt, 0fBE91A98E;
+    fma.rn.f32 %poly, %poly, %tt, 0f3E827906;
+    mul.rn.f32 %poly, %poly, %tt;
+
+    mul.rn.f32 %exp_arg, %az, %az;
+    neg.f32 %exp_arg, %exp_arg;
+    mul.rn.f32 %exp_arg, %exp_arg, 0f3FB8AA3B;
+    max.f32 %exp_arg, %exp_arg, 0fC2A00000;
+    ex2.approx.f32 %exp_val, %exp_arg;
+
+    mul.rn.f32 %tmp, %poly, %exp_val;
+    sub.rn.f32 %erf, %one, %tmp;
+    mul.rn.f32 %erf, %erf, %sign;
+
+    add.rn.f32 %cdf, %one, %erf;
+    mul.rn.f32 %cdf, %cdf, %half;
+    mul.rn.f32 %x, %x, %cdf;
+
+    st.global.f32 [%addr], %x;
+
+GELU_DONE:
+    ret;
+}

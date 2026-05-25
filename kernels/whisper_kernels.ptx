@@ -1,0 +1,310 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// ============================================================
+// GELU activation: y = 0.5*x*(1 + erf(x/sqrt(2)))
+// Grid: ceil(N/256), Block: 256
+// ============================================================
+.visible .entry gelu_f32(
+    .param .u64 param_x,
+    .param .u32 param_N
+)
+{
+    .reg .b64 %pX, %addr;
+    .reg .b32 %N, %i, %t;
+    .reg .b64 %off;
+    .reg .f32 %x, %z, %az, %sign, %tt, %poly, %exp_arg, %exp_val, %erf, %cdf, %tmp, %one, %half;
+    .reg .pred %p;
+    .reg .pred %is_neg;
+
+    ld.param.u64 %pX, [param_x];
+    ld.param.u32 %N, [param_N];
+
+    mov.u32 %i, %ctaid.x;
+    shl.b32 %i, %i, 8;
+    mov.u32 %t, %tid.x;
+    add.u32 %i, %i, %t;
+
+    setp.ge.u32 %p, %i, %N;
+    @%p bra GELU_DONE;
+
+    shl.b32 %t, %i, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pX, %off;
+    ld.global.f32 %x, [%addr];
+
+    mov.f32 %one, 0f3F800000;
+    mov.f32 %half, 0f3F000000;
+
+    // z = x / sqrt(2)
+    mul.rn.f32 %z, %x, 0f3F3504F3;
+    abs.f32 %az, %z;
+    setp.lt.f32 %is_neg, %z, 0f00000000;
+    selp.f32 %sign, 0fBF800000, 0f3F800000, %is_neg;
+
+    // t = 1 / (1 + p*abs(z)), p = 0.3275911
+    fma.rn.f32 %tmp, %az, 0f3EA7BA05, %one;
+    div.rn.f32 %tt, %one, %tmp;
+
+    // poly = (((((a5*t + a4)*t + a3)*t + a2)*t + a1)*t)
+    fma.rn.f32 %poly, 0f3F87DC22, %tt, 0fBFBA00E3;
+    fma.rn.f32 %poly, %poly, %tt, 0f3FB5F0E3;
+    fma.rn.f32 %poly, %poly, %tt, 0fBE91A98E;
+    fma.rn.f32 %poly, %poly, %tt, 0f3E827906;
+    mul.rn.f32 %poly, %poly, %tt;
+
+    // exp(-z*z) via exp2(arg * log2(e))
+    mul.rn.f32 %exp_arg, %az, %az;
+    neg.f32 %exp_arg, %exp_arg;
+    mul.rn.f32 %exp_arg, %exp_arg, 0f3FB8AA3B;
+    max.f32 %exp_arg, %exp_arg, 0fC2A00000;
+    ex2.approx.f32 %exp_val, %exp_arg;
+
+    // erf(z) = sign(z) * (1 - poly*exp(-z*z))
+    mul.rn.f32 %tmp, %poly, %exp_val;
+    sub.rn.f32 %erf, %one, %tmp;
+    mul.rn.f32 %erf, %erf, %sign;
+
+    // gelu = 0.5 * x * (1 + erf(z))
+    add.rn.f32 %cdf, %one, %erf;
+    mul.rn.f32 %cdf, %cdf, %half;
+    mul.rn.f32 %x, %x, %cdf;
+
+    st.global.f32 [%addr], %x;
+
+GELU_DONE:
+    ret;
+}
+
+
+// ============================================================
+// Row-wise Softmax: out[row][j] = exp(x[row][j]-max) / sum
+// 1 block = 1 row, blockDim.x=256 threads
+// Grid: n_rows, Block: 256
+// PROPER shared-memory reduction across all 256 threads
+// ============================================================
+.visible .entry softmax_f32(
+    .param .u64 param_X,
+    .param .u32 param_D
+)
+{
+    .reg .b64 %pX, %addr;
+    .reg .b32 %D, %row, %my_tid, %i, %t, %j, %base;
+    .reg .b64 %off;
+    .reg .f32 %val, %mx, %s, %ex, %inv, %tmp;
+    .reg .pred %p, %p2;
+
+    .shared .align 4 .f32 sh_buf[256];
+
+    ld.param.u64 %pX, [param_X];
+    ld.param.u32 %D, [param_D];
+    mov.u32 %row, %ctaid.x;
+    mov.u32 %my_tid, %tid.x;
+
+    // ===== Pass 1: each thread finds partial max with stride=256 =====
+    mov.f32 %mx, 0fFF800000;
+    mov.u32 %i, %my_tid;
+SM_MAX:
+    setp.ge.u32 %p, %i, %D;
+    @%p bra SM_MAX_DONE;
+    mul.lo.u32 %t, %row, %D;
+    add.u32 %t, %t, %i;
+    shl.b32 %t, %t, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pX, %off;
+    ld.global.f32 %val, [%addr];
+    max.f32 %mx, %mx, %val;
+    add.u32 %i, %i, 256;
+    bra SM_MAX;
+SM_MAX_DONE:
+
+    // Store partial max to sh_buf[tid]
+    mov.u32 %base, sh_buf;
+    shl.b32 %t, %my_tid, 2;
+    add.u32 %t, %base, %t;
+    st.shared.f32 [%t], %mx;
+    bar.sync 0;
+
+    // Thread 0: reduce 256 partial maxes
+    setp.ne.u32 %p, %my_tid, 0;
+    @%p bra SM_MAX_BCAST;
+    mov.f32 %mx, 0fFF800000;
+    mov.u32 %j, 0;
+SM_RMAX:
+    setp.ge.u32 %p2, %j, 256;
+    @%p2 bra SM_RMAX_DONE;
+    shl.b32 %t, %j, 2;
+    add.u32 %t, %base, %t;
+    ld.shared.f32 %tmp, [%t];
+    max.f32 %mx, %mx, %tmp;
+    add.u32 %j, %j, 1;
+    bra SM_RMAX;
+SM_RMAX_DONE:
+    st.shared.f32 [sh_buf], %mx;
+SM_MAX_BCAST:
+    bar.sync 0;
+    ld.shared.f32 %mx, [sh_buf];
+
+    // ===== Pass 2: exp(x - max) and partial sum =====
+    mov.f32 %s, 0f00000000;
+    mov.u32 %i, %my_tid;
+SM_EXP:
+    setp.ge.u32 %p, %i, %D;
+    @%p bra SM_EXP_DONE;
+    mul.lo.u32 %t, %row, %D;
+    add.u32 %t, %t, %i;
+    shl.b32 %t, %t, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pX, %off;
+    ld.global.f32 %val, [%addr];
+    sub.f32 %val, %val, %mx;
+    mul.f32 %val, %val, 0f3FB8AA3B;
+    ex2.approx.f32 %ex, %val;
+    st.global.f32 [%addr], %ex;
+    add.f32 %s, %s, %ex;
+    add.u32 %i, %i, 256;
+    bra SM_EXP;
+SM_EXP_DONE:
+
+    // Store partial sum to sh_buf[tid]
+    mov.u32 %base, sh_buf;
+    shl.b32 %t, %my_tid, 2;
+    add.u32 %t, %base, %t;
+    st.shared.f32 [%t], %s;
+    bar.sync 0;
+
+    // Thread 0: reduce 256 partial sums
+    setp.ne.u32 %p, %my_tid, 0;
+    @%p bra SM_SUM_BCAST;
+    mov.f32 %s, 0f00000000;
+    mov.u32 %j, 0;
+SM_RSUM:
+    setp.ge.u32 %p2, %j, 256;
+    @%p2 bra SM_RSUM_DONE;
+    shl.b32 %t, %j, 2;
+    add.u32 %t, %base, %t;
+    ld.shared.f32 %tmp, [%t];
+    add.f32 %s, %s, %tmp;
+    add.u32 %j, %j, 1;
+    bra SM_RSUM;
+SM_RSUM_DONE:
+    st.shared.f32 [sh_buf], %s;
+SM_SUM_BCAST:
+    bar.sync 0;
+    ld.shared.f32 %s, [sh_buf];
+
+    // ===== Pass 3: normalize =====
+    rcp.approx.f32 %inv, %s;
+    mov.u32 %i, %my_tid;
+SM_NORM:
+    setp.ge.u32 %p, %i, %D;
+    @%p bra SM_DONE;
+    mul.lo.u32 %t, %row, %D;
+    add.u32 %t, %t, %i;
+    shl.b32 %t, %t, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pX, %off;
+    ld.global.f32 %val, [%addr];
+    mul.f32 %val, %val, %inv;
+    st.global.f32 [%addr], %val;
+    add.u32 %i, %i, 256;
+    bra SM_NORM;
+SM_DONE:
+    ret;
+}
+
+
+// ============================================================
+// Batched bias add: x[i] += bias[i % D]
+// Grid: ceil(N/256), Block: 256
+// ============================================================
+.visible .entry bias_add(
+    .param .u64 param_X,
+    .param .u64 param_B,
+    .param .u32 param_N,
+    .param .u32 param_D
+)
+{
+    .reg .b64 %pX, %pB, %addr;
+    .reg .b32 %N, %D, %i, %t, %m;
+    .reg .b64 %off;
+    .reg .f32 %x, %b;
+    .reg .pred %p;
+
+    ld.param.u64 %pX, [param_X];
+    ld.param.u64 %pB, [param_B];
+    ld.param.u32 %N, [param_N];
+    ld.param.u32 %D, [param_D];
+
+    mov.u32 %i, %ctaid.x;
+    shl.b32 %i, %i, 8;
+    mov.u32 %t, %tid.x;
+    add.u32 %i, %i, %t;
+
+    setp.ge.u32 %p, %i, %N;
+    @%p bra BA_DONE;
+
+    // x[i]
+    shl.b32 %t, %i, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pX, %off;
+    ld.global.f32 %x, [%addr];
+
+    // bias[i % D]
+    rem.u32 %m, %i, %D;
+    shl.b32 %t, %m, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pB, %off;
+    ld.global.f32 %b, [%addr];
+
+    add.f32 %x, %x, %b;
+
+    shl.b32 %t, %i, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pX, %off;
+    st.global.f32 [%addr], %x;
+
+BA_DONE:
+    ret;
+}
+
+
+// ============================================================
+// Scale: x[i] *= scale
+// Grid: ceil(N/256), Block: 256
+// ============================================================
+.visible .entry scale_f32(
+    .param .u64 param_X,
+    .param .u32 param_N,
+    .param .f32 param_scale
+)
+{
+    .reg .b64 %pX, %addr;
+    .reg .b32 %N, %i, %t;
+    .reg .b64 %off;
+    .reg .f32 %x, %s;
+    .reg .pred %p;
+
+    ld.param.u64 %pX, [param_X];
+    ld.param.u32 %N, [param_N];
+    ld.param.f32 %s, [param_scale];
+
+    mov.u32 %i, %ctaid.x;
+    shl.b32 %i, %i, 8;
+    mov.u32 %t, %tid.x;
+    add.u32 %i, %i, %t;
+
+    setp.ge.u32 %p, %i, %N;
+    @%p bra SC_DONE;
+
+    shl.b32 %t, %i, 2;
+    cvt.u64.u32 %off, %t;
+    add.u64 %addr, %pX, %off;
+    ld.global.f32 %x, [%addr];
+    mul.f32 %x, %x, %s;
+    st.global.f32 [%addr], %x;
+
+SC_DONE:
+    ret;
+}

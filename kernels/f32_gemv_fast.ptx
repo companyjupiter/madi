@@ -1,0 +1,91 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+.visible .entry f32_gemv_fast(
+    .param .u64 param_y, .param .u64 param_x, .param .u64 param_W,
+    .param .u32 param_N, .param .u32 param_D
+)
+{
+    .reg .b64 %py, %px, %pW, %ax, %aw, %ay;
+    .reg .b32 %N, %D, %d, %t, %n, %r0;
+    .reg .b64 %off, %rb;
+    .reg .f32 %sum, %xv, %wv, %tmp;
+    .reg .b16 %wh;
+    .reg .pred %p0;
+    .shared .align 4 .f32 sdata[256];
+
+    ld.param.u64 %py, [param_y];
+    ld.param.u64 %px, [param_x];
+    ld.param.u64 %pW, [param_W];
+    ld.param.u32 %N,  [param_N];
+    ld.param.u32 %D,  [param_D];
+
+    mov.u32 %d, %ctaid.x;
+    setp.ge.u32 %p0, %d, %D;
+    @%p0 bra DONE;
+
+    mov.u32 %t, %tid.x;
+
+    mul.lo.u32 %r0, %d, %N;
+    shl.b32 %r0, %r0, 1;
+    cvt.u64.u32 %rb, %r0;
+    add.u64 %rb, %pW, %rb;
+
+    mov.f32 %sum, 0f00000000;
+    mov.u32 %n, %t;
+
+LP:
+    setp.ge.u32 %p0, %n, %N;
+    @%p0 bra WR;
+
+    shl.b32 %r0, %n, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %ax, %px, %off;
+    ld.global.f32 %xv, [%ax];
+
+    shl.b32 %r0, %n, 1;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %aw, %rb, %off;
+    ld.global.b16 %wh, [%aw];
+    cvt.f32.f16 %wv, %wh;
+
+    fma.rn.f32 %sum, %xv, %wv, %sum;
+    add.u32 %n, %n, 256;
+    bra LP;
+
+WR:
+    mov.u64 %ax, sdata;
+    shl.b32 %r0, %t, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %ax, %ax, %off;
+    st.shared.f32 [%ax], %sum;
+    bar.sync 0;
+
+    setp.ne.u32 %p0, %t, 0;
+    @%p0 bra DONE;
+
+    mov.u64 %ax, sdata;
+    ld.shared.f32 %sum, [%ax];
+    mov.u32 %n, 1;
+SLP:
+    setp.ge.u32 %p0, %n, 256;
+    @%p0 bra ST;
+    shl.b32 %r0, %n, 2;
+    cvt.u64.u32 %off, %r0;
+    mov.u64 %ax, sdata;
+    add.u64 %ax, %ax, %off;
+    ld.shared.f32 %tmp, [%ax];
+    add.f32 %sum, %sum, %tmp;
+    add.u32 %n, %n, 1;
+    bra SLP;
+
+ST:
+    shl.b32 %r0, %d, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %ay, %py, %off;
+    st.global.f32 [%ay], %sum;
+
+DONE:
+    ret;
+}

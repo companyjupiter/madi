@@ -1,0 +1,182 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// conv1d_gelu: 1D convolution + GELU activation
+// input[C_in][L_in] F32, weight[C_out][C_in][K] F16, bias[C_out] F32
+// output[C_out][L_out] F32
+// Grid: (L_out, 1, 1), Block: (256, 1, 1)
+.visible .entry conv1d_gelu(
+    .param .u64 param_out,
+    .param .u64 param_in,
+    .param .u64 param_weight,
+    .param .u64 param_bias,
+    .param .u32 param_C_in,
+    .param .u32 param_C_out,
+    .param .u32 param_L_in,
+    .param .u32 param_K,
+    .param .u32 param_stride,
+    .param .u32 param_padding
+) {
+    .reg .b64 %out_ptr, %in_ptr, %w_ptr, %b_ptr, %addr, %off;
+    .reg .u32 %C_in, %C_out, %L_in, %K, %stride, %padding;
+    .reg .u32 %t, %c_out, %c_in, %k, %thread_id, %t_in;
+    .reg .u32 %w_idx, %in_idx, %out_idx, %tmp, %L_out;
+    .reg .f32 %sum, %val, %wf32, %bias_val;
+    .reg .f32 %x, %x3, %tanh_arg, %tanh_val, %gelu;
+    .reg .f32 %clamp_hi, %clamp_lo, %exp_val, %one, %tanh_r;
+    .reg .pred %p, %p2;
+
+    ld.param.u64 %out_ptr, [param_out];
+    ld.param.u64 %in_ptr, [param_in];
+    ld.param.u64 %w_ptr, [param_weight];
+    ld.param.u64 %b_ptr, [param_bias];
+    ld.param.u32 %C_in, [param_C_in];
+    ld.param.u32 %C_out, [param_C_out];
+    ld.param.u32 %L_in, [param_L_in];
+    ld.param.u32 %K, [param_K];
+    ld.param.u32 %stride, [param_stride];
+    ld.param.u32 %padding, [param_padding];
+
+    .reg .u32 %blk_x, %thr_x, %grid_x;
+    mov.u32 %blk_x, %ctaid.x;
+    mov.u32 %thr_x, %tid.x;
+    mov.u32 %grid_x, %nctaid.x;
+    mov.u32 %t, %blk_x;
+    mov.u32 %thread_id, %thr_x;
+    mov.u32 %L_out, %grid_x;
+    mov.u32 %c_out, %thread_id;
+
+COUT_LOOP:
+    setp.ge.u32 %p, %c_out, %C_out;
+    @%p bra COUT_DONE;
+
+    mul.wide.u32 %off, %c_out, 4;
+    add.u64 %addr, %b_ptr, %off;
+    ld.global.f32 %sum, [%addr];
+
+    mov.u32 %c_in, 0;
+CIN_LOOP:
+    setp.ge.u32 %p, %c_in, %C_in;
+    @%p bra CIN_DONE;
+
+    mov.u32 %k, 0;
+K_LOOP:
+    setp.ge.u32 %p, %k, %K;
+    @%p bra K_DONE;
+
+    mul.lo.u32 %t_in, %t, %stride;
+    add.u32 %t_in, %t_in, %k;
+    setp.lt.u32 %p2, %t_in, %padding;
+    @%p2 bra K_NEXT;
+    sub.u32 %t_in, %t_in, %padding;
+    setp.ge.u32 %p2, %t_in, %L_in;
+    @%p2 bra K_NEXT;
+
+    mul.lo.u32 %in_idx, %c_in, %L_in;
+    add.u32 %in_idx, %in_idx, %t_in;
+    mul.wide.u32 %off, %in_idx, 4;
+    add.u64 %addr, %in_ptr, %off;
+    ld.global.f32 %val, [%addr];
+
+    mul.lo.u32 %w_idx, %k, %C_in;
+    add.u32 %w_idx, %w_idx, %c_in;
+    mul.lo.u32 %w_idx, %w_idx, %C_out;
+    add.u32 %w_idx, %w_idx, %c_out;
+    mul.wide.u32 %off, %w_idx, 4;
+    add.u64 %addr, %w_ptr, %off;
+    ld.global.f32 %wf32, [%addr];
+
+    fma.rn.f32 %sum, %val, %wf32, %sum;
+
+K_NEXT:
+    add.u32 %k, %k, 1;
+    bra K_LOOP;
+K_DONE:
+    add.u32 %c_in, %c_in, 1;
+    bra CIN_LOOP;
+CIN_DONE:
+
+    // GELU(x) = x * 0.5 * (1 + tanh(sqrt(2/pi) * (x + 0.044715*x^3)))
+    mov.f32 %x, %sum;
+    mul.f32 %x3, %x, %x;
+    mul.f32 %x3, %x3, %x;
+    mul.f32 %x3, %x3, 0f3D372713;
+    add.f32 %tanh_arg, %x, %x3;
+    mul.f32 %tanh_arg, %tanh_arg, 0f3FCC422A;
+    add.f32 %tanh_arg, %tanh_arg, %tanh_arg;
+    mov.f32 %clamp_hi, 0f41200000;
+    mov.f32 %clamp_lo, 0fC1200000;
+    max.f32 %tanh_arg, %tanh_arg, %clamp_lo;
+    min.f32 %tanh_arg, %tanh_arg, %clamp_hi;
+    mov.f32 %one, 0f3F800000;
+    mul.f32 %tanh_arg, %tanh_arg, 0f3FB8AA3B;
+    ex2.approx.f32 %exp_val, %tanh_arg;
+    add.f32 %tanh_r, %exp_val, %one;
+    sub.f32 %tanh_val, %exp_val, %one;
+    div.approx.f32 %tanh_val, %tanh_val, %tanh_r;
+    add.f32 %tanh_val, %tanh_val, %one;
+    mul.f32 %gelu, %x, %tanh_val;
+    mul.f32 %gelu, %gelu, 0f3F000000;
+
+    mul.lo.u32 %out_idx, %c_out, %L_out;
+    add.u32 %out_idx, %out_idx, %t;
+    mul.wide.u32 %off, %out_idx, 4;
+    add.u64 %addr, %out_ptr, %off;
+    st.global.f32 [%addr], %gelu;
+
+    add.u32 %c_out, %c_out, 256;
+    bra COUT_LOOP;
+COUT_DONE:
+    ret;
+}
+
+// transpose_2d: [R][C] F32 -> [C][R] F32
+// Grid: (ceil(C/16), ceil(R/16), 1), Block: (16, 16, 1)
+.visible .entry transpose_2d(
+    .param .u64 param_out,
+    .param .u64 param_in,
+    .param .u32 param_R,
+    .param .u32 param_C
+) {
+    .reg .b64 %out_ptr, %in_ptr, %addr, %off;
+    .reg .u32 %R, %C, %r, %c, %idx_in, %idx_out;
+    .reg .f32 %val;
+    .reg .pred %p;
+
+    ld.param.u64 %out_ptr, [param_out];
+    ld.param.u64 %in_ptr, [param_in];
+    ld.param.u32 %R, [param_R];
+    ld.param.u32 %C, [param_C];
+
+    .reg .u32 %bx, %by, %tx, %ty;
+    mov.u32 %bx, %ctaid.x;
+    mov.u32 %by, %ctaid.y;
+    mov.u32 %tx, %tid.x;
+    mov.u32 %ty, %tid.y;
+    mul.lo.u32 %c, %bx, 16;
+    add.u32 %c, %c, %tx;
+    mul.lo.u32 %r, %by, 16;
+    add.u32 %r, %r, %ty;
+
+    setp.ge.u32 %p, %r, %R;
+    @%p bra TR_DONE;
+    setp.ge.u32 %p, %c, %C;
+    @%p bra TR_DONE;
+
+    // in[r][c] -> out[c][r]
+    mul.lo.u32 %idx_in, %r, %C;
+    add.u32 %idx_in, %idx_in, %c;
+    mul.wide.u32 %off, %idx_in, 4;
+    add.u64 %addr, %in_ptr, %off;
+    ld.global.f32 %val, [%addr];
+
+    mul.lo.u32 %idx_out, %c, %R;
+    add.u32 %idx_out, %idx_out, %r;
+    mul.wide.u32 %off, %idx_out, 4;
+    add.u64 %addr, %out_ptr, %off;
+    st.global.f32 [%addr], %val;
+
+TR_DONE:
+    ret;
+}

@@ -1,0 +1,111 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+.visible .entry mel_filterbank_kernel(
+    .param .u64 p_mel,
+    .param .u64 p_fft,
+    .param .u64 p_filters,
+    .param .u32 p_n_frames,
+    .param .u32 p_fft_bins
+) {
+    .reg .pred %p0, %p1, %p2;
+    .reg .u32 %r0, %r1, %r2, %r3, %r4, %r5, %r6;
+    .reg .u64 %rd0, %rd1, %rd2, %rd3, %rd4;
+    .reg .f32 %f0, %f1, %f2, %f3, %f4, %f5;
+
+    mov.u32 %r0, %ctaid.x;
+    mov.u32 %r1, %tid.x;
+    ld.param.u32 %r2, [p_n_frames];
+    setp.ge.u32 %p0, %r0, %r2;
+    @%p0 bra $done;
+    setp.ge.u32 %p0, %r1, 128;
+    @%p0 bra $done;
+
+    ld.param.u64 %rd0, [p_fft];
+    ld.param.u64 %rd1, [p_filters];
+    ld.param.u32 %r3, [p_fft_bins];
+
+    mov.f32 %f0, 0f00000000;
+    mov.u32 %r4, 0;
+
+$loop:
+    setp.ge.u32 %p1, %r4, %r3;
+    @%p1 bra $loopend;
+
+    mul.lo.u32 %r5, %r1, %r3;
+    add.u32 %r5, %r5, %r4;
+    mul.wide.u32 %rd3, %r5, 4;
+    add.u64 %rd4, %rd1, %rd3;
+    ld.global.f32 %f1, [%rd4];
+
+    setp.neu.f32 %p2, %f1, 0f00000000;
+    @!%p2 bra $next;
+
+    mul.lo.u32 %r5, %r0, %r3;
+    add.u32 %r5, %r5, %r4;
+    shl.b32 %r5, %r5, 1;
+    mul.wide.u32 %rd3, %r5, 4;
+    add.u64 %rd4, %rd0, %rd3;
+    ld.global.f32 %f2, [%rd4];
+    add.u32 %r6, %r5, 1;
+    mul.wide.u32 %rd3, %r6, 4;
+    add.u64 %rd4, %rd0, %rd3;
+    ld.global.f32 %f3, [%rd4];
+
+    mul.f32 %f4, %f2, %f2;
+    fma.rn.f32 %f4, %f3, %f3, %f4;
+    fma.rn.f32 %f0, %f1, %f4, %f0;
+
+$next:
+    add.u32 %r4, %r4, 1;
+    bra $loop;
+
+$loopend:
+    max.f32 %f0, %f0, 0f2EDBE6FF;
+    lg2.approx.f32 %f5, %f0;
+    mul.f32 %f5, %f5, 0f3F317218;
+
+    ld.param.u64 %rd2, [p_mel];
+    mul.lo.u32 %r5, %r1, %r2;
+    add.u32 %r5, %r5, %r0;
+    mul.wide.u32 %rd3, %r5, 4;
+    add.u64 %rd4, %rd2, %rd3;
+    st.global.f32 [%rd4], %f5;
+
+$done:
+    ret;
+}
+
+.visible .entry mel_normalize_kernel(
+    .param .u64 p_mel,
+    .param .f32 p_max_val,
+    .param .u32 p_count
+) {
+    .reg .pred %p0;
+    .reg .u32 %r0, %r1, %r2, %r3;
+    .reg .u64 %rd0, %rd1;
+    .reg .f32 %f0, %f1, %f2;
+
+    mov.u32 %r0, %tid.x;
+    mov.u32 %r1, %ctaid.x;
+    mad.lo.u32 %r2, %r1, 256, %r0;
+    ld.param.u32 %r3, [p_count];
+    setp.ge.u32 %p0, %r2, %r3;
+    @%p0 bra $ndone;
+
+    ld.param.u64 %rd0, [p_mel];
+    mul.wide.u32 %rd1, %r2, 4;
+    add.u64 %rd0, %rd0, %rd1;
+    ld.global.f32 %f0, [%rd0];
+
+    ld.param.f32 %f1, [p_max_val];
+    sub.f32 %f2, %f1, 0f41000000;
+    max.f32 %f0, %f0, %f2;
+    add.f32 %f0, %f0, 0f40800000;
+    mul.f32 %f0, %f0, 0f3E800000;
+    st.global.f32 [%rd0], %f0;
+
+$ndone:
+    ret;
+}

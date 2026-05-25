@@ -1,0 +1,1301 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// RMSNorm: out[i] = w[i] * x[i] * rsqrt(mean(x^2) + eps)
+// 1 block, 256 threads, handles any dim via loop
+.visible .entry gpu_rmsnorm(
+    .param .u64 p_out,
+    .param .u64 p_x,
+    .param .u64 p_w,
+    .param .u32 p_dim
+)
+{
+    .reg .b64 %ro, %rx, %rw, %a64, %off;
+    .reg .b32 %dim, %ltid, %idx, %r0, %r1, %lane, %wid;
+    .reg .f32 %ss, %xv, %wv, %scale, %tmp, %fdim;
+    .reg .pred %p0;
+    .shared .align 4 .f32 warp_sum[8];
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %rx, [p_x];
+    ld.param.u64 %rw, [p_w];
+    ld.param.u32 %dim, [p_dim];
+    mov.u32 %ltid, %tid.x;
+
+    // Phase 1: partial sum of squares
+    mov.f32 %ss, 0f00000000;
+    mov.u32 %idx, %ltid;
+P1_LP:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra P1_END;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %xv, [%a64];
+    mul.f32 %tmp, %xv, %xv;
+    add.f32 %ss, %ss, %tmp;
+    add.u32 %idx, %idx, 256;
+    bra P1_LP;
+P1_END:
+
+    // Phase 2: warp reduction (shfl.sync.down)
+    shfl.sync.down.b32 %tmp, %ss, 16, 31, 0xFFFFFFFF;
+    add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 8, 31, 0xFFFFFFFF;
+    add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 4, 31, 0xFFFFFFFF;
+    add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 2, 31, 0xFFFFFFFF;
+    add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 1, 31, 0xFFFFFFFF;
+    add.f32 %ss, %ss, %tmp;
+
+    // store warp result to shared
+    and.b32 %lane, %ltid, 31;
+    shr.u32 %wid, %ltid, 5;
+    setp.ne.u32 %p0, %lane, 0;
+    @%p0 bra SKIP_STORE;
+    shl.b32 %r0, %wid, 2;
+    mov.u64 %off, warp_sum;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    st.shared.f32 [%a64], %ss;
+SKIP_STORE:
+    bar.sync 0;
+
+    // Phase 3: thread 0 reduces warp sums
+    setp.ne.u32 %p0, %ltid, 0;
+    @%p0 bra SKIP_FINAL;
+    mov.u64 %off, warp_sum;
+    ld.shared.f32 %ss, [%off];
+    ld.shared.f32 %tmp, [%off+4];
+    add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+8];
+    add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+12];
+    add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+16];
+    add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+20];
+    add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+24];
+    add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+28];
+    add.f32 %ss, %ss, %tmp;
+    // ss = sum of squares, compute 1/sqrt(ss/dim + 1e-5)
+    cvt.rn.f32.u32 %fdim, %dim;
+    div.rn.f32 %ss, %ss, %fdim;
+    add.f32 %ss, %ss, 0f3727C5AC;
+    rsqrt.approx.f32 %ss, %ss;
+    // broadcast via shared
+    st.shared.f32 [%off], %ss;
+SKIP_FINAL:
+    bar.sync 0;
+
+    // Phase 4: out[i] = w[i] * x[i] * scale
+    mov.u64 %off, warp_sum;
+    ld.shared.f32 %scale, [%off];
+    mov.u32 %idx, %ltid;
+P4_LP:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra P4_END;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %xv, [%a64];
+    add.u64 %a64, %rw, %off;
+    ld.global.f32 %wv, [%a64];
+    mul.f32 %xv, %xv, %scale;
+    mul.f32 %xv, %wv, %xv;
+    add.u64 %a64, %ro, %off;
+    st.global.f32 [%a64], %xv;
+    add.u32 %idx, %idx, 256;
+    bra P4_LP;
+P4_END:
+    ret;
+}
+
+// Fused RMSNorm + int8 Quantize: out_f32 + out_int8 + scale in one pass
+// Eliminates separate quantize_x launch (saves 85 launches/token)
+.visible .entry gpu_rmsnorm_q(
+    .param .u64 p_out,     // f32 output
+    .param .u64 p_x,       // f32 input
+    .param .u64 p_w,       // f32 weights
+    .param .u32 p_dim,
+    .param .u64 p_out_q,   // int8 output
+    .param .u64 p_out_s    // f16 scale output
+)
+{
+    .reg .b64 %ro, %rx, %rw, %rq, %rsc, %a64, %off;
+    .reg .b32 %dim, %ltid, %idx, %r0, %lane, %wid;
+    .reg .f32 %ss, %xv, %wv, %scale, %tmp, %fdim, %amax, %av, %shfl_v, %inv_s, %qf, %dscale;
+    .reg .s32 %qi;
+    .reg .b16 %sh;
+    .reg .pred %p0;
+    .shared .align 4 .f32 warp_sum[8];
+    .shared .align 4 .f32 warp_max2[8];
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %rx, [p_x];
+    ld.param.u64 %rw, [p_w];
+    ld.param.u32 %dim, [p_dim];
+    ld.param.u64 %rq, [p_out_q];
+    ld.param.u64 %rsc, [p_out_s];
+    mov.u32 %ltid, %tid.x;
+
+    // Phase 1: sum of squares (same as rmsnorm)
+    mov.f32 %ss, 0f00000000;
+    mov.u32 %idx, %ltid;
+RQ_P1:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra RQ_P1E;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %xv, [%a64];
+    mul.f32 %tmp, %xv, %xv;
+    add.f32 %ss, %ss, %tmp;
+    add.u32 %idx, %idx, 256;
+    bra RQ_P1;
+RQ_P1E:
+
+    // Phase 2: warp reduce
+    shfl.sync.down.b32 %tmp, %ss, 16, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 8, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 4, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 2, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 1, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    and.b32 %lane, %ltid, 31;
+    shr.u32 %wid, %ltid, 5;
+    setp.ne.u32 %p0, %lane, 0;
+    @%p0 bra RQ_SKIP1;
+    shl.b32 %r0, %wid, 2;
+    mov.u64 %off, warp_sum;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    st.shared.f32 [%a64], %ss;
+RQ_SKIP1:
+    bar.sync 0;
+
+    // Phase 3: final reduce + rsqrt
+    setp.ne.u32 %p0, %ltid, 0;
+    @%p0 bra RQ_SKIP2;
+    mov.u64 %off, warp_sum;
+    ld.shared.f32 %ss, [%off];
+    ld.shared.f32 %tmp, [%off+4]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+8]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+12]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+16]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+20]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+24]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+28]; add.f32 %ss, %ss, %tmp;
+    cvt.rn.f32.u32 %fdim, %dim;
+    div.rn.f32 %ss, %ss, %fdim;
+    add.f32 %ss, %ss, 0f3727C5AC;
+    rsqrt.approx.f32 %ss, %ss;
+    st.shared.f32 [%off], %ss;
+RQ_SKIP2:
+    bar.sync 0;
+
+    // Phase 4: RMSNorm output + abs-max tracking
+    mov.u64 %off, warp_sum;
+    ld.shared.f32 %scale, [%off];
+    mov.f32 %amax, 0f00000000;
+    mov.u32 %idx, %ltid;
+RQ_P4:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra RQ_P4E;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %xv, [%a64];
+    add.u64 %a64, %rw, %off;
+    ld.global.f32 %wv, [%a64];
+    mul.f32 %xv, %xv, %scale;
+    mul.f32 %xv, %wv, %xv;
+    // Store f32 output
+    add.u64 %a64, %ro, %off;
+    st.global.f32 [%a64], %xv;
+    // Track abs max
+    abs.f32 %av, %xv;
+    max.f32 %amax, %amax, %av;
+    add.u32 %idx, %idx, 256;
+    bra RQ_P4;
+RQ_P4E:
+
+    // Phase 5: reduce amax + quantize
+    shfl.sync.bfly.b32 %shfl_v, %amax, 16, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    shfl.sync.bfly.b32 %shfl_v, %amax, 8, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    shfl.sync.bfly.b32 %shfl_v, %amax, 4, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    shfl.sync.bfly.b32 %shfl_v, %amax, 2, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    shfl.sync.bfly.b32 %shfl_v, %amax, 1, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    and.b32 %lane, %ltid, 31;
+    setp.ne.u32 %p0, %lane, 0;
+    @%p0 bra RQ_SKIP3;
+    shr.u32 %wid, %ltid, 5;
+    shl.b32 %r0, %wid, 2;
+    cvt.u64.u32 %off, %r0;
+    mov.u64 %a64, warp_max2;
+    add.u64 %a64, %a64, %off;
+    st.shared.f32 [%a64], %amax;
+RQ_SKIP3:
+    bar.sync 0;
+
+    setp.ne.u32 %p0, %ltid, 0;
+    @%p0 bra RQ_SKIP4;
+    ld.shared.f32 %amax, [warp_max2];
+    ld.shared.f32 %tmp, [warp_max2+4]; max.f32 %amax, %amax, %tmp;
+    ld.shared.f32 %tmp, [warp_max2+8]; max.f32 %amax, %amax, %tmp;
+    ld.shared.f32 %tmp, [warp_max2+12]; max.f32 %amax, %amax, %tmp;
+    ld.shared.f32 %tmp, [warp_max2+16]; max.f32 %amax, %amax, %tmp;
+    ld.shared.f32 %tmp, [warp_max2+20]; max.f32 %amax, %amax, %tmp;
+    ld.shared.f32 %tmp, [warp_max2+24]; max.f32 %amax, %amax, %tmp;
+    ld.shared.f32 %tmp, [warp_max2+28]; max.f32 %amax, %amax, %tmp;
+    div.rn.f32 %dscale, %amax, 0f42FE0000;
+    cvt.rn.f16.f32 %sh, %dscale;
+    st.global.b16 [%rsc], %sh;
+    st.shared.f32 [warp_max2], %amax;
+RQ_SKIP4:
+    bar.sync 0;
+
+    // Phase 6: quantize using f32 output already in global
+    ld.shared.f32 %amax, [warp_max2];
+    div.rn.f32 %inv_s, 0f42FE0000, %amax;
+    mov.u32 %idx, %ltid;
+RQ_P6:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra RQ_P6E;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %ro, %off;
+    ld.global.f32 %xv, [%a64];
+    mul.rn.f32 %qf, %xv, %inv_s;
+    cvt.rni.s32.f32 %qi, %qf;
+    min.s32 %qi, %qi, 127;
+    max.s32 %qi, %qi, -128;
+    cvt.u64.u32 %off, %idx;
+    add.u64 %a64, %rq, %off;
+    st.global.s8 [%a64], %qi;
+    add.u32 %idx, %idx, 256;
+    bra RQ_P6;
+RQ_P6E:
+    ret;
+}
+
+// Residual add: x[i] += y[i]
+// Grid: ceil(dim/256), Block: 256
+.visible .entry gpu_residual(
+    .param .u64 p_x,
+    .param .u64 p_y,
+    .param .u32 p_dim
+)
+{
+    .reg .b64 %rx, %ry, %a64, %off;
+    .reg .b32 %dim, %i, %r0, %r1;
+    .reg .f32 %xv, %yv;
+    .reg .pred %p0;
+
+    ld.param.u64 %rx, [p_x];
+    ld.param.u64 %ry, [p_y];
+    ld.param.u32 %dim, [p_dim];
+    mov.u32 %r0, %ctaid.x;
+    mov.u32 %r1, %ntid.x;
+    mul.lo.s32 %r0, %r0, %r1;
+    mov.u32 %r1, %tid.x;
+    add.u32 %i, %r0, %r1;
+    setp.ge.u32 %p0, %i, %dim;
+    @%p0 bra RES_END;
+    shl.b32 %r0, %i, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %xv, [%a64];
+    add.u64 %a64, %ry, %off;
+    ld.global.f32 %yv, [%a64];
+    add.f32 %xv, %xv, %yv;
+    add.u64 %a64, %rx, %off;
+    st.global.f32 [%a64], %xv;
+RES_END:
+    ret;
+}
+
+// GPU Embedding Lookup: out[i] = emb_table[tok_id * dim + i]
+// Reads tok_id from GPU memory (argmax output), no H2D needed
+// 1 block, 256 threads, loops over dim
+.visible .entry gpu_emb_lookup(
+    .param .u64 p_out,       // f32 output [dim]
+    .param .u64 p_emb,       // f32 embedding table [vocab x dim]
+    .param .u64 p_tok_id,    // u32* token ID (from argmax, GPU resident)
+    .param .u32 p_dim
+)
+{
+    .reg .b64 %ro, %re, %rt, %a64, %off, %row_off;
+    .reg .b32 %dim, %ltid, %idx, %r0, %tok_id;
+    .reg .f32 %val;
+    .reg .pred %p0;
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %re, [p_emb];
+    ld.param.u64 %rt, [p_tok_id];
+    ld.param.u32 %dim, [p_dim];
+    mov.u32 %ltid, %tid.x;
+
+    // Load token ID from GPU memory
+    ld.global.u32 %tok_id, [%rt];
+    // row_off = tok_id * dim * 4 (bytes)
+    mul.lo.u32 %r0, %tok_id, %dim;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %row_off, %r0;
+    add.u64 %re, %re, %row_off;
+
+    // Copy embedding row
+    mov.u32 %idx, %ltid;
+EL_LP:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra EL_END;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %re, %off;
+    ld.global.f32 %val, [%a64];
+    add.u64 %a64, %ro, %off;
+    st.global.f32 [%a64], %val;
+    add.u32 %idx, %idx, 256;
+    bra EL_LP;
+EL_END:
+    ret;
+}
+
+// SwiGLU: hb[i] = silu(hb[i]) * hb2[i]
+// silu(x) = x / (1 + exp(-x))
+// Grid: ceil(dim/256), Block: 256
+.visible .entry gpu_swiglu(
+    .param .u64 p_hb,
+    .param .u64 p_hb2,
+    .param .u32 p_dim
+)
+{
+    .reg .b64 %rh, %rh2, %a64, %off;
+    .reg .b32 %dim, %i, %r0, %r1;
+    .reg .f32 %v, %v2, %neg, %ex, %sig;
+    .reg .pred %p0;
+
+    ld.param.u64 %rh, [p_hb];
+    ld.param.u64 %rh2, [p_hb2];
+    ld.param.u32 %dim, [p_dim];
+    mov.u32 %r0, %ctaid.x;
+    mov.u32 %r1, %ntid.x;
+    mul.lo.s32 %r0, %r0, %r1;
+    mov.u32 %r1, %tid.x;
+    add.u32 %i, %r0, %r1;
+    setp.ge.u32 %p0, %i, %dim;
+    @%p0 bra SG_END;
+    shl.b32 %r0, %i, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rh, %off;
+    ld.global.f32 %v, [%a64];
+    add.u64 %a64, %rh2, %off;
+    ld.global.f32 %v2, [%a64];
+    // silu(v) = v * sigmoid(v) = v / (1 + exp(-v))
+    neg.f32 %neg, %v;
+    mul.f32 %neg, %neg, 0f3FB8AA3B;
+    ex2.approx.f32 %ex, %neg;
+    add.f32 %sig, %ex, 0f3F800000;
+    div.rn.f32 %sig, %v, %sig;
+    mul.f32 %sig, %sig, %v2;
+    add.u64 %a64, %rh, %off;
+    st.global.f32 [%a64], %sig;
+SG_END:
+    ret;
+}
+
+// RoPE: apply rotary position embedding to q and k vectors
+// q[dim], k[kv_dim] modified in-place
+// Grid: 1, Block: 256 (handles dim/2 pairs via loop)
+// theta_base = 10000.0
+.visible .entry gpu_rope(
+    .param .u64 p_q,
+    .param .u64 p_k,
+    .param .u32 p_dim,
+    .param .u32 p_kvdim,
+    .param .u32 p_hdd,
+    .param .u64 p_pos_ptr
+)
+{
+    .reg .b64 %rq, %rk, %rpos, %a64, %off;
+    .reg .b32 %dim, %kvdim, %hdd, %pos, %ltid, %idx, %r0, %r1, %hd2;
+    .reg .f32 %theta, %freq, %fpos, %fi, %fhdd, %cr, %ci, %q0, %q1, %nq0, %nq1;
+    .reg .pred %p0, %p1;
+
+    ld.param.u64 %rq, [p_q];
+    ld.param.u64 %rk, [p_k];
+    ld.param.u32 %dim, [p_dim];
+    ld.param.u32 %kvdim, [p_kvdim];
+    ld.param.u32 %hdd, [p_hdd];
+    ld.param.u64 %rpos, [p_pos_ptr];
+    ld.global.u32 %pos, [%rpos];
+
+    mov.u32 %ltid, %tid.x;
+    shr.u32 %hd2, %hdd, 1;
+
+    // Each thread handles pair at idx = tid, tid+256, tid+512...
+    mov.u32 %idx, %ltid;
+ROPE_LP:
+    // idx ranges over dim/2 pairs
+    shr.u32 %r0, %dim, 1;
+    setp.ge.u32 %p0, %idx, %r0;
+    @%p0 bra ROPE_END;
+
+    // pair_in_head = idx % (hdd/2), freq = 1/theta^(2*pair_in_head/hdd)
+    // Simplified: just use idx within head
+    rem.u32 %r0, %idx, %hd2;
+    cvt.rn.f32.u32 %fi, %r0;
+    add.f32 %fi, %fi, %fi;
+    cvt.rn.f32.u32 %fhdd, %hdd;
+    div.rn.f32 %fi, %fi, %fhdd;
+    // theta^fi = 2^(fi * log2(500000)) = 2^(fi * 18.9316)  [Llama3.2: rope_freq_base=500000]
+    mul.f32 %fi, %fi, 0f419773DA;
+    ex2.approx.f32 %theta, %fi;
+    rcp.rn.f32 %freq, %theta;
+    cvt.rn.f32.u32 %fpos, %pos;
+    mul.f32 %freq, %freq, %fpos;
+    // cos/sin via ex2 trick: cos(x) = Re(e^ix), approximate
+    // Use sin.approx and cos.approx
+    sin.approx.f32 %ci, %freq;
+    cos.approx.f32 %cr, %freq;
+
+    // Apply to Q: q[2*idx], q[2*idx+1]
+    shl.b32 %r0, %idx, 3;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rq, %off;
+    ld.global.f32 %q0, [%a64];
+    ld.global.f32 %q1, [%a64+4];
+    mul.f32 %nq0, %q0, %cr;
+    mul.f32 %nq1, %q1, %ci;
+    sub.f32 %nq0, %nq0, %nq1;
+    st.global.f32 [%a64], %nq0;
+    mul.f32 %nq0, %q0, %ci;
+    mul.f32 %nq1, %q1, %cr;
+    add.f32 %nq0, %nq0, %nq1;
+    st.global.f32 [%a64+4], %nq0;
+
+    // Apply to K if idx < kv_dim/2
+    shr.u32 %r0, %kvdim, 1;
+    setp.ge.u32 %p1, %idx, %r0;
+    @%p1 bra ROPE_SKIP_K;
+    cvt.u64.u32 %off, %r0;
+    shl.b32 %r0, %idx, 3;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rk, %off;
+    ld.global.f32 %q0, [%a64];
+    ld.global.f32 %q1, [%a64+4];
+    mul.f32 %nq0, %q0, %cr;
+    mul.f32 %nq1, %q1, %ci;
+    sub.f32 %nq0, %nq0, %nq1;
+    st.global.f32 [%a64], %nq0;
+    mul.f32 %nq0, %q0, %ci;
+    mul.f32 %nq1, %q1, %cr;
+    add.f32 %nq0, %nq0, %nq1;
+    st.global.f32 [%a64+4], %nq0;
+
+ROPE_SKIP_K:
+    add.u32 %idx, %idx, 256;
+    bra ROPE_LP;
+
+ROPE_END:
+    ret;
+}
+
+// Convert FP32 vector to FP16, broadcast to 16 rows
+// out[row*n + i] = f16(src[i]) for row=0..15
+// Grid: ceil(n/256), Block: 256
+.visible .entry gpu_f32_to_f16x16(
+    .param .u64 p_out,
+    .param .u64 p_src,
+    .param .u32 p_n
+)
+{
+    .reg .b64 %ro, %rs, %a64, %off;
+    .reg .b32 %n, %i, %r0, %row;
+    .reg .f32 %fv;
+    .reg .b16 %hv;
+    .reg .pred %p0, %p1;
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %rs, [p_src];
+    ld.param.u32 %n, [p_n];
+
+    mov.u32 %r0, %ctaid.x;
+    shl.b32 %r0, %r0, 8;
+    mov.u32 %i, %tid.x;
+    add.u32 %i, %r0, %i;
+    setp.ge.u32 %p0, %i, %n;
+    @%p0 bra BC_END;
+
+    // Load src[i] as FP32
+    shl.b32 %r0, %i, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rs, %off;
+    ld.global.f32 %fv, [%a64];
+    cvt.rn.f16.f32 %hv, %fv;
+
+    // Store to 16 rows
+    mov.u32 %row, 0;
+BC_LP:
+    setp.ge.u32 %p1, %row, 16;
+    @%p1 bra BC_END;
+    mul.lo.u32 %r0, %row, %n;
+    add.u32 %r0, %r0, %i;
+    shl.b32 %r0, %r0, 1;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %ro, %off;
+    st.global.b16 [%a64], %hv;
+    add.u32 %row, %row, 1;
+    bra BC_LP;
+
+BC_END:
+    ret;
+}
+
+// Extract row 0 from FP32 matrix [16 x d] to vector [d]
+// Grid: ceil(d/256), Block: 256
+.visible .entry gpu_extract_row0(
+    .param .u64 p_out,
+    .param .u64 p_src,
+    .param .u32 p_d
+)
+{
+    .reg .b64 %ro, %rs, %a64, %off;
+    .reg .b32 %d, %i, %r0;
+    .reg .f32 %v;
+    .reg .pred %p0;
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %rs, [p_src];
+    ld.param.u32 %d, [p_d];
+
+    mov.u32 %r0, %ctaid.x;
+    shl.b32 %r0, %r0, 8;
+    mov.u32 %i, %tid.x;
+    add.u32 %i, %r0, %i;
+    setp.ge.u32 %p0, %i, %d;
+    @%p0 bra EX_END;
+
+    // src[0*d + i] = row 0
+    shl.b32 %r0, %i, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rs, %off;
+    ld.global.f32 %v, [%a64];
+    add.u64 %a64, %ro, %off;
+    st.global.f32 [%a64], %v;
+
+EX_END:
+    ret;
+}
+
+// Copy vector to KV cache slot: cache[pos*kvd + 0..kvd] = src[0..kvd]
+// Grid: ceil(kvd/256), Block: 256
+.visible .entry gpu_kv_store(
+    .param .u64 p_cache,
+    .param .u64 p_src,
+    .param .u32 p_kvd,
+    .param .u64 p_pos_ptr
+)
+{
+    .reg .b64 %rc, %rs, %rpos, %a64, %off;
+    .reg .b32 %kvd, %pos, %i, %r0;
+    .reg .f32 %v;
+    .reg .pred %p0;
+
+    ld.param.u64 %rc, [p_cache];
+    ld.param.u64 %rs, [p_src];
+    ld.param.u32 %kvd, [p_kvd];
+    ld.param.u64 %rpos, [p_pos_ptr];
+    ld.global.u32 %pos, [%rpos];
+
+    mov.u32 %r0, %ctaid.x;
+    shl.b32 %r0, %r0, 8;
+    mov.u32 %i, %tid.x;
+    add.u32 %i, %r0, %i;
+    setp.ge.u32 %p0, %i, %kvd;
+    @%p0 bra KVS_END;
+
+    // src[i]
+    shl.b32 %r0, %i, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rs, %off;
+    ld.global.f32 %v, [%a64];
+
+    // cache[pos*kvd + i]
+    mul.lo.u32 %r0, %pos, %kvd;
+    add.u32 %r0, %r0, %i;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rc, %off;
+    st.global.f32 [%a64], %v;
+
+KVS_END:
+    ret;
+}
+
+// GPU Attention with GQA
+// 1 block = 1 query head, blockDim.x threads handle sequence positions
+// Grid: n_heads, Block: 256
+// For each head h: kv_head = h * n_kv_heads / n_heads
+// score[t] = dot(q[h*hdd..], k_cache[t*kvd + kv_head*hdd..]) / sqrt(hdd)
+// softmax(score[0..pos+1])
+// out[h*hdd + d] = sum_t score[t] * v_cache[t*kvd + kv_head*hdd + d]
+.visible .entry gpu_attention(
+    .param .u64 p_out,
+    .param .u64 p_q,
+    .param .u64 p_kc,
+    .param .u64 p_vc,
+    .param .u64 p_pos_ptr,
+    .param .u32 p_hdd,
+    .param .u32 p_kvd,
+    .param .u32 p_nkv,
+    .param .u32 p_nh
+)
+{
+    .reg .b64 %ro, %rq, %rkc, %rvc, %rpos, %a64, %b64, %off;
+    .reg .b32 %pos, %hdd, %kvd, %nkv, %nh, %h, %kvh, %ltid, %t, %d, %r0, %r1, %len, %posP1;
+    .reg .f32 %sum, %v, %qv, %kv, %sc, %mx, %ex, %s, %inv, %rsq, %fhdd, %tmp, %local_max, %local_sum, %shfl, %sc_tmp, %sc_den;
+    .reg .pred %p0, %p1, %p2, %p3;
+    .shared .align 4 .f32 scores[2048];
+    .shared .align 4 .f32 s_max[8];
+    .shared .align 4 .f32 s_sum[8];
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %rq, [p_q];
+    ld.param.u64 %rkc, [p_kc];
+    ld.param.u64 %rvc, [p_vc];
+    ld.param.u64 %rpos, [p_pos_ptr];
+    ld.global.u32 %pos, [%rpos];
+    ld.param.u32 %hdd, [p_hdd];
+    ld.param.u32 %kvd, [p_kvd];
+    ld.param.u32 %nkv, [p_nkv];
+    ld.param.u32 %nh,  [p_nh];
+
+    // Branchless cross-attention detection & setup
+    // %p2 = (pos >= 1500) [is_cross]
+    setp.ge.u32 %p2, %pos, 1500;
+
+    // Compute step: pos - 1500 if cross-attn, else 0
+    sub.u32 %r0, %pos, 1500;
+    selp.u32 %len, %r0, 0, %p2; // %len = step
+
+    // Compute pos and posP1 with isolated dependencies
+    add.u32 %r1, %pos, 1;
+    selp.u32 %posP1, 1500, %r1, %p2;
+    mov.u32 %r1, %pos;
+    selp.u32 %pos, 1500, %r1, %p2;
+
+    // Compute Corridor Sparse Attention center (Shift & Add approximation)
+    // center = step * 3 + (step >> 2) + (step >> 3)
+    shl.b32 %r0, %len, 1;
+    add.u32 %r0, %r0, %len;
+    shr.u32 %r1, %len, 2;
+    add.u32 %r0, %r0, %r1;
+    shr.u32 %r1, %len, 3;
+    add.u32 %len, %r0, %r1; // %len = center
+
+    // Compute minT = max(0, center - 120)
+    // %p0 = (center < 120)
+    setp.lt.u32 %p0, %len, 120;
+    sub.u32 %r0, %len, 120;
+    selp.u32 %r1, 0, %r0, %p0;    // %r1 = minT
+
+    mov.u32 %h, %ctaid.x;
+    mov.u32 %ltid, %tid.x;
+
+    mul.lo.u32 %kvh, %h, %nkv;
+    div.u32 %kvh, %kvh, %nh;
+
+    cvt.rn.f32.u32 %fhdd, %hdd;
+    rsqrt.approx.f32 %rsq, %fhdd;
+
+    // Phase 1: scores - each thread handles t = tid, tid+256, ...
+    mov.u32 %t, %ltid;
+ATT_SCORE:
+    setp.ge.u32 %p0, %t, %posP1;
+    @%p0 bra ATT_SCORE_DONE;
+    mov.f32 %sum, 0f00000000;
+    mov.u32 %d, 0;
+ATT_DOT:
+    setp.ge.u32 %p1, %d, %hdd;
+    @%p1 bra ATT_DOT_END;
+    mul.lo.u32 %r0, %h, %hdd;
+    add.u32 %r0, %r0, %d;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rq, %off;
+    ld.global.f32 %qv, [%a64];
+    mul.lo.u32 %r0, %t, %kvd;
+    mul.lo.u32 %r1, %kvh, %hdd;
+    add.u32 %r0, %r0, %r1;
+    add.u32 %r0, %r0, %d;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rkc, %off;
+    ld.global.f32 %kv, [%a64];
+    fma.rn.f32 %sum, %qv, %kv, %sum;
+    add.u32 %d, %d, 1;
+    bra ATT_DOT;
+ATT_DOT_END:
+    mul.f32 %sum, %sum, %rsq;
+    
+    // Branchless Sparse Masking (Safe Recycled Register version)
+    setp.lt.u32 %p0, %t, 8;             // %p0 = isSink
+    setp.ge.u32 %p1, %t, %r1;           // %p1 = (t >= minT)
+    add.u32 %r0, %len, 120;             // %r0 = maxT = center + 120
+    setp.le.u32 %p3, %t, %r0;           // %p3 = (t <= maxT)
+    and.pred %p1, %p1, %p3;             // %p1 = isLocal = (t >= minT) & (t <= maxT)
+    or.pred %p0, %p0, %p1;              // %p0 = isHot = isSink | isLocal
+    not.pred %p1, %p0;                  // %p1 = !isHot
+    and.pred %p3, %p2, %p1;             // %p3 = applyMask = is_cross & !isHot
+    selp.f32 %sum, %sum, %sum, %p3; // sum = sum (Dense bypass for zero-error integrity)
+
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    st.shared.f32 [%a64], %sum;
+    add.u32 %t, %t, 256;
+    bra ATT_SCORE;
+ATT_SCORE_DONE:
+    bar.sync 0;
+
+    // Phase 2: PARALLEL softmax - all 256 threads participate
+    // Step 2a: parallel max reduction
+    mov.f32 %local_max, 0fFF800000;
+    mov.u32 %t, %ltid;
+ATT_PMAX:
+    setp.ge.u32 %p0, %t, %posP1;
+    @%p0 bra ATT_PMAX_END;
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    ld.shared.f32 %v, [%a64];
+    max.f32 %local_max, %local_max, %v;
+    add.u32 %t, %t, 256;
+    bra ATT_PMAX;
+ATT_PMAX_END:
+    // warp reduction for max
+    shfl.sync.bfly.b32 %shfl, %local_max, 16, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_max, 8, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_max, 4, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_max, 2, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_max, 1, 31, 0xffffffff; max.f32 %local_max, %local_max, %shfl;
+    // cross-warp max reduction via shared memory
+    and.b32 %r0, %ltid, 31;
+    setp.ne.u32 %p0, %r0, 0;
+    @%p0 bra ATT_SKIP_WR_MAX;
+    shr.u32 %r1, %ltid, 5;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off, %r1;
+    mov.u64 %a64, s_max;
+    add.u64 %a64, %a64, %off;
+    st.shared.f32 [%a64], %local_max;
+ATT_SKIP_WR_MAX:
+    bar.sync 0;
+    // thread 0 reduces 8 warp maxes
+    setp.ne.u32 %p0, %ltid, 0;
+    @%p0 bra ATT_SKIP_FMAX;
+    ld.shared.f32 %local_max, [s_max];
+    ld.shared.f32 %shfl, [s_max+4]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+8]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+12]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+16]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+20]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+24]; max.f32 %local_max, %local_max, %shfl;
+    ld.shared.f32 %shfl, [s_max+28]; max.f32 %local_max, %local_max, %shfl;
+    st.shared.f32 [s_max], %local_max;
+ATT_SKIP_FMAX:
+    bar.sync 0;
+    ld.shared.f32 %mx, [s_max];
+
+    // Step 2b: parallel exp + local sum
+    mov.f32 %local_sum, 0f00000000;
+    mov.u32 %t, %ltid;
+ATT_PEX:
+    setp.ge.u32 %p0, %t, %posP1;
+    @%p0 bra ATT_PEX_END;
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    ld.shared.f32 %v, [%a64];
+    sub.f32 %v, %v, %mx;
+    mul.f32 %v, %v, 0f3FB8AA3B;
+    ex2.approx.f32 %v, %v;
+    st.shared.f32 [%a64], %v;
+    add.f32 %local_sum, %local_sum, %v;
+    add.u32 %t, %t, 256;
+    bra ATT_PEX;
+ATT_PEX_END:
+    // warp reduction for sum
+    shfl.sync.bfly.b32 %shfl, %local_sum, 16, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_sum, 8, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_sum, 4, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_sum, 2, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    shfl.sync.bfly.b32 %shfl, %local_sum, 1, 31, 0xffffffff; add.f32 %local_sum, %local_sum, %shfl;
+    // cross-warp sum reduction via shared memory
+    and.b32 %r0, %ltid, 31;
+    setp.ne.u32 %p0, %r0, 0;
+    @%p0 bra ATT_SKIP_WR_SUM;
+    shr.u32 %r1, %ltid, 5;
+    shl.b32 %r1, %r1, 2;
+    cvt.u64.u32 %off, %r1;
+    mov.u64 %a64, s_sum;
+    add.u64 %a64, %a64, %off;
+    st.shared.f32 [%a64], %local_sum;
+ATT_SKIP_WR_SUM:
+    bar.sync 0;
+    // thread 0 reduces 8 warp sums
+    setp.ne.u32 %p0, %ltid, 0;
+    @%p0 bra ATT_SKIP_FSUM;
+    ld.shared.f32 %local_sum, [s_sum];
+    ld.shared.f32 %shfl, [s_sum+4]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+8]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+12]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+16]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+20]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+24]; add.f32 %local_sum, %local_sum, %shfl;
+    ld.shared.f32 %shfl, [s_sum+28]; add.f32 %local_sum, %local_sum, %shfl;
+    st.shared.f32 [s_sum], %local_sum;
+ATT_SKIP_FSUM:
+    bar.sync 0;
+    ld.shared.f32 %s, [s_sum];
+    rcp.rn.f32 %inv, %s;
+
+    // Step 2c: parallel normalize
+    mov.u32 %t, %ltid;
+ATT_PNRM:
+    setp.ge.u32 %p0, %t, %posP1;
+    @%p0 bra ATT_PNRM_END;
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    ld.shared.f32 %v, [%a64];
+    mul.f32 %v, %v, %inv;
+    st.shared.f32 [%a64], %v;
+    add.u32 %t, %t, 256;
+    bra ATT_PNRM;
+ATT_PNRM_END:
+    bar.sync 0;
+
+    // Phase 3: weighted sum (unchanged - already parallel over d)
+    mov.u32 %d, %ltid;
+ATT_WS:
+    setp.ge.u32 %p0, %d, %hdd;
+    @%p0 bra ATT_WS_END;
+    mov.f32 %sum, 0f00000000;
+    mov.u32 %t, 0;
+ATT_WS_T:
+    setp.ge.u32 %p1, %t, %posP1;
+    @%p1 bra ATT_WS_ST;
+    shl.b32 %r0, %t, 2;
+    mov.u64 %off, scores;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    ld.shared.f32 %sc, [%a64];
+    mul.lo.u32 %r0, %t, %kvd;
+    mul.lo.u32 %r1, %kvh, %hdd;
+    add.u32 %r0, %r0, %r1;
+    add.u32 %r0, %r0, %d;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rvc, %off;
+    ld.global.f32 %v, [%a64];
+    fma.rn.f32 %sum, %v, %sc, %sum;
+    add.u32 %t, %t, 1;
+    bra ATT_WS_T;
+ATT_WS_ST:
+    mul.lo.u32 %r0, %h, %hdd;
+    add.u32 %r0, %r0, %d;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %ro, %off;
+    st.global.f32 [%a64], %sum;
+    add.u32 %d, %d, 256;
+    bra ATT_WS;
+ATT_WS_END:
+    ret;
+}
+
+
+.visible .entry gpu_inc_pos(
+    .param .u64 p_pos_ptr
+)
+{
+    .reg .b64 %p;
+    .reg .u32 %v;
+    ld.param.u64 %p, [p_pos_ptr];
+    ld.global.u32 %v, [%p];
+    add.u32 %v, %v, 1;
+    st.global.u32 [%p], %v;
+    ret;
+}
+
+// Gemma RMSNorm: out[i] = (w[i] + 1.0) * x[i] * rsqrt(mean(x^2) + eps)
+// Identical to gpu_rmsnorm except weight has 1.0 added
+.visible .entry gpu_rmsnorm_gemma(
+    .param .u64 p_out,
+    .param .u64 p_x,
+    .param .u64 p_w,
+    .param .u32 p_dim
+)
+{
+    .reg .b64 %ro, %rx, %rw, %a64, %off;
+    .reg .b32 %dim, %ltid, %idx, %r0, %r1, %lane, %wid;
+    .reg .f32 %ss, %xv, %wv, %scale, %tmp, %fdim;
+    .reg .pred %p0;
+    .shared .align 4 .f32 warp_sum[8];
+
+    ld.param.u64 %ro, [p_out];
+    ld.param.u64 %rx, [p_x];
+    ld.param.u64 %rw, [p_w];
+    ld.param.u32 %dim, [p_dim];
+    mov.u32 %ltid, %tid.x;
+
+    mov.f32 %ss, 0f00000000;
+    mov.u32 %idx, %ltid;
+GP1_LP:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra GP1_END;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %xv, [%a64];
+    mul.f32 %tmp, %xv, %xv;
+    add.f32 %ss, %ss, %tmp;
+    add.u32 %idx, %idx, 256;
+    bra GP1_LP;
+GP1_END:
+
+    shfl.sync.down.b32 %tmp, %ss, 16, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 8, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 4, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 2, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+    shfl.sync.down.b32 %tmp, %ss, 1, 31, 0xFFFFFFFF; add.f32 %ss, %ss, %tmp;
+
+    and.b32 %lane, %ltid, 31;
+    shr.u32 %wid, %ltid, 5;
+    setp.ne.u32 %p0, %lane, 0;
+    @%p0 bra GSKIP_STORE;
+    shl.b32 %r0, %wid, 2;
+    mov.u64 %off, warp_sum;
+    cvt.u64.u32 %a64, %r0;
+    add.u64 %a64, %off, %a64;
+    st.shared.f32 [%a64], %ss;
+GSKIP_STORE:
+    bar.sync 0;
+
+    setp.ne.u32 %p0, %ltid, 0;
+    @%p0 bra GSKIP_FINAL;
+    mov.u64 %off, warp_sum;
+    ld.shared.f32 %ss, [%off];
+    ld.shared.f32 %tmp, [%off+4]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+8]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+12]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+16]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+20]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+24]; add.f32 %ss, %ss, %tmp;
+    ld.shared.f32 %tmp, [%off+28]; add.f32 %ss, %ss, %tmp;
+    cvt.rn.f32.u32 %fdim, %dim;
+    div.rn.f32 %ss, %ss, %fdim;
+    add.f32 %ss, %ss, 0f3727C5AC;
+    rsqrt.approx.f32 %ss, %ss;
+    st.shared.f32 [%off], %ss;
+GSKIP_FINAL:
+    bar.sync 0;
+
+    // Phase 4: out[i] = (w[i] + 1.0) * x[i] * scale
+    mov.u64 %off, warp_sum;
+    ld.shared.f32 %scale, [%off];
+    mov.u32 %idx, %ltid;
+GP4_LP:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra GP4_END;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %xv, [%a64];
+    add.u64 %a64, %rw, %off;
+    ld.global.f32 %wv, [%a64];
+    // Gemma: weight + 1.0
+    add.f32 %wv, %wv, 0f3F800000;
+    mul.f32 %xv, %xv, %scale;
+    mul.f32 %xv, %wv, %xv;
+    add.u64 %a64, %ro, %off;
+    st.global.f32 [%a64], %xv;
+    add.u32 %idx, %idx, 256;
+    bra GP4_LP;
+GP4_END:
+    ret;
+}
+
+// GeGLU: hb[i] = gelu(hb[i]) * hb2[i]
+// gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+// Approximation: 0.5 * x * (1 + tanh(0.7978846 * x * (1 + 0.044715 * x * x)))
+.visible .entry gpu_geglu(
+    .param .u64 p_hb,
+    .param .u64 p_hb2,
+    .param .u32 p_dim
+)
+{
+    .reg .b64 %rh, %rh2, %a64, %off;
+    .reg .b32 %dim, %i, %r0, %r1;
+    .reg .f32 %v, %v2, %x2, %inner, %tanh_in, %exp_pos, %exp_neg, %tanh_val, %gelu;
+    .reg .pred %p0;
+
+    ld.param.u64 %rh, [p_hb];
+    ld.param.u64 %rh2, [p_hb2];
+    ld.param.u32 %dim, [p_dim];
+    mov.u32 %r0, %ctaid.x;
+    mov.u32 %r1, %ntid.x;
+    mul.lo.s32 %r0, %r0, %r1;
+    mov.u32 %r1, %tid.x;
+    add.u32 %i, %r0, %r1;
+    setp.ge.u32 %p0, %i, %dim;
+    @%p0 bra GG_END;
+    shl.b32 %r0, %i, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rh, %off;
+    ld.global.f32 %v, [%a64];
+    add.u64 %a64, %rh2, %off;
+    ld.global.f32 %v2, [%a64];
+    // gelu(v) = 0.5 * v * (1 + tanh(0.7978846 * v * (1 + 0.044715 * v * v)))
+    mul.f32 %x2, %v, %v;
+    fma.rn.f32 %inner, %x2, 0f3D372713, 0f3F800000; // 1 + 0.044715 * x^2
+    mul.f32 %inner, %inner, %v;
+    mul.f32 %tanh_in, %inner, 0f3F4C4230; // * 0.7978846
+    // tanh via exp: tanh(x) = (e^2x - 1)/(e^2x + 1)
+    add.f32 %tanh_in, %tanh_in, %tanh_in; // 2x
+    mul.f32 %tanh_in, %tanh_in, 0f3FB8AA3B; // * log2(e) for ex2
+    ex2.approx.f32 %exp_pos, %tanh_in;
+    add.f32 %exp_neg, %exp_pos, 0f3F800000; // e^2x + 1
+    add.f32 %tanh_val, %exp_pos, 0fBF800000; // e^2x - 1 (subtracting 1.0 via neg float)
+    div.rn.f32 %tanh_val, %tanh_val, %exp_neg;
+    // gelu = 0.5 * v * (1 + tanh)
+    add.f32 %tanh_val, %tanh_val, 0f3F800000; // 1 + tanh
+    mul.f32 %gelu, %v, %tanh_val;
+    mul.f32 %gelu, %gelu, 0f3F000000; // * 0.5
+    mul.f32 %gelu, %gelu, %v2;
+    add.u64 %a64, %rh, %off;
+    st.global.f32 [%a64], %gelu;
+GG_END:
+    ret;
+}
+
+// GPU Argmax: find index of maximum value in float array
+// 1 block, 256 threads. Handles any n via loop.
+// Output: dst[0] = argmax index (u32)
+.visible .entry gpu_argmax(
+    .param .u64 p_dst,    // output: u32 index
+    .param .u64 p_src,    // input: f32 array
+    .param .u32 p_n       // array length
+)
+{
+    .reg .b64 %rd, %rs, %a64, %off;
+    .reg .b32 %n, %ltid, %idx, %r0, %best_idx, %other_idx;
+    .reg .f32 %best_val, %v, %other_val;
+    .reg .pred %p0, %p1;
+    .shared .align 4 .f32 s_val[256];
+    .shared .align 4 .b32 s_idx[256];
+
+    ld.param.u64 %rd, [p_dst];
+    ld.param.u64 %rs, [p_src];
+    ld.param.u32 %n, [p_n];
+    mov.u32 %ltid, %tid.x;
+
+    // Phase 1: each thread finds local max across strided elements
+    mov.f32 %best_val, 0fFF800000;  // -inf
+    mov.u32 %best_idx, 0;
+    mov.u32 %idx, %ltid;
+AM_LP:
+    setp.ge.u32 %p0, %idx, %n;
+    @%p0 bra AM_LP_END;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rs, %off;
+    ld.global.f32 %v, [%a64];
+    setp.gt.f32 %p1, %v, %best_val;
+    @%p1 mov.f32 %best_val, %v;
+    @%p1 mov.u32 %best_idx, %idx;
+    add.u32 %idx, %idx, 256;
+    bra AM_LP;
+AM_LP_END:
+
+    // Store to shared memory
+    shl.b32 %r0, %ltid, 2;
+    cvt.u64.u32 %off, %r0;
+    mov.u64 %a64, s_val;
+    add.u64 %a64, %a64, %off;
+    st.shared.f32 [%a64], %best_val;
+    mov.u64 %a64, s_idx;
+    add.u64 %a64, %a64, %off;
+    st.shared.b32 [%a64], %best_idx;
+    bar.sync 0;
+
+    // Phase 2: parallel reduction in shared memory
+    // stride = 128, 64, 32, 16, 8, 4, 2, 1
+    mov.u32 %r0, 128;
+AM_RED:
+    setp.eq.u32 %p0, %r0, 0;
+    @%p0 bra AM_RED_END;
+    setp.ge.u32 %p0, %ltid, %r0;
+    @%p0 bra AM_RED_SKIP;
+    // Load other element
+    add.u32 %idx, %ltid, %r0;
+    shl.b32 %idx, %idx, 2;
+    cvt.u64.u32 %off, %idx;
+    mov.u64 %a64, s_val;
+    add.u64 %a64, %a64, %off;
+    ld.shared.f32 %other_val, [%a64];
+    mov.u64 %a64, s_idx;
+    add.u64 %a64, %a64, %off;
+    ld.shared.b32 %other_idx, [%a64];
+    // Load my element
+    shl.b32 %idx, %ltid, 2;
+    cvt.u64.u32 %off, %idx;
+    mov.u64 %a64, s_val;
+    add.u64 %a64, %a64, %off;
+    ld.shared.f32 %best_val, [%a64];
+    mov.u64 %a64, s_idx;
+    add.u64 %a64, %a64, %off;
+    ld.shared.b32 %best_idx, [%a64];
+    // Compare and store winner
+    setp.gt.f32 %p1, %other_val, %best_val;
+    @%p1 mov.f32 %best_val, %other_val;
+    @%p1 mov.u32 %best_idx, %other_idx;
+    mov.u64 %a64, s_val;
+    add.u64 %a64, %a64, %off;
+    st.shared.f32 [%a64], %best_val;
+    mov.u64 %a64, s_idx;
+    add.u64 %a64, %a64, %off;
+    st.shared.b32 [%a64], %best_idx;
+AM_RED_SKIP:
+    bar.sync 0;
+    shr.u32 %r0, %r0, 1;
+    bra AM_RED;
+AM_RED_END:
+
+    // Thread 0 writes result
+    setp.ne.u32 %p0, %ltid, 0;
+    @%p0 bra AM_DONE;
+    ld.shared.b32 %best_idx, [s_idx];
+    st.global.b32 [%rd], %best_idx;
+AM_DONE:
+    ret;
+}
+
+// Quantize f32 vector -> int8 + f16 scale
+// 1 block, 256 threads. out_q[i] = round(x[i] * 127/max|x|), scale = max|x|/127
+.visible .entry gpu_quantize_x(
+    .param .u64 p_out_q,   // output: int8 array
+    .param .u64 p_out_s,   // output: f16 scale (single value)
+    .param .u64 p_x,       // input: f32 array
+    .param .u32 p_dim      // vector length
+)
+{
+    .reg .b64 %rq, %rs, %rx, %a64, %off;
+    .reg .b32 %dim, %ltid, %idx, %r0;
+    .reg .f32 %amax, %v, %av, %scale, %inv_s, %qf, %shfl_v;
+    .reg .s32 %qi;
+    .reg .b16 %sh;
+    .reg .pred %p0;
+    .shared .align 4 .f32 warp_max[8];
+
+    ld.param.u64 %rq, [p_out_q];
+    ld.param.u64 %rs, [p_out_s];
+    ld.param.u64 %rx, [p_x];
+    ld.param.u32 %dim, [p_dim];
+    mov.u32 %ltid, %tid.x;
+
+    // Phase 1: find abs-max
+    mov.f32 %amax, 0f00000000;
+    mov.u32 %idx, %ltid;
+QX_LP1:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra QX_LP1_END;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %v, [%a64];
+    abs.f32 %av, %v;
+    max.f32 %amax, %amax, %av;
+    add.u32 %idx, %idx, 256;
+    bra QX_LP1;
+QX_LP1_END:
+
+    // Warp reduce max
+    shfl.sync.bfly.b32 %shfl_v, %amax, 16, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    shfl.sync.bfly.b32 %shfl_v, %amax, 8, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    shfl.sync.bfly.b32 %shfl_v, %amax, 4, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    shfl.sync.bfly.b32 %shfl_v, %amax, 2, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+    shfl.sync.bfly.b32 %shfl_v, %amax, 1, 31, 0xffffffff; max.f32 %amax, %amax, %shfl_v;
+
+    // Lane 0 of each warp writes to shared
+    and.b32 %r0, %ltid, 31;
+    setp.ne.u32 %p0, %r0, 0;
+    @%p0 bra QX_SKIP_WR;
+    shr.u32 %r0, %ltid, 5;
+    shl.b32 %r0, %r0, 2;
+    cvt.u64.u32 %off, %r0;
+    mov.u64 %a64, warp_max;
+    add.u64 %a64, %a64, %off;
+    st.shared.f32 [%a64], %amax;
+QX_SKIP_WR:
+    bar.sync 0;
+
+    // Thread 0 reduces across warps
+    setp.ne.u32 %p0, %ltid, 0;
+    @%p0 bra QX_SKIP_RED;
+    ld.shared.f32 %amax, [warp_max];
+    ld.shared.f32 %v, [warp_max+4]; max.f32 %amax, %amax, %v;
+    ld.shared.f32 %v, [warp_max+8]; max.f32 %amax, %amax, %v;
+    ld.shared.f32 %v, [warp_max+12]; max.f32 %amax, %amax, %v;
+    ld.shared.f32 %v, [warp_max+16]; max.f32 %amax, %amax, %v;
+    ld.shared.f32 %v, [warp_max+20]; max.f32 %amax, %amax, %v;
+    ld.shared.f32 %v, [warp_max+24]; max.f32 %amax, %amax, %v;
+    ld.shared.f32 %v, [warp_max+28]; max.f32 %amax, %amax, %v;
+    // Compute scale = amax/127 and store
+    div.rn.f32 %scale, %amax, 0f42FE0000;
+    cvt.rn.f16.f32 %sh, %scale;
+    st.global.b16 [%rs], %sh;
+    // Store amax back to shared for all threads
+    st.shared.f32 [warp_max], %amax;
+QX_SKIP_RED:
+    bar.sync 0;
+
+    // All threads read global amax
+    ld.shared.f32 %amax, [warp_max];
+    // inv_s = 127/amax
+    div.rn.f32 %inv_s, 0f42FE0000, %amax;
+
+    // Phase 2: quantize
+    mov.u32 %idx, %ltid;
+QX_LP2:
+    setp.ge.u32 %p0, %idx, %dim;
+    @%p0 bra QX_LP2_END;
+    shl.b32 %r0, %idx, 2;
+    cvt.u64.u32 %off, %r0;
+    add.u64 %a64, %rx, %off;
+    ld.global.f32 %v, [%a64];
+    mul.rn.f32 %qf, %v, %inv_s;
+    cvt.rni.s32.f32 %qi, %qf;
+    min.s32 %qi, %qi, 127;
+    max.s32 %qi, %qi, -128;
+    // Store as int8
+    cvt.u64.u32 %off, %idx;
+    add.u64 %a64, %rq, %off;
+    st.global.s8 [%a64], %qi;
+    add.u32 %idx, %idx, 256;
+    bra QX_LP2;
+QX_LP2_END:
+    ret;
+}
+
+

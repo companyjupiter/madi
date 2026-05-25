@@ -1,0 +1,78 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// TC GEMV: C[16xD] = A[16xN] * B[NxD]
+// Grid: (D/16, 1), Block: (32, 1) = 1 warp
+.visible .entry tc_gemv(
+    .param .u64 param_A,
+    .param .u64 param_B,
+    .param .u64 param_C,
+    .param .u32 param_N,
+    .param .u32 param_D
+)
+{
+    .reg .b32 %ra<8>, %rb<8>;
+    .reg .f32 %acc<8>, %rd<8>;
+    .reg .b64 %pA, %pB, %pC, %addr;
+    .reg .b32 %mN, %mD, %bx;
+    .reg .b32 %t0, %t1, %k;
+    .reg .b64 %off64;
+    .reg .pred %p0;
+
+    ld.param.u64 %pA, [param_A];
+    ld.param.u64 %pB, [param_B];
+    ld.param.u64 %pC, [param_C];
+    ld.param.u32 %mN, [param_N];
+    ld.param.u32 %mD, [param_D];
+    mov.u32 %bx, %ctaid.x;
+
+    mov.f32 %acc0, 0f00000000; mov.f32 %acc1, 0f00000000;
+    mov.f32 %acc2, 0f00000000; mov.f32 %acc3, 0f00000000;
+    mov.f32 %acc4, 0f00000000; mov.f32 %acc5, 0f00000000;
+    mov.f32 %acc6, 0f00000000; mov.f32 %acc7, 0f00000000;
+
+    mov.u32 %k, 0;
+KL:
+    setp.ge.u32 %p0, %k, %mN;
+    @%p0 bra KE;
+
+    shl.b32 %t0, %k, 1;
+    cvt.u64.u32 %off64, %t0;
+    add.u64 %addr, %pA, %off64;
+    wmma.load.a.sync.aligned.row.m16n16k16.global.f16
+        {%ra0,%ra1,%ra2,%ra3,%ra4,%ra5,%ra6,%ra7}, [%addr], %mN;
+
+    mul.lo.s32 %t0, %bx, 16;
+    mul.lo.s32 %t0, %t0, %mN;
+    add.u32 %t0, %t0, %k;
+    shl.b32 %t0, %t0, 1;
+    cvt.u64.u32 %off64, %t0;
+    add.u64 %addr, %pB, %off64;
+    wmma.load.b.sync.aligned.col.m16n16k16.global.f16
+        {%rb0,%rb1,%rb2,%rb3,%rb4,%rb5,%rb6,%rb7}, [%addr], %mN;
+
+    wmma.mma.sync.aligned.row.col.m16n16k16.f32.f32
+        {%rd0,%rd1,%rd2,%rd3,%rd4,%rd5,%rd6,%rd7},
+        {%ra0,%ra1,%ra2,%ra3,%ra4,%ra5,%ra6,%ra7},
+        {%rb0,%rb1,%rb2,%rb3,%rb4,%rb5,%rb6,%rb7},
+        {%acc0,%acc1,%acc2,%acc3,%acc4,%acc5,%acc6,%acc7};
+
+    mov.f32 %acc0, %rd0; mov.f32 %acc1, %rd1;
+    mov.f32 %acc2, %rd2; mov.f32 %acc3, %rd3;
+    mov.f32 %acc4, %rd4; mov.f32 %acc5, %rd5;
+    mov.f32 %acc6, %rd6; mov.f32 %acc7, %rd7;
+    add.u32 %k, %k, 16;
+    bra KL;
+KE:
+    // Store to global: C[0*D + bx*16]
+    mul.lo.s32 %t1, %bx, 16;
+    shl.b32 %t1, %t1, 2;
+    cvt.u64.u32 %off64, %t1;
+    add.u64 %addr, %pC, %off64;
+    wmma.store.d.sync.aligned.row.m16n16k16.global.f32
+        [%addr], {%rd0,%rd1,%rd2,%rd3,%rd4,%rd5,%rd6,%rd7}, %mD;
+    ret;
+}
+
+

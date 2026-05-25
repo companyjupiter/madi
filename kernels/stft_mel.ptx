@@ -1,0 +1,220 @@
+.version 7.1
+.target sm_86
+.address_size 64
+
+// compute_mel: per-frame STFT + mel filterbank
+// Grid: (N_FRAMES, 1, 1), Block: (256, 1, 1)
+// Each block computes one frame's 128 mel bins
+// params: d_mel[128*3000], d_samples[480000], d_window[400], d_filters[128*201], n_frames, n_samples
+.visible .entry compute_mel(
+    .param .u64 param_mel,
+    .param .u64 param_samples,
+    .param .u64 param_window,
+    .param .u64 param_filters,
+    .param .u32 param_n_frames,
+    .param .u32 param_n_samples
+) {
+    .reg .pred %p_out, %p_samp, %p_mel, %p_done;
+    .reg .b32 %frame, %tid, %mel_bin, %n_frames, %n_samples;
+    .reg .b32 %k, %t, %nfft, %hop, %fft_bins, %sample_idx;
+    .reg .b64 %ptr_mel, %ptr_samples, %ptr_window, %ptr_filters;
+    .reg .b64 %off64, %addr;
+    .reg .f32 %sample, %win, %angle, %cos_v, %sin_v, %re, %im;
+    .reg .f32 %power, %filter_val, %mel_sum, %pi2, %inv_nfft;
+    .reg .f32 %f_k, %f_t, %f_nfft, %f_prod, %f_neg2pi;
+
+    mov.u32 %frame, %ctaid.x;
+    mov.u32 %tid, %tid.x;
+
+    ld.param.u32 %n_frames, [param_n_frames];
+    setp.ge.u32 %p_out, %frame, %n_frames;
+    @%p_out bra DONE;
+
+    ld.param.u64 %ptr_samples, [param_samples];
+    ld.param.u64 %ptr_window, [param_window];
+    ld.param.u64 %ptr_filters, [param_filters];
+    ld.param.u64 %ptr_mel, [param_mel];
+    ld.param.u32 %n_samples, [param_n_samples];
+
+    mov.u32 %nfft, 400;
+    mov.u32 %hop, 160;
+    mov.u32 %fft_bins, 201;  // nfft/2 + 1
+
+    // Each thread handles multiple mel bins (128 bins / 256 threads = loop)
+    // But simpler: each thread computes ONE fft bin's power, store to shared, then reduce
+    // Actually simplest approach: each thread = one mel_bin (threads 0..127)
+    // For each mel bin: iterate over 201 fft bins, compute STFT on-the-fly
+
+    // Thread maps to mel_bin
+    mov.u32 %mel_bin, %tid;
+    setp.ge.u32 %p_mel, %mel_bin, 128;
+    @%p_mel bra DONE;
+
+    // mel_sum = sum over k of (filter[mel_bin * 201 + k] * power_spectrum[k])
+    mov.f32 %mel_sum, 0f00000000;
+
+    // Constants
+    // -2*pi/nfft
+    mov.f32 %f_neg2pi, 0fC0C90FDB;  // -2*pi = -6.2831853
+    mov.f32 %f_nfft, 0f43C80000;    // 400.0
+    div.approx.f32 %f_neg2pi, %f_neg2pi, %f_nfft;  // -2*pi/400
+
+    // Loop over fft bins k = 0..200
+    mov.u32 %k, 0;
+FFT_LOOP:
+    setp.ge.u32 %p_done, %k, %fft_bins;
+    @%p_done bra FFT_DONE;
+
+    // Load filter coefficient: filters[mel_bin * 201 + k]
+    // offset = (mel_bin * 201 + k) * 4
+    mul.lo.u32 %sample_idx, %mel_bin, 201;
+    add.u32 %sample_idx, %sample_idx, %k;
+    mul.wide.u32 %off64, %sample_idx, 4;
+    add.u64 %addr, %ptr_filters, %off64;
+    ld.global.f32 %filter_val, [%addr];
+
+    // Skip if filter is zero (sparse optimization)
+    setp.eq.f32 %p_done, %filter_val, 0f00000000;
+    @%p_done bra SKIP_BIN;
+
+    // Compute STFT for this frame at frequency bin k
+    // re = sum_t(sample[frame*hop + t] * window[t] * cos(-2*pi*k*t/nfft))
+    // im = sum_t(sample[frame*hop + t] * window[t] * sin(-2*pi*k*t/nfft))
+    mov.f32 %re, 0f00000000;
+    mov.f32 %im, 0f00000000;
+
+    // angle_step = -2*pi*k/nfft
+    cvt.rn.f32.u32 %f_k, %k;
+    mul.f32 %angle, %f_neg2pi, %f_k;  // This is -2*pi*k/nfft (pre-divided above)
+    // But we need angle_per_t = -2*pi*k/nfft, then for each t: angle_t = angle_per_t * t
+
+    // Unrolled DFT: iterate t = 0..399
+    mov.u32 %t, 0;
+DFT_LOOP:
+    setp.ge.u32 %p_done, %t, %nfft;
+    @%p_done bra DFT_DONE;
+
+    // sample_idx = frame * hop + t
+    mul.lo.u32 %sample_idx, %frame, %hop;
+    add.u32 %sample_idx, %sample_idx, %t;
+
+    // Bounds check
+    setp.ge.u32 %p_samp, %sample_idx, %n_samples;
+    @%p_samp bra DFT_NEXT;
+
+    // Load sample
+    mul.wide.u32 %off64, %sample_idx, 4;
+    add.u64 %addr, %ptr_samples, %off64;
+    ld.global.f32 %sample, [%addr];
+
+    // Load window
+    mul.wide.u32 %off64, %t, 4;
+    add.u64 %addr, %ptr_window, %off64;
+    ld.global.f32 %win, [%addr];
+
+    // windowed = sample * window
+    mul.f32 %sample, %sample, %win;
+
+    // angle_t = angle_per_t * t = (-2*pi*k/nfft) * t
+    cvt.rn.f32.u32 %f_t, %t;
+    mul.f32 %cos_v, %angle, %f_t;  // total angle
+
+    // cos/sin approximation
+    cos.approx.f32 %sin_v, %cos_v;  // this is actually cos
+    sin.approx.f32 %cos_v, %cos_v;  // wait, need to be careful
+
+    // Actually: cos.approx computes cos, sin.approx computes sin
+    // Let me redo: angle_total is in %cos_v right now
+    // Need a temp register
+    // Re-approach:
+    // f_prod = angle * f_t (the angle)
+    mul.f32 %f_prod, %angle, %f_t;
+    cos.approx.f32 %cos_v, %f_prod;
+    sin.approx.f32 %sin_v, %f_prod;
+
+    // re += sample * cos(angle)
+    fma.rn.f32 %re, %sample, %cos_v, %re;
+    // im += sample * sin(angle)
+    fma.rn.f32 %im, %sample, %sin_v, %im;
+
+DFT_NEXT:
+    add.u32 %t, %t, 1;
+    bra DFT_LOOP;
+
+DFT_DONE:
+    // power = re*re + im*im
+    mul.f32 %power, %re, %re;
+    fma.rn.f32 %power, %im, %im, %power;
+
+    // mel_sum += filter_val * power
+    fma.rn.f32 %mel_sum, %filter_val, %power, %mel_sum;
+
+SKIP_BIN:
+    add.u32 %k, %k, 1;
+    bra FFT_LOOP;
+
+FFT_DONE:
+    // Apply log: mel_sum = log(max(mel_sum, 1e-10))
+    // Clamp to avoid log(0)
+    max.f32 %mel_sum, %mel_sum, 0f2EDBE6FF;  // 1e-10
+    lg2.approx.f32 %mel_sum, %mel_sum;        // log2
+    mul.f32 %mel_sum, %mel_sum, 0f3F317218;   // * ln(2) = 0.6931 to get natural log
+
+    // Store: mel[mel_bin * n_frames + frame]
+    mul.lo.u32 %sample_idx, %mel_bin, %n_frames;
+    add.u32 %sample_idx, %sample_idx, %frame;
+    mul.wide.u32 %off64, %sample_idx, 4;
+    add.u64 %addr, %ptr_mel, %off64;
+    st.global.f32 [%addr], %mel_sum;
+
+DONE:
+    ret;
+}
+
+// normalize_mel: mel = (mel - max) / 4.0 + 1.0 (Whisper normalization)
+// Actually Whisper does: mel = max(mel, mel_max - 8.0); mel = (mel + 4.0) / 4.0
+.visible .entry normalize_mel(
+    .param .u64 param_mel,
+    .param .f32 param_max_val,
+    .param .u32 param_count
+) {
+    .reg .pred %p_out;
+    .reg .b32 %tid, %bid, %idx, %count;
+    .reg .b64 %ptr, %off64;
+    .reg .f32 %val, %max_val, %floor_val, %four, %inv4, %one;
+
+    mov.u32 %tid, %tid.x;
+    mov.u32 %bid, %ctaid.x;
+    mul.lo.u32 %idx, %bid, 256;
+    add.u32 %idx, %idx, %tid;
+
+    ld.param.u32 %count, [param_count];
+    setp.ge.u32 %p_out, %idx, %count;
+    @%p_out bra NORM_DONE;
+
+    ld.param.u64 %ptr, [param_mel];
+    ld.param.f32 %max_val, [param_max_val];
+
+    // Load mel value
+    mul.wide.u32 %off64, %idx, 4;
+    add.u64 %ptr, %ptr, %off64;
+    ld.global.f32 %val, [%ptr];
+
+    // floor = max_val - 8.0
+    mov.f32 %four, 0f41000000;  // 8.0
+    sub.f32 %floor_val, %max_val, %four;
+
+    // val = max(val, floor)
+    max.f32 %val, %val, %floor_val;
+
+    // val = (val + 4.0) / 4.0
+    mov.f32 %four, 0f40800000;  // 4.0
+    add.f32 %val, %val, %four;
+    mov.f32 %inv4, 0f3E800000;  // 0.25
+    mul.f32 %val, %val, %inv4;
+
+    st.global.f32 [%ptr], %val;
+
+NORM_DONE:
+    ret;
+}
