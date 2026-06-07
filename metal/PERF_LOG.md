@@ -1,0 +1,32 @@
+# Metal perf optimization loop — log
+
+Autonomous self-paced optimization on branch `feature/metal-perf-loop`.
+
+## Protocol (per iteration)
+1. Pick next idea (backlog below, or derive from quark `_perf__measured` bands).
+2. Implement (kernel / host edit).
+3. **Build** — fail → revert, log FAIL.
+4. **Correctness gate** (hard): `test_encoder` + `test_decoder` stay green AND
+   `transcribe assets/jfk.wav` text **exactly** == golden:
+   `And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.`
+   Any mismatch → revert, log FAIL.
+5. **Measure** encoder/decoder ms (≥3 runs, take min).
+6. **Decide**: faster beyond noise (>3%) & correct → keep → regen quark → `git commit`.
+   Else → `git revert`(working tree) → log as tried-and-failed (Data).
+7. Append a row below. Regenerate quark after any committed `.metal`/`.zig` change.
+
+## Baseline (M4 Pro, jfk 11s) — start of loop
+encoder ~565 ms · decoder ~120 tok/s · flash_attention_enc_f16 4.88 ms/layer
+front-end conv1d_gelu ~50 ms × 2.
+
+## Idea backlog
+- conv1d_gelu: F16 weights (bandwidth), or MPS/im2col GEMM, or better tiling.
+- decoder: F16 weights for self/cross/MLP GEMVs (M=1, bandwidth-bound).
+- decoder cross-attn (flash_cross_attn): F16 K/V cache.
+- logit_gemv_f16: tune threadgroup / 2-row.
+- encoder: fuse bias into LN/GEMM epilogue; reduce per-layer sync further.
+
+## Results (newest first)
+| # | idea | result | metric | commit |
+|---|------|--------|--------|--------|
+| 1 | conv1d_gelu F16 weights | ❌ revert | conv 23–47ms/call, no clear gain (weights cached across time axis → compute-bound, not bandwidth) | — |
