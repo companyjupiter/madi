@@ -1,0 +1,13 @@
+build/
+out/
+*.metallib
+*.air
+*.o
+
+# Model assets: keep only the generator scripts + README; ignore everything
+# downloaded/generated (model, tokenizer json, .bin, .wav — all re-creatable).
+assets/*
+!assets/gen_assets.py
+!assets/export_enc_weights.py
+!assets/README.md
+.DS_Store
