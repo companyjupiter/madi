@@ -165,3 +165,100 @@ kernel void logit_gemv_f16_cg(
     acc = simd_sum(acc);
     if (tiisg == 0) logits[v] = acc;
 }
+
+// ── Q8_0 embedding (int8 weights + fp16 per-32-block scale) ─────────
+// Halves embed_tokens memory (132→~70MB) vs F16; logit/lookup are our own
+// kernels (no MPS), so Q8 bandwidth helps directly. Block = 32 (= one warp).
+//   dequant w[v][d] = qs[v*dim + d] * scales[v*(dim/32) + d/32]
+
+// logit GEMV (Q8): one simdgroup per vocab row, 32 lanes = one 32-block.
+kernel void logit_gemv_q8(
+    device float*        logits [[buffer(0)]],
+    device const char*   qs     [[buffer(1)]],
+    device const half*   scales [[buffer(2)]],
+    device const float*  x      [[buffer(3)]],
+    constant uint& vocab [[buffer(4)]],
+    constant uint& dim   [[buffer(5)]],
+    uint  tgid  [[threadgroup_position_in_grid]],
+    uint  tiitg [[thread_position_in_threadgroup]],
+    ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    threadgroup float xs[1280];
+    for (uint d = tiitg; d < dim; d += 256) xs[d] = x[d];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    const uint v = tgid * 8 + sgitg;
+    if (v >= vocab) return;
+    const uint nb = dim / 32;
+    device const char* qrow = qs + (ulong)v * dim;
+    device const half* srow = scales + (ulong)v * nb;
+    float acc = 0.0f;
+    for (uint b = 0; b < nb; b++) {
+        const uint d = b * 32 + tiisg;
+        acc += xs[d] * ((float)qrow[d] * (float)srow[b]);
+    }
+    acc = simd_sum(acc);
+    if (tiisg == 0) logits[v] = acc;
+}
+
+// emb lookup (Q8), indirect: out[d] = dequant(qs[tokens[*pos]][d])
+kernel void emb_lookup_indirect_q8(
+    device float*        out_buf [[buffer(0)]],
+    device const char*   qs      [[buffer(1)]],
+    device const half*   scales  [[buffer(2)]],
+    device const uint*   tokens  [[buffer(3)]],
+    device const uint*   pos_ptr [[buffer(4)]],
+    constant uint& dim [[buffer(5)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= dim) return;
+    const uint tok = tokens[pos_ptr[0]];
+    const uint nb = dim / 32;
+    out_buf[gid] = (float)qs[(ulong)tok * dim + gid] * (float)scales[(ulong)tok * nb + gid / 32];
+}
+
+// emb lookup (Q8), direct token pointer (seed phase).
+kernel void gpu_emb_lookup_q8(
+    device float*        out_buf [[buffer(0)]],
+    device const char*   qs      [[buffer(1)]],
+    device const half*   scales  [[buffer(2)]],
+    device const uint*   tok_ptr [[buffer(3)]],
+    constant uint& dim [[buffer(4)]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    const uint tok = tok_ptr[0];
+    const uint nb = dim / 32;
+    device const char* qrow = qs + (ulong)tok * dim;
+    device const half* srow = scales + (ulong)tok * nb;
+    for (uint d = ltid; d < dim; d += 256) out_buf[d] = (float)qrow[d] * (float)srow[d / 32];
+}
+
+// gemv_q8 — general single-token GEMV with Q8_0 weights stored [N][K] (out-major,
+// = original safetensors [out][in], NOT transposed). out[n] = Σ_k x[k]·deq(w[n][k]).
+// One simdgroup per output row n; 32 lanes split K in 32-blocks (coalesced int8),
+// simd_sum. int8 weights → 1/4 the F32 weight bandwidth. (No x cache: x is tiny
+// for M=1 and broadcast-cached.)
+kernel void gemv_q8(
+    device float*        out_buf [[buffer(0)]],
+    device const char*   qs      [[buffer(1)]],
+    device const half*   scales  [[buffer(2)]],
+    device const float*  x       [[buffer(3)]],
+    constant uint& N [[buffer(4)]],
+    constant uint& K [[buffer(5)]],
+    uint  tgid  [[threadgroup_position_in_grid]],
+    ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n = tgid * 8 + sgitg;
+    if (n >= N) return;
+    const uint nb = K / 32;
+    device const char* qrow = qs + (ulong)n * K;
+    device const half* srow = scales + (ulong)n * nb;
+    float acc = 0.0f;
+    for (uint b = 0; b < nb; b++) {
+        const uint d = b * 32 + tiisg;
+        acc += x[d] * ((float)qrow[d] * (float)srow[b]);
+    }
+    acc = simd_sum(acc);
+    if (tiisg == 0) out_buf[n] = acc;
+}

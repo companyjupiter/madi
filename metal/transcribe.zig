@@ -20,20 +20,31 @@ const SEED = [_]u32{ 50258, 50259, 50360, 50364 }; // sot, en, transcribe, notim
 const alloc = std.heap.page_allocator;
 
 // ── safetensors ──────────────────────────────────────────────────────
+// pread-based loader: the 1.6GB data section is NEVER mmap'd/resident. Each
+// tensor is pread into a single reusable scratch buffer, consumed (copied or
+// quantized into a unified GPU buffer), then overwritten by the next read.
+// Peak RSS ≈ GPU weight buffers + one tensor's bytes (vs +1.6GB with mmap;
+// macOS won't reclaim read-once mmap pages via madvise, so mmap is avoided).
+var g_rd: []u8 = &.{}; // reusable per-tensor read buffer (grows as needed)
+
 const Sf = struct {
-    data: []align(std.heap.page_size_min) const u8,
+    fd: std.posix.fd_t,
     off: usize, // data section start
-    json: []const u8,
+    size: usize, // total file size (for reporting)
+    json: []u8, // heap-allocated header
 
     fn open(path: []const u8) !Sf {
         const fd = try std.posix.open(path, .{}, 0);
-        defer std.posix.close(fd);
         const sz: usize = @intCast((try std.posix.fstat(fd)).size);
-        const m = try std.posix.mmap(null, sz, std.posix.PROT.READ, .{ .TYPE = .PRIVATE }, fd, 0);
-        const n = std.mem.readInt(u64, m[0..8], .little);
-        return .{ .data = m, .off = 8 + n, .json = m[8 .. 8 + n] };
+        var hdr: [8]u8 = undefined;
+        if (try std.posix.pread(fd, &hdr, 0) != 8) return error.BadHeader;
+        const n = std.mem.readInt(u64, &hdr, .little);
+        const json = try alloc.alloc(u8, n);
+        if (try std.posix.pread(fd, json, 8) != n) return error.BadHeader;
+        return .{ .fd = fd, .off = 8 + n, .size = sz, .json = json };
     }
-    /// Raw F16 bytes for a tensor key (null if absent).
+    /// Raw F16 bytes for a tensor key (null if absent). Valid until the next
+    /// raw() call — the returned slice aliases the shared scratch buffer.
     fn raw(self: Sf, key: []const u8) ?[]const u8 {
         var kbuf: [128]u8 = undefined;
         const q = std.fmt.bufPrint(&kbuf, "\"{s}\"", .{key}) catch return null;
@@ -44,7 +55,19 @@ const Sf = struct {
         const rb = std.mem.indexOfPos(u8, self.json, cm, "]") orelse return null;
         const s = std.fmt.parseInt(usize, std.mem.trim(u8, self.json[lb + 1 .. cm], " "), 10) catch return null;
         const e = std.fmt.parseInt(usize, std.mem.trim(u8, self.json[cm + 1 .. rb], " "), 10) catch return null;
-        return self.data[self.off + s .. self.off + e];
+        const len = e - s;
+        if (g_rd.len < len) {
+            if (g_rd.len > 0) alloc.free(g_rd);
+            g_rd = alloc.alloc(u8, len) catch return null;
+        }
+        const buf = g_rd[0..len];
+        var got: usize = 0;
+        while (got < len) {
+            const m = std.posix.pread(self.fd, buf[got..], self.off + s + got) catch return null;
+            if (m == 0) return null;
+            got += m;
+        }
+        return buf;
     }
 };
 
@@ -74,6 +97,29 @@ fn upVecF16(sf: Sf, key: []const u8) ![*]f16 {
     const dst = try mtl.allocSlice(f16, r.len / 2);
     @memcpy(std.mem.sliceAsBytes(dst), r);
     return dst.ptr;
+}
+const Q8 = dec.Q8w;
+/// Quantize an F16 [rows][dim] tensor to Q8_0 (int8 + per-32-block fp16 scale).
+fn upVecQ8(sf: Sf, key: []const u8, rows: usize, dim: usize) !Q8 {
+    const r = sf.raw(key) orelse return error.MissingTensor;
+    const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. rows * dim];
+    const nb = dim / 32;
+    const qs = try mtl.allocSlice(i8, rows * dim);
+    const sc = try mtl.allocSlice(f16, rows * nb);
+    for (0..rows) |v| {
+        for (0..nb) |b| {
+            var mx: f32 = 0;
+            for (0..32) |i| { const w = @abs(h2f(u16s[v * dim + b * 32 + i])); if (w > mx) mx = w; }
+            const scale: f32 = if (mx > 0) mx / 127.0 else 1.0;
+            sc[v * nb + b] = @floatCast(scale);
+            const inv = 1.0 / scale;
+            for (0..32) |i| {
+                const q = std.math.clamp(@round(h2f(u16s[v * dim + b * 32 + i]) * inv), -127.0, 127.0);
+                qs[v * dim + b * 32 + i] = @intFromFloat(q);
+            }
+        }
+    }
+    return .{ .qs = qs.ptr, .scales = sc.ptr };
 }
 
 /// Load a projection weight [out][in] → transposed [in][out] F32 unified.
@@ -119,6 +165,49 @@ fn upMatTIntoF16(sf: Sf, key: []const u8, dst: [*]f16, out_ch: usize, in_ch: usi
     }
 }
 
+// Quantize a safetensors [out][in] f16 matrix → Q8_0 natural [out][in] layout
+// (per output row, blocks of 32 along `in`). Feeds encoder JIT-dequant→MPS.
+fn quantInto(u16s: [*]align(1) const u16, qs: [*]i8, sc: [*]f16, out_ch: usize, in_ch: usize, row0: usize) void {
+    const nb = in_ch / 32;
+    for (0..out_ch) |o| {
+        const row = row0 + o;
+        for (0..nb) |b| {
+            var mx: f32 = 0;
+            for (0..32) |i| { const w = @abs(h2f(u16s[o * in_ch + b * 32 + i])); if (w > mx) mx = w; }
+            const scale: f32 = if (mx > 0) mx / 127.0 else 1.0;
+            sc[row * nb + b] = @floatCast(scale);
+            const inv = 1.0 / scale;
+            for (0..32) |i| {
+                const q = std.math.clamp(@round(h2f(u16s[o * in_ch + b * 32 + i]) * inv), -127.0, 127.0);
+                qs[row * in_ch + b * 32 + i] = @intFromFloat(q);
+            }
+        }
+    }
+}
+fn upMatQ8(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize) !enc.Q8 {
+    const r = sf.raw(key) orelse return error.MissingTensor;
+    const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr));
+    const qs = try mtl.allocSlice(i8, out_ch * in_ch);
+    const sc = try mtl.allocSlice(f16, out_ch * (in_ch / 32));
+    quantInto(u16s, qs.ptr, sc.ptr, out_ch, in_ch, 0);
+    return .{ .qs = qs.ptr, .scales = sc.ptr };
+}
+// Encoder qkv stacked [3D][D] Q8 (q|k|v out-major), for JIT-dequant→MPS.
+fn upQKVQ8enc(sf: Sf, l: usize) !enc.Q8 {
+    const nb = @as(usize, D) / 32;
+    const qs = try mtl.allocSlice(i8, 3 * @as(usize, D) * D);
+    const sc = try mtl.allocSlice(f16, 3 * @as(usize, D) * nb);
+    var kbuf: [128]u8 = undefined;
+    const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
+    for (names, 0..) |nm, blk| {
+        const key = std.fmt.bufPrint(&kbuf, "model.encoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        const r = sf.raw(key) orelse return error.MissingTensor;
+        const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr));
+        quantInto(u16s, qs.ptr, sc.ptr, D, D, blk * @as(usize, D));
+    }
+    return .{ .qs = qs.ptr, .scales = sc.ptr };
+}
+
 // conv weight: safetensors [out][in][k] → [k][in][out]
 fn upConvW(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![*]f32 {
     const r = sf.raw(key) orelse return error.MissingTensor;
@@ -142,6 +231,35 @@ fn upConvWF16(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![
 }
 
 // Stacked decoder QKV weight [D][3D] (q|k|v) for one batched GEMM (F32, [in][out]).
+fn upQKVQ8(sf: Sf, l: usize) !Q8 {
+    const nb = @as(usize, D) / 32;
+    const qs = try mtl.allocSlice(i8, 3 * @as(usize, D) * D);
+    const sc = try mtl.allocSlice(f16, 3 * @as(usize, D) * nb);
+    var kbuf: [128]u8 = undefined;
+    const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
+    for (names, 0..) |nm, blk| {
+        const key = std.fmt.bufPrint(&kbuf, "model.decoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        const r = sf.raw(key) orelse return error.MissingTensor;
+        const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. @as(usize, D) * D];
+        const ro = blk * @as(usize, D);
+        for (0..D) |o| {
+            const row = ro + o;
+            for (0..nb) |b| {
+                var mx: f32 = 0;
+                for (0..32) |i| { const w = @abs(h2f(u16s[o * @as(usize, D) + b * 32 + i])); if (w > mx) mx = w; }
+                const scale: f32 = if (mx > 0) mx / 127.0 else 1.0;
+                sc[row * nb + b] = @floatCast(scale);
+                const inv = 1.0 / scale;
+                for (0..32) |i| {
+                    const q = std.math.clamp(@round(h2f(u16s[o * @as(usize, D) + b * 32 + i]) * inv), -127.0, 127.0);
+                    qs[row * @as(usize, D) + b * 32 + i] = @intFromFloat(q);
+                }
+            }
+        }
+    }
+    return .{ .qs = qs.ptr, .scales = sc.ptr };
+}
+
 fn upQKV(sf: Sf, l: usize) ![*]f32 {
     const dst = try mtl.allocSlice(f32, 3 * @as(usize, D) * D);
     var kbuf: [128]u8 = undefined;
@@ -180,20 +298,21 @@ pub fn main() !void {
     const f_geluPos = try mtl.getFunction("gelu_pos");
     const Ke = try enc.Kernels.load();
     const Kd = try dec.Kernels.load();
-    const f_emb = Kd.emb;
+    const f_emb = try mtl.getFunction("gpu_emb_lookup_q8");
     // GPU-resident decode-loop kernels (sync-free replay; from the SHARE build)
-    const f_emb_ind = try mtl.getFunction("emb_lookup_indirect");
+    const f_emb_ind = try mtl.getFunction("emb_lookup_indirect_q8");
     const f_pe_ind = try mtl.getFunction("pos_embed_add_indirect");
     const f_step = try mtl.getFunction("step_advance");
     const f_argmax = try mtl.getFunction("argmax_no_inc");
     const f_filt = try mtl.getFunction("logit_filter_indirect");
     const f_suppress = try mtl.getFunction("suppress_list");
-    const f_logit = try mtl.getFunction("logit_gemv_f16_cg");
+    const f_logit = try mtl.getFunction("logit_gemv_q8");
     const f_bias16 = try mtl.getFunction("bias_add_f16");
+    const f_deq = try mtl.getFunction("dequant_q8_f16");
     try out.print("[1] Metal + kernels ready\n", .{});
 
     const sf = try Sf.open(model_path);
-    try out.print("[2] model.safetensors mapped ({d} MB)\n", .{sf.data.len / 1048576});
+    try out.print("[2] model.safetensors opened ({d} MB, pread streaming)\n", .{sf.size / 1048576});
 
     const zeros = try mtl.allocSlice(f32, D);
     @memset(zeros, 0);
@@ -219,24 +338,20 @@ pub fn main() !void {
     var elayers: [enc.ENL]enc.Layer = undefined;
     var kb: [4][128]u8 = undefined;
     for (0..enc.ENL) |l| {
-        const qkv = try mtl.allocSlice(f16, 3 * D * D);
-        try upMatTIntoF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.q_proj.weight", l), qkv.ptr, D, D);
-        try upMatTIntoF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.k_proj.weight", l), qkv.ptr + D * D, D, D);
-        try upMatTIntoF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.v_proj.weight", l), qkv.ptr + 2 * D * D, D, D);
         elayers[l] = .{
             .aln_w = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn_layer_norm.weight", l)),
             .aln_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn_layer_norm.bias", l)),
-            .qkv_w = qkv.ptr,
+            .qkv_w = try upQKVQ8enc(sf, l),
             .q_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.q_proj.bias", l)),
             .k_b = g_zeros, // whisper k_proj has no bias
             .v_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.v_proj.bias", l)),
-            .o_w = try upMatTF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
+            .o_w = try upMatQ8(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
             .o_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.out_proj.bias", l)),
             .mln_w = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.final_layer_norm.weight", l)),
             .mln_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.final_layer_norm.bias", l)),
-            .m0_w = try upMatTF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc1.weight", l), MLP, D),
+            .m0_w = try upMatQ8(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc1.weight", l), MLP, D),
             .m0_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc1.bias", l)),
-            .m2_w = try upMatTF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc2.weight", l), D, MLP),
+            .m2_w = try upMatQ8(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc2.weight", l), D, MLP),
             .m2_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc2.bias", l)),
         };
     }
@@ -251,49 +366,55 @@ pub fn main() !void {
         .ao = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr,
         .mo = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr,
         .mh = (try mtl.allocSlice(f16, ENC_SEQ * MLP)).ptr,
+        .wdq = (try mtl.allocSlice(f16, MLP * D)).ptr,
     };
     const out_f16 = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
     const enc_out = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
 
     // ── decoder weights (4 layers); cross-KV weights kept for per-chunk recompute ─
     var dlayers: [dec.NL]dec.Layer = undefined;
-    const ckw = try alloc.alloc([*]f16, dec.NL);
-    const cvw = try alloc.alloc([*]f16, dec.NL);
+    const ckw = try alloc.alloc(enc.Q8, dec.NL); // Q8, JIT-dequanted per chunk → MPS
+    const cvw = try alloc.alloc(enc.Q8, dec.NL);
     const cvb = try alloc.alloc([*]f32, dec.NL);
     const ckc = try alloc.alloc([*]f16, dec.NL);
     const cvc = try alloc.alloc([*]f16, dec.NL);
+    const cross_wdq = (try mtl.allocSlice(f16, D * D)).ptr; // dequant scratch [in][out]
     for (0..dec.NL) |l| {
-        ckw[l] = try upMatTF16(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.k_proj.weight", l), D, D);
-        cvw[l] = try upMatTF16(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.weight", l), D, D);
+        ckw[l] = try upMatQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.k_proj.weight", l), D, D);
+        cvw[l] = try upMatQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.weight", l), D, D);
         cvb[l] = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.bias", l));
         ckc[l] = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
         cvc[l] = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
         dlayers[l] = .{
             .aln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.weight", l)),
             .aln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.bias", l)),
-            .qkvw = try upQKV(sf, l),
+            .qkvw = try upQKVQ8(sf, l),
             .qb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.q_proj.bias", l)),
             .vb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.v_proj.bias", l)),
-            .ow = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
+            .ow = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
             .ob = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.bias", l)),
             .caln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn_layer_norm.weight", l)),
             .caln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn_layer_norm.bias", l)),
-            .cqw = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.q_proj.weight", l), D, D),
+            .cqw = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.q_proj.weight", l), D, D),
             .cqb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.q_proj.bias", l)),
-            .cow = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.out_proj.weight", l), D, D),
+            .cow = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.out_proj.weight", l), D, D),
             .cob = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.out_proj.bias", l)),
             .mln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.final_layer_norm.weight", l)),
             .mln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.final_layer_norm.bias", l)),
-            .m0w = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc1.weight", l), MLP, D),
+            .m0w = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc1.weight", l), MLP, D),
             .m0b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc1.bias", l)),
-            .m2w = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc2.weight", l), D, MLP),
+            .m2w = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc2.weight", l), D, MLP),
             .m2b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc2.bias", l)),
         };
     }
     const dln_w = try upVec(sf, "model.decoder.layer_norm.weight");
     const dln_b = try upVec(sf, "model.decoder.layer_norm.bias");
-    const tok_emb = try upVecF16(sf, "model.decoder.embed_tokens.weight"); // [VOCAB][D] F16
+    const tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0
     const dec_pe = try upVec(sf, "model.decoder.embed_positions.weight"); // [448][D]
+    // all weights now in unified GPU buffers — release the read scratch + fd
+    if (g_rd.len > 0) { alloc.free(g_rd); g_rd = &.{}; }
+    alloc.free(sf.json);
+    std.posix.close(sf.fd);
     try out.print("[7] decoder weights + cross-KV ready\n", .{});
 
     // ── decoder scratch + KV caches ─────────────────────────────────
@@ -367,8 +488,10 @@ pub fn main() !void {
         const enc_ms = @as(f64, @floatFromInt(et.read())) / 1e6;
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
-            try mtl.matmulF16Batched(out_f16, ckw[l], ckc[l], ENC_SEQ, D, D);
-            try mtl.matmulF16Batched(out_f16, cvw[l], cvc[l], ENC_SEQ, D, D);
+            try deqW16(f_deq, cross_wdq, ckw[l], D, D);
+            try mtl.matmulF16Batched(out_f16, cross_wdq, ckc[l], ENC_SEQ, D, D);
+            try deqW16(f_deq, cross_wdq, cvw[l], D, D);
+            try mtl.matmulF16Batched(out_f16, cross_wdq, cvc[l], ENC_SEQ, D, D);
             try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
@@ -393,7 +516,7 @@ pub fn main() !void {
             while (sp + 1 < SEED.len) : (sp += 1) {
                 d_pos[0] = sp;
                 try mtl.beginCommandBuffer();
-                try embLookup(f_emb, d_x, tok_emb, &d_tokens[sp]);
+                try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[sp]);
                 try residual(Kd, d_x, dec_pe + @as(usize, sp) * D, D);
                 for (0..dec.NL) |l| {
                     const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n };
@@ -410,14 +533,14 @@ pub fn main() !void {
             const this_b = @min(DBATCH, max_gen - n_text);
             try mtl.beginCommandBuffer();
             for (0..this_b) |_| {
-                try kEmbInd(f_emb_ind, d_x, tok_emb, d_tokens.ptr, d_pos);
+                try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
                 try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
                 for (0..dec.NL) |l| {
                     const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n };
                     try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
                 }
                 try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
-                try kLogitGemv(f_logit, d_logits, tok_emb, dscr.xb, VOCAB, D);
+                try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
                 try kSuppress(f_suppress, d_logits, d_suppress.ptr, n_suppress);
                 try kFilt(f_filt, d_logits, d_tokens.ptr, d_pos, sample_begin);
                 try kStep(f_step, d_pos); // pos += 1
@@ -621,16 +744,16 @@ fn conv1d(f: mtl.Function, o: [*]f32, i: [*]f32, w: [*]f32, b: [*]f32, cin: u32,
     const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U, U };
     try mtl.dispatch(f, .{ lout, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-fn embLookup(f: mtl.Function, o: [*]f32, emb: [*]f16, tok: *u32) !void {
-    var a0 = o; var a1 = emb; var a2 = tok; var nd = D;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&nd) };
-    const s = [_]usize{ PS, PS, PS, U };
+fn embLookup(f: mtl.Function, o: [*]f32, qs: [*]i8, sc: [*]f16, tok: *u32) !void {
+    var a0 = o; var a1 = qs; var a2 = sc; var a3 = tok; var nd = D;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nd) };
+    const s = [_]usize{ PS, PS, PS, PS, U };
     try mtl.dispatch(f, .{ 1, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-fn kLogitGemv(f: mtl.Function, logits: [*]f32, emb: [*]f16, x: [*]f32, vocab: u32, dim: u32) !void {
-    var a0 = logits; var a1 = emb; var a2 = x; var v = vocab; var d = dim;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&v), P(&d) };
-    const s = [_]usize{ PS, PS, PS, U, U };
+fn kLogitGemv(f: mtl.Function, logits: [*]f32, qs: [*]i8, sc: [*]f16, x: [*]f32, vocab: u32, dim: u32) !void {
+    var a0 = logits; var a1 = qs; var a2 = sc; var a3 = x; var v = vocab; var d = dim;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&v), P(&d) };
+    const s = [_]usize{ PS, PS, PS, PS, U, U };
     try mtl.dispatch(f, .{ (vocab + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn residual(K: dec.Kernels, x: [*]f32, y: [*]f32, n: u32) !void {
@@ -644,6 +767,13 @@ fn biasAdd(K: dec.Kernels, x: [*]f32, b: [*]f32, n: u32, d: u32) !void {
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn), P(&nd) };
     const s = [_]usize{ PS, PS, U, U };
     try mtl.dispatch(K.bias, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+// Dequant Q8 weight [out=N][in=K] → F16 [K][N] (MPS B layout) via dequant_q8_f16.
+fn deqW16(f: mtl.Function, wdq: [*]f16, w: enc.Q8, n: u32, k: u32) !void {
+    var a0 = wdq; var a1 = w.qs; var a2 = w.scales; var nn = n; var kk = k;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&nn), P(&kk) };
+    const s = [_]usize{ PS, PS, PS, U, U };
+    try mtl.dispatch(f, .{ (n * k + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn biasAdd16(f: mtl.Function, x: [*]f16, b: [*]f32, n: u32, d: u32) !void {
     var a0 = x; var a1 = b; var nn = n; var nd = d;
@@ -659,10 +789,10 @@ fn layerNorm(K: dec.Kernels, x: [*]f32, y: [*]f32, g: [*]f32, b: [*]f32, d: u32)
 }
 
 // ── GPU-resident decode-loop launchers (sync-free replay) ────────────
-fn kEmbInd(f: mtl.Function, o: [*]f32, emb: [*]f16, toks: [*]u32, pos: [*]u32) !void {
-    var a0 = o; var a1 = emb; var a2 = toks; var a3 = pos; var nd = D;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nd) };
-    const s = [_]usize{ PS, PS, PS, PS, U };
+fn kEmbInd(f: mtl.Function, o: [*]f32, qs: [*]i8, sc: [*]f16, toks: [*]u32, pos: [*]u32) !void {
+    var a0 = o; var a1 = qs; var a2 = sc; var a3 = toks; var a4 = pos; var nd = D;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&nd) };
+    const s = [_]usize{ PS, PS, PS, PS, PS, U };
     try mtl.dispatch(f, .{ (D + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn kPeInd(f: mtl.Function, o: [*]f32, pe: [*]f32, pos: [*]u32) !void {

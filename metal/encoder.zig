@@ -17,6 +17,9 @@ pub const ENC_SEQ: u32 = 1500;
 pub const ENL: u32 = 32;
 const EPS: f32 = 1e-5;
 
+/// Q8_0 weight: int8 quants [out][in] + per-32 fp16 scale [out][in/32].
+pub const Q8 = struct { qs: [*]i8, scales: [*]f16 };
+
 pub const Kernels = struct {
     ln: mtl.Function,
     brln: mtl.Function,
@@ -24,6 +27,7 @@ pub const Kernels = struct {
     gelu: mtl.Function,
     flash: mtl.Function,
     cvt: mtl.Function,
+    deq: mtl.Function,
 
     pub fn load() mtl.Error!Kernels {
         return .{
@@ -33,35 +37,39 @@ pub const Kernels = struct {
             .gelu = try mtl.getFunction("gelu_f16"),
             .flash = try mtl.getFunction("flash_attention_enc_f16"),
             .cvt = try mtl.getFunction("cvt_f16_f32"),
+            .deq = try mtl.getFunction("dequant_q8_f16"),
         };
     }
 };
 
-/// Per-layer weights: projection matrices F16 (`*_w`), biases + LN weights F32.
+/// Per-layer weights: projection matrices Q8 (`*_w`, out-major), JIT-dequanted to
+/// an F16 scratch right before each MPS GEMM; biases + LN weights F32.
 pub const Layer = struct {
     aln_w: [*]f32,
     aln_b: [*]f32,
-    qkv_w: [*]f16,
+    qkv_w: Q8, // stacked [3D][D] out-major (q|k|v)
     q_b: [*]f32,
     k_b: [*]f32,
     v_b: [*]f32,
-    o_w: [*]f16,
+    o_w: Q8, // [D][D]
     o_b: [*]f32,
     mln_w: [*]f32,
     mln_b: [*]f32,
-    m0_w: [*]f16,
+    m0_w: Q8, // [MLP][D]
     m0_b: [*]f32,
-    m2_w: [*]f16,
+    m2_w: Q8, // [D][MLP]
     m2_b: [*]f32,
 };
 
 /// Scratch (F16 activations), sized for M = batch_count * ENC_SEQ.
+/// `wdq` holds one JIT-dequanted weight tile [K][N] f16 (max MLP*D).
 pub const Scratch = struct {
     x_ln: [*]f16,
     qkv: [*]f16, // [3][M][D]
     ao: [*]f16,
     mo: [*]f16,
     mh: [*]f16,
+    wdq: [*]f16, // weight dequant scratch, size >= MLP*D
 };
 
 inline fn P(x: anytype) ?*const anyopaque {
@@ -101,6 +109,13 @@ fn kFlash(K: Kernels, out: [*]f16, q: [*]f16, k: [*]f16, v: [*]f16, seq: u32) !v
     const s = [_]usize{ PS, PS, PS, PS, U, U, U };
     try mtl.dispatch(K.flash, .{ NH, (seq + 31) / 32, 1 }, .{ 128, 1, 1 }, &p, &s);
 }
+/// Dequant Q8 weight [out=N][in=K] → F16 wdq [K][N] (MPS B layout).
+fn kDeq(K: Kernels, wdq: [*]f16, w: Q8, n: u32, k: u32) !void {
+    var a0 = wdq; var a1 = w.qs; var a2 = w.scales; var nn = n; var kk = k;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&nn), P(&kk) };
+    const s = [_]usize{ PS, PS, PS, U, U };
+    try mtl.dispatch(K.deq, .{ (n * k + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
 fn kCvt(K: Kernels, dst: [*]f32, src: [*]f16, n: u32) !void {
     var a0 = dst; var a1 = src; var nn = n;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn) };
@@ -130,10 +145,15 @@ pub fn forward(
     try mtl.beginCommandBuffer();
     try kLN(K, x, s.x_ln, layers[0].aln_w, layers[0].aln_b, D, M);
 
+    const dnb = @as(usize, D) / 32; // scale blocks per D-length row
     for (layers, 0..) |L, li| {
-        try mtl.matmulF16Batched(s.x_ln, L.qkv_w, q, M, D, D);
-        try mtl.matmulF16Batched(s.x_ln, L.qkv_w + @as(usize, D) * D, k, M, D, D);
-        try mtl.matmulF16Batched(s.x_ln, L.qkv_w + 2 * @as(usize, D) * D, v, M, D, D);
+        // q/k/v: dequant Q8 slice of stacked qkv_w → wdq, then MPS F16 GEMM
+        try kDeq(K, s.wdq, L.qkv_w, D, D);
+        try mtl.matmulF16Batched(s.x_ln, s.wdq, q, M, D, D);
+        try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
+        try mtl.matmulF16Batched(s.x_ln, s.wdq, k, M, D, D);
+        try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+        try mtl.matmulF16Batched(s.x_ln, s.wdq, v, M, D, D);
         try kBias(K, q, L.q_b, M * D, D);
         try kBias(K, k, L.k_b, M * D, D);
         try kBias(K, v, L.v_b, M * D, D);
@@ -141,12 +161,15 @@ pub fn forward(
             const off = bi * ENC_SEQ * D;
             try kFlash(K, s.ao + off, q + off, k + off, v + off, ENC_SEQ);
         }
-        try mtl.matmulF16Batched(s.ao, L.o_w, s.mo, M, D, D);
+        try kDeq(K, s.wdq, L.o_w, D, D);
+        try mtl.matmulF16Batched(s.ao, s.wdq, s.mo, M, D, D);
         try kBRLN(K, x, s.mo, L.o_b, s.x_ln, L.mln_w, L.mln_b, D, M);
-        try mtl.matmulF16Batched(s.x_ln, L.m0_w, s.mh, M, MLP, D);
+        try kDeq(K, s.wdq, L.m0_w, MLP, D);
+        try mtl.matmulF16Batched(s.x_ln, s.wdq, s.mh, M, MLP, D);
         try kBias(K, s.mh, L.m0_b, M * MLP, MLP);
         try kGelu(K, s.mh, M * MLP);
-        try mtl.matmulF16Batched(s.mh, L.m2_w, s.mo, M, D, MLP);
+        try kDeq(K, s.wdq, L.m2_w, D, MLP);
+        try mtl.matmulF16Batched(s.mh, s.wdq, s.mo, M, D, MLP);
         if (li + 1 < layers.len) {
             try kBRLN(K, x, s.mo, L.m2_b, s.x_ln, layers[li + 1].aln_w, layers[li + 1].aln_b, D, M);
         } else {
