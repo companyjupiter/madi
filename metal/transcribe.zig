@@ -279,6 +279,11 @@ fn upQKV(sf: Sf, l: usize) ![*]f32 {
 }
 
 var g_zeros: [*]f32 = undefined; // shared zero bias [D]
+// speaker-attributed transcript: words (global time + text) ⨝ speaker segments
+const Word = struct { t: f32, txt: []const u8 };
+const SpkSeg = struct { a: f32, b: f32, spk: i32 };
+var g_words = std.ArrayList(Word).init(alloc);
+var g_segs = std.ArrayList(SpkSeg).init(alloc);
 
 fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
     return std.fmt.bufPrint(buf, fmt, .{l}) catch unreachable;
@@ -686,6 +691,7 @@ pub fn main() !void {
         try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
     }
     try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
+    try attributeTranscript(out);
 }
 
 // Global speaker diarization on 256-d ResNet34 speaker embeddings. Pipeline:
@@ -773,6 +779,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         fn f(o: anytype, r: *std.ArrayList(u8), fid: []const u8, a: f32, b: f32, sp: i32) !void {
             try o.print("  [{d:.2}s - {d:.2}s] Speaker {d}\n", .{ a, b, sp });
             try r.writer().print("SPEAKER {s} 1 {d:.3} {d:.3} <NA> <NA> spk{d} <NA> <NA>\n", .{ fid, a, b - a, sp });
+            g_segs.append(.{ .a = a, .b = b, .spk = sp }) catch {};
         }
     }.f;
     var open_seg = false;
@@ -797,6 +804,37 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
 
 // Median-filter (size 3) each text token's alignment row, argmax → encoder
 // frame → time (each frame = 20 ms). Group into words at space-prefixed tokens.
+// Speaker-attributed transcript: join each word (by global time) to the speaker
+// segment covering it (nearest if in a gap), group consecutive same-speaker
+// words → "Speaker N: …". Needs g_words (from wordTimestamps) + g_segs (diarize).
+fn speakerAt(t: f32) i32 {
+    var best: i32 = -1;
+    var bestd: f32 = 1e30;
+    for (g_segs.items) |s| {
+        if (t >= s.a and t < s.b) return s.spk;
+        const d = if (t < s.a) s.a - t else t - s.b;
+        if (d < bestd) { bestd = d; best = s.spk; }
+    }
+    return best;
+}
+fn attributeTranscript(out: anytype) !void {
+    if (g_words.items.len == 0 or g_segs.items.len == 0) return;
+    try out.print("\n=== SPEAKER-ATTRIBUTED TRANSCRIPT ===\n", .{});
+    var line = std.ArrayList(u8).init(alloc);
+    defer line.deinit();
+    var cur: i32 = -2;
+    var cur_t: f32 = 0;
+    for (g_words.items) |w| {
+        const sp = speakerAt(w.t);
+        if (sp != cur) {
+            if (line.items.len > 0) try out.print("  [{d:.2}s] Speaker {d}:{s}\n", .{ cur_t, cur, line.items });
+            line.clearRetainingCapacity();
+            cur = sp; cur_t = w.t;
+        }
+        try line.appendSlice(w.txt); // txt already has a leading space for word starts
+    }
+    if (line.items.len > 0) try out.print("  [{d:.2}s] Speaker {d}:{s}\n", .{ cur_t, cur, line.items });
+}
 fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, t_off: f32) !void {
     const toks = try loadBpe(bpe_path);
     var word = std.ArrayList(u8).init(alloc);
@@ -823,12 +861,16 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
         const starts_word = tok_bytes.len > 0 and tok_bytes[0] == ' ';
         if (starts_word and word.items.len > 0) {
             try out.print("  [{d:.2}s] {s}\n", .{ word_start, word.items });
+            try g_words.append(.{ .t = word_start, .txt = try alloc.dupe(u8, word.items) });
             word.clearRetainingCapacity();
         }
         if (word.items.len == 0) word_start = ts;
         try word.appendSlice(tok_bytes);
     }
-    if (word.items.len > 0) try out.print("  [{d:.2}s] {s}\n", .{ word_start, word.items });
+    if (word.items.len > 0) {
+        try out.print("  [{d:.2}s] {s}\n", .{ word_start, word.items });
+        try g_words.append(.{ .t = word_start, .txt = try alloc.dupe(u8, word.items) });
+    }
 }
 
 fn loadBpe(path: []const u8) ![][]const u8 {
