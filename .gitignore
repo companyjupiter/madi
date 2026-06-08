@@ -49,3 +49,4 @@ metal/bench/*.rttm
 metal/bench/md-eval.pl
 metal/bench/*.bin
 metal/bench/*.log
+metal/bench/*.onnx
