@@ -49,6 +49,14 @@ front-end conv1d_gelu ~50 ms × 2.
 | Q8-3c | recover +7%: fuse q/k/v dequant 3→1 launch (dequant_q8_f16_qkv, 192→128 launches/forward) | ❌ revert | encoder 627→630ms (neutral, within noise). The +7% dequant cost is **bandwidth-bound** (F16 scratch round-trip ~1.9GB write + MPS read), NOT launch-bound — cutting 64 launches changed nothing (cf iter9: encoder sync overhead negligible). Irreducible w/ MPS: only fused dequant+GEMM avoids the round-trip, but that's the 2.39x-slower mul_mm_q8. +7% accepted as cost of memory win | — |
 | Q8-4 | cross-attn K/V proj weights (ckw/cvw, 4 layers) → Q8 + JIT dequant→MPS (per-chunk cross-KV is M=1500, same as encoder; reuses dequant_q8_f16) | ✅ commit (memory) | clean A/B same thermal window: encoder/decode **identical** (~658ms/~188 tok/s — perf-neutral); peak RSS 2.543→2.531GB (−12MB, F16 cross-KV weights 26→14MB); jfk text exact; test_encoder/decoder green | deqW16 (reuses dequant_q8_f16) |
 
+## Accuracy / quality
+Gate (in addition to jfk exact): silence must produce EMPTY output.
+Repro: `python3 -c "import wave;w=wave.open('/tmp/sil.wav','w');w.setnchannels(1);w.setsampwidth(2);w.setframerate(16000);w.writeframes(b'\x00\x00'*16000*30)"` then transcribe /tmp/sil.wav.
+| # | issue | result | metric | commit |
+|---|------|--------|--------|--------|
+| ACC-1a (data) | silence hallucination: 30s digital silence → "you. You. You."; tried <|nospeech|>(50363) prob gate at SOT & first-pred positions | ❌ data | P(nospeech)≈0 for silence at BOTH positions (logit_ns even *lower* for silence than jfk) — large-v3-turbo doesn't fire nospeech on OOD digital/near-silence. Token-prob gate unreliable here | — |
+| ACC-1b | **energy VAD**: skip a chunk whose loudest 1s-window RMS < 0.01 (speech≈0.14, silence/ambient≲0.001). Skips mel+encode+decode entirely | ✅ commit | silence30 & lownoise30 → **empty** (was hallucinated text); jfk **exact**; jfk3 both chunks full (chunk2's 3s speech kept via max-1s-window metric). Bonus: silent chunks now ~free | hasSpeech VAD |
+
 ## Memory architecture
 | # | idea | result | metric | commit |
 |---|------|--------|--------|--------|

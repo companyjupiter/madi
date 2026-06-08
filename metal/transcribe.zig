@@ -468,6 +468,14 @@ pub fn main() !void {
         if (chunk > 0 and got == 0) break;
         const t_off: f32 = @as(f32, @floatFromInt(chunk)) * 30.0;
 
+        // VAD: skip silent chunks entirely (no mel/encode/decode) — avoids the
+        // silence-hallucination junk and saves compute on quiet meeting stretches.
+        if (!hasSpeech(samples, got)) {
+            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (silence — skipped)\n", .{ chunk + 1, n_chunks, t_off });
+            if (got < mel.CHUNK_SAMPLES) break;
+            continue;
+        }
+
         // front-end: mel → Conv1D×2 → enc_input
         mel.melSpectrogram(samples, mel_filters, mel_buf);
         var ct = try std.time.Timer.start();
@@ -774,6 +782,25 @@ fn deqW16(f: mtl.Function, wdq: [*]f16, w: enc.Q8, n: u32, k: u32) !void {
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&nn), P(&kk) };
     const s = [_]usize{ PS, PS, PS, U, U };
     try mtl.dispatch(f, .{ (n * k + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+// Energy VAD: is there speech in this chunk? Uses the loudest 1-second window's
+// RMS so a chunk with only a brief utterance is still transcribed, while truly
+// silent / ambient-only chunks are skipped. Whisper's <|nospeech|> token does
+// NOT fire on (out-of-distribution) digital silence in large-v3-turbo, so this
+// input-energy gate is the robust defense against silence hallucination
+// ("you. You. You." on a quiet chunk) — essential for meeting audio.
+fn hasSpeech(samples: []const f32, got: usize) bool {
+    const VAD_RMS: f32 = 0.01; // normalized [-1,1]; speech≈0.14, silence/ambient≲0.001
+    const win: usize = 16000; // 1 s @ 16 kHz
+    var i: usize = 0;
+    while (i < got) : (i += win) {
+        const end = @min(i + win, got);
+        var s: f64 = 0;
+        for (samples[i..end]) |x| s += @as(f64, x) * @as(f64, x);
+        const r = @sqrt(s / @as(f64, @floatFromInt(end - i)));
+        if (r > VAD_RMS) return true;
+    }
+    return false;
 }
 fn biasAdd16(f: mtl.Function, x: [*]f16, b: [*]f32, n: u32, d: u32) !void {
     var a0 = x; var a1 = b; var nn = n; var nd = d;
