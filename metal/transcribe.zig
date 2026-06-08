@@ -75,7 +75,7 @@ fn upVecF16(sf: Sf, key: []const u8) ![*]f16 {
     @memcpy(std.mem.sliceAsBytes(dst), r);
     return dst.ptr;
 }
-const Q8 = struct { qs: [*]i8, scales: [*]f16 };
+const Q8 = dec.Q8w;
 /// Quantize an F16 [rows][dim] tensor to Q8_0 (int8 + per-32-block fp16 scale).
 fn upVecQ8(sf: Sf, key: []const u8, rows: usize, dim: usize) !Q8 {
     const r = sf.raw(key) orelse return error.MissingTensor;
@@ -165,6 +165,35 @@ fn upConvWF16(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![
 }
 
 // Stacked decoder QKV weight [D][3D] (q|k|v) for one batched GEMM (F32, [in][out]).
+fn upQKVQ8(sf: Sf, l: usize) !Q8 {
+    const nb = @as(usize, D) / 32;
+    const qs = try mtl.allocSlice(i8, 3 * @as(usize, D) * D);
+    const sc = try mtl.allocSlice(f16, 3 * @as(usize, D) * nb);
+    var kbuf: [128]u8 = undefined;
+    const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
+    for (names, 0..) |nm, blk| {
+        const key = std.fmt.bufPrint(&kbuf, "model.decoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        const r = sf.raw(key) orelse return error.MissingTensor;
+        const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. @as(usize, D) * D];
+        const ro = blk * @as(usize, D);
+        for (0..D) |o| {
+            const row = ro + o;
+            for (0..nb) |b| {
+                var mx: f32 = 0;
+                for (0..32) |i| { const w = @abs(h2f(u16s[o * @as(usize, D) + b * 32 + i])); if (w > mx) mx = w; }
+                const scale: f32 = if (mx > 0) mx / 127.0 else 1.0;
+                sc[row * nb + b] = @floatCast(scale);
+                const inv = 1.0 / scale;
+                for (0..32) |i| {
+                    const q = std.math.clamp(@round(h2f(u16s[o * @as(usize, D) + b * 32 + i]) * inv), -127.0, 127.0);
+                    qs[row * @as(usize, D) + b * 32 + i] = @intFromFloat(q);
+                }
+            }
+        }
+    }
+    return .{ .qs = qs.ptr, .scales = sc.ptr };
+}
+
 fn upQKV(sf: Sf, l: usize) ![*]f32 {
     const dst = try mtl.allocSlice(f32, 3 * @as(usize, D) * D);
     var kbuf: [128]u8 = undefined;
@@ -294,22 +323,22 @@ pub fn main() !void {
         dlayers[l] = .{
             .aln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.weight", l)),
             .aln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.bias", l)),
-            .qkvw = try upQKV(sf, l),
+            .qkvw = try upQKVQ8(sf, l),
             .qb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.q_proj.bias", l)),
             .vb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.v_proj.bias", l)),
-            .ow = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
+            .ow = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
             .ob = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.bias", l)),
             .caln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn_layer_norm.weight", l)),
             .caln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn_layer_norm.bias", l)),
-            .cqw = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.q_proj.weight", l), D, D),
+            .cqw = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.q_proj.weight", l), D, D),
             .cqb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.q_proj.bias", l)),
-            .cow = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.out_proj.weight", l), D, D),
+            .cow = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.out_proj.weight", l), D, D),
             .cob = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.out_proj.bias", l)),
             .mln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.final_layer_norm.weight", l)),
             .mln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.final_layer_norm.bias", l)),
-            .m0w = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc1.weight", l), MLP, D),
+            .m0w = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc1.weight", l), MLP, D),
             .m0b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc1.bias", l)),
-            .m2w = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc2.weight", l), D, MLP),
+            .m2w = try upVecQ8(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc2.weight", l), D, MLP),
             .m2b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.fc2.bias", l)),
         };
     }

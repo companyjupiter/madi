@@ -232,3 +232,33 @@ kernel void gpu_emb_lookup_q8(
     device const half* srow = scales + (ulong)tok * nb;
     for (uint d = ltid; d < dim; d += 256) out_buf[d] = (float)qrow[d] * (float)srow[d / 32];
 }
+
+// gemv_q8 — general single-token GEMV with Q8_0 weights stored [N][K] (out-major,
+// = original safetensors [out][in], NOT transposed). out[n] = Σ_k x[k]·deq(w[n][k]).
+// One simdgroup per output row n; 32 lanes split K in 32-blocks (coalesced int8),
+// simd_sum. int8 weights → 1/4 the F32 weight bandwidth. (No x cache: x is tiny
+// for M=1 and broadcast-cached.)
+kernel void gemv_q8(
+    device float*        out_buf [[buffer(0)]],
+    device const char*   qs      [[buffer(1)]],
+    device const half*   scales  [[buffer(2)]],
+    device const float*  x       [[buffer(3)]],
+    constant uint& N [[buffer(4)]],
+    constant uint& K [[buffer(5)]],
+    uint  tgid  [[threadgroup_position_in_grid]],
+    ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n = tgid * 8 + sgitg;
+    if (n >= N) return;
+    const uint nb = K / 32;
+    device const char* qrow = qs + (ulong)n * K;
+    device const half* srow = scales + (ulong)n * nb;
+    float acc = 0.0f;
+    for (uint b = 0; b < nb; b++) {
+        const uint d = b * 32 + tiisg;
+        acc += x[d] * ((float)qrow[d] * (float)srow[b]);
+    }
+    acc = simd_sum(acc);
+    if (tiisg == 0) out_buf[n] = acc;
+}

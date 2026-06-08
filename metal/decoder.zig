@@ -19,6 +19,8 @@ pub const MAX_TOK: u32 = 448;
 pub const VOCAB: u32 = 51866;
 const EPS: f32 = 1e-5;
 
+pub const Q8w = struct { qs: [*]i8, scales: [*]f16 };
+
 pub const Kernels = struct {
     ln: mtl.Function,
     brln: mtl.Function,
@@ -30,6 +32,7 @@ pub const Kernels = struct {
     ca: mtl.Function,
     emb: mtl.Function,
     extract: mtl.Function,
+    gemv: mtl.Function,
 
     pub fn load() mtl.Error!Kernels {
         return .{
@@ -43,6 +46,7 @@ pub const Kernels = struct {
             .ca = try mtl.getFunction("flash_cross_attn_f16kv"),
             .emb = try mtl.getFunction("gpu_emb_lookup"),
             .extract = try mtl.getFunction("extract_ca_head_f16kv"),
+            .gemv = try mtl.getFunction("gemv_q8"),
         };
     }
 };
@@ -61,16 +65,16 @@ pub const CaCtx = struct {
 /// block only needs cross Q/out here.
 pub const Layer = struct {
     aln_w: [*]f32, aln_b: [*]f32,
-    qkvw: [*]f32, // stacked [D][3D] (q|k|v) → one batched GEMM
+    qkvw: Q8w, // stacked [3D][D] (q|k|v out-major) for one Q8 GEMV
     qb: [*]f32,
     vb: [*]f32,
-    ow: [*]f32, ob: [*]f32,
+    ow: Q8w, ob: [*]f32,
     caln_w: [*]f32, caln_b: [*]f32,
-    cqw: [*]f32, cqb: [*]f32,
-    cow: [*]f32, cob: [*]f32,
+    cqw: Q8w, cqb: [*]f32,
+    cow: Q8w, cob: [*]f32,
     mln_w: [*]f32, mln_b: [*]f32,
-    m0w: [*]f32, m0b: [*]f32,
-    m2w: [*]f32, m2b: [*]f32,
+    m0w: Q8w, m0b: [*]f32,
+    m2w: Q8w, m2b: [*]f32,
 };
 
 /// Per-step scratch (all [D] except mh=[MLP]).
@@ -102,6 +106,12 @@ fn kBias(K: Kernels, x: [*]f32, b: [*]f32, n: u32, d: u32) !void {
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn), P(&nd) };
     const s = [_]usize{ PS, PS, U, U };
     try mtl.dispatch(K.bias, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+fn kGemvQ8(K: Kernels, out: [*]f32, x: [*]f32, w: Q8w, n: u32, k: u32) !void {
+    var a0 = out; var a1 = w.qs; var a2 = w.scales; var a3 = x; var nn = n; var kk = k;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nn), P(&kk) };
+    const s = [_]usize{ PS, PS, PS, PS, U, U };
+    try mtl.dispatch(K.gemv, .{ (n + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn kGelu(K: Kernels, x: [*]f32, n: u32) !void {
     var a0 = x; var nn = n;
@@ -163,29 +173,29 @@ pub fn decodeBlock(
     // data dependency below (KV-store→attn, cross-Q→CA, etc.) stays correct.
     // self-attn
     try kLN(K, x, s.xb, L.aln_w, L.aln_b, D, 1);
-    try mtl.matmulBatched(s.xb, L.qkvw, s.q, 1, 3 * D, D); // writes q|k|v contiguously (s.k=s.q+D, s.v=s.q+2D)
+    try kGemvQ8(K, s.q, s.xb, L.qkvw, 3 * D, D); // q|k|v contiguous (s.k=s.q+D, s.v=s.q+2D)
     try kBias(K, s.q, L.qb, D, D);
     try kBias(K, s.v, L.vb, D, D);
     try kStore(K, skc, s.k, D, pos);
     try kStore(K, svc, s.v, D, pos);
     try kAttn(K, s.ao, s.q, skc, svc, pos);
     // out proj + residual + cross LN
-    try mtl.matmulBatched(s.ao, L.ow, s.mo, 1, D, D);
+    try kGemvQ8(K, s.mo, s.ao, L.ow, D, D);
     try kBRLN(K, x, s.mo, L.ob, s.xb, L.caln_w, L.caln_b, D);
     // cross-attn
-    try mtl.matmulBatched(s.xb, L.cqw, s.q, 1, D, D);
+    try kGemvQ8(K, s.q, s.xb, L.cqw, D, D);
     try kBias(K, s.q, L.cqb, D, D);
     if (ca) |c| {
         for (c.heads) |h| try kExtract(K, s.q, ckc, c.weights, c.tok, h, c.inv_n, ENC_SEQ);
     }
     try kCA(K, s.ao, s.q, ckc, cvc, ENC_SEQ);
-    try mtl.matmulBatched(s.ao, L.cow, s.mo, 1, D, D);
+    try kGemvQ8(K, s.mo, s.ao, L.cow, D, D);
     try kBRLN(K, x, s.mo, L.cob, s.xb, L.mln_w, L.mln_b, D);
     // MLP
-    try mtl.matmulBatched(s.xb, L.m0w, s.mh, 1, MLP, D);
+    try kGemvQ8(K, s.mh, s.xb, L.m0w, MLP, D);
     try kBias(K, s.mh, L.m0b, MLP, MLP);
     try kGelu(K, s.mh, MLP);
-    try mtl.matmulBatched(s.mh, L.m2w, s.mo, 1, D, MLP);
+    try kGemvQ8(K, s.mo, s.mh, L.m2w, D, MLP);
     try kBias(K, s.mo, L.m2b, D, D);
     try kRes(K, x, s.mo, D);
 }
