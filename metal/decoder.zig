@@ -61,9 +61,9 @@ pub const CaCtx = struct {
 /// block only needs cross Q/out here.
 pub const Layer = struct {
     aln_w: [*]f32, aln_b: [*]f32,
-    qw: [*]f32, qb: [*]f32,
-    kw: [*]f32,
-    vw: [*]f32, vb: [*]f32,
+    qkvw: [*]f32, // stacked [D][3D] (q|k|v) → one batched GEMM
+    qb: [*]f32,
+    vb: [*]f32,
     ow: [*]f32, ob: [*]f32,
     caln_w: [*]f32, caln_b: [*]f32,
     cqw: [*]f32, cqb: [*]f32,
@@ -163,9 +163,7 @@ pub fn decodeBlock(
     // data dependency below (KV-store→attn, cross-Q→CA, etc.) stays correct.
     // self-attn
     try kLN(K, x, s.xb, L.aln_w, L.aln_b, D, 1);
-    try mtl.matmulBatched(s.xb, L.qw, s.q, 1, D, D);
-    try mtl.matmulBatched(s.xb, L.kw, s.k, 1, D, D);
-    try mtl.matmulBatched(s.xb, L.vw, s.v, 1, D, D);
+    try mtl.matmulBatched(s.xb, L.qkvw, s.q, 1, 3 * D, D); // writes q|k|v contiguously (s.k=s.q+D, s.v=s.q+2D)
     try kBias(K, s.q, L.qb, D, D);
     try kBias(K, s.v, L.vb, D, D);
     try kStore(K, skc, s.k, D, pos);

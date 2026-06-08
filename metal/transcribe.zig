@@ -141,6 +141,23 @@ fn upConvWF16(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![
     return dst.ptr;
 }
 
+// Stacked decoder QKV weight [D][3D] (q|k|v) for one batched GEMM (F32, [in][out]).
+fn upQKV(sf: Sf, l: usize) ![*]f32 {
+    const dst = try mtl.allocSlice(f32, 3 * @as(usize, D) * D);
+    var kbuf: [128]u8 = undefined;
+    const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
+    for (names, 0..) |nm, blk| {
+        const key = std.fmt.bufPrint(&kbuf, "model.decoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        const r = sf.raw(key) orelse return error.MissingTensor;
+        const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. @as(usize, D) * D];
+        const co = blk * @as(usize, D);
+        for (0..D) |o| for (0..D) |i| {
+            dst[i * 3 * @as(usize, D) + co + o] = h2f(u16s[o * D + i]);
+        };
+    }
+    return dst.ptr;
+}
+
 var g_zeros: [*]f32 = undefined; // shared zero bias [D]
 
 fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
@@ -254,10 +271,8 @@ pub fn main() !void {
         dlayers[l] = .{
             .aln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.weight", l)),
             .aln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.bias", l)),
-            .qw = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.q_proj.weight", l), D, D),
+            .qkvw = try upQKV(sf, l),
             .qb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.q_proj.bias", l)),
-            .kw = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.k_proj.weight", l), D, D),
-            .vw = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.v_proj.weight", l), D, D),
             .vb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.v_proj.bias", l)),
             .ow = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
             .ob = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.bias", l)),
@@ -282,9 +297,10 @@ pub fn main() !void {
     try out.print("[7] decoder weights + cross-KV ready\n", .{});
 
     // ── decoder scratch + KV caches ─────────────────────────────────
+    const d_qkv3 = (try mtl.allocSlice(f32, 3 * D)).ptr; // contiguous q|k|v
     const dscr = dec.Scratch{
-        .xb = (try mtl.allocSlice(f32, D)).ptr, .q = (try mtl.allocSlice(f32, D)).ptr,
-        .k = (try mtl.allocSlice(f32, D)).ptr, .v = (try mtl.allocSlice(f32, D)).ptr,
+        .xb = (try mtl.allocSlice(f32, D)).ptr, .q = d_qkv3,
+        .k = d_qkv3 + D, .v = d_qkv3 + 2 * D,
         .ao = (try mtl.allocSlice(f32, D)).ptr, .mo = (try mtl.allocSlice(f32, D)).ptr,
         .mh = (try mtl.allocSlice(f32, MLP)).ptr,
     };
