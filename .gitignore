@@ -50,3 +50,6 @@ metal/bench/md-eval.pl
 metal/bench/*.bin
 metal/bench/*.log
 metal/bench/*.onnx
+metal/assets/resnet34_diar.bin
+metal/assets/kaldi_melbank.bin
+metal/bench/__pycache__/

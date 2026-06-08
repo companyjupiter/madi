@@ -7,6 +7,7 @@ const mtl = @import("metal_backend.zig");
 const mel = @import("mel.zig");
 const enc = @import("encoder.zig");
 const dec = @import("decoder.zig");
+const diar = @import("diar_resnet.zig");
 
 const METALLIB = @embedFile("whisper.metallib");
 const D = enc.D;
@@ -335,7 +336,12 @@ pub fn main() !void {
     // ── one-time weights: conv front-end + positional ───────────────
     const mel_filters = try readBinF32(bpe_dir(bpe_path), "mel_filters.bin");
     const mel_buf = try mtl.allocSlice(f32, mel.N_MELS * mel.N_FRAMES);
-    const mel_raw = try mtl.allocSlice(f32, mel.N_MELS * mel.N_FRAMES); // unnormalized log10 for diarization
+    // diarization speaker-embedding model (sovereign ResNet34, CPU)
+    var kb_d: [256]u8 = undefined;
+    const diar_w = std.fmt.bufPrint(&kb_d, "{s}/resnet34_diar.bin", .{bpe_dir(bpe_path)}) catch unreachable;
+    var kb_d2: [256]u8 = undefined;
+    const diar_mb = std.fmt.bufPrint(&kb_d2, "{s}/kaldi_melbank.bin", .{bpe_dir(bpe_path)}) catch unreachable;
+    var diar_model = try diar.Model.load(alloc, diar_w, diar_mb);
     const c1w = try upConvWF16(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
     const c1b = try upVec(sf, "model.encoder.conv1.bias");
     const c2w = try upConvWF16(sf, "model.encoder.conv2.weight", D, D, 3);
@@ -476,15 +482,14 @@ pub fn main() !void {
     try out.print("[8] audio: {d} samples ({d:.1}s) → {d} chunk(s) × 30s\n", .{ total, @as(f64, @floatFromInt(total)) / 16000.0, n_chunks });
 
     var full = std.ArrayList(u8).init(alloc);
-    // Global diarization accumulator: 1.5 s mean-pooled log-MEL segment features
-    // over the whole audio (mel carries speaker timbre/pitch — the encoder output
-    // is speaker-invariant, separation≈0, so mel is what the CUDA reference used).
-    // Clustered after the loop (k-means, K = diar_k) → global speaker RTTM.
-    const SEG_FR: usize = 150; // 1.5 s @ 10 ms/mel-frame (N_FRAMES=3000 over 30s)
+    // Global diarization accumulator: 256-d ResNet34 speaker embeddings over
+    // 1.5 s waveform windows (real speaker timbre — AMI K=4 DER 31.7% vs 67% mel).
+    // Clustered after the loop (L2-norm + k-means, K = diar_k) → global RTTM.
+    const SEG_SAMP: usize = 24000; // 1.5 s @ 16 kHz
     const SEG_SEC: f32 = 1.5;
-    const SEGD: usize = mel.N_MELS; // 128
-    var diar_emb = std.ArrayList(f32).init(alloc); // n × 128 mean log-mel
-    var diar_bm = std.ArrayList(f32).init(alloc); // per-seg block mean (for VAD)
+    const SEGD: usize = diar.EMB; // 256
+    var diar_emb = std.ArrayList(f32).init(alloc); // n × 256
+    var diar_bm = std.ArrayList(f32).init(alloc); // per-window RMS (for VAD)
     var diar_t0 = std.ArrayList(f32).init(alloc);
     var diar_n: usize = 0;
     // language token for the SEED: env WHISPER_LANG_ID overrides; else 0 = auto
@@ -500,6 +505,23 @@ pub fn main() !void {
         if (chunk > 0 and got == 0) break;
         const t_off: f32 = @as(f32, @floatFromInt(chunk)) * 30.0;
 
+        // diarization: 256-d ResNet34 speaker embedding per 1.5 s window over the
+        // whole audio (independent of the transcription chunk-VAD so sparse speech
+        // in quiet chunks is kept; relative energy VAD applied at clustering time).
+        {
+            const nwin = got / SEG_SAMP;
+            for (0..nwin) |wsg| {
+                const win = samples[wsg * SEG_SAMP ..][0..SEG_SAMP];
+                var e: f64 = 0;
+                for (win) |v| e += @as(f64, v) * v;
+                const emb = try diar.embed(&diar_model, win);
+                try diar_emb.appendSlice(emb[0..]);
+                try diar_bm.append(@floatCast(@sqrt(e / @as(f64, SEG_SAMP))));
+                try diar_t0.append(t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC);
+                diar_n += 1;
+            }
+        }
+
         // VAD: skip silent chunks entirely (no mel/encode/decode) — avoids the
         // silence-hallucination junk and saves compute on quiet meeting stretches.
         if (!hasSpeech(samples, got)) {
@@ -509,7 +531,7 @@ pub fn main() !void {
         }
 
         // front-end: mel → Conv1D×2 → enc_input
-        mel.melSpectrogramRaw(samples, mel_filters, mel_buf, mel_raw);
+        mel.melSpectrogram(samples, mel_filters, mel_buf);
         var ct = try std.time.Timer.start();
         try mtl.beginCommandBuffer();
         try imIm2col(f_im2col, col1, mel_buf.ptr, mel.N_MELS, mel.N_FRAMES, 1, 1, mel.N_FRAMES);
@@ -526,30 +548,6 @@ pub fn main() !void {
         var et = try std.time.Timer.start();
         try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, 1);
         const enc_ms = @as(f64, @floatFromInt(et.read())) / 1e6;
-
-        // diarization: pool this chunk's RAW (unnormalized) log-mel into 1.5 s
-        // segment features (mean per mel band) + absolute block mean for VAD.
-        {
-            const NF: usize = mel.N_FRAMES;
-            const nseg = NF / SEG_FR;
-            for (0..nseg) |sg| {
-                const f0 = sg * SEG_FR;
-                const base = diar_emb.items.len;
-                try diar_emb.appendNTimes(0, SEGD);
-                const dst = diar_emb.items[base .. base + SEGD];
-                var bm: f32 = 0;
-                for (0..SEGD) |m| {
-                    var s: f32 = 0;
-                    for (0..SEG_FR) |r| s += mel_raw[m * NF + (f0 + r)];
-                    const v = s / @as(f32, @floatFromInt(SEG_FR));
-                    dst[m] = v;
-                    bm += v;
-                }
-                try diar_bm.append(bm / @as(f32, @floatFromInt(SEGD)));
-                try diar_t0.append(t_off + @as(f32, @floatFromInt(sg)) * SEG_SEC);
-                diar_n += 1;
-            }
-        }
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
             try deqW16(f_deq, cross_wdq, ckw[l], D, D);
@@ -669,40 +667,35 @@ pub fn main() !void {
         try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
         try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
     }
-    try diarizeMel(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
+    try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
 }
 
-// Global speaker diarization on log-MEL segment features (timbre/pitch — the
-// signal Whisper's encoder discards). Pipeline: global energy VAD → per-dim
-// z-score → k-means (K = `diar_k`, deterministic farthest-point init) → merge
-// consecutive same-speaker segments → timeline + optional RTTM (DER scoring).
-// Reliable to ~2 speakers on hard far-field audio; higher K works on cleaner,
-// well-separated voices. (cf. CUDA reference, which clustered the same mel feature.)
-fn diarizeMel(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usize, segd: usize, seg_sec: f32, diar_k: u32, rttm_path: ?[]const u8, file_id: []const u8) !void {
-    try out.print("\n=== SPEAKER TIMELINE (mel k-means, K={d}) ===\n", .{diar_k});
+// Global speaker diarization on 256-d ResNet34 speaker embeddings. Pipeline:
+// relative energy VAD → L2-normalize → k-means (K = `diar_k`, deterministic
+// farthest-point init) → merge consecutive same-speaker segments → timeline +
+// optional RTTM. AMI ES2004a K=4 DER 31.7% (vs 67% mel, 90% encoder).
+fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usize, segd: usize, seg_sec: f32, diar_k: u32, rttm_path: ?[]const u8, file_id: []const u8) !void {
+    try out.print("\n=== SPEAKER TIMELINE (ResNet34 embeddings, K={d}) ===\n", .{diar_k});
     if (n < 2) { try out.print("  (insufficient speech: {d} segs)\n", .{n}); return; }
 
-    // global energy VAD: keep segments with block-mean > globalmean - 0.5
-    var gmean: f32 = 0;
-    for (0..n) |i| gmean += bm[i];
-    gmean /= @floatFromInt(n);
-    const eth = gmean - 0.5;
+    // relative energy VAD: keep windows with RMS > 0.3 × median RMS
+    const rs = try alloc.dupe(f32, bm[0..n]); defer alloc.free(rs);
+    std.mem.sort(f32, rs, {}, std.sort.asc(f32));
+    const eth = rs[n / 2] * 0.3;
     const keep = try alloc.alloc(usize, n); defer alloc.free(keep);
     var m: usize = 0;
     for (0..n) |i| if (bm[i] > eth) { keep[m] = i; m += 1; };
     if (m < 2) { try out.print("  (insufficient speech after VAD: {d})\n", .{m}); return; }
 
-    // gather kept features, per-dim z-score
+    // gather kept embeddings, L2-normalize (cosine k-means)
     const X = try alloc.alloc(f32, m * segd); defer alloc.free(X);
-    for (0..m) |i| @memcpy(X[i * segd ..][0..segd], emb[keep[i] * segd ..][0..segd]);
-    const mu = try alloc.alloc(f32, segd); defer alloc.free(mu);
-    const sd = try alloc.alloc(f32, segd); defer alloc.free(sd);
-    @memset(mu, 0); @memset(sd, 0);
-    for (0..m) |i| for (0..segd) |j| { mu[j] += X[i * segd + j]; };
-    for (0..segd) |j| mu[j] /= @floatFromInt(m);
-    for (0..m) |i| for (0..segd) |j| { const d = X[i * segd + j] - mu[j]; sd[j] += d * d; };
-    for (0..segd) |j| sd[j] = @sqrt(sd[j] / @as(f32, @floatFromInt(m))) + 1e-8;
-    for (0..m) |i| for (0..segd) |j| { X[i * segd + j] = (X[i * segd + j] - mu[j]) / sd[j]; };
+    for (0..m) |i| {
+        const src = emb[keep[i] * segd ..][0..segd];
+        var s: f32 = 0;
+        for (src) |v| s += v * v;
+        const inv = 1.0 / (@sqrt(s) + 1e-8);
+        for (0..segd) |j| X[i * segd + j] = src[j] * inv;
+    }
 
     var K: usize = @min(@as(usize, diar_k), m);
     if (K < 1) K = 1;

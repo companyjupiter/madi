@@ -37,7 +37,7 @@ zig build-obj -O ReleaseFast -lc \
     "$ENTRY"
 
 echo "[4/4] Link → $OUT/$NAME"
-clang -O2 -framework Metal -framework Foundation -framework MetalPerformanceShaders \
+clang -O2 -framework Metal -framework Foundation -framework MetalPerformanceShaders -framework Accelerate \
     "$BUILD/${NAME}.o" "$BUILD/metal_backend.o" \
     -o "$OUT/$NAME"
 
