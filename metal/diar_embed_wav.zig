@@ -56,4 +56,5 @@ pub fn main() !void {
     try f.writeAll(std.mem.asBytes(&n));
     try f.writeAll(buf.items);
     try out.print("{d} segments embedded in {d:.0}ms ({d:.0}ms/seg) → {s}\n", .{ n, ms, ms / @as(f64, @floatFromInt(n)), out_path });
+    try diar.dumpProf(out);
 }

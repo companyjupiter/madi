@@ -142,9 +142,13 @@ fn conv2d(a: std.mem.Allocator, in: []const f32, c: usize, h: usize, w: usize, c
     const Wo = (w + 2 * pad - cv.kw) / cv.stride + 1;
     ho.* = Ho; wo.* = Wo;
     const M = cv.o; const N = Ho * Wo; const K = c * cv.kh * cv.kw;
-    // im2col → cols[K][N]
+    var im_t = std.time.Timer.start() catch unreachable;
+    // im2col → cols[K][N]. Bulk via @memcpy for stride-1 (contiguous spans);
+    // only padding edges are zeroed (avoids zeroing the whole 3.5M-elem buffer).
     const cols = try a.alloc(f32, K * N);
-    @memset(cols, 0);
+    @memset(cols, 0); // padding stays 0; valid spans overwritten below
+    const wI: isize = @intCast(w);
+    const WoI: isize = @intCast(Wo);
     for (0..c) |ic| {
         const inb = ic * h * w;
         for (0..cv.kh) |ky| {
@@ -155,30 +159,52 @@ fn conv2d(a: std.mem.Allocator, in: []const f32, c: usize, h: usize, w: usize, c
                     const iy = @as(isize, @intCast(oy * cv.stride + ky)) - @as(isize, @intCast(pad));
                     if (iy < 0 or iy >= @as(isize, @intCast(h))) continue;
                     const iry = inb + @as(usize, @intCast(iy)) * w;
-                    const orow = rb + oy * Wo;
-                    for (0..Wo) |ox| {
-                        const ix = @as(isize, @intCast(ox * cv.stride + kx)) - @as(isize, @intCast(pad));
-                        if (ix < 0 or ix >= @as(isize, @intCast(w))) continue;
-                        cols[orow + ox] = in[iry + @as(usize, @intCast(ix))];
+                    const dst = cols[rb + oy * Wo ..][0..Wo];
+                    if (cv.stride == 1) {
+                        // ix = ox + (kx-pad); copy the contiguous valid ox range
+                        const shift = @as(isize, @intCast(kx)) - @as(isize, @intCast(pad));
+                        const lo: usize = if (shift < 0) @intCast(-shift) else 0;
+                        var hiI: isize = wI - shift;
+                        if (hiI > WoI) hiI = WoI;
+                        if (hiI > @as(isize, @intCast(lo))) {
+                            const hi: usize = @intCast(hiI);
+                            @memcpy(dst[lo..hi], in[iry + @as(usize, @intCast(@as(isize, @intCast(lo)) + shift)) ..][0 .. hi - lo]);
+                        }
+                    } else {
+                        for (0..Wo) |ox| {
+                            const ix = @as(isize, @intCast(ox * cv.stride + kx)) - @as(isize, @intCast(pad));
+                            if (ix >= 0 and ix < wI) dst[ox] = in[iry + @as(usize, @intCast(ix))];
+                        }
                     }
                 }
             }
         }
     }
+    conv_im2col_ns += im_t.read();
     const out = try a.alloc(f32, M * N);
+    var gt = std.time.Timer.start() catch unreachable;
     // out[M][N] = W[M][K] @ cols[K][N]
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, @intCast(M), @intCast(N), @intCast(K), 1.0, cv.w.ptr, @intCast(K), cols.ptr, @intCast(N), 0.0, out.ptr, @intCast(N));
+    conv_sgemm_ns += gt.read();
     // + bias (broadcast per output channel)
     for (0..M) |oc| { const bv = cv.b[oc]; const ob = oc * N; for (0..N) |i| out[ob + i] += bv; }
     return out;
 }
 fn relu(x: []f32) void { for (x) |*v| { if (v.* < 0) v.* = 0; } }
 
+// per-stage profiling accumulators (ns): fbank, stem, stage1..4, pool+gemm
+pub var prof = [_]u64{0} ** 7;
+pub var prof_n: u64 = 0;
+pub var conv_im2col_ns: u64 = 0;
+pub var conv_sgemm_ns: u64 = 0;
+
 /// Full forward: fbank features [nfr][80] → 256-d embedding (caller frees).
 pub fn embed(m: *const Model, sig: []const f32) ![EMB]f32 {
     var a = std.heap.ArenaAllocator.init(m.alloc); // scratch for one segment
     defer a.deinit();
     const ar = a.allocator();
+    var tm = std.time.Timer.start() catch unreachable;
+    prof_n += 1;
     var nfr: usize = 0;
     const fb = try fbank(m, sig, &nfr);
     // global-mean normalize fbank over time, then layout as [C=1][H=80][W=nfr]
@@ -190,13 +216,15 @@ pub fn embed(m: *const Model, sig: []const f32) ![EMB]f32 {
     m.alloc.free(fb);
     var c: usize = 1; var h: usize = NMEL; var w: usize = nfr;
 
+    prof[0] += tm.lap();
     var ci: usize = 0;
     // stem
     var ho: usize = 0; var wo: usize = 0;
     x = try conv2d(ar, x, c, h, w, m.convs[ci], &ho, &wo); ci += 1; relu(x);
     c = m.convs[0].o; h = ho; w = wo;
+    prof[1] += tm.lap();
     const stages = [_]struct { nb: usize, downs: bool }{ .{ .nb = 3, .downs = false }, .{ .nb = 4, .downs = true }, .{ .nb = 6, .downs = true }, .{ .nb = 3, .downs = true } };
-    for (stages) |st| {
+    for (stages, 0..) |st, si| {
         for (0..st.nb) |k| {
             const downs = st.downs and k == 0;
             const inp = x; const ic = c; const ih = h; const iw = w;
@@ -212,6 +240,7 @@ pub fn embed(m: *const Model, sig: []const f32) ![EMB]f32 {
             relu(y);
             x = y; c = m.convs[ci - 1].o; h = yh; w = yw;
         }
+        prof[2 + si] += tm.lap();
     }
     // stats pooling over time (W) per [C][H]
     const ch = c * h; // 256*10
@@ -236,5 +265,20 @@ pub fn embed(m: *const Model, sig: []const f32) ![EMB]f32 {
         for (0..K) |i| acc += wr[i] * pooled[i];
         out[o] = acc - m.mean_vec[o];
     }
+    prof[6] += tm.lap();
     return out;
+}
+
+/// Print accumulated per-stage profile (ns→ms) to the given writer.
+pub fn dumpProf(out: anytype) !void {
+    const names = [_][]const u8{ "fbank", "stem", "stage1", "stage2", "stage3", "stage4", "pool+gemm" };
+    var tot: u64 = 0;
+    for (prof) |p| tot += p;
+    if (prof_n == 0 or tot == 0) return;
+    try out.print("\n=== diar ResNet34 profile ({d} embeds, {d:.1} ms/embed) ===\n", .{ prof_n, @as(f64, @floatFromInt(tot)) / 1e6 / @as(f64, @floatFromInt(prof_n)) });
+    for (names, 0..) |nm, i| {
+        const ms = @as(f64, @floatFromInt(prof[i])) / 1e6;
+        try out.print("  {s:<11} {d:8.1} ms  ({d:4.1}%)\n", .{ nm, ms, 100.0 * @as(f64, @floatFromInt(prof[i])) / @as(f64, @floatFromInt(tot)) });
+    }
+    try out.print("  conv split: im2col {d:.1} ms / sgemm {d:.1} ms\n", .{ @as(f64, @floatFromInt(conv_im2col_ns)) / 1e6, @as(f64, @floatFromInt(conv_sgemm_ns)) / 1e6 });
 }

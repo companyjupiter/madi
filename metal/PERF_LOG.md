@@ -62,6 +62,20 @@ Repro: `python3 -c "import wave;w=wave.open('/tmp/sil.wav','w');w.setnchannels(1
 
 | ACC-4 | **WIN: sovereign ResNet34 speaker-embedding diarization** — hand-ported wespeaker ResNet34 (Apache-2.0) to Zig (kaldi 80-fbank + conv2d via Accelerate sgemm + stats pool + FC), 256-d embeddings per 1.5s window → L2-norm + k-means(K) | ✅ commit | **AMI ES2004a K=4 DER 32.5%** (was 90% encoder / 67% mel; oracle 28.8%). Verified bit-for-bit vs onnxruntime (cosine 1.000000) at every stage. jfk text exact; silence→no spurious speakers. K = CLI/DIAR_K (default 2). No runtime dep (onnxruntime only offline). +~34s/17min for embeds (CPU), RSS +~0.1GB | diar_resnet.zig, bench/ |
 
+## Diarization perf (quark-decomposed, measured)
+quark atoms: `file__diar_resnet.zig/{fn__embed,conv2d,fbank,fft512,relu}`.
+Per-stage profile (608 AMI embeds) revealed the bottleneck is NOT matmul FLOP:
+| stage | share | | conv internal | share |
+|---|---|---|---|---|
+| stage1 (80×150, 32ch) | 40% | | **im2col** | **77%** |
+| stage2 | 26% | | sgemm (Accelerate) | 23% |
+| stage3 | 21% | | | |
+| stage4 / fbank / pool+gemm | 13% | | | |
+| # | idea | result | metric | commit |
+|---|------|--------|--------|--------|
+| DIAR-OPT1 | im2col: element-by-element strided copy + full @memset → @memcpy of contiguous valid spans (stride-1 path) | ✅ commit | **68→28 ms/embed (2.4×)**; AMI 17min total 100→83s; DER unchanged 32.49% (cosine 1.0 preserved); im2col 15.9s→7.6s | conv2d im2col |
+| (next) | multithread embeds across segments (independent) → ~Ncore×; or F16/MPS GPU convs | backlog | im2col-memcpy is now the floor (data movement); FLOP/sgemm is only 23% | — |
+
 ## Memory architecture
 | # | idea | result | metric | commit |
 |---|------|--------|--------|--------|
