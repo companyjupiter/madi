@@ -55,6 +55,19 @@ pub fn melSpectrogram(
     mel_filters: []const f32,
     mel: []f32,
 ) void {
+    melSpectrogramRaw(samples, mel_filters, mel, null);
+}
+
+/// As `melSpectrogram`, but if `raw_out` is given it receives the absolute
+/// log10(mel) BEFORE Whisper's per-chunk max-clip + affine normalization.
+/// Diarization needs this: the per-chunk normalization makes a quiet chunk's
+/// noise look as loud as speech, breaking cross-chunk energy VAD + clustering.
+pub fn melSpectrogramRaw(
+    samples: []const f32,
+    mel_filters: []const f32,
+    mel: []f32,
+    raw_out: ?[]f32,
+) void {
     std.debug.assert(samples.len >= CHUNK_SAMPLES);
     std.debug.assert(mel.len >= N_MELS * N_FRAMES);
 
@@ -102,6 +115,7 @@ pub fn melSpectrogram(
         v.* = @log10(clamped);
         if (v.* > mel_max) mel_max = v.*;
     }
+    if (raw_out) |ro| @memcpy(ro[0 .. N_MELS * N_FRAMES], mel[0 .. N_MELS * N_FRAMES]);
     for (mel[0 .. N_MELS * N_FRAMES]) |*v| {
         const clipped = @max(v.*, mel_max - 8.0);
         v.* = (clipped + 4.0) / 4.0;

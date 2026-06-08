@@ -289,6 +289,20 @@ pub fn main() !void {
     const model_path = args.next() orelse "assets/model.safetensors";
     const wav_path = args.next() orelse "assets/jfk.wav";
     const bpe_path = args.next() orelse "assets/WHISPER_BPE.bin";
+    const rttm_out = args.next(); // optional 4th arg: write system RTTM here (DER scoring)
+    const spk_arg = args.next(); // optional 5th arg: number of speakers (0/absent = 2)
+    // file-id for RTTM = wav basename without extension
+    const wav_base = std.fs.path.basename(wav_path);
+    const file_id = if (std.mem.lastIndexOfScalar(u8, wav_base, '.')) |dot| wav_base[0..dot] else wav_base;
+    // target speaker count for diarization (CLI 5th arg or env DIAR_K; default 2).
+    // NOTE: reliable only up to ~2 on hard far-field audio (mel features); higher K
+    // works on cleaner, well-separated voices — see PERF_LOG ACC-2.
+    const n_speakers: u32 = blk: {
+        if (spk_arg) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
+        if (std.posix.getenv("DIAR_K")) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
+        break :blk 0;
+    };
+    const diar_k: u32 = if (n_speakers >= 1) n_speakers else 2;
 
     try mtl.init();
     defer mtl.deinit();
@@ -321,6 +335,7 @@ pub fn main() !void {
     // ── one-time weights: conv front-end + positional ───────────────
     const mel_filters = try readBinF32(bpe_dir(bpe_path), "mel_filters.bin");
     const mel_buf = try mtl.allocSlice(f32, mel.N_MELS * mel.N_FRAMES);
+    const mel_raw = try mtl.allocSlice(f32, mel.N_MELS * mel.N_FRAMES); // unnormalized log10 for diarization
     const c1w = try upConvWF16(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
     const c1b = try upVec(sf, "model.encoder.conv1.bias");
     const c2w = try upConvWF16(sf, "model.encoder.conv2.weight", D, D, 3);
@@ -461,6 +476,17 @@ pub fn main() !void {
     try out.print("[8] audio: {d} samples ({d:.1}s) → {d} chunk(s) × 30s\n", .{ total, @as(f64, @floatFromInt(total)) / 16000.0, n_chunks });
 
     var full = std.ArrayList(u8).init(alloc);
+    // Global diarization accumulator: 1.5 s mean-pooled log-MEL segment features
+    // over the whole audio (mel carries speaker timbre/pitch — the encoder output
+    // is speaker-invariant, separation≈0, so mel is what the CUDA reference used).
+    // Clustered after the loop (k-means, K = diar_k) → global speaker RTTM.
+    const SEG_FR: usize = 150; // 1.5 s @ 10 ms/mel-frame (N_FRAMES=3000 over 30s)
+    const SEG_SEC: f32 = 1.5;
+    const SEGD: usize = mel.N_MELS; // 128
+    var diar_emb = std.ArrayList(f32).init(alloc); // n × 128 mean log-mel
+    var diar_bm = std.ArrayList(f32).init(alloc); // per-seg block mean (for VAD)
+    var diar_t0 = std.ArrayList(f32).init(alloc);
+    var diar_n: usize = 0;
     var timer = try std.time.Timer.start();
     var chunk: usize = 0;
     while (chunk < n_chunks) : (chunk += 1) {
@@ -477,7 +503,7 @@ pub fn main() !void {
         }
 
         // front-end: mel → Conv1D×2 → enc_input
-        mel.melSpectrogram(samples, mel_filters, mel_buf);
+        mel.melSpectrogramRaw(samples, mel_filters, mel_buf, mel_raw);
         var ct = try std.time.Timer.start();
         try mtl.beginCommandBuffer();
         try imIm2col(f_im2col, col1, mel_buf.ptr, mel.N_MELS, mel.N_FRAMES, 1, 1, mel.N_FRAMES);
@@ -494,6 +520,30 @@ pub fn main() !void {
         var et = try std.time.Timer.start();
         try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, 1);
         const enc_ms = @as(f64, @floatFromInt(et.read())) / 1e6;
+
+        // diarization: pool this chunk's RAW (unnormalized) log-mel into 1.5 s
+        // segment features (mean per mel band) + absolute block mean for VAD.
+        {
+            const NF: usize = mel.N_FRAMES;
+            const nseg = NF / SEG_FR;
+            for (0..nseg) |sg| {
+                const f0 = sg * SEG_FR;
+                const base = diar_emb.items.len;
+                try diar_emb.appendNTimes(0, SEGD);
+                const dst = diar_emb.items[base .. base + SEGD];
+                var bm: f32 = 0;
+                for (0..SEGD) |m| {
+                    var s: f32 = 0;
+                    for (0..SEG_FR) |r| s += mel_raw[m * NF + (f0 + r)];
+                    const v = s / @as(f32, @floatFromInt(SEG_FR));
+                    dst[m] = v;
+                    bm += v;
+                }
+                try diar_bm.append(bm / @as(f32, @floatFromInt(SEGD)));
+                try diar_t0.append(t_off + @as(f32, @floatFromInt(sg)) * SEG_SEC);
+                diar_n += 1;
+            }
+        }
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
             try deqW16(f_deq, cross_wdq, ckw[l], D, D);
@@ -578,96 +628,129 @@ pub fn main() !void {
     const dt = @as(f64, @floatFromInt(timer.read())) / 1e9;
     try out.print("\n=== TRANSCRIPTION ({d:.2}s, {d} chunk(s)) ===\n{s}\n", .{ dt, n_chunks, full.items });
 
-    if (n_chunks == 1) try diarize(out, enc_out); // single-window only
+    // optional: dump raw pooled segment embeddings for offline clustering sweeps
+    if (std.posix.getenv("DIAR_DUMP")) |dp| {
+        var df = try std.fs.cwd().createFile(dp, .{});
+        defer df.close();
+        const hdr = [_]u32{ @intCast(diar_n), @intCast(SEGD) };
+        try df.writeAll(std.mem.sliceAsBytes(hdr[0..]));
+        try df.writeAll(std.mem.sliceAsBytes(diar_t0.items[0..diar_n]));
+        try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
+        try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
+    }
+    try diarizeMel(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
 }
 
-// Zero-shot speaker diarization: VAD by per-frame L2 energy, K-means(K=2) on
-// active frames, temporal median smoothing, emit speaker timeline. CPU; reads
-// the unified enc_out buffer directly. (Ported from the CUDA reference.)
-fn diarize(out: anytype, enc_out: [*]f32) !void {
-    const SEQ: usize = ENC_SEQ;
-    const DE: usize = D;
-    const f = enc_out[0 .. SEQ * DE];
-    var energy = try alloc.alloc(f32, SEQ);
-    defer alloc.free(energy);
-    var total: f32 = 0;
-    for (0..SEQ) |i| {
-        var s: f32 = 0;
-        for (0..DE) |j| { const v = f[i * DE + j]; s += v * v; }
-        energy[i] = @sqrt(s);
-        total += energy[i];
-    }
-    const thresh = (total / @as(f32, @floatFromInt(SEQ))) * 0.5;
-    var is_speech = try alloc.alloc(bool, SEQ);
-    defer alloc.free(is_speech);
-    var active: usize = 0;
-    for (0..SEQ) |i| { is_speech[i] = energy[i] > thresh; if (is_speech[i]) active += 1; }
-    if (active < 2) return;
+// Global speaker diarization on log-MEL segment features (timbre/pitch — the
+// signal Whisper's encoder discards). Pipeline: global energy VAD → per-dim
+// z-score → k-means (K = `diar_k`, deterministic farthest-point init) → merge
+// consecutive same-speaker segments → timeline + optional RTTM (DER scoring).
+// Reliable to ~2 speakers on hard far-field audio; higher K works on cleaner,
+// well-separated voices. (cf. CUDA reference, which clustered the same mel feature.)
+fn diarizeMel(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usize, segd: usize, seg_sec: f32, diar_k: u32, rttm_path: ?[]const u8, file_id: []const u8) !void {
+    try out.print("\n=== SPEAKER TIMELINE (mel k-means, K={d}) ===\n", .{diar_k});
+    if (n < 2) { try out.print("  (insufficient speech: {d} segs)\n", .{n}); return; }
 
-    var c0 = try alloc.alloc(f32, DE); defer alloc.free(c0);
-    var c1 = try alloc.alloc(f32, DE); defer alloc.free(c1);
-    var labels = try alloc.alloc(u8, SEQ); defer alloc.free(labels);
-    @memset(labels, 0);
-    var first: usize = 0; var last: usize = SEQ - 1;
-    for (0..SEQ) |i| if (is_speech[i]) { first = i; break; };
-    var ir: usize = SEQ; while (ir > 0) { ir -= 1; if (is_speech[ir]) { last = ir; break; } }
-    for (0..DE) |j| { c0[j] = f[first * DE + j]; c1[j] = f[last * DE + j]; }
+    // global energy VAD: keep segments with block-mean > globalmean - 0.5
+    var gmean: f32 = 0;
+    for (0..n) |i| gmean += bm[i];
+    gmean /= @floatFromInt(n);
+    const eth = gmean - 0.5;
+    const keep = try alloc.alloc(usize, n); defer alloc.free(keep);
+    var m: usize = 0;
+    for (0..n) |i| if (bm[i] > eth) { keep[m] = i; m += 1; };
+    if (m < 2) { try out.print("  (insufficient speech after VAD: {d})\n", .{m}); return; }
 
-    for (0..5) |_| {
-        var s0 = try alloc.alloc(f32, DE); defer alloc.free(s0);
-        var s1 = try alloc.alloc(f32, DE); defer alloc.free(s1);
-        @memset(s0, 0); @memset(s1, 0);
-        var n0: usize = 0; var n1: usize = 0;
-        for (0..SEQ) |i| {
-            if (!is_speech[i]) continue;
-            var d0: f32 = 0; var d1: f32 = 0;
-            for (0..DE) |j| {
-                const x = f[i * DE + j];
-                d0 += (x - c0[j]) * (x - c0[j]);
-                d1 += (x - c1[j]) * (x - c1[j]);
-            }
-            if (d0 < d1) { labels[i] = 0; n0 += 1; for (0..DE) |j| s0[j] += f[i * DE + j]; }
-            else { labels[i] = 1; n1 += 1; for (0..DE) |j| s1[j] += f[i * DE + j]; }
+    // gather kept features, per-dim z-score
+    const X = try alloc.alloc(f32, m * segd); defer alloc.free(X);
+    for (0..m) |i| @memcpy(X[i * segd ..][0..segd], emb[keep[i] * segd ..][0..segd]);
+    const mu = try alloc.alloc(f32, segd); defer alloc.free(mu);
+    const sd = try alloc.alloc(f32, segd); defer alloc.free(sd);
+    @memset(mu, 0); @memset(sd, 0);
+    for (0..m) |i| for (0..segd) |j| { mu[j] += X[i * segd + j]; };
+    for (0..segd) |j| mu[j] /= @floatFromInt(m);
+    for (0..m) |i| for (0..segd) |j| { const d = X[i * segd + j] - mu[j]; sd[j] += d * d; };
+    for (0..segd) |j| sd[j] = @sqrt(sd[j] / @as(f32, @floatFromInt(m))) + 1e-8;
+    for (0..m) |i| for (0..segd) |j| { X[i * segd + j] = (X[i * segd + j] - mu[j]) / sd[j]; };
+
+    var K: usize = @min(@as(usize, diar_k), m);
+    if (K < 1) K = 1;
+    const dist2 = struct {
+        fn f(a: []const f32, b: []const f32, d: usize) f32 {
+            var s: f32 = 0;
+            for (0..d) |j| { const t = a[j] - b[j]; s += t * t; }
+            return s;
         }
-        if (n0 > 0) for (0..DE) |j| { c0[j] = s0[j] / @as(f32, @floatFromInt(n0)); };
-        if (n1 > 0) for (0..DE) |j| { c1[j] = s1[j] / @as(f32, @floatFromInt(n1)); };
-    }
-
-    // temporal smoothing (window ±10)
-    var sm = try alloc.alloc(u8, SEQ); defer alloc.free(sm);
-    @memset(sm, 0);
-    for (0..SEQ) |i| {
-        if (!is_speech[i]) continue;
-        var votes: i32 = 0;
-        const lo = if (i > 10) i - 10 else 0;
-        const hi = if (i + 10 < SEQ) i + 10 else SEQ - 1;
-        for (lo..hi + 1) |w| if (is_speech[w]) { votes += if (labels[w] == 1) @as(i32, 1) else -1; };
-        sm[i] = if (votes > 0) 1 else 0;
-    }
-
-    try out.print("\n=== SPEAKER TIMELINE (zero-shot) ===\n", .{});
-    var seg = false; var start: usize = 0; var spk: u8 = 0; var n_spk: usize = 0;
-    var distinct = [_]bool{ false, false };
-    for (0..SEQ) |i| {
-        if (is_speech[i]) {
-            const sp = sm[i];
-            if (!seg) { seg = true; start = i; spk = sp; }
-            else if (spk != sp) {
-                if (i - start > 15) { try emitSeg(out, start, i, spk); distinct[spk] = true; n_spk += 1; }
-                start = i; spk = sp;
-            }
-        } else if (seg) {
-            if (i - start > 15) { try emitSeg(out, start, i, spk); distinct[spk] = true; n_spk += 1; }
-            seg = false;
+    }.f;
+    // k-means++ style farthest-point init (deterministic)
+    const cent = try alloc.alloc(f32, K * segd); defer alloc.free(cent);
+    @memcpy(cent[0..segd], X[0..segd]);
+    const dmin = try alloc.alloc(f32, m); defer alloc.free(dmin);
+    for (0..m) |i| dmin[i] = dist2(X[i * segd ..][0..segd], cent[0..segd], segd);
+    for (1..K) |c| {
+        var far: usize = 0; var fv: f32 = -1;
+        for (0..m) |i| if (dmin[i] > fv) { fv = dmin[i]; far = i; };
+        @memcpy(cent[c * segd ..][0..segd], X[far * segd ..][0..segd]);
+        for (0..m) |i| {
+            const dd = dist2(X[i * segd ..][0..segd], cent[c * segd ..][0..segd], segd);
+            if (dd < dmin[i]) dmin[i] = dd;
         }
     }
-    if (seg and SEQ - start > 15) { try emitSeg(out, start, SEQ, spk); distinct[spk] = true; }
-    const nd: u32 = (if (distinct[0]) @as(u32, 1) else 0) + (if (distinct[1]) @as(u32, 1) else 0);
-    try out.print("  → {d} speaker(s) detected\n", .{nd});
-}
+    // Lloyd iterations
+    const asg = try alloc.alloc(usize, m); defer alloc.free(asg);
+    @memset(asg, 0);
+    const csum = try alloc.alloc(f32, K * segd); defer alloc.free(csum);
+    const ccnt = try alloc.alloc(usize, K); defer alloc.free(ccnt);
+    for (0..25) |_| {
+        for (0..m) |i| {
+            var bc: usize = 0; var bv: f32 = dist2(X[i * segd ..][0..segd], cent[0..segd], segd);
+            for (1..K) |c| { const dd = dist2(X[i * segd ..][0..segd], cent[c * segd ..][0..segd], segd); if (dd < bv) { bv = dd; bc = c; } }
+            asg[i] = bc;
+        }
+        @memset(csum, 0); @memset(ccnt, 0);
+        for (0..m) |i| { ccnt[asg[i]] += 1; for (0..segd) |j| csum[asg[i] * segd + j] += X[i * segd + j]; }
+        for (0..K) |c| if (ccnt[c] > 0) for (0..segd) |j| { cent[c * segd + j] = csum[c * segd + j] / @as(f32, @floatFromInt(ccnt[c])); };
+    }
 
-fn emitSeg(out: anytype, a: usize, b: usize, spk: u8) !void {
-    try out.print("  [{d:.2}s - {d:.2}s] Speaker {d}\n", .{ @as(f32, @floatFromInt(a)) * 0.02, @as(f32, @floatFromInt(b)) * 0.02, spk });
+    // per-segment speaker label (kept segments only), relabel by first appearance
+    const spk = try alloc.alloc(i32, n); defer alloc.free(spk);
+    for (0..n) |i| spk[i] = -1;
+    const remap = try alloc.alloc(i32, K); defer alloc.free(remap);
+    for (0..K) |i| remap[i] = -1;
+    var nspk: i32 = 0;
+    for (0..m) |i| {
+        const c = asg[i];
+        if (remap[c] < 0) { remap[c] = nspk; nspk += 1; }
+        spk[keep[i]] = remap[c];
+    }
+
+    // merge temporally-consecutive same-speaker speech segments → RTTM + timeline
+    var rttm = std.ArrayList(u8).init(alloc);
+    defer rttm.deinit();
+    const flush = struct {
+        fn f(o: anytype, r: *std.ArrayList(u8), fid: []const u8, a: f32, b: f32, sp: i32) !void {
+            try o.print("  [{d:.2}s - {d:.2}s] Speaker {d}\n", .{ a, b, sp });
+            try r.writer().print("SPEAKER {s} 1 {d:.3} {d:.3} <NA> <NA> spk{d} <NA> <NA>\n", .{ fid, a, b - a, sp });
+        }
+    }.f;
+    var open_seg = false;
+    var s_start: f32 = 0; var s_end: f32 = 0; var s_spk: i32 = -1;
+    for (0..n) |i| {
+        if (spk[i] < 0) continue; // non-speech segment → breaks any run
+        if (open_seg and spk[i] == s_spk and t0[i] - s_end < seg_sec + 0.01) {
+            s_end = t0[i] + seg_sec;
+        } else {
+            if (open_seg) try flush(out, &rttm, file_id, s_start, s_end, s_spk);
+            open_seg = true; s_start = t0[i]; s_spk = spk[i]; s_end = t0[i] + seg_sec;
+        }
+    }
+    if (open_seg) try flush(out, &rttm, file_id, s_start, s_end, s_spk);
+    try out.print("  → {d} speaker(s) ({d}/{d} speech segments)\n", .{ nspk, m, n });
+
+    if (rttm_path) |p| {
+        try std.fs.cwd().writeFile(.{ .sub_path = p, .data = rttm.items });
+        try out.print("  RTTM → {s}\n", .{p});
+    }
 }
 
 // Median-filter (size 3) each text token's alignment row, argmax → encoder
