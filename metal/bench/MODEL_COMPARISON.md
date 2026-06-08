@@ -52,3 +52,18 @@ verify dataset terms for commercial deployment.
 3. ResNet34 forward (conv2d+BN+relu+residual, stats pooling, FC) — CPU first
    (offline, ~10 ms/seg is fine), verify layer-by-layer vs onnx
 4. wire into diarization (replace mel features), re-measure AMI DER, target <40%
+
+## Sovereignty fit (why ResNet34 is the most Sovereign choice)
+Project ethos (PORT.md "self-contained"; quark CLAUDE.md `@embedFile` binary):
+own the whole stack, no vendor ML runtime, hand-ported & auditable, fully offline.
+- **No runtime dependency**: inference reimplemented in our Zig/Metal; onnxruntime
+  is used ONLY for offline validation/DER (like numpy for kernel checks) — never
+  in the shipped binary.
+- **Own every layer**: simplest model = most of the stack is transparently ours.
+  ResNet34 = 36 convs / uniform 3×3 BasicBlocks (BN folded into convs at export →
+  just conv+relu+add); no CAM masking / D-TDNN / SE. Fully audited by a numpy
+  reimplementation that matches onnx bit-for-bit (cosine 1.000000).
+- **Open & reproducible**: wespeaker Apache-2.0, open recipe + open data (VoxCeleb).
+- **Future weight independence**: simple enough to retrain ourselves if needed.
+- Using Apache-2.0 pretrained weights, run in our own code, is consistent with how
+  this project uses Llama weights — sovereignty is owning the runtime, not training.
