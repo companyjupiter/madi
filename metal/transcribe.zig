@@ -309,7 +309,7 @@ pub fn main() !void {
         if (std.posix.getenv("DIAR_K")) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
         break :blk 0;
     };
-    const diar_k: u32 = if (n_speakers >= 1) n_speakers else 2;
+    const diar_k: u32 = n_speakers; // 0 = auto-estimate K (silhouette); ≥1 = fixed
 
     try mtl.init();
     defer mtl.deinit();
@@ -694,6 +694,65 @@ pub fn main() !void {
     try attributeTranscript(out);
 }
 
+fn envU(name: [:0]const u8, dflt: usize) usize {
+    if (std.posix.getenv(name)) |s| return std.fmt.parseInt(usize, s, 10) catch dflt;
+    return dflt;
+}
+fn envF(name: [:0]const u8, dflt: f32) f32 {
+    if (std.posix.getenv(name)) |s| return std.fmt.parseFloat(f32, s) catch dflt;
+    return dflt;
+}
+fn d2(a: []const f32, b: []const f32) f32 {
+    var s: f32 = 0;
+    for (0..a.len) |j| { const t = a[j] - b[j]; s += t * t; }
+    return s;
+}
+// k-means (cosine via L2-normed X) with deterministic farthest-point init.
+fn kmeansFit(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize) !void {
+    if (K <= 1) { @memset(asg, 0); return; }
+    const cent = try alloc.alloc(f32, K * segd); defer alloc.free(cent);
+    @memcpy(cent[0..segd], X[0..segd]);
+    const dmin = try alloc.alloc(f32, m); defer alloc.free(dmin);
+    for (0..m) |i| dmin[i] = d2(X[i * segd ..][0..segd], cent[0..segd]);
+    for (1..K) |c| {
+        var far: usize = 0; var fv: f32 = -1;
+        for (0..m) |i| if (dmin[i] > fv) { fv = dmin[i]; far = i; };
+        @memcpy(cent[c * segd ..][0..segd], X[far * segd ..][0..segd]);
+        for (0..m) |i| { const dd = d2(X[i * segd ..][0..segd], cent[c * segd ..][0..segd]); if (dd < dmin[i]) dmin[i] = dd; }
+    }
+    const csum = try alloc.alloc(f32, K * segd); defer alloc.free(csum);
+    const ccnt = try alloc.alloc(usize, K); defer alloc.free(ccnt);
+    for (0..25) |_| {
+        for (0..m) |i| {
+            var bc: usize = 0; var bv: f32 = d2(X[i * segd ..][0..segd], cent[0..segd]);
+            for (1..K) |c| { const dd = d2(X[i * segd ..][0..segd], cent[c * segd ..][0..segd]); if (dd < bv) { bv = dd; bc = c; } }
+            asg[i] = bc;
+        }
+        @memset(csum, 0); @memset(ccnt, 0);
+        for (0..m) |i| { ccnt[asg[i]] += 1; for (0..segd) |j| csum[asg[i] * segd + j] += X[i * segd + j]; }
+        for (0..K) |c| if (ccnt[c] > 0) for (0..segd) |j| { cent[c * segd + j] = csum[c * segd + j] / @as(f32, @floatFromInt(ccnt[c])); };
+    }
+}
+// Simplified silhouette (centroid distance, O(m·K·segd)) for auto-K selection.
+fn silhouetteSimplified(X: []const f32, m: usize, segd: usize, asg: []const usize, K: usize) !f32 {
+    if (K < 2) return -2;
+    const mu = try alloc.alloc(f32, K * segd); defer alloc.free(mu);
+    const cnt = try alloc.alloc(usize, K); defer alloc.free(cnt);
+    @memset(mu, 0); @memset(cnt, 0);
+    for (0..m) |i| { cnt[asg[i]] += 1; for (0..segd) |j| mu[asg[i] * segd + j] += X[i * segd + j]; }
+    for (0..K) |c| if (cnt[c] > 0) for (0..segd) |j| { mu[c * segd + j] /= @as(f32, @floatFromInt(cnt[c])); };
+    var sil: f64 = 0;
+    for (0..m) |i| {
+        const xi = X[i * segd ..][0..segd];
+        const a = d2(xi, mu[asg[i] * segd ..][0..segd]);
+        var b: f32 = 1e30;
+        for (0..K) |c| { if (c == asg[i] or cnt[c] == 0) continue; const dd = d2(xi, mu[c * segd ..][0..segd]); if (dd < b) b = dd; }
+        const mx = @max(a, b);
+        if (mx > 1e-9) sil += @as(f64, (b - a) / mx);
+    }
+    return @floatCast(sil / @as(f64, @floatFromInt(m)));
+}
+
 // Global speaker diarization on 256-d ResNet34 speaker embeddings. Pipeline:
 // relative energy VAD → L2-normalize → k-means (K = `diar_k`, deterministic
 // farthest-point init) → merge consecutive same-speaker segments → timeline +
@@ -705,7 +764,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
     // relative energy VAD: keep windows with RMS > 0.3 × median RMS
     const rs = try alloc.dupe(f32, bm[0..n]); defer alloc.free(rs);
     std.mem.sort(f32, rs, {}, std.sort.asc(f32));
-    const eth = rs[n / 2] * 0.3;
+    const eth = rs[n / 2] * envF("DIAR_VAD", 0.3);
     const keep = try alloc.alloc(usize, n); defer alloc.free(keep);
     var m: usize = 0;
     for (0..n) |i| if (bm[i] > eth) { keep[m] = i; m += 1; };
@@ -721,43 +780,25 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         for (0..segd) |j| X[i * segd + j] = src[j] * inv;
     }
 
-    var K: usize = @min(@as(usize, diar_k), m);
-    if (K < 1) K = 1;
-    const dist2 = struct {
-        fn f(a: []const f32, b: []const f32, d: usize) f32 {
-            var s: f32 = 0;
-            for (0..d) |j| { const t = a[j] - b[j]; s += t * t; }
-            return s;
-        }
-    }.f;
-    // k-means++ style farthest-point init (deterministic)
-    const cent = try alloc.alloc(f32, K * segd); defer alloc.free(cent);
-    @memcpy(cent[0..segd], X[0..segd]);
-    const dmin = try alloc.alloc(f32, m); defer alloc.free(dmin);
-    for (0..m) |i| dmin[i] = dist2(X[i * segd ..][0..segd], cent[0..segd], segd);
-    for (1..K) |c| {
-        var far: usize = 0; var fv: f32 = -1;
-        for (0..m) |i| if (dmin[i] > fv) { fv = dmin[i]; far = i; };
-        @memcpy(cent[c * segd ..][0..segd], X[far * segd ..][0..segd]);
-        for (0..m) |i| {
-            const dd = dist2(X[i * segd ..][0..segd], cent[c * segd ..][0..segd], segd);
-            if (dd < dmin[i]) dmin[i] = dd;
-        }
-    }
-    // Lloyd iterations
+    // Choose K: fixed (diar_k≥1) or auto via simplified-silhouette over 2..maxK.
     const asg = try alloc.alloc(usize, m); defer alloc.free(asg);
-    @memset(asg, 0);
-    const csum = try alloc.alloc(f32, K * segd); defer alloc.free(csum);
-    const ccnt = try alloc.alloc(usize, K); defer alloc.free(ccnt);
-    for (0..25) |_| {
-        for (0..m) |i| {
-            var bc: usize = 0; var bv: f32 = dist2(X[i * segd ..][0..segd], cent[0..segd], segd);
-            for (1..K) |c| { const dd = dist2(X[i * segd ..][0..segd], cent[c * segd ..][0..segd], segd); if (dd < bv) { bv = dd; bc = c; } }
-            asg[i] = bc;
+    var K: usize = undefined;
+    if (diar_k >= 1) {
+        K = @min(@as(usize, diar_k), m);
+        try kmeansFit(X, m, segd, K, asg);
+    } else {
+        const maxK: usize = @min(envU("DIAR_MAXK", 8), m);
+        const tau: f32 = envF("DIAR_SIL_TAU", 0.10); // below this → single speaker
+        const tmp = try alloc.alloc(usize, m); defer alloc.free(tmp);
+        var bestK: usize = 2; var bestSil: f32 = -2;
+        var kk: usize = 2;
+        while (kk <= maxK) : (kk += 1) {
+            try kmeansFit(X, m, segd, kk, tmp);
+            const sil = try silhouetteSimplified(X, m, segd, tmp, kk);
+            if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
         }
-        @memset(csum, 0); @memset(ccnt, 0);
-        for (0..m) |i| { ccnt[asg[i]] += 1; for (0..segd) |j| csum[asg[i] * segd + j] += X[i * segd + j]; }
-        for (0..K) |c| if (ccnt[c] > 0) for (0..segd) |j| { cent[c * segd + j] = csum[c * segd + j] / @as(f32, @floatFromInt(ccnt[c])); };
+        if (bestSil < tau) { K = 1; @memset(asg, 0); } else K = bestK;
+        try out.print("  [auto-K] K={d} (silhouette {d:.3}, tau {d:.2})\n", .{ K, bestSil, tau });
     }
 
     // per-segment speaker label (kept segments only), relabel by first appearance
