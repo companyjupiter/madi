@@ -159,6 +159,7 @@ pub fn main() !void {
     const f_filt = try mtl.getFunction("logit_filter_indirect");
     const f_suppress = try mtl.getFunction("suppress_list");
     const f_logit = try mtl.getFunction("logit_gemv_f16");
+    const f_bias16 = try mtl.getFunction("bias_add_f16");
     try out.print("[1] Metal + kernels ready\n", .{});
 
     const sf = try Sf.open(model_path);
@@ -223,17 +224,17 @@ pub fn main() !void {
 
     // ── decoder weights (4 layers); cross-KV weights kept for per-chunk recompute ─
     var dlayers: [dec.NL]dec.Layer = undefined;
-    const ckw = try alloc.alloc([*]f32, dec.NL);
-    const cvw = try alloc.alloc([*]f32, dec.NL);
+    const ckw = try alloc.alloc([*]f16, dec.NL);
+    const cvw = try alloc.alloc([*]f16, dec.NL);
     const cvb = try alloc.alloc([*]f32, dec.NL);
-    const ckc = try alloc.alloc([*]f32, dec.NL);
-    const cvc = try alloc.alloc([*]f32, dec.NL);
+    const ckc = try alloc.alloc([*]f16, dec.NL);
+    const cvc = try alloc.alloc([*]f16, dec.NL);
     for (0..dec.NL) |l| {
-        ckw[l] = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.k_proj.weight", l), D, D);
-        cvw[l] = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.weight", l), D, D);
+        ckw[l] = try upMatTF16(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.k_proj.weight", l), D, D);
+        cvw[l] = try upMatTF16(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.weight", l), D, D);
         cvb[l] = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.bias", l));
-        ckc[l] = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
-        cvc[l] = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
+        ckc[l] = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
+        cvc[l] = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
         dlayers[l] = .{
             .aln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.weight", l)),
             .aln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.bias", l)),
@@ -330,10 +331,10 @@ pub fn main() !void {
         try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, 1);
         const enc_ms = @as(f64, @floatFromInt(et.read())) / 1e6;
         for (0..dec.NL) |l| {
-            try mtl.matmul(enc_out, ckw[l], ckc[l], ENC_SEQ, D, D);
-            try mtl.matmul(enc_out, cvw[l], cvc[l], ENC_SEQ, D, D);
             try mtl.beginCommandBuffer();
-            try biasAdd(Kd, cvc[l], cvb[l], ENC_SEQ * D, D);
+            try mtl.matmulF16Batched(out_f16, ckw[l], ckc[l], ENC_SEQ, D, D);
+            try mtl.matmulF16Batched(out_f16, cvw[l], cvc[l], ENC_SEQ, D, D);
+            try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
         }
@@ -590,6 +591,12 @@ fn biasAdd(K: dec.Kernels, x: [*]f32, b: [*]f32, n: u32, d: u32) !void {
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn), P(&nd) };
     const s = [_]usize{ PS, PS, U, U };
     try mtl.dispatch(K.bias, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+fn biasAdd16(f: mtl.Function, x: [*]f16, b: [*]f32, n: u32, d: u32) !void {
+    var a0 = x; var a1 = b; var nn = n; var nd = d;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn), P(&nd) };
+    const s = [_]usize{ PS, PS, U, U };
+    try mtl.dispatch(f, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn layerNorm(K: dec.Kernels, x: [*]f32, y: [*]f32, g: [*]f32, b: [*]f32, d: u32) !void {
     var a0 = x; var a1 = y; var a2 = g; var a3 = b; var nd = d; var ne: f32 = 1e-5;

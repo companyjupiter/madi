@@ -40,9 +40,9 @@ pub const Kernels = struct {
             .res = try mtl.getFunction("gpu_residual"),
             .store = try mtl.getFunction("gpu_kv_store"),
             .attn = try mtl.getFunction("gpu_attention"),
-            .ca = try mtl.getFunction("flash_cross_attn"),
+            .ca = try mtl.getFunction("flash_cross_attn_f16kv"),
             .emb = try mtl.getFunction("gpu_emb_lookup"),
-            .extract = try mtl.getFunction("extract_ca_head"),
+            .extract = try mtl.getFunction("extract_ca_head_f16kv"),
         };
     }
 };
@@ -128,14 +128,14 @@ fn kAttn(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f32, vc: [*]f32, pos: [*]u32
     const s = [_]usize{ PS, PS, PS, PS, PS, U, U, U, U };
     try mtl.dispatch(K.attn, .{ NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-fn kCA(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f32, vc: [*]f32, seqlen: u32) !void {
+fn kCA(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, seqlen: u32) !void {
     var a0 = out; var a1 = q; var a2 = kc; var a3 = vc; var sl = seqlen;
     var hd = HDD; var kvd = D; var nkv = NH; var nh = NH;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sl), P(&hd), P(&kvd), P(&nkv), P(&nh) };
     const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U };
     try mtl.dispatch(K.ca, .{ NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-fn kExtract(K: Kernels, q: [*]f32, kc: [*]f32, ca: [*]f32, tok: [*]u32, head: u32, inv_n: f32, seqlen: u32) !void {
+fn kExtract(K: Kernels, q: [*]f32, kc: [*]f16, ca: [*]f32, tok: [*]u32, head: u32, inv_n: f32, seqlen: u32) !void {
     var a0 = q; var a1 = kc; var a2 = ca; var a3 = tok; var hh = head; var iv = inv_n; var sl = seqlen; var hd = HDD; var kvd = D;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&hh), P(&iv), P(&sl), P(&hd), P(&kvd) };
     const s = [_]usize{ PS, PS, PS, PS, U, Ff, U, U, U };
@@ -153,8 +153,8 @@ pub fn decodeBlock(
     s: Scratch,
     skc: [*]f32,
     svc: [*]f32,
-    ckc: [*]f32,
-    cvc: [*]f32,
+    ckc: [*]f16,
+    cvc: [*]f16,
     pos: [*]u32,
     ca: ?CaCtx,
 ) !void {

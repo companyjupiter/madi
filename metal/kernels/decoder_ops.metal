@@ -239,3 +239,90 @@ kernel void flash_cross_attn(
         out_buf[h * hdd + d] = sum;
     }
 }
+
+// ── F16 K/V-cache variants (decoder cross-attention) ────────────────
+// Query stays F32 (decoder activations are F32); K/V cache is F16 → halves the
+// dominant read (1500 keys × 20 heads). Used only by the transcribe decoder;
+// the F32 flash_cross_attn / extract_ca_head above stay for the tests.
+
+kernel void flash_cross_attn_f16kv(
+    device float*       out_buf [[buffer(0)]],
+    device const float* q_buf   [[buffer(1)]],
+    device const half*  kc      [[buffer(2)]],
+    device const half*  vc      [[buffer(3)]],
+    constant uint& seqlen [[buffer(4)]],
+    constant uint& hdd    [[buffer(5)]],
+    constant uint& kvd    [[buffer(6)]],
+    constant uint& nkv    [[buffer(7)]],
+    constant uint& nh     [[buffer(8)]],
+    uint tgid [[threadgroup_position_in_grid]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    threadgroup float scores[1504];
+    threadgroup float s8[8];
+    const uint h = tgid;
+    const uint kvh = (h * nkv) / nh;
+    const float rsq = rsqrt((float)hdd);
+    const float LOG2E = 1.4426950408889634f;
+
+    for (uint t = ltid; t < seqlen; t += 256) {
+        float sum = 0.0f;
+        for (uint d = 0; d < hdd; d++)
+            sum += q_buf[h * hdd + d] * (float)kc[(ulong)t * kvd + kvh * hdd + d];
+        scores[t] = sum * rsq;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lmax = -INFINITY;
+    for (uint t = ltid; t < seqlen; t += 256) lmax = max(lmax, scores[t]);
+    float mx = block_max(s8, lmax, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lsum = 0.0f;
+    for (uint t = ltid; t < seqlen; t += 256) { float e = exp2((scores[t] - mx) * LOG2E); scores[t] = e; lsum += e; }
+    float ssum = block_sum(s8, lsum, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float inv = 1.0f / ssum;
+    for (uint t = ltid; t < seqlen; t += 256) scores[t] *= inv;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint d = ltid; d < hdd; d += 256) {
+        float sum = 0.0f;
+        for (uint t = 0; t < seqlen; t++)
+            sum += scores[t] * (float)vc[(ulong)t * kvd + kvh * hdd + d];
+        out_buf[h * hdd + d] = sum;
+    }
+}
+
+kernel void extract_ca_head_f16kv(
+    device const float* q       [[buffer(0)]],
+    device const half*  kc      [[buffer(1)]],
+    device float*       ca      [[buffer(2)]],
+    device const uint*  tok_ptr [[buffer(3)]],
+    constant uint&  head  [[buffer(4)]],
+    constant float& inv_n [[buffer(5)]],
+    constant uint&  seqlen[[buffer(6)]],
+    constant uint&  hdd   [[buffer(7)]],
+    constant uint&  kvd   [[buffer(8)]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    threadgroup float sc[1504];
+    threadgroup float s8[8];
+    const uint tok = tok_ptr[0];
+    const float rsq = rsqrt((float)hdd);
+    const float LOG2E = 1.4426950408889634f;
+    for (uint t = ltid; t < seqlen; t += 256) {
+        float d = 0.0f;
+        for (uint e = 0; e < hdd; e++) d += q[head * hdd + e] * (float)kc[(ulong)t * kvd + head * hdd + e];
+        sc[t] = d * rsq;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lmax = -INFINITY;
+    for (uint t = ltid; t < seqlen; t += 256) lmax = max(lmax, sc[t]);
+    float mx = block_max(s8, lmax, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lsum = 0.0f;
+    for (uint t = ltid; t < seqlen; t += 256) { float e = exp2((sc[t] - mx) * LOG2E); sc[t] = e; lsum += e; }
+    float ssum = block_sum(s8, lsum, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float inv = inv_n / ssum;
+    device float* row = ca + (ulong)tok * seqlen;
+    for (uint t = ltid; t < seqlen; t += 256) row[t] += sc[t] * inv;
+}
