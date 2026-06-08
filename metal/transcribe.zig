@@ -158,7 +158,7 @@ pub fn main() !void {
     const f_argmax = try mtl.getFunction("argmax_no_inc");
     const f_filt = try mtl.getFunction("logit_filter_indirect");
     const f_suppress = try mtl.getFunction("suppress_list");
-    const f_logit = try mtl.getFunction("logit_gemv_f16");
+    const f_logit = try mtl.getFunction("logit_gemv_f16_cg");
     const f_bias16 = try mtl.getFunction("bias_add_f16");
     try out.print("[1] Metal + kernels ready\n", .{});
 
@@ -578,7 +578,7 @@ fn kLogitGemv(f: mtl.Function, logits: [*]f32, emb: [*]f16, x: [*]f32, vocab: u3
     var a0 = logits; var a1 = emb; var a2 = x; var v = vocab; var d = dim;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&v), P(&d) };
     const s = [_]usize{ PS, PS, PS, U, U };
-    try mtl.dispatch(f, .{ (vocab + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+    try mtl.dispatch(f, .{ (vocab + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn residual(K: dec.Kernels, x: [*]f32, y: [*]f32, n: u32) !void {
     var a0 = x; var a1 = y; var nn = n;
