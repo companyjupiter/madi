@@ -74,7 +74,8 @@ Per-stage profile (608 AMI embeds) revealed the bottleneck is NOT matmul FLOP:
 | # | idea | result | metric | commit |
 |---|------|--------|--------|--------|
 | DIAR-OPT1 | im2col: element-by-element strided copy + full @memset → @memcpy of contiguous valid spans (stride-1 path) | ✅ commit | **68→28 ms/embed (2.4×)**; AMI 17min total 100→83s; DER unchanged 32.49% (cosine 1.0 preserved); im2col 15.9s→7.6s | conv2d im2col |
-| (next) | multithread embeds across segments (independent) → ~Ncore×; or F16/MPS GPU convs | backlog | im2col-memcpy is now the floor (data movement); FLOP/sgemm is only 23% | — |
+| DIAR-OPT2 | multithread embeds across segments (std.Thread pool over a chunk's ~20 windows; Accelerate pinned to 1 thread/worker via VECLIB_MAXIMUM_THREADS=1 to avoid oversubscription) | ✅ commit | AMI 17min total 83→71s; diar embed ~2.4× (12 cores). NOT Ncore× — im2col is memory-bandwidth-bound, threads share bandwidth → sublinear. DER unchanged 32.49%; jfk exact; silence safe | DiarJob/diarWorker |
+| (next) | F16 convs or MPS GPU (compute, not bandwidth) for true scaling; or fuse im2col into a direct conv to cut data movement | backlog | total now transcription-bound (diar ~7s of 71s) | — |
 
 ## Memory architecture
 | # | idea | result | metric | commit |

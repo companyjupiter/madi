@@ -8,6 +8,7 @@ const mel = @import("mel.zig");
 const enc = @import("encoder.zig");
 const dec = @import("decoder.zig");
 const diar = @import("diar_resnet.zig");
+extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 
 const METALLIB = @embedFile("whisper.metallib");
 const D = enc.D;
@@ -492,6 +493,12 @@ pub fn main() !void {
     var diar_bm = std.ArrayList(f32).init(alloc); // per-window RMS (for VAD)
     var diar_t0 = std.ArrayList(f32).init(alloc);
     var diar_n: usize = 0;
+    // diar threading: 1 sgemm thread per worker (avoid Accelerate oversubscription)
+    _ = setenv("VECLIB_MAXIMUM_THREADS", "1", 1);
+    const diar_nthreads: usize = @min(std.Thread.getCpuCount() catch 4, 16);
+    const max_win: usize = mel.CHUNK_SAMPLES / SEG_SAMP; // 20
+    const cemb = try alloc.alloc(f32, max_win * diar.EMB);
+    const crms = try alloc.alloc(f32, max_win);
     // language token for the SEED: env WHISPER_LANG_ID overrides; else 0 = auto
     // (detected once from the SOT-position logits on the first speech chunk).
     var lang_tok: u32 = blk: {
@@ -510,15 +517,26 @@ pub fn main() !void {
         // in quiet chunks is kept; relative energy VAD applied at clustering time).
         {
             const nwin = got / SEG_SAMP;
-            for (0..nwin) |wsg| {
-                const win = samples[wsg * SEG_SAMP ..][0..SEG_SAMP];
-                var e: f64 = 0;
-                for (win) |v| e += @as(f64, v) * v;
-                const emb = try diar.embed(&diar_model, win);
-                try diar_emb.appendSlice(emb[0..]);
-                try diar_bm.append(@floatCast(@sqrt(e / @as(f64, SEG_SAMP))));
-                try diar_t0.append(t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC);
-                diar_n += 1;
+            if (nwin > 0) {
+                const nt = @min(diar_nthreads, nwin);
+                const per = (nwin + nt - 1) / nt;
+                var jobs: [16]DiarJob = undefined;
+                var threads: [16]std.Thread = undefined;
+                var spawned: usize = 0;
+                for (0..nt) |ti| {
+                    const lo = ti * per;
+                    if (lo >= nwin) break;
+                    jobs[ti] = .{ .m = &diar_model, .samples = samples[0 .. nwin * SEG_SAMP], .emb = cemb, .rms = crms, .lo = lo, .hi = @min(lo + per, nwin) };
+                    threads[ti] = try std.Thread.spawn(.{}, diarWorker, .{&jobs[ti]});
+                    spawned += 1;
+                }
+                for (0..spawned) |ti| threads[ti].join();
+                for (0..nwin) |wsg| {
+                    try diar_emb.appendSlice(cemb[wsg * diar.EMB ..][0 .. diar.EMB]);
+                    try diar_bm.append(crms[wsg]);
+                    try diar_t0.append(t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC);
+                    diar_n += 1;
+                }
             }
         }
 
@@ -908,6 +926,32 @@ fn hasSpeech(samples: []const f32, got: usize) bool {
         if (r > VAD_RMS) return true;
     }
     return false;
+}
+// Parallel diarization embedding: each 1.5 s window is independent, so a pool
+// of threads embeds them concurrently (~Ncore×). Model is read-only/shared;
+// each diar.embed uses its own arena over the (thread-safe) page allocator.
+const DIAR_WIN: usize = 24000; // 1.5 s
+const DiarJob = struct {
+    m: *const diar.Model,
+    samples: []const f32, // chunk PCM
+    emb: []f32, // [nwin][256] out
+    rms: []f32, // [nwin] out
+    lo: usize,
+    hi: usize,
+};
+fn diarWorker(j: *const DiarJob) void {
+    var w = j.lo;
+    while (w < j.hi) : (w += 1) {
+        const win = j.samples[w * DIAR_WIN ..][0..DIAR_WIN];
+        var e: f64 = 0;
+        for (win) |v| e += @as(f64, v) * v;
+        j.rms[w] = @floatCast(@sqrt(e / @as(f64, DIAR_WIN)));
+        const emb = diar.embed(j.m, win) catch {
+            @memset(j.emb[w * diar.EMB ..][0 .. diar.EMB], 0);
+            continue;
+        };
+        @memcpy(j.emb[w * diar.EMB ..][0 .. diar.EMB], emb[0..]);
+    }
 }
 fn biasAdd16(f: mtl.Function, x: [*]f16, b: [*]f32, n: u32, d: u32) !void {
     var a0 = x; var a1 = b; var nn = n; var nd = d;
