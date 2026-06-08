@@ -142,6 +142,49 @@ fn upMatTIntoF16(sf: Sf, key: []const u8, dst: [*]f16, out_ch: usize, in_ch: usi
     }
 }
 
+// Quantize a safetensors [out][in] f16 matrix → Q8_0 natural [out][in] layout
+// (per output row, blocks of 32 along `in`). Feeds encoder JIT-dequant→MPS.
+fn quantInto(u16s: [*]align(1) const u16, qs: [*]i8, sc: [*]f16, out_ch: usize, in_ch: usize, row0: usize) void {
+    const nb = in_ch / 32;
+    for (0..out_ch) |o| {
+        const row = row0 + o;
+        for (0..nb) |b| {
+            var mx: f32 = 0;
+            for (0..32) |i| { const w = @abs(h2f(u16s[o * in_ch + b * 32 + i])); if (w > mx) mx = w; }
+            const scale: f32 = if (mx > 0) mx / 127.0 else 1.0;
+            sc[row * nb + b] = @floatCast(scale);
+            const inv = 1.0 / scale;
+            for (0..32) |i| {
+                const q = std.math.clamp(@round(h2f(u16s[o * in_ch + b * 32 + i]) * inv), -127.0, 127.0);
+                qs[row * in_ch + b * 32 + i] = @intFromFloat(q);
+            }
+        }
+    }
+}
+fn upMatQ8(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize) !enc.Q8 {
+    const r = sf.raw(key) orelse return error.MissingTensor;
+    const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr));
+    const qs = try mtl.allocSlice(i8, out_ch * in_ch);
+    const sc = try mtl.allocSlice(f16, out_ch * (in_ch / 32));
+    quantInto(u16s, qs.ptr, sc.ptr, out_ch, in_ch, 0);
+    return .{ .qs = qs.ptr, .scales = sc.ptr };
+}
+// Encoder qkv stacked [3D][D] Q8 (q|k|v out-major), for JIT-dequant→MPS.
+fn upQKVQ8enc(sf: Sf, l: usize) !enc.Q8 {
+    const nb = @as(usize, D) / 32;
+    const qs = try mtl.allocSlice(i8, 3 * @as(usize, D) * D);
+    const sc = try mtl.allocSlice(f16, 3 * @as(usize, D) * nb);
+    var kbuf: [128]u8 = undefined;
+    const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
+    for (names, 0..) |nm, blk| {
+        const key = std.fmt.bufPrint(&kbuf, "model.encoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        const r = sf.raw(key) orelse return error.MissingTensor;
+        const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr));
+        quantInto(u16s, qs.ptr, sc.ptr, D, D, blk * @as(usize, D));
+    }
+    return .{ .qs = qs.ptr, .scales = sc.ptr };
+}
+
 // conv weight: safetensors [out][in][k] → [k][in][out]
 fn upConvW(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![*]f32 {
     const r = sf.raw(key) orelse return error.MissingTensor;
@@ -271,24 +314,20 @@ pub fn main() !void {
     var elayers: [enc.ENL]enc.Layer = undefined;
     var kb: [4][128]u8 = undefined;
     for (0..enc.ENL) |l| {
-        const qkv = try mtl.allocSlice(f16, 3 * D * D);
-        try upMatTIntoF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.q_proj.weight", l), qkv.ptr, D, D);
-        try upMatTIntoF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.k_proj.weight", l), qkv.ptr + D * D, D, D);
-        try upMatTIntoF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.v_proj.weight", l), qkv.ptr + 2 * D * D, D, D);
         elayers[l] = .{
             .aln_w = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn_layer_norm.weight", l)),
             .aln_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn_layer_norm.bias", l)),
-            .qkv_w = qkv.ptr,
+            .qkv_w = try upQKVQ8enc(sf, l),
             .q_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.q_proj.bias", l)),
             .k_b = g_zeros, // whisper k_proj has no bias
             .v_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.v_proj.bias", l)),
-            .o_w = try upMatTF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
+            .o_w = try upMatQ8(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
             .o_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.self_attn.out_proj.bias", l)),
             .mln_w = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.final_layer_norm.weight", l)),
             .mln_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.final_layer_norm.bias", l)),
-            .m0_w = try upMatTF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc1.weight", l), MLP, D),
+            .m0_w = try upMatQ8(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc1.weight", l), MLP, D),
             .m0_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc1.bias", l)),
-            .m2_w = try upMatTF16(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc2.weight", l), D, MLP),
+            .m2_w = try upMatQ8(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc2.weight", l), D, MLP),
             .m2_b = try upVec(sf, keyL(&kb[0], "model.encoder.layers.{d}.fc2.bias", l)),
         };
     }
@@ -303,6 +342,7 @@ pub fn main() !void {
         .ao = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr,
         .mo = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr,
         .mh = (try mtl.allocSlice(f16, ENC_SEQ * MLP)).ptr,
+        .wdq = (try mtl.allocSlice(f16, MLP * D)).ptr,
     };
     const out_f16 = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
     const enc_out = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
