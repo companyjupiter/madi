@@ -130,6 +130,17 @@ fn upConvW(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![*]f
     return dst.ptr;
 }
 
+fn upConvWF16(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![*]f16 {
+    const r = sf.raw(key) orelse return error.MissingTensor;
+    const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. out_ch * in_ch * k];
+    const dst = try mtl.allocSlice(f16, out_ch * in_ch * k);
+    const d16 = @as([*]u16, @ptrCast(dst.ptr));
+    for (0..out_ch) |o| for (0..in_ch) |i| for (0..k) |kk| {
+        d16[(kk * in_ch + i) * out_ch + o] = u16s[(o * in_ch + i) * k + kk];
+    };
+    return dst.ptr;
+}
+
 var g_zeros: [*]f32 = undefined; // shared zero bias [D]
 
 fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
@@ -147,7 +158,9 @@ pub fn main() !void {
     try mtl.init();
     defer mtl.deinit();
     try mtl.loadLibrary(METALLIB);
-    const Kc = try mtl.getFunction("conv1d_gelu");
+    const f_im2col = try mtl.getFunction("im2col_f16");
+    const f_geluT = try mtl.getFunction("gelu_transpose");
+    const f_geluPos = try mtl.getFunction("gelu_pos");
     const Ke = try enc.Kernels.load();
     const Kd = try dec.Kernels.load();
     const f_emb = Kd.emb;
@@ -172,13 +185,16 @@ pub fn main() !void {
     // ── one-time weights: conv front-end + positional ───────────────
     const mel_filters = try readBinF32(bpe_dir(bpe_path), "mel_filters.bin");
     const mel_buf = try mtl.allocSlice(f32, mel.N_MELS * mel.N_FRAMES);
-    const c1w = try upConvW(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
+    const c1w = try upConvWF16(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
     const c1b = try upVec(sf, "model.encoder.conv1.bias");
-    const c2w = try upConvW(sf, "model.encoder.conv2.weight", D, D, 3);
+    const c2w = try upConvWF16(sf, "model.encoder.conv2.weight", D, D, 3);
     const c2b = try upVec(sf, "model.encoder.conv2.bias");
     const enc_pe = try upVec(sf, "model.encoder.embed_positions.weight"); // [1500][D]
-    const conv1o = (try mtl.allocSlice(f32, D * mel.N_FRAMES)).ptr;
-    const conv2o = (try mtl.allocSlice(f32, D * ENC_SEQ)).ptr;
+    const conv1o = (try mtl.allocSlice(f32, D * mel.N_FRAMES)).ptr; // [D][3000] F32
+    const col1 = (try mtl.allocSlice(f16, mel.N_FRAMES * (mel.N_MELS * 3))).ptr;
+    const t1 = (try mtl.allocSlice(f16, mel.N_FRAMES * D)).ptr;
+    const col2 = (try mtl.allocSlice(f16, ENC_SEQ * (D * 3))).ptr;
+    const t2 = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
     const d_ex = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
     try out.print("[3] front-end weights loaded\n", .{});
 
@@ -317,14 +333,17 @@ pub fn main() !void {
 
         // front-end: mel → Conv1D×2 → enc_input
         mel.melSpectrogram(samples, mel_filters, mel_buf);
+        var ct = try std.time.Timer.start();
         try mtl.beginCommandBuffer();
-        try conv1d(Kc, conv1o, mel_buf.ptr, c1w, c1b, mel.N_MELS, D, mel.N_FRAMES, 1, mel.N_FRAMES);
-        try conv1d(Kc, conv2o, conv1o, c2w, c2b, D, D, mel.N_FRAMES, 2, ENC_SEQ);
+        try imIm2col(f_im2col, col1, mel_buf.ptr, mel.N_MELS, mel.N_FRAMES, 1, 1, mel.N_FRAMES);
+        try mtl.matmulF16Batched(col1, c1w, t1, mel.N_FRAMES, D, mel.N_MELS * 3);
+        try geluTranspose(f_geluT, conv1o, t1, c1b, mel.N_FRAMES, D);
+        try imIm2col(f_im2col, col2, conv1o, D, mel.N_FRAMES, 2, 1, ENC_SEQ);
+        try mtl.matmulF16Batched(col2, c2w, t2, ENC_SEQ, D, D * 3);
+        try geluPos(f_geluPos, d_ex, t2, c2b, enc_pe, ENC_SEQ * D, D);
         try mtl.commitCommandBuffer();
         try mtl.sync();
-        for (0..ENC_SEQ) |t| for (0..D) |c| {
-            d_ex[t * D + c] = conv2o[c * ENC_SEQ + t] + enc_pe[t * D + c];
-        };
+        const conv_ms = @as(f64, @floatFromInt(ct.read())) / 1e6;
 
         // encoder + per-chunk cross-KV
         var et = try std.time.Timer.start();
@@ -402,7 +421,7 @@ pub fn main() !void {
         }
 
         const dec_ms = @as(f64, @floatFromInt(dt2.read())) / 1e6;
-        try out.print("[perf] chunk {d}: encoder {d:.0}ms | decode {d} tok {d:.0}ms ({d:.1} tok/s)\n", .{ chunk + 1, enc_ms, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0) });
+        try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms | decode {d} tok {d:.0}ms ({d:.1} tok/s)\n", .{ chunk + 1, conv_ms, enc_ms, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0) });
         const text = try bpeDecode(bpe_path, out_tokens[SEED.len .. SEED.len + n_text]);
         if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ chunk + 1, n_chunks, t_off, text });
         try full.appendSlice(text);
@@ -562,6 +581,24 @@ const PS = @sizeOf(usize);
 const U = @sizeOf(u32);
 const Ff = @sizeOf(f32);
 
+fn imIm2col(f: mtl.Function, col: [*]f16, in: [*]f32, cin: u32, lin: u32, stride: u32, pad: u32, lout: u32) !void {
+    var a0 = col; var a1 = in; var c = cin; var l = lin; var k: u32 = 3; var st = stride; var pd = pad; var lo = lout;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&c), P(&l), P(&k), P(&st), P(&pd), P(&lo) };
+    const sz = [_]usize{ PS, PS, U, U, U, U, U, U };
+    try mtl.dispatch(f, .{ (lout * cin * 3 + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &sz);
+}
+fn geluTranspose(f: mtl.Function, o: [*]f32, in: [*]f16, bias: [*]f32, lout: u32, cout: u32) !void {
+    var a0 = o; var a1 = in; var a2 = bias; var l = lout; var c = cout;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&l), P(&c) };
+    const sz = [_]usize{ PS, PS, PS, U, U };
+    try mtl.dispatch(f, .{ (lout * cout + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &sz);
+}
+fn geluPos(f: mtl.Function, o: [*]f32, in: [*]f16, bias: [*]f32, pos: [*]f32, n: u32, cout: u32) !void {
+    var a0 = o; var a1 = in; var a2 = bias; var a3 = pos; var nn = n; var c = cout;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nn), P(&c) };
+    const sz = [_]usize{ PS, PS, PS, PS, U, U };
+    try mtl.dispatch(f, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &sz);
+}
 fn conv1d(f: mtl.Function, o: [*]f32, i: [*]f32, w: [*]f32, b: [*]f32, cin: u32, cout: u32, lin: u32, stride: u32, lout: u32) !void {
     var a0 = o; var a1 = i; var a2 = w; var a3 = b; var c0 = cin; var c1 = cout; var l0 = lin; var k: u32 = 3; var st = stride; var pd: u32 = 1;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&c0), P(&c1), P(&l0), P(&k), P(&st), P(&pd) };
