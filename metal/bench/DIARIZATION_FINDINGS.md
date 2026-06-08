@@ -30,6 +30,22 @@ self-contained Metal port like the encoder/decoder. Objective target: beat
 mel's 67% on AMI K=4 (CAM++ python baseline 47%). Validate with
 `bench/ecapa_validate.py` (onnx reference) before/after the port.
 
+## Qualitative 4-speaker demo (controlled, clean)
+`bench/gen_demo4.py` builds a 4-speaker clip via macOS `say` (Alex/Samantha/
+Daniel/Karen, 12 interleaved turns) + ground-truth RTTM. With the shipped
+ResNet34 diarizer (K=4):
+- **Global speaker identity is consistent** across all 3 rounds: Alex→spk0,
+  Samantha→spk1, Daniel→spk2, Karen→spk3 (system timeline 0,1,2,3 ×3 == GT
+  turn order). The Win: right speaker count + stable IDs over the whole clip.
+- **DER 24.2%** (clean voices < AMI far-field 32.5%). Error is almost entirely
+  one short-turn boundary (Samantha's first 4s window absorbed into Alex) —
+  the 1.5s window granularity; finer/turn-aware windows would lower it.
+```bash
+python3 bench/gen_demo4.py
+./out/transcribe assets/model.safetensors bench/demo4.wav assets/WHISPER_BPE.bin /tmp/d.rttm 4
+perl bench/md-eval.pl -c 0.25 -r bench/demo4.ref.rttm -s /tmp/d.rttm | grep OVERALL
+```
+
 ## Repro
 ```bash
 python3 -m venv /tmp/diarvenv
