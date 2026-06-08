@@ -27,12 +27,12 @@ def fbank80(sig):
     f.input_finished()
     return np.array([f.get_frame(i) for i in range(f.num_frames_ready)], dtype=np.float32)
 
-sess = ort.InferenceSession("bench/campplus.onnx", providers=["CPUExecutionProvider"])
+sess = ort.InferenceSession(__import__("os").environ.get("MODEL_ONNX","bench/campplus.onnx"), providers=["CPUExecutionProvider"])
 def embed(sig):
     fb = fbank80(sig)
     if len(fb) < 10: return None
     fb = fb - fb.mean(0, keepdims=True)            # global-mean normalize
-    e = sess.run(None, {"x": fb[None].astype(np.float32)})[0][0]
+    e = sess.run(None, {sess.get_inputs()[0].name: fb[None].astype(np.float32)})[0][0]
     return e / (np.linalg.norm(e) + 1e-8)
 
 seg_n = int(SEG * sr)
