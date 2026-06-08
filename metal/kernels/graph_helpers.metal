@@ -138,3 +138,30 @@ kernel void logit_filter_indirect(
         if (i == 1) logits[50257] = NEG; // EOT
     }
 }
+
+// logit_gemv_f16_cg — coalesced variant: one SIMD-group (warp) per vocab row,
+// 32 lanes split `dim` and read emb CONTIGUOUSLY (coalesced), then simd_sum.
+// Block=256 (8 warps → 8 rows/threadgroup). Replaces the 1-thread/row version
+// whose adjacent threads read `dim`-apart (uncoalesced).
+kernel void logit_gemv_f16_cg(
+    device float*        logits [[buffer(0)]],
+    device const half*   emb    [[buffer(1)]],
+    device const float*  x      [[buffer(2)]],
+    constant uint& vocab [[buffer(3)]],
+    constant uint& dim   [[buffer(4)]],
+    uint  tgid  [[threadgroup_position_in_grid]],
+    uint  tiitg [[thread_position_in_threadgroup]],
+    ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    threadgroup float xs[1280];
+    for (uint d = tiitg; d < dim; d += 256) xs[d] = x[d];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    const uint v = tgid * 8 + sgitg;
+    if (v >= vocab) return;
+    device const half* row = emb + (ulong)v * dim;
+    float acc = 0.0f;
+    for (uint i = tiisg; i < dim; i += 32) acc += xs[i] * (float)row[i];
+    acc = simd_sum(acc);
+    if (tiisg == 0) logits[v] = acc;
+}

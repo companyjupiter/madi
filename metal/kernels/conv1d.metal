@@ -76,3 +76,58 @@ kernel void transpose_2d(
     if (r >= R || c >= C) return;
     out_buf[c * R + r] = in_buf[r * C + c];
 }
+
+// ── conv1d as im2col + GEMM (MPS) ───────────────────────────────────
+// im2col: build col[L_out][C_in*K] (F16) from in[C_in][L_in] (F32).
+//   col[t][k*C_in + c] = in[c][t*stride + k - pad]  (0 if out of range)
+// Then MPS F16 GEMM: out[L_out][C_out] = col @ W[C_in*K][C_out] (W = upConvWF16).
+kernel void im2col_f16(
+    device half*        col    [[buffer(0)]],
+    device const float* in_buf [[buffer(1)]],
+    constant uint& C_in   [[buffer(2)]],
+    constant uint& L_in   [[buffer(3)]],
+    constant uint& K      [[buffer(4)]],
+    constant uint& stride [[buffer(5)]],
+    constant uint& pad    [[buffer(6)]],
+    constant uint& L_out  [[buffer(7)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const uint CK = C_in * K;
+    if (gid >= L_out * CK) return;
+    const uint t = gid / CK;
+    const uint kc = gid % CK;
+    const uint k = kc / C_in;
+    const uint c = kc % C_in;
+    const int ti = (int)(t * stride + k) - (int)pad;
+    float v = 0.0f;
+    if (ti >= 0 && ti < (int)L_in) v = in_buf[(ulong)c * L_in + (uint)ti];
+    col[gid] = (half)v;
+}
+
+// bias + gelu(tanh) + transpose [L_out][C_out](F16) -> [C_out][L_out](F32). conv1.
+kernel void gelu_transpose(
+    device float*       out_ct [[buffer(0)]],
+    device const half*  in_tc  [[buffer(1)]],
+    device const float* bias   [[buffer(2)]],
+    constant uint& L_out [[buffer(3)]],
+    constant uint& C_out [[buffer(4)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= L_out * C_out) return;
+    const uint t = gid / C_out, c = gid % C_out;
+    out_ct[(ulong)c * L_out + t] = gelu_tanh((float)in_tc[gid] + bias[c]);
+}
+
+// bias + gelu(tanh) + positional add: d_ex[i] = gelu(in[i]+bias[c]) + pos[i]. conv2.
+kernel void gelu_pos(
+    device float*       d_ex   [[buffer(0)]],
+    device const half*  in_tc  [[buffer(1)]],
+    device const float* bias   [[buffer(2)]],
+    device const float* pos    [[buffer(3)]],
+    constant uint& n     [[buffer(4)]],
+    constant uint& C_out [[buffer(5)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= n) return;
+    d_ex[gid] = gelu_tanh((float)in_tc[gid] + bias[gid % C_out]) + pos[gid];
+}

@@ -829,6 +829,38 @@ static id<MTLBuffer> resolve_buffer(const void* p, size_t* out_off) {
 
 // Shared MPS encode helper: builds the matrices + op and encodes onto `cb`.
 // f16 != 0 → all matrices MPSDataTypeFloat16 (half element size); else Float32.
+// Shape-keyed cache of descriptors + the MatrixMultiplication op (alpha=1,beta=0).
+// The op + 3 descriptors depend only on (M,N,K,f16) — reused across calls; only
+// the 3 MPSMatrix buffer-wrappers (buffer/offset vary) are made per call. Cached
+// objects are retained for process lifetime (bounded set of shapes). Cuts the
+// per-call ObjC alloc + op re-init overhead (big for the decoder: ~28 GEMV/token).
+typedef struct { int m, n, k, f16; void *dA, *dB, *dC, *mm; } MpsCacheEnt;
+static MpsCacheEnt g_mps_cache[64];
+static int g_mps_cache_n = 0;
+
+static MpsCacheEnt* mps_cache_get(int M, int N, int K, int f16) {
+    for (int i = 0; i < g_mps_cache_n; i++) {
+        MpsCacheEnt* e = &g_mps_cache[i];
+        if (e->m == M && e->n == N && e->k == K && e->f16 == f16) return e;
+    }
+    if (g_mps_cache_n >= 64) return NULL;
+    MpsCacheEnt* e = &g_mps_cache[g_mps_cache_n++];
+    e->m = M; e->n = N; e->k = K; e->f16 = f16;
+    const NSUInteger es = f16 ? 2 : 4;
+    const MPSDataType dt = f16 ? MPSDataTypeFloat16 : MPSDataTypeFloat32;
+    MPSMatrixDescriptor* dA = [MPSMatrixDescriptor matrixDescriptorWithRows:M columns:K rowBytes:(K * es) dataType:dt];
+    MPSMatrixDescriptor* dB = [MPSMatrixDescriptor matrixDescriptorWithRows:K columns:N rowBytes:(N * es) dataType:dt];
+    MPSMatrixDescriptor* dC = [MPSMatrixDescriptor matrixDescriptorWithRows:M columns:N rowBytes:(N * es) dataType:dt];
+    MPSMatrixMultiplication* mm = [[MPSMatrixMultiplication alloc]
+        initWithDevice:g_device transposeLeft:NO transposeRight:NO
+        resultRows:M resultColumns:N interiorColumns:K alpha:1.0 beta:0.0];
+    e->dA = (void*)CFBridgingRetain(dA);
+    e->dB = (void*)CFBridgingRetain(dB);
+    e->dC = (void*)CFBridgingRetain(dC);
+    e->mm = (void*)CFBridgingRetain(mm);
+    return e;
+}
+
 static int mps_encode_dt(id<MTLCommandBuffer> cb, const void* A, const void* B, void* C,
                          int M, int N, int K, float alpha, float beta, int f16) {
     size_t offA = 0, offB = 0, offC = 0;
@@ -839,6 +871,18 @@ static int mps_encode_dt(id<MTLCommandBuffer> cb, const void* A, const void* B, 
         fprintf(stderr, "[mps] matmul: unregistered buffer (A=%p B=%p C=%p)\n", A, B, C);
         return -1;
     }
+    // Fast path: cached descriptors + op for the common alpha=1,beta=0 case.
+    if (alpha == 1.0f && beta == 0.0f) {
+        MpsCacheEnt* e = mps_cache_get(M, N, K, f16);
+        if (e) {
+            MPSMatrix* mA = [[MPSMatrix alloc] initWithBuffer:bufA offset:offA descriptor:(__bridge MPSMatrixDescriptor*)e->dA];
+            MPSMatrix* mB = [[MPSMatrix alloc] initWithBuffer:bufB offset:offB descriptor:(__bridge MPSMatrixDescriptor*)e->dB];
+            MPSMatrix* mC = [[MPSMatrix alloc] initWithBuffer:bufC offset:offC descriptor:(__bridge MPSMatrixDescriptor*)e->dC];
+            [(__bridge MPSMatrixMultiplication*)e->mm encodeToCommandBuffer:cb leftMatrix:mA rightMatrix:mB resultMatrix:mC];
+            return 0;
+        }
+    }
+    // Fallback: uncached (rare shapes / non-default alpha,beta).
     const NSUInteger es = f16 ? 2 : 4;
     const MPSDataType dt = f16 ? MPSDataTypeFloat16 : MPSDataTypeFloat32;
     MPSMatrixDescriptor* dA = [MPSMatrixDescriptor matrixDescriptorWithRows:M columns:K rowBytes:(K * es) dataType:dt];

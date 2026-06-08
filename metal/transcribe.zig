@@ -130,6 +130,34 @@ fn upConvW(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![*]f
     return dst.ptr;
 }
 
+fn upConvWF16(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize, k: usize) ![*]f16 {
+    const r = sf.raw(key) orelse return error.MissingTensor;
+    const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. out_ch * in_ch * k];
+    const dst = try mtl.allocSlice(f16, out_ch * in_ch * k);
+    const d16 = @as([*]u16, @ptrCast(dst.ptr));
+    for (0..out_ch) |o| for (0..in_ch) |i| for (0..k) |kk| {
+        d16[(kk * in_ch + i) * out_ch + o] = u16s[(o * in_ch + i) * k + kk];
+    };
+    return dst.ptr;
+}
+
+// Stacked decoder QKV weight [D][3D] (q|k|v) for one batched GEMM (F32, [in][out]).
+fn upQKV(sf: Sf, l: usize) ![*]f32 {
+    const dst = try mtl.allocSlice(f32, 3 * @as(usize, D) * D);
+    var kbuf: [128]u8 = undefined;
+    const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
+    for (names, 0..) |nm, blk| {
+        const key = std.fmt.bufPrint(&kbuf, "model.decoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        const r = sf.raw(key) orelse return error.MissingTensor;
+        const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. @as(usize, D) * D];
+        const co = blk * @as(usize, D);
+        for (0..D) |o| for (0..D) |i| {
+            dst[i * 3 * @as(usize, D) + co + o] = h2f(u16s[o * D + i]);
+        };
+    }
+    return dst.ptr;
+}
+
 var g_zeros: [*]f32 = undefined; // shared zero bias [D]
 
 fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
@@ -147,7 +175,9 @@ pub fn main() !void {
     try mtl.init();
     defer mtl.deinit();
     try mtl.loadLibrary(METALLIB);
-    const Kc = try mtl.getFunction("conv1d_gelu");
+    const f_im2col = try mtl.getFunction("im2col_f16");
+    const f_geluT = try mtl.getFunction("gelu_transpose");
+    const f_geluPos = try mtl.getFunction("gelu_pos");
     const Ke = try enc.Kernels.load();
     const Kd = try dec.Kernels.load();
     const f_emb = Kd.emb;
@@ -158,7 +188,8 @@ pub fn main() !void {
     const f_argmax = try mtl.getFunction("argmax_no_inc");
     const f_filt = try mtl.getFunction("logit_filter_indirect");
     const f_suppress = try mtl.getFunction("suppress_list");
-    const f_logit = try mtl.getFunction("logit_gemv_f16");
+    const f_logit = try mtl.getFunction("logit_gemv_f16_cg");
+    const f_bias16 = try mtl.getFunction("bias_add_f16");
     try out.print("[1] Metal + kernels ready\n", .{});
 
     const sf = try Sf.open(model_path);
@@ -171,13 +202,16 @@ pub fn main() !void {
     // ── one-time weights: conv front-end + positional ───────────────
     const mel_filters = try readBinF32(bpe_dir(bpe_path), "mel_filters.bin");
     const mel_buf = try mtl.allocSlice(f32, mel.N_MELS * mel.N_FRAMES);
-    const c1w = try upConvW(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
+    const c1w = try upConvWF16(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
     const c1b = try upVec(sf, "model.encoder.conv1.bias");
-    const c2w = try upConvW(sf, "model.encoder.conv2.weight", D, D, 3);
+    const c2w = try upConvWF16(sf, "model.encoder.conv2.weight", D, D, 3);
     const c2b = try upVec(sf, "model.encoder.conv2.bias");
     const enc_pe = try upVec(sf, "model.encoder.embed_positions.weight"); // [1500][D]
-    const conv1o = (try mtl.allocSlice(f32, D * mel.N_FRAMES)).ptr;
-    const conv2o = (try mtl.allocSlice(f32, D * ENC_SEQ)).ptr;
+    const conv1o = (try mtl.allocSlice(f32, D * mel.N_FRAMES)).ptr; // [D][3000] F32
+    const col1 = (try mtl.allocSlice(f16, mel.N_FRAMES * (mel.N_MELS * 3))).ptr;
+    const t1 = (try mtl.allocSlice(f16, mel.N_FRAMES * D)).ptr;
+    const col2 = (try mtl.allocSlice(f16, ENC_SEQ * (D * 3))).ptr;
+    const t2 = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
     const d_ex = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
     try out.print("[3] front-end weights loaded\n", .{});
 
@@ -223,24 +257,22 @@ pub fn main() !void {
 
     // ── decoder weights (4 layers); cross-KV weights kept for per-chunk recompute ─
     var dlayers: [dec.NL]dec.Layer = undefined;
-    const ckw = try alloc.alloc([*]f32, dec.NL);
-    const cvw = try alloc.alloc([*]f32, dec.NL);
+    const ckw = try alloc.alloc([*]f16, dec.NL);
+    const cvw = try alloc.alloc([*]f16, dec.NL);
     const cvb = try alloc.alloc([*]f32, dec.NL);
-    const ckc = try alloc.alloc([*]f32, dec.NL);
-    const cvc = try alloc.alloc([*]f32, dec.NL);
+    const ckc = try alloc.alloc([*]f16, dec.NL);
+    const cvc = try alloc.alloc([*]f16, dec.NL);
     for (0..dec.NL) |l| {
-        ckw[l] = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.k_proj.weight", l), D, D);
-        cvw[l] = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.weight", l), D, D);
+        ckw[l] = try upMatTF16(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.k_proj.weight", l), D, D);
+        cvw[l] = try upMatTF16(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.weight", l), D, D);
         cvb[l] = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.encoder_attn.v_proj.bias", l));
-        ckc[l] = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
-        cvc[l] = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
+        ckc[l] = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
+        cvc[l] = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
         dlayers[l] = .{
             .aln_w = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.weight", l)),
             .aln_b = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn_layer_norm.bias", l)),
-            .qw = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.q_proj.weight", l), D, D),
+            .qkvw = try upQKV(sf, l),
             .qb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.q_proj.bias", l)),
-            .kw = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.k_proj.weight", l), D, D),
-            .vw = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.v_proj.weight", l), D, D),
             .vb = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.v_proj.bias", l)),
             .ow = try upMatT(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.weight", l), D, D),
             .ob = try upVec(sf, keyL(&kb[0], "model.decoder.layers.{d}.self_attn.out_proj.bias", l)),
@@ -265,9 +297,10 @@ pub fn main() !void {
     try out.print("[7] decoder weights + cross-KV ready\n", .{});
 
     // ── decoder scratch + KV caches ─────────────────────────────────
+    const d_qkv3 = (try mtl.allocSlice(f32, 3 * D)).ptr; // contiguous q|k|v
     const dscr = dec.Scratch{
-        .xb = (try mtl.allocSlice(f32, D)).ptr, .q = (try mtl.allocSlice(f32, D)).ptr,
-        .k = (try mtl.allocSlice(f32, D)).ptr, .v = (try mtl.allocSlice(f32, D)).ptr,
+        .xb = (try mtl.allocSlice(f32, D)).ptr, .q = d_qkv3,
+        .k = d_qkv3 + D, .v = d_qkv3 + 2 * D,
         .ao = (try mtl.allocSlice(f32, D)).ptr, .mo = (try mtl.allocSlice(f32, D)).ptr,
         .mh = (try mtl.allocSlice(f32, MLP)).ptr,
     };
@@ -316,24 +349,27 @@ pub fn main() !void {
 
         // front-end: mel → Conv1D×2 → enc_input
         mel.melSpectrogram(samples, mel_filters, mel_buf);
+        var ct = try std.time.Timer.start();
         try mtl.beginCommandBuffer();
-        try conv1d(Kc, conv1o, mel_buf.ptr, c1w, c1b, mel.N_MELS, D, mel.N_FRAMES, 1, mel.N_FRAMES);
-        try conv1d(Kc, conv2o, conv1o, c2w, c2b, D, D, mel.N_FRAMES, 2, ENC_SEQ);
+        try imIm2col(f_im2col, col1, mel_buf.ptr, mel.N_MELS, mel.N_FRAMES, 1, 1, mel.N_FRAMES);
+        try mtl.matmulF16Batched(col1, c1w, t1, mel.N_FRAMES, D, mel.N_MELS * 3);
+        try geluTranspose(f_geluT, conv1o, t1, c1b, mel.N_FRAMES, D);
+        try imIm2col(f_im2col, col2, conv1o, D, mel.N_FRAMES, 2, 1, ENC_SEQ);
+        try mtl.matmulF16Batched(col2, c2w, t2, ENC_SEQ, D, D * 3);
+        try geluPos(f_geluPos, d_ex, t2, c2b, enc_pe, ENC_SEQ * D, D);
         try mtl.commitCommandBuffer();
         try mtl.sync();
-        for (0..ENC_SEQ) |t| for (0..D) |c| {
-            d_ex[t * D + c] = conv2o[c * ENC_SEQ + t] + enc_pe[t * D + c];
-        };
+        const conv_ms = @as(f64, @floatFromInt(ct.read())) / 1e6;
 
         // encoder + per-chunk cross-KV
         var et = try std.time.Timer.start();
         try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, 1);
         const enc_ms = @as(f64, @floatFromInt(et.read())) / 1e6;
         for (0..dec.NL) |l| {
-            try mtl.matmul(enc_out, ckw[l], ckc[l], ENC_SEQ, D, D);
-            try mtl.matmul(enc_out, cvw[l], cvc[l], ENC_SEQ, D, D);
             try mtl.beginCommandBuffer();
-            try biasAdd(Kd, cvc[l], cvb[l], ENC_SEQ * D, D);
+            try mtl.matmulF16Batched(out_f16, ckw[l], ckc[l], ENC_SEQ, D, D);
+            try mtl.matmulF16Batched(out_f16, cvw[l], cvc[l], ENC_SEQ, D, D);
+            try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
         }
@@ -401,7 +437,7 @@ pub fn main() !void {
         }
 
         const dec_ms = @as(f64, @floatFromInt(dt2.read())) / 1e6;
-        try out.print("[perf] chunk {d}: encoder {d:.0}ms | decode {d} tok {d:.0}ms ({d:.1} tok/s)\n", .{ chunk + 1, enc_ms, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0) });
+        try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms | decode {d} tok {d:.0}ms ({d:.1} tok/s)\n", .{ chunk + 1, conv_ms, enc_ms, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0) });
         const text = try bpeDecode(bpe_path, out_tokens[SEED.len .. SEED.len + n_text]);
         if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ chunk + 1, n_chunks, t_off, text });
         try full.appendSlice(text);
@@ -561,6 +597,24 @@ const PS = @sizeOf(usize);
 const U = @sizeOf(u32);
 const Ff = @sizeOf(f32);
 
+fn imIm2col(f: mtl.Function, col: [*]f16, in: [*]f32, cin: u32, lin: u32, stride: u32, pad: u32, lout: u32) !void {
+    var a0 = col; var a1 = in; var c = cin; var l = lin; var k: u32 = 3; var st = stride; var pd = pad; var lo = lout;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&c), P(&l), P(&k), P(&st), P(&pd), P(&lo) };
+    const sz = [_]usize{ PS, PS, U, U, U, U, U, U };
+    try mtl.dispatch(f, .{ (lout * cin * 3 + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &sz);
+}
+fn geluTranspose(f: mtl.Function, o: [*]f32, in: [*]f16, bias: [*]f32, lout: u32, cout: u32) !void {
+    var a0 = o; var a1 = in; var a2 = bias; var l = lout; var c = cout;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&l), P(&c) };
+    const sz = [_]usize{ PS, PS, PS, U, U };
+    try mtl.dispatch(f, .{ (lout * cout + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &sz);
+}
+fn geluPos(f: mtl.Function, o: [*]f32, in: [*]f16, bias: [*]f32, pos: [*]f32, n: u32, cout: u32) !void {
+    var a0 = o; var a1 = in; var a2 = bias; var a3 = pos; var nn = n; var c = cout;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nn), P(&c) };
+    const sz = [_]usize{ PS, PS, PS, PS, U, U };
+    try mtl.dispatch(f, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &sz);
+}
 fn conv1d(f: mtl.Function, o: [*]f32, i: [*]f32, w: [*]f32, b: [*]f32, cin: u32, cout: u32, lin: u32, stride: u32, lout: u32) !void {
     var a0 = o; var a1 = i; var a2 = w; var a3 = b; var c0 = cin; var c1 = cout; var l0 = lin; var k: u32 = 3; var st = stride; var pd: u32 = 1;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&c0), P(&c1), P(&l0), P(&k), P(&st), P(&pd) };
@@ -577,7 +631,7 @@ fn kLogitGemv(f: mtl.Function, logits: [*]f32, emb: [*]f16, x: [*]f32, vocab: u3
     var a0 = logits; var a1 = emb; var a2 = x; var v = vocab; var d = dim;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&v), P(&d) };
     const s = [_]usize{ PS, PS, PS, U, U };
-    try mtl.dispatch(f, .{ (vocab + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+    try mtl.dispatch(f, .{ (vocab + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn residual(K: dec.Kernels, x: [*]f32, y: [*]f32, n: u32) !void {
     var a0 = x; var a1 = y; var nn = n;
@@ -590,6 +644,12 @@ fn biasAdd(K: dec.Kernels, x: [*]f32, b: [*]f32, n: u32, d: u32) !void {
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn), P(&nd) };
     const s = [_]usize{ PS, PS, U, U };
     try mtl.dispatch(K.bias, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+fn biasAdd16(f: mtl.Function, x: [*]f16, b: [*]f32, n: u32, d: u32) !void {
+    var a0 = x; var a1 = b; var nn = n; var nd = d;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn), P(&nd) };
+    const s = [_]usize{ PS, PS, U, U };
+    try mtl.dispatch(f, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn layerNorm(K: dec.Kernels, x: [*]f32, y: [*]f32, g: [*]f32, b: [*]f32, d: u32) !void {
     var a0 = x; var a1 = y; var a2 = g; var a3 = b; var nd = d; var ne: f32 = 1e-5;

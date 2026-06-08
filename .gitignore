@@ -1,0 +1,44 @@
+# ── OS / editor junk ─────────────────────────────────────────────
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# ── Build outputs ────────────────────────────────────────────────
+build/
+out/
+zig-cache/
+zig-out/
+.zig-cache/
+*.o
+*.obj
+*.exe
+*.pdb
+*.dSYM/
+
+# ── Metal artifacts ──────────────────────────────────────────────
+*.metallib
+*.air
+
+# ── CUDA build artifacts ─────────────────────────────────────────
+*.cubin
+*.ptxas
+
+# ── Model weights / generated data (large, re-creatable) ─────────
+# Source stays tracked: *.zig, kernels/*.ptx, metal/kernels/*.metal.
+# Binary model data + generated assets are NOT committed.
+*.safetensors
+*.bin
+*.wav
+*.npz
+
+# ── Model-asset folder: keep only generator scripts + docs ───────
+metal/assets/*
+!metal/assets/gen_assets.py
+!metal/assets/export_enc_weights.py
+!metal/assets/README.md
