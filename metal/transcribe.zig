@@ -487,6 +487,12 @@ pub fn main() !void {
     var diar_bm = std.ArrayList(f32).init(alloc); // per-seg block mean (for VAD)
     var diar_t0 = std.ArrayList(f32).init(alloc);
     var diar_n: usize = 0;
+    // language token for the SEED: env WHISPER_LANG_ID overrides; else 0 = auto
+    // (detected once from the SOT-position logits on the first speech chunk).
+    var lang_tok: u32 = blk: {
+        if (std.posix.getenv("WHISPER_LANG_ID")) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
+        break :blk 0;
+    };
     var timer = try std.time.Timer.start();
     var chunk: usize = 0;
     while (chunk < n_chunks) : (chunk += 1) {
@@ -558,6 +564,31 @@ pub fn main() !void {
         // reset decode state for this chunk
         for (SEED, 0..) |s, i| { d_tokens[i] = s; out_tokens[i] = s; }
         @memset(d_ca, 0);
+
+        // language detection (Whisper-style): the prediction at the <|sot|>
+        // position is the language token. Detect once (constant per file) by
+        // arg-max over the language-token range [50259..50358]; env override skips.
+        if (lang_tok == 0) {
+            d_pos[0] = 0;
+            try mtl.beginCommandBuffer();
+            try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[0]);
+            try residual(Kd, d_x, dec_pe, D); // pos-0 positional embedding
+            for (0..dec.NL) |l| {
+                const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n };
+                try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+            }
+            try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
+            try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
+            try mtl.commitCommandBuffer();
+            try mtl.sync();
+            var bl: u32 = 50259; var bv: f32 = d_logits[50259];
+            var lt: u32 = 50259;
+            while (lt <= 50358) : (lt += 1) { if (d_logits[lt] > bv) { bv = d_logits[lt]; bl = lt; } }
+            lang_tok = bl;
+            try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+        }
+        d_tokens[1] = lang_tok;
+        out_tokens[1] = lang_tok;
 
         // GPU-resident autoregressive decode (idea from the SHARE build's CUDA
         // Graph replay): the whole step runs on-GPU — indirect embed, blocks,
