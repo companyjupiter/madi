@@ -75,6 +75,29 @@ fn upVecF16(sf: Sf, key: []const u8) ![*]f16 {
     @memcpy(std.mem.sliceAsBytes(dst), r);
     return dst.ptr;
 }
+const Q8 = struct { qs: [*]i8, scales: [*]f16 };
+/// Quantize an F16 [rows][dim] tensor to Q8_0 (int8 + per-32-block fp16 scale).
+fn upVecQ8(sf: Sf, key: []const u8, rows: usize, dim: usize) !Q8 {
+    const r = sf.raw(key) orelse return error.MissingTensor;
+    const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. rows * dim];
+    const nb = dim / 32;
+    const qs = try mtl.allocSlice(i8, rows * dim);
+    const sc = try mtl.allocSlice(f16, rows * nb);
+    for (0..rows) |v| {
+        for (0..nb) |b| {
+            var mx: f32 = 0;
+            for (0..32) |i| { const w = @abs(h2f(u16s[v * dim + b * 32 + i])); if (w > mx) mx = w; }
+            const scale: f32 = if (mx > 0) mx / 127.0 else 1.0;
+            sc[v * nb + b] = @floatCast(scale);
+            const inv = 1.0 / scale;
+            for (0..32) |i| {
+                const q = std.math.clamp(@round(h2f(u16s[v * dim + b * 32 + i]) * inv), -127.0, 127.0);
+                qs[v * dim + b * 32 + i] = @intFromFloat(q);
+            }
+        }
+    }
+    return .{ .qs = qs.ptr, .scales = sc.ptr };
+}
 
 /// Load a projection weight [out][in] → transposed [in][out] F32 unified.
 fn upMatT(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize) ![*]f32 {
@@ -180,15 +203,15 @@ pub fn main() !void {
     const f_geluPos = try mtl.getFunction("gelu_pos");
     const Ke = try enc.Kernels.load();
     const Kd = try dec.Kernels.load();
-    const f_emb = Kd.emb;
+    const f_emb = try mtl.getFunction("gpu_emb_lookup_q8");
     // GPU-resident decode-loop kernels (sync-free replay; from the SHARE build)
-    const f_emb_ind = try mtl.getFunction("emb_lookup_indirect");
+    const f_emb_ind = try mtl.getFunction("emb_lookup_indirect_q8");
     const f_pe_ind = try mtl.getFunction("pos_embed_add_indirect");
     const f_step = try mtl.getFunction("step_advance");
     const f_argmax = try mtl.getFunction("argmax_no_inc");
     const f_filt = try mtl.getFunction("logit_filter_indirect");
     const f_suppress = try mtl.getFunction("suppress_list");
-    const f_logit = try mtl.getFunction("logit_gemv_f16_cg");
+    const f_logit = try mtl.getFunction("logit_gemv_q8");
     const f_bias16 = try mtl.getFunction("bias_add_f16");
     try out.print("[1] Metal + kernels ready\n", .{});
 
@@ -292,7 +315,7 @@ pub fn main() !void {
     }
     const dln_w = try upVec(sf, "model.decoder.layer_norm.weight");
     const dln_b = try upVec(sf, "model.decoder.layer_norm.bias");
-    const tok_emb = try upVecF16(sf, "model.decoder.embed_tokens.weight"); // [VOCAB][D] F16
+    const tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0
     const dec_pe = try upVec(sf, "model.decoder.embed_positions.weight"); // [448][D]
     try out.print("[7] decoder weights + cross-KV ready\n", .{});
 
@@ -393,7 +416,7 @@ pub fn main() !void {
             while (sp + 1 < SEED.len) : (sp += 1) {
                 d_pos[0] = sp;
                 try mtl.beginCommandBuffer();
-                try embLookup(f_emb, d_x, tok_emb, &d_tokens[sp]);
+                try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[sp]);
                 try residual(Kd, d_x, dec_pe + @as(usize, sp) * D, D);
                 for (0..dec.NL) |l| {
                     const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n };
@@ -410,14 +433,14 @@ pub fn main() !void {
             const this_b = @min(DBATCH, max_gen - n_text);
             try mtl.beginCommandBuffer();
             for (0..this_b) |_| {
-                try kEmbInd(f_emb_ind, d_x, tok_emb, d_tokens.ptr, d_pos);
+                try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
                 try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
                 for (0..dec.NL) |l| {
                     const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n };
                     try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
                 }
                 try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
-                try kLogitGemv(f_logit, d_logits, tok_emb, dscr.xb, VOCAB, D);
+                try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
                 try kSuppress(f_suppress, d_logits, d_suppress.ptr, n_suppress);
                 try kFilt(f_filt, d_logits, d_tokens.ptr, d_pos, sample_begin);
                 try kStep(f_step, d_pos); // pos += 1
@@ -621,16 +644,16 @@ fn conv1d(f: mtl.Function, o: [*]f32, i: [*]f32, w: [*]f32, b: [*]f32, cin: u32,
     const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U, U };
     try mtl.dispatch(f, .{ lout, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-fn embLookup(f: mtl.Function, o: [*]f32, emb: [*]f16, tok: *u32) !void {
-    var a0 = o; var a1 = emb; var a2 = tok; var nd = D;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&nd) };
-    const s = [_]usize{ PS, PS, PS, U };
+fn embLookup(f: mtl.Function, o: [*]f32, qs: [*]i8, sc: [*]f16, tok: *u32) !void {
+    var a0 = o; var a1 = qs; var a2 = sc; var a3 = tok; var nd = D;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nd) };
+    const s = [_]usize{ PS, PS, PS, PS, U };
     try mtl.dispatch(f, .{ 1, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-fn kLogitGemv(f: mtl.Function, logits: [*]f32, emb: [*]f16, x: [*]f32, vocab: u32, dim: u32) !void {
-    var a0 = logits; var a1 = emb; var a2 = x; var v = vocab; var d = dim;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&v), P(&d) };
-    const s = [_]usize{ PS, PS, PS, U, U };
+fn kLogitGemv(f: mtl.Function, logits: [*]f32, qs: [*]i8, sc: [*]f16, x: [*]f32, vocab: u32, dim: u32) !void {
+    var a0 = logits; var a1 = qs; var a2 = sc; var a3 = x; var v = vocab; var d = dim;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&v), P(&d) };
+    const s = [_]usize{ PS, PS, PS, PS, U, U };
     try mtl.dispatch(f, .{ (vocab + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn residual(K: dec.Kernels, x: [*]f32, y: [*]f32, n: u32) !void {
@@ -659,10 +682,10 @@ fn layerNorm(K: dec.Kernels, x: [*]f32, y: [*]f32, g: [*]f32, b: [*]f32, d: u32)
 }
 
 // ── GPU-resident decode-loop launchers (sync-free replay) ────────────
-fn kEmbInd(f: mtl.Function, o: [*]f32, emb: [*]f16, toks: [*]u32, pos: [*]u32) !void {
-    var a0 = o; var a1 = emb; var a2 = toks; var a3 = pos; var nd = D;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nd) };
-    const s = [_]usize{ PS, PS, PS, PS, U };
+fn kEmbInd(f: mtl.Function, o: [*]f32, qs: [*]i8, sc: [*]f16, toks: [*]u32, pos: [*]u32) !void {
+    var a0 = o; var a1 = qs; var a2 = sc; var a3 = toks; var a4 = pos; var nd = D;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&nd) };
+    const s = [_]usize{ PS, PS, PS, PS, PS, U };
     try mtl.dispatch(f, .{ (D + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn kPeInd(f: mtl.Function, o: [*]f32, pe: [*]f32, pos: [*]u32) !void {
