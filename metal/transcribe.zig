@@ -20,20 +20,31 @@ const SEED = [_]u32{ 50258, 50259, 50360, 50364 }; // sot, en, transcribe, notim
 const alloc = std.heap.page_allocator;
 
 // ── safetensors ──────────────────────────────────────────────────────
+// pread-based loader: the 1.6GB data section is NEVER mmap'd/resident. Each
+// tensor is pread into a single reusable scratch buffer, consumed (copied or
+// quantized into a unified GPU buffer), then overwritten by the next read.
+// Peak RSS ≈ GPU weight buffers + one tensor's bytes (vs +1.6GB with mmap;
+// macOS won't reclaim read-once mmap pages via madvise, so mmap is avoided).
+var g_rd: []u8 = &.{}; // reusable per-tensor read buffer (grows as needed)
+
 const Sf = struct {
-    data: []align(std.heap.page_size_min) const u8,
+    fd: std.posix.fd_t,
     off: usize, // data section start
-    json: []const u8,
+    size: usize, // total file size (for reporting)
+    json: []u8, // heap-allocated header
 
     fn open(path: []const u8) !Sf {
         const fd = try std.posix.open(path, .{}, 0);
-        defer std.posix.close(fd);
         const sz: usize = @intCast((try std.posix.fstat(fd)).size);
-        const m = try std.posix.mmap(null, sz, std.posix.PROT.READ, .{ .TYPE = .PRIVATE }, fd, 0);
-        const n = std.mem.readInt(u64, m[0..8], .little);
-        return .{ .data = m, .off = 8 + n, .json = m[8 .. 8 + n] };
+        var hdr: [8]u8 = undefined;
+        if (try std.posix.pread(fd, &hdr, 0) != 8) return error.BadHeader;
+        const n = std.mem.readInt(u64, &hdr, .little);
+        const json = try alloc.alloc(u8, n);
+        if (try std.posix.pread(fd, json, 8) != n) return error.BadHeader;
+        return .{ .fd = fd, .off = 8 + n, .size = sz, .json = json };
     }
-    /// Raw F16 bytes for a tensor key (null if absent).
+    /// Raw F16 bytes for a tensor key (null if absent). Valid until the next
+    /// raw() call — the returned slice aliases the shared scratch buffer.
     fn raw(self: Sf, key: []const u8) ?[]const u8 {
         var kbuf: [128]u8 = undefined;
         const q = std.fmt.bufPrint(&kbuf, "\"{s}\"", .{key}) catch return null;
@@ -44,7 +55,19 @@ const Sf = struct {
         const rb = std.mem.indexOfPos(u8, self.json, cm, "]") orelse return null;
         const s = std.fmt.parseInt(usize, std.mem.trim(u8, self.json[lb + 1 .. cm], " "), 10) catch return null;
         const e = std.fmt.parseInt(usize, std.mem.trim(u8, self.json[cm + 1 .. rb], " "), 10) catch return null;
-        return self.data[self.off + s .. self.off + e];
+        const len = e - s;
+        if (g_rd.len < len) {
+            if (g_rd.len > 0) alloc.free(g_rd);
+            g_rd = alloc.alloc(u8, len) catch return null;
+        }
+        const buf = g_rd[0..len];
+        var got: usize = 0;
+        while (got < len) {
+            const m = std.posix.pread(self.fd, buf[got..], self.off + s + got) catch return null;
+            if (m == 0) return null;
+            got += m;
+        }
+        return buf;
     }
 };
 
@@ -289,7 +312,7 @@ pub fn main() !void {
     try out.print("[1] Metal + kernels ready\n", .{});
 
     const sf = try Sf.open(model_path);
-    try out.print("[2] model.safetensors mapped ({d} MB)\n", .{sf.data.len / 1048576});
+    try out.print("[2] model.safetensors opened ({d} MB, pread streaming)\n", .{sf.size / 1048576});
 
     const zeros = try mtl.allocSlice(f32, D);
     @memset(zeros, 0);
@@ -388,6 +411,10 @@ pub fn main() !void {
     const dln_b = try upVec(sf, "model.decoder.layer_norm.bias");
     const tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0
     const dec_pe = try upVec(sf, "model.decoder.embed_positions.weight"); // [448][D]
+    // all weights now in unified GPU buffers — release the read scratch + fd
+    if (g_rd.len > 0) { alloc.free(g_rd); g_rd = &.{}; }
+    alloc.free(sf.json);
+    std.posix.close(sf.fd);
     try out.print("[7] decoder weights + cross-KV ready\n", .{});
 
     // ── decoder scratch + KV caches ─────────────────────────────────
