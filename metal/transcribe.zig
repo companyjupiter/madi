@@ -977,28 +977,78 @@ fn attributeTranscript(out: anytype) !void {
     }
     if (line.items.len > 0) try out.print("  [{d:.2}s] Speaker {d}:{s}\n", .{ cur_t, cur, line.items });
 }
+// Word timestamps via DTW over the alignment-head cross-attention (d_ca already
+// averages Whisper-turbo align heads {2,4}{2,11}{3,3}{3,6}{3,11}{3,14}). Ported
+// from the CUDA sibling's verified DTW (박정근) — replaces per-token argmax,
+// which picked each token's peak independently (non-monotonic → time inversions).
+// DTW finds one monotonic token→frame path maximizing total attention, so every
+// token's onset is strictly ordered. Frame = 20 ms.
 fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, t_off: f32) !void {
     const toks = try loadBpe(bpe_path);
-    var word = std.ArrayList(u8).init(alloc);
-    var word_start: f32 = -1;
-    try out.print("\n=== WORD TIMESTAMPS ===\n", .{});
-    for (0..n_text) |i| {
-        const ti = SEED.len + i; // ca row index == sequence position
-        const row = ca[ti * ENC_SEQ ..][0..ENC_SEQ];
-        // median-3 + argmax
-        var best_j: u32 = 0;
-        var best_v: f32 = -1;
-        for (0..ENC_SEQ) |j| {
-            const lo = if (j > 0) row[j - 1] else row[j];
-            const md = row[j];
-            const hi = if (j + 1 < ENC_SEQ) row[j + 1] else row[j];
-            var a = lo; var b = md; const c = hi;
+    const E: usize = ENC_SEQ;
+    const N: usize = n_text;
+
+    // Phase 1: median-3 filter each text-token attention row → filtered[N×E]
+    const filtered = try alloc.alloc(f32, N * E);
+    defer alloc.free(filtered);
+    for (0..N) |i| {
+        const row = ca[(SEED.len + i) * E ..][0..E];
+        const frow = filtered[i * E ..][0..E];
+        for (0..E) |j| {
+            var a = if (j > 0) row[j - 1] else row[j];
+            var b = row[j];
+            const c = if (j + 1 < E) row[j + 1] else row[j];
             if (a > b) { const t = a; a = b; b = t; }
             if (b > c) { b = c; }
             if (a > b) { b = a; }
-            if (b > best_v) { best_v = b; best_j = @intCast(j); }
+            frow[j] = b;
         }
-        const ts: f32 = t_off + @as(f32, @floatFromInt(best_j)) * 0.02; // 20 ms/frame + chunk offset
+    }
+
+    // Phase 2: DTW DP — score[i][j] = max(↑ prev-tok, ↖ adv-both, ← adv-frame) + filtered[i][j]
+    const score = try alloc.alloc(f32, N * E);
+    defer alloc.free(score);
+    for (0..E) |j| score[j] = filtered[j]; // first text-token row
+    for (1..N) |i| {
+        for (0..E) |j| {
+            var m = score[(i - 1) * E + j]; // ↑ same frame, previous token
+            if (j > 0) {
+                const d = score[(i - 1) * E + j - 1]; // ↖ advance frame + token
+                if (d > m) m = d;
+                const l = score[i * E + j - 1]; // ← advance frame, same token
+                if (l > m) m = l;
+            }
+            score[i * E + j] = m + filtered[i * E + j];
+        }
+    }
+
+    // Phase 3: backtrace from the best final-token frame → per-token onset frame
+    const ts_frame = try alloc.alloc(u32, N);
+    defer alloc.free(ts_frame);
+    var cj: usize = 0;
+    {
+        var best: f32 = -1e30;
+        for (0..E) |j| if (score[(N - 1) * E + j] > best) { best = score[(N - 1) * E + j]; cj = j; };
+    }
+    var ci: usize = N - 1;
+    while (true) {
+        ts_frame[ci] = @intCast(cj); // revisited left→right; final value = token onset
+        if (ci == 0 and cj == 0) break;
+        var ni = ci; var nj = cj; var m: f32 = -1e30;
+        if (ci > 0 and score[(ci - 1) * E + cj] > m) { m = score[(ci - 1) * E + cj]; ni = ci - 1; nj = cj; }
+        if (ci > 0 and cj > 0 and score[(ci - 1) * E + cj - 1] > m) { m = score[(ci - 1) * E + cj - 1]; ni = ci - 1; nj = cj - 1; }
+        if (cj > 0 and score[ci * E + cj - 1] > m) { m = score[ci * E + cj - 1]; ni = ci; nj = cj - 1; }
+        if (ni == ci and nj == cj) break;
+        ci = ni; cj = nj;
+    }
+
+    // group BPE sub-words into words (space-prefixed token = new word)
+    var word = std.ArrayList(u8).init(alloc);
+    var word_start: f32 = -1;
+    try out.print("\n=== WORD TIMESTAMPS ===\n", .{});
+    for (0..N) |i| {
+        const ti = SEED.len + i;
+        const ts: f32 = t_off + @as(f32, @floatFromInt(ts_frame[i])) * 0.02; // 20 ms/frame + offset
         const tok_bytes = if (out_tokens[ti] < toks.len) toks[out_tokens[ti]] else "";
         const starts_word = tok_bytes.len > 0 and tok_bytes[0] == ' ';
         if (starts_word and word.items.len > 0) {
