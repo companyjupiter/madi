@@ -94,6 +94,52 @@ DIAR_K=1 ./out/transcribe assets/model.safetensors lecture.wav assets/WHISPER_BP
 
 ---
 
+## 4-b. 준실시간 회의 전사 (마이크 → 라이브 전사)
+`metal/live_transcribe.sh` 는 마이크(또는 임의의 avfoundation 오디오 장치)를
+**N초 세그먼트로 굴려가며** 닫히는 즉시 `transcribe`에 넣어, 흐르는 회의록을
+실시간에 가깝게 출력합니다. 세그먼트 1개를 닫은 뒤 디코드(~3초)만큼 뒤따라가므로
+지연은 대략 **N + 3초**입니다. (진짜 스트리밍/슬라이딩 윈도우/온라인 화자분리는
+아직 미구현 — 8장 한계 참고)
+
+### 오디오 장치 목록 보기
+```bash
+ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep -A20 'audio devices'
+#  예) [2] MacBook Pro Microphone   [3] Microsoft Teams Audio
+```
+
+### 실행
+```bash
+cd metal
+./live_transcribe.sh [장치인덱스] [세그먼트초]
+#  기본: 장치 2(내장 마이크), 10초 세그먼트, 언어 자동감지. Ctrl-C로 종료.
+```
+예시:
+```bash
+./live_transcribe.sh                 # 내장 마이크, 10초 세그먼트
+./live_transcribe.sh 3 8             # "Microsoft Teams Audio" 캡처, 8초
+LANG=50264 DIAR=1 ./live_transcribe.sh   # 한국어 강제 + 세그먼트별 화자표시
+```
+
+### 환경변수
+| 변수 | 기본 | 의미 |
+|---|---|---|
+| `DEVICE` | 2 | avfoundation 오디오 장치 인덱스(1번째 인자와 동일) |
+| `SEG` | 10 | 세그먼트 길이(초, 2번째 인자와 동일). 짧을수록 지연↓ 정확도↓ |
+| `LANG` | 자동 | 언어 토큰 강제 → `WHISPER_LANG_ID`로 전달(한 50264 / 영 50259) |
+| `DIAR` | 0 | 1이면 세그먼트별 화자 표시(※라벨은 세그먼트 내부 한정 — Speaker 0이 다음 세그먼트의 Speaker 0과 동일 보장 X) |
+| `KEEP` | 0 | 1이면 종료 시 임시 세그먼트 WAV 보존 |
+| `MODEL`/`BPE`/`BIN` | assets/… | 모델·BPE·바이너리 경로 |
+
+> **⚠️ 마이크 권한**: 최초 실행 시 macOS가 **터미널의 마이크 접근**을 묻습니다.
+> 허용해야 캡처됩니다(시스템 설정 → 개인정보 보호 및 보안 → 마이크). 권한이 없으면
+> 오디오가 안 잡히고 스크립트가 힌트를 출력합니다.
+
+> **한계(청크 방식)**: 세그먼트 경계에서 단어가 잘릴 수 있고("country"→"company" 등),
+> 화자 라벨은 세그먼트 간 일관되지 않습니다. 정확한 최종본은 회의 종료 후 전체 WAV를
+> 한 번에 `transcribe`로 돌리세요(4장).
+
+---
+
 ## 5. 출력 설명
 ```
 [perf] chunk 1: conv 21ms | encoder 653ms | decode 26 tok 138ms (188 tok/s)
