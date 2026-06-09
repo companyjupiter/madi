@@ -182,8 +182,12 @@ command -v ffmpeg >/dev/null || { echo "error: ffmpeg not found (brew install ff
 [ -f "$MODEL" ] || { echo "error: model not found: $MODEL"; exit 1; }
 [ -f "$BPE" ]   || { echo "error: BPE not found: $BPE"; exit 1; }
 if [ "$DIAR" = "1" ]; then
-  [ -x "$EMB" ] && [ -x "$CLUST" ] || { echo "error: diar tools missing ($EMB / $CLUST). Build: bash build.sh diar_embed_wav.zig ; zig build-obj -O ReleaseFast -lc --name online_diar -femit-bin=build/online_diar.o online_diar.zig && clang -O2 build/online_diar.o -o out/online_diar"; exit 1; }
+  # diar weights are always needed (resident binary + external tools both load them)
   [ -f "$DIAR_W" ] && [ -f "$DIAR_MB" ] || { echo "error: diar assets missing. Run: bash bench/gen_diar_assets.sh"; exit 1; }
+  # the standalone diar tools are only used in the --no-resident fallback
+  if [ "$RESIDENT" != "1" ]; then
+    [ -x "$EMB" ] && [ -x "$CLUST" ] || { echo "error: diar tools missing ($EMB / $CLUST). Build: bash build.sh diar_embed_wav.zig ; zig build-obj -O ReleaseFast -lc --name online_diar -femit-bin=build/online_diar.o online_diar.zig && clang -O2 build/online_diar.o -o out/online_diar"; exit 1; }
+  fi
 fi
 
 WORK="$(mktemp -d -t live_whisper)"
@@ -211,6 +215,7 @@ start_resident() {
   [ "${RESIDENT:-1}" = "1" ] || return 0
   mkfifo "$WORK/tx_in" "$WORK/tx_out" 2>/dev/null || { RESIDENT=0; return 0; }
   env ${LANGTOK:+WHISPER_LANG_ID=$LANGTOK} STREAM=1 \
+    DIAR="$DIAR" DIAR_SIM="$DIAR_SIM" DIAR_MAXK="$DIAR_MAXK" \
     "$BIN" "$MODEL" "$BPE" "$BPE" <"$WORK/tx_in" >"$WORK/tx_out" 2>>"$FFLOG" &
   TX_PID=$!
   exec 7>"$WORK/tx_in"     # hold the write end open (else binary sees EOF on stdin)
@@ -265,6 +270,7 @@ words_of() { # $1=wav  $2=global_start_offset
 "
     done
     printf '%s' "$buf" | awk '
+      /^SPK /                { print "S " $2 " " $3; next }   # in-process speaker label
       /^=== WORD TIMESTAMPS/ { m=1; next }
       /^=== /                { m=0 }
       m && /^[[:space:]]*\[/ {
@@ -290,6 +296,8 @@ DIAR_MIN_DUR="1.6"
 # speaker labels for a disjoint segment → "S <global_time> <spk>" lines
 labels_of() { # $1=wav  $2=global_start_offset  $3=idx
   [ "$DIAR" = "1" ] || return 0
+  # resident binary diarizes in-process and emits SPK lines → skip external tools
+  [ "${RESIDENT:-0}" = "1" ] && [ -n "${TX_PID:-}" ] && return 0
   # too-short segments (final tail) → no diar window; skip (also avoids segfault)
   local dur; dur=$(ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 "$1" 2>/dev/null || echo 0)
   awk -v d="$dur" -v m="$DIAR_MIN_DUR" 'BEGIN{exit !(d>=m)}' || return 0

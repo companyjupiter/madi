@@ -289,6 +289,41 @@ fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
     return std.fmt.bufPrint(buf, fmt, .{l}) catch unreachable;
 }
 
+// ── in-process online speaker clustering (resident; folds in online_diar) ────
+// A persistent centroid set kept in memory across stream segments, so the SAME
+// voice keeps the SAME id for the whole session without an external process or
+// state file. centroid direction = normalize(sum of L2-normalized embeddings).
+const DiarCentroid = struct { count: u32, sum: [diar.EMB]f32 };
+fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k: u32) !usize {
+    var s: f64 = 0;
+    for (v) |x| s += @as(f64, x) * x;
+    const nrm: f32 = @floatCast(@sqrt(s) + 1e-9);
+    for (v) |*x| x.* /= nrm; // unit-length
+    var best: f32 = -2;
+    var best_i: usize = 0;
+    for (cents.items, 0..) |*c, i| {
+        var dot: f64 = 0;
+        var cs: f64 = 0;
+        for (0..diar.EMB) |k| {
+            dot += @as(f64, v[k]) * c.sum[k];
+            cs += @as(f64, c.sum[k]) * c.sum[k];
+        }
+        const sim: f32 = @floatCast(dot / (@sqrt(cs) + 1e-9));
+        if (sim > best) { best = sim; best_i = i; }
+    }
+    if (cents.items.len == 0 or (best < sim_thr and cents.items.len < max_k)) {
+        const spk = cents.items.len; // birth a new speaker
+        var c: DiarCentroid = .{ .count = 1, .sum = undefined };
+        for (0..diar.EMB) |k| c.sum[k] = v[k];
+        try cents.append(c);
+        return spk;
+    }
+    var c = &cents.items[best_i];
+    for (0..diar.EMB) |k| c.sum[k] += v[k];
+    c.count += 1;
+    return best_i;
+}
+
 pub fn main() !void {
     const out = std.io.getStdOut().writer();
     var args = try std.process.argsWithAllocator(alloc);
@@ -509,6 +544,12 @@ pub fn main() !void {
     // segment's WORD TIMESTAMPS / TRANSCRIPTION (with global offset) and a
     // "<<SEG_END>>" sentinel, then wait for the next line. No model reload.
     const stream = std.posix.getenv("STREAM") != null;
+    // resident in-process diarization (stream only): cluster 1.5 s windows online
+    // into a persistent centroid set → consistent speaker ids, no external proc.
+    var cents = std.ArrayList(DiarCentroid).init(alloc);
+    const diar_sim = envF("DIAR_SIM", 0.40);
+    const diar_max: u32 = @intCast(envU("DIAR_MAXK", 8));
+    const stream_diar = stream and !std.mem.eql(u8, std.posix.getenv("DIAR") orelse "1", "0");
     if (stream) try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{});
     var stdin_buf: [8192]u8 = undefined;
     const stdin_r = std.io.getStdIn().reader();
@@ -539,9 +580,10 @@ pub fn main() !void {
             if (chunk > 0 and got == 0) break;
             const t_off: f32 = g_off + @as(f32, @floatFromInt(chunk)) * 30.0;
 
-            // diarization embedding accumulation — skipped in stream mode (the
-            // live runner handles speakers via its own resident clusterer).
-            if (!stream) {
+            // diarization: 256-d ResNet34 embedding per 1.5 s window. Non-stream
+            // accumulates for end-of-file k-means; stream mode clusters online
+            // (resident centroids) and emits "SPK <gtime> <id>" right away.
+            if (!stream or stream_diar) {
             const nwin = got / SEG_SAMP;
             if (nwin > 0) {
                 const nt = @min(diar_nthreads, nwin);
@@ -557,11 +599,26 @@ pub fn main() !void {
                     spawned += 1;
                 }
                 for (0..spawned) |ti| threads[ti].join();
-                for (0..nwin) |wsg| {
-                    try diar_emb.appendSlice(cemb[wsg * diar.EMB ..][0 .. diar.EMB]);
-                    try diar_bm.append(crms[wsg]);
-                    try diar_t0.append(t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC);
-                    diar_n += 1;
+                if (stream_diar) {
+                    // per-segment relative-energy VAD: keep windows RMS > 0.3×median
+                    var rtmp: [64]f32 = undefined;
+                    const m = @min(nwin, rtmp.len);
+                    for (0..m) |w| rtmp[w] = crms[w];
+                    std.mem.sort(f32, rtmp[0..m], {}, std.sort.asc(f32));
+                    const thr = rtmp[m / 2] * 0.3;
+                    for (0..nwin) |wsg| {
+                        if (crms[wsg] < thr) continue;
+                        const gt = t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC;
+                        const spk = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, diar_max);
+                        try out.print("SPK {d:.2} {d}\n", .{ gt, spk });
+                    }
+                } else {
+                    for (0..nwin) |wsg| {
+                        try diar_emb.appendSlice(cemb[wsg * diar.EMB ..][0 .. diar.EMB]);
+                        try diar_bm.append(crms[wsg]);
+                        try diar_t0.append(t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC);
+                        diar_n += 1;
+                    }
                 }
             }
         }
