@@ -550,6 +550,13 @@ pub fn main() !void {
     const diar_sim = envF("DIAR_SIM", 0.40);
     const diar_max: u32 = @intCast(envU("DIAR_MAXK", 8));
     const stream_diar = stream and !std.mem.eql(u8, std.posix.getenv("DIAR") orelse "1", "0");
+    // hallucination guard: Whisper invents words ("Oh my", "Okay okay") in near-
+    // silent / ambient stretches. Drop a segment's text when the loudest 1 s
+    // window is below HALLU_RMS — a *strong* utterance (shouting "아아아") has
+    // high RMS and is always kept. Off with HALLU_GUARD=0.
+    const hallu_guard = !std.mem.eql(u8, std.posix.getenv("HALLU_GUARD") orelse "1", "0");
+    const hallu_rms = envF("HALLU_RMS", 0.020);
+    const vad_thresh = envF("VAD_THRESH", 0.010);
     if (stream) try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{});
     var stdin_buf: [8192]u8 = undefined;
     const stdin_r = std.io.getStdIn().reader();
@@ -625,7 +632,8 @@ pub fn main() !void {
 
         // VAD: skip silent chunks entirely (no mel/encode/decode) — avoids the
         // silence-hallucination junk and saves compute on quiet meeting stretches.
-        if (!hasSpeech(samples, got)) {
+        const seg_rms = maxWinRms(samples, got); // loudest 1 s window, [-1,1] RMS
+        if (seg_rms <= vad_thresh) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (silence — skipped)\n", .{ chunk + 1, n_chunks, t_off });
             if (got < mel.CHUNK_SAMPLES) break;
             continue;
@@ -750,9 +758,16 @@ pub fn main() !void {
         const dec_ms = @as(f64, @floatFromInt(dt2.read())) / 1e6;
         try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms | decode {d} tok {d:.0}ms ({d:.1} tok/s)\n", .{ chunk + 1, conv_ms, enc_ms, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0) });
         const text = try bpeDecode(bpe_path, out_tokens[SEED.len .. SEED.len + n_text]);
-        if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ chunk + 1, n_chunks, t_off, text });
-        try full.appendSlice(text);
-        if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off);
+        // near-silence hallucination guard: drop this chunk's text when the audio
+        // was quiet (loud speech keeps high seg_rms and is never dropped).
+        const dropped = hallu_guard and seg_rms < hallu_rms;
+        if (dropped) {
+            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (low-energy — hallucination guard, rms {d:.3})\n", .{ chunk + 1, n_chunks, t_off, seg_rms });
+        } else {
+            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ chunk + 1, n_chunks, t_off, text });
+            try full.appendSlice(text);
+            if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off);
+        }
         if (got < mel.CHUNK_SAMPLES) break; // reached end of audio
     }
         const dt = @as(f64, @floatFromInt(timer.read())) / 1e9;
@@ -1083,18 +1098,20 @@ fn deqW16(f: mtl.Function, wdq: [*]f16, w: enc.Q8, n: u32, k: u32) !void {
 // NOT fire on (out-of-distribution) digital silence in large-v3-turbo, so this
 // input-energy gate is the robust defense against silence hallucination
 // ("you. You. You." on a quiet chunk) — essential for meeting audio.
-fn hasSpeech(samples: []const f32, got: usize) bool {
-    const VAD_RMS: f32 = 0.01; // normalized [-1,1]; speech≈0.14, silence/ambient≲0.001
+// Loudest 1 s window RMS over the chunk ([-1,1]; speech≈0.14, ambient≲0.001).
+// Used both for the silence-skip VAD and the near-silence hallucination guard.
+fn maxWinRms(samples: []const f32, got: usize) f32 {
     const win: usize = 16000; // 1 s @ 16 kHz
+    var mx: f32 = 0;
     var i: usize = 0;
     while (i < got) : (i += win) {
         const end = @min(i + win, got);
         var s: f64 = 0;
         for (samples[i..end]) |x| s += @as(f64, x) * @as(f64, x);
-        const r = @sqrt(s / @as(f64, @floatFromInt(end - i)));
-        if (r > VAD_RMS) return true;
+        const r: f32 = @floatCast(@sqrt(s / @as(f64, @floatFromInt(end - i))));
+        if (r > mx) mx = r;
     }
-    return false;
+    return mx;
 }
 // Parallel diarization embedding: each 1.5 s window is independent, so a pool
 // of threads embeds them concurrently (~Ncore×). Model is read-only/shared;

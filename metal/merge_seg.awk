@@ -59,10 +59,10 @@ END {
     if (diar == 1 && s < 0) s = last_known
     if (s >= 0) last_known = s
     if (s != cur_spk) {                            # speaker change → flush line
-      flush_line(cur_spk, line, line_t)
-      cur_spk = s; line = ww[i]; line_t = wt[i]
+      flush_line(cur_spk, line, line_t, line_end)
+      cur_spk = s; line = ww[i]; line_t = wt[i]; line_end = wt[i]
     } else {
-      line = (line == "" ? ww[i] : line " " ww[i])
+      line = (line == "" ? ww[i] : line " " ww[i]); line_end = wt[i]
     }
     # advance the dedup watermark ONLY by plausible (in-window) timestamps —
     # Whisper sometimes hallucinates a far-future time (e.g. 29.9s in a 6s
@@ -70,17 +70,17 @@ END {
     if (wt[i] <= segend && wt[i] > new_emitted) new_emitted = wt[i]
     lastword = ww[i]
   }
-  flush_line(cur_spk, line, line_t)
+  flush_line(cur_spk, line, line_t, line_end)
   printf "@EMITTED %.2f\n", new_emitted
   printf "@LASTWORD %s\n", lastword
   printf "@LASTSPK %d\n", last_known
 }
 
-function flush_line(spk, txt, t,   mm, ss, hdr) {
+# Emit a machine-readable line record; the bash runner renders it for the
+# console (with colour), the .md transcript and the .srt subtitles.
+#   @LINE <start_sec> <end_sec> <speaker_id|-1> <text…>
+function flush_line(spk, txt, t, te) {
   if (txt == "") return
-  mm = int(t / 60); ss = int(t) % 60
-  if (diar == 1 && spk >= 0)      hdr = sprintf("[%02d:%02d] Speaker %d: ", mm, ss, spk)
-  else if (diar == 1)             hdr = sprintf("[%02d:%02d] Speaker ?: ", mm, ss)
-  else                            hdr = sprintf("[%02d:%02d] ", mm, ss)
-  print "  " hdr txt
+  if (te < t) te = t
+  printf "@LINE %.2f %.2f %d %s\n", t, te, (diar == 1 ? spk : -1), txt
 }

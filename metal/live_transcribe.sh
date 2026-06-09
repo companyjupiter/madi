@@ -28,6 +28,9 @@ DIAR="${DIAR:-1}"
 DIAR_SIM="${DIAR_SIM:-0.40}"
 DIAR_MAXK="${DIAR_MAXK:-8}"
 RESIDENT="${RESIDENT:-1}"        # 1 = keep model resident across segments (no reload)
+MD_FILE="${MD_FILE:-}"           # append a Markdown transcript here
+SRT_FILE="${SRT_FILE:-}"         # append SRT subtitles here
+COLOR="${COLOR:-auto}"           # auto|always|never — colourize speakers on the console
 LANGTOK="${WHISPER_LANG_ID:-}"   # numeric token; "" = auto. (NOT the locale $LANG)
 REPLAY="${REPLAY:-}"
 DURATION="${DURATION:-}"
@@ -98,6 +101,10 @@ OPTIONS
       --maxk <n>        max speakers in the session                 (default $DIAR_MAXK)
       --duration <sec>  stop after N seconds (else run until Ctrl-C)
       --replay <wav>    transcribe a recorded file instead of the mic (no mic needed)
+      --md <file>       also write a Markdown transcript
+      --srt <file>      also write SRT subtitles
+      --color <when>    auto|always|never — colourize speakers on the console (default auto)
+      --no-color        shortcut for --color never
       --keep            keep temp WAVs + speaker state on exit
       --model/--bpe/--bin <path>   override asset/binary paths
   -h, --help            show this help and exit
@@ -106,6 +113,7 @@ OPTIONS
 
 EXAMPLES
   ./live_transcribe.sh --mode ko-meeting              # Korean multi-speaker meeting
+  ./live_transcribe.sh -m ko-meeting --md notes.md --srt notes.srt   # + save files
   ./live_transcribe.sh -m en -s 8 --duration 60       # English, 8s, stop after 60s
   ./live_transcribe.sh -m fast                        # quick low-latency notes
   ./live_transcribe.sh --replay meeting.m4a -m ko     # transcribe a recording in Korean
@@ -115,6 +123,9 @@ NOTES
   • Forcing --lang avoids per-segment language mis-detection on short/ambiguous
     audio (e.g. "아아" mis-read as another language). Use it for known-language
     meetings; keep auto only for genuinely mixed-language sessions.
+  • A hallucination guard drops invented words in near-silent stretches (loud
+    speech is always kept). Tune via env HALLU_RMS (default 0.020), VAD_THRESH
+    (0.010), or disable with HALLU_GUARD=0.
   • First run prompts macOS for Microphone access for the app hosting this shell
     (Terminal / iTerm / Claude). Grant it in System Settings → Privacy → Microphone.
 EOF
@@ -154,6 +165,10 @@ while [ $# -gt 0 ]; do
     --diar=*)       DIAR="${1#*=}"; shift ;;
     --no-diar)      DIAR=0; shift ;;
     --no-resident)  RESIDENT=0; shift ;;
+    --md)           MD_FILE="$2"; shift 2 ;;   --md=*)    MD_FILE="${1#*=}"; shift ;;
+    --srt)          SRT_FILE="$2"; shift 2 ;;  --srt=*)   SRT_FILE="${1#*=}"; shift ;;
+    --color)        COLOR="$2"; shift 2 ;;     --color=*) COLOR="${1#*=}"; shift ;;
+    --no-color)     COLOR="never"; shift ;;
     --sim)          DIAR_SIM="$2"; shift 2 ;;
     --sim=*)        DIAR_SIM="${1#*=}"; shift ;;
     --maxk)         DIAR_MAXK="$2"; shift 2 ;;
@@ -230,6 +245,51 @@ start_resident() {
     fi
   done
   RESIDENT=0; TX_PID=""   # EOF before ready → fall back
+}
+
+# ── output rendering: console colour + .md transcript + .srt subtitles ───────
+case "$COLOR" in
+  always) USE_COLOR=1 ;;
+  never)  USE_COLOR=0 ;;
+  *)      [ -t 1 ] && USE_COLOR=1 || USE_COLOR=0 ;;   # auto: only when stdout is a TTY
+esac
+ESC=$(printf '\033'); RESET="${ESC}[0m"; DIM="${ESC}[2m"
+SPK_COLORS=( "${ESC}[96m" "${ESC}[92m" "${ESC}[93m" "${ESC}[95m" "${ESC}[94m" "${ESC}[91m" "${ESC}[36m" "${ESC}[35m" )
+SRT_N=0
+[ -n "$MD_FILE" ] && printf '# Transcript\n\n' > "$MD_FILE"
+[ -n "$SRT_FILE" ] && : > "$SRT_FILE"
+
+srt_tc() { # seconds(float) → HH:MM:SS,mmm
+  awk -v s="$1" 'BEGIN{h=int(s/3600);m=int((s%3600)/60);se=int(s)%60;ms=int((s-int(s))*1000+0.5);printf "%02d:%02d:%02d,%03d",h,m,se,ms}'
+}
+
+render_line() { # $1=start  $2=end  $3=spk  $4..=text
+  local start="$1" end="$2" spk="$3"; shift 3; local text="$*"
+  [ -n "$text" ] || return 0
+  local si="${start%.*}" mm ss tc who
+  mm=$((si / 60)); ss=$((si % 60)); tc=$(printf '%02d:%02d' "$mm" "$ss")
+  if [ "$DIAR" = "1" ]; then
+    if [ "$spk" -ge 0 ] 2>/dev/null; then who="Speaker $spk: "; else who="Speaker ?: "; fi
+  else who=""; fi
+  # console
+  if [ "$USE_COLOR" = "1" ] && [ "$DIAR" = "1" ]; then
+    local idx=$(( (spk < 0 ? 0 : spk) % ${#SPK_COLORS[@]} )) c
+    c="${SPK_COLORS[$idx]}"
+    printf '  %s[%s]%s %s%s%s\n' "$DIM" "$tc" "$RESET" "$c" "$who$text" "$RESET"
+  else
+    printf '  [%s] %s%s\n' "$tc" "$who" "$text"
+  fi
+  # markdown
+  if [ -n "$MD_FILE" ]; then
+    if [ "$DIAR" = "1" ]; then printf -- '- **[%s] %s** %s\n' "$tc" "${who%: }" "$text" >> "$MD_FILE"
+    else                       printf -- '- **[%s]** %s\n' "$tc" "$text" >> "$MD_FILE"; fi
+  fi
+  # srt
+  if [ -n "$SRT_FILE" ]; then
+    local e; e=$(awk -v s="$start" -v e="$end" 'BEGIN{if(e<=s+0.2)e=s+1.2;print e}')
+    SRT_N=$((SRT_N + 1))
+    printf '%s\n%s --> %s\n%s%s\n\n' "$SRT_N" "$(srt_tc "$start")" "$(srt_tc "$e")" "$who" "$text" >> "$SRT_FILE"
+  fi
 }
 
 # spin up the resident model now (loads while ffmpeg captures the first segment)
@@ -330,14 +390,19 @@ process_segment() { # $1=idx  $2=cur.wav  $3=prev.wav  $4=final(0/1)
           -v diar="$DIAR" -v prevword="$last_word" -v prevspk="$last_spk" \
           -v segend="$((S + SEG))" "$feed")
 
-  # print transcript lines only; carry control state forward across segments
-  printf '%s\n' "$merged" | grep -v '^@' || true
-  new_emit=$(printf '%s\n' "$merged" | awk '/^@EMITTED/{print $2}')
-  new_last=$(printf '%s\n' "$merged" | sed -n 's/^@LASTWORD //p')
-  new_spk=$(printf '%s\n' "$merged" | awk '/^@LASTSPK/{print $2}')
-  [ -n "$new_emit" ] && emitted_until="$new_emit"
-  [ -n "$new_last" ] && last_word="$new_last"
-  [ -n "$new_spk" ] && [ "$new_spk" -ge 0 ] 2>/dev/null && last_spk="$new_spk"
+  # render @LINE records (console colour + .md + .srt) and carry control state.
+  # MUST be a main-shell while-loop (here-string, no subshell) so SRT_N persists.
+  local ln rest
+  set -f                       # no globbing when word-splitting $rest into args
+  while IFS= read -r ln; do
+    case "$ln" in
+      "@LINE "*)     rest="${ln#@LINE }"; render_line $rest ;;
+      "@EMITTED "*)  emitted_until="${ln#@EMITTED }" ;;
+      "@LASTWORD "*) last_word="${ln#@LASTWORD }" ;;
+      "@LASTSPK "*)  new_spk="${ln#@LASTSPK }"; [ "$new_spk" -ge 0 ] 2>/dev/null && last_spk="$new_spk" ;;
+    esac
+  done <<< "$merged"
+  set +f
 }
 
 idx=0; processed=-1; waited=0
