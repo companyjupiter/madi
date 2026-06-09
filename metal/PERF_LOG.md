@@ -49,6 +49,34 @@ front-end conv1d_gelu ~50 ms × 2.
 | Q8-3c | recover +7%: fuse q/k/v dequant 3→1 launch (dequant_q8_f16_qkv, 192→128 launches/forward) | ❌ revert | encoder 627→630ms (neutral, within noise). The +7% dequant cost is **bandwidth-bound** (F16 scratch round-trip ~1.9GB write + MPS read), NOT launch-bound — cutting 64 launches changed nothing (cf iter9: encoder sync overhead negligible). Irreducible w/ MPS: only fused dequant+GEMM avoids the round-trip, but that's the 2.39x-slower mul_mm_q8. +7% accepted as cost of memory win | — |
 | Q8-4 | cross-attn K/V proj weights (ckw/cvw, 4 layers) → Q8 + JIT dequant→MPS (per-chunk cross-KV is M=1500, same as encoder; reuses dequant_q8_f16) | ✅ commit (memory) | clean A/B same thermal window: encoder/decode **identical** (~658ms/~188 tok/s — perf-neutral); peak RSS 2.543→2.531GB (−12MB, F16 cross-KV weights 26→14MB); jfk text exact; test_encoder/decoder green | deqW16 (reuses dequant_q8_f16) |
 
+## Accuracy / quality
+Gate (in addition to jfk exact): silence must produce EMPTY output.
+Repro: `python3 -c "import wave;w=wave.open('/tmp/sil.wav','w');w.setnchannels(1);w.setsampwidth(2);w.setframerate(16000);w.writeframes(b'\x00\x00'*16000*30)"` then transcribe /tmp/sil.wav.
+| # | issue | result | metric | commit |
+|---|------|--------|--------|--------|
+| ACC-1a (data) | silence hallucination: 30s digital silence → "you. You. You."; tried <|nospeech|>(50363) prob gate at SOT & first-pred positions | ❌ data | P(nospeech)≈0 for silence at BOTH positions (logit_ns even *lower* for silence than jfk) — large-v3-turbo doesn't fire nospeech on OOD digital/near-silence. Token-prob gate unreliable here | — |
+| ACC-1b | **energy VAD**: skip a chunk whose loudest 1s-window RMS < 0.01 (speech≈0.14, silence/ambient≲0.001). Skips mel+encode+decode entirely | ✅ commit | silence30 & lownoise30 → **empty** (was hallucinated text); jfk **exact**; jfk3 both chunks full (chunk2's 3s speech kept via max-1s-window metric). Bonus: silent chunks now ~free | hasSpeech VAD |
+| ACC-2a (data) | diarization on Whisper **encoder** features (old k=2/≤30s stub, and a new global variable-K AHC) | ❌ data | DER measured on AMI ES2004a (4-spk, md-eval.pl, collar 0.25): all clustering ≥90% ≈ single-spk baseline. Direct proof: intra-speaker cosine 0.006 ≈ inter 0.001 → **encoder output is speaker-invariant** (ASR discards speaker id). Analysis of CUDA reference: it clusters **mel** features, not encoder; final stage is 2-way Fiedler bisection | — |
+| ACC-3 | **language auto-detection** (arg-max over language tokens 50259..50358 at the SOT-position logits; env WHISPER_LANG_ID override) + verified Korean | ✅ commit | jfk→en(50259), Korean DevOps 7m42s→ko(50264); fluent Korean across all 16 chunks incl @450s; word timestamps monotonic/aligned; 462s in 36.5s (~12.7× RT); 2-spk timeline alternates with the dialogue. Records in bench/MULTILINGUAL_TEST.md | lang-detect probe |
+| ACC-2b | **mel-feature diarization**: pool RAW (unnormalized) log-mel per 1.5s segment → energy VAD → per-dim z-score → k-means (K = CLI arg / DIAR_K, default 2) → global RTTM. mel carries timbre/pitch (intra−inter separation **0.22** vs encoder 0.007) | ✅ commit | **AMI DER 90%→65% (K=2)**; K param exposed (K=4 runs, 76% on hard far-field AMI, better on clean audio); jfk text exact; runs globally on any length (old stub was ≤30s/≤2spk). Oracle ceiling 24% (1.5s seg) — SOTA would need a dedicated speaker-embedding model | melSpectrogramRaw, diarizeMel; bench/ DER harness |
+
+| ACC-4 | **WIN: sovereign ResNet34 speaker-embedding diarization** — hand-ported wespeaker ResNet34 (Apache-2.0) to Zig (kaldi 80-fbank + conv2d via Accelerate sgemm + stats pool + FC), 256-d embeddings per 1.5s window → L2-norm + k-means(K) | ✅ commit | **AMI ES2004a K=4 DER 32.5%** (was 90% encoder / 67% mel; oracle 28.8%). Verified bit-for-bit vs onnxruntime (cosine 1.000000) at every stage. jfk text exact; silence→no spurious speakers. K = CLI/DIAR_K (default 2). No runtime dep (onnxruntime only offline). +~34s/17min for embeds (CPU), RSS +~0.1GB | diar_resnet.zig, bench/ |
+
+## Diarization perf (quark-decomposed, measured)
+quark atoms: `file__diar_resnet.zig/{fn__embed,conv2d,fbank,fft512,relu}`.
+Per-stage profile (608 AMI embeds) revealed the bottleneck is NOT matmul FLOP:
+| stage | share | | conv internal | share |
+|---|---|---|---|---|
+| stage1 (80×150, 32ch) | 40% | | **im2col** | **77%** |
+| stage2 | 26% | | sgemm (Accelerate) | 23% |
+| stage3 | 21% | | | |
+| stage4 / fbank / pool+gemm | 13% | | | |
+| # | idea | result | metric | commit |
+|---|------|--------|--------|--------|
+| DIAR-OPT1 | im2col: element-by-element strided copy + full @memset → @memcpy of contiguous valid spans (stride-1 path) | ✅ commit | **68→28 ms/embed (2.4×)**; AMI 17min total 100→83s; DER unchanged 32.49% (cosine 1.0 preserved); im2col 15.9s→7.6s | conv2d im2col |
+| DIAR-OPT2 | multithread embeds across segments (std.Thread pool over a chunk's ~20 windows; Accelerate pinned to 1 thread/worker via VECLIB_MAXIMUM_THREADS=1 to avoid oversubscription) | ✅ commit | AMI 17min total 83→71s; diar embed ~2.4× (12 cores). NOT Ncore× — im2col is memory-bandwidth-bound, threads share bandwidth → sublinear. DER unchanged 32.49%; jfk exact; silence safe | DiarJob/diarWorker |
+| (next) | F16 convs or MPS GPU (compute, not bandwidth) for true scaling; or fuse im2col into a direct conv to cut data movement | backlog | total now transcription-bound (diar ~7s of 71s) | — |
+
 ## Memory architecture
 | # | idea | result | metric | commit |
 |---|------|--------|--------|--------|
