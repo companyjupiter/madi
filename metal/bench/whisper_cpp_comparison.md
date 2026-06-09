@@ -26,12 +26,19 @@ fast baseline and wins on raw speed.** Our value is elsewhere — see "Takeaways
 ### ko60 — 60 s, Korean
 | metric | Sovereign (ours) | whisper.cpp | winner |
 |---|---|---|---|
-| end-to-end wall (incl load) | 5.62 s | **2.05 s** | whisper.cpp ~2.7× |
-| RTF (×real-time, incl load) | 10.7× | **29.3×** | whisper.cpp |
-| encoder / 30 s chunk | ~647 ms | **567 ms** | whisper.cpp |
-| decode | ~237 tok/s | faster (batched/flash-attn) | whisper.cpp |
+| encoder / 30 s chunk | ~660 ms | **571 ms** | whisper.cpp ~1.15× |
+| **decode** | **~420 tok/s (740 ms/2ch)** | ~848 ms/2ch | **ours ~1.15×** |
+| steady-state transcription (2 chunks) | ~2099 ms | **~1990 ms** | ~tie (wcpp +5%) |
 | peak RSS | 1.19 GB | 1.13 GB | ~tie |
 | transcript (chars) | 1057 | 1065 | ~identical |
+
+> **Decode optimization journey** (quark-/profile-guided, all bit-exact):
+> 233 → 420 tok/s (+80%). The big win was parallelizing the cross-attention
+> output phase (`flash_cross_attn_f16kv`), which a per-kernel GPU profile flagged
+> as ~half of long-sequence decode — it had used 64 of 256 threads. After this,
+> **decode is now faster than whisper.cpp**; the remaining ~5% steady-state gap
+> is the encoder (mostly MPS GEMM, already near-optimal). Load (one-time,
+> pre-meeting) is excluded — it doesn't recur during a live session.
 
 ### Diarization — VoxConverse dev (DER, md-eval collar 0.25)
 | metric | Sovereign (ours) | whisper.cpp |
