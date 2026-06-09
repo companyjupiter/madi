@@ -27,6 +27,7 @@ OVERLAP="${OVERLAP:-3}"
 DIAR="${DIAR:-1}"
 DIAR_SIM="${DIAR_SIM:-0.40}"
 DIAR_MAXK="${DIAR_MAXK:-8}"
+RESIDENT="${RESIDENT:-1}"        # 1 = keep model resident across segments (no reload)
 LANGTOK="${WHISPER_LANG_ID:-}"   # numeric token; "" = auto. (NOT the locale $LANG)
 REPLAY="${REPLAY:-}"
 DURATION="${DURATION:-}"
@@ -152,6 +153,7 @@ while [ $# -gt 0 ]; do
     --diar)         DIAR="$2"; shift 2 ;;
     --diar=*)       DIAR="${1#*=}"; shift ;;
     --no-diar)      DIAR=0; shift ;;
+    --no-resident)  RESIDENT=0; shift ;;
     --sim)          DIAR_SIM="$2"; shift 2 ;;
     --sim=*)        DIAR_SIM="${1#*=}"; shift ;;
     --maxk)         DIAR_MAXK="$2"; shift 2 ;;
@@ -190,13 +192,43 @@ STATE="$WORK/spk_state.bin"      # persistent online-clustering centroids
 emitted_until="-1"               # global time already printed (overlap dedup)
 last_word=""                     # text of last emitted word (boundary text dedup)
 last_spk=""                      # last emitted speaker id (carry over unlabeled overlap)
+TX_PID=""                        # resident transcribe coprocess (FIFO-based)
 
 cleanup() {
   [ -n "${FFPID:-}" ] && kill "$FFPID" 2>/dev/null || true
   wait "${FFPID:-}" 2>/dev/null || true
+  exec 7>&- 8<&- 2>/dev/null || true            # close FIFO fds (signals EOF → binary exits)
+  [ -n "${TX_PID:-}" ] && kill "$TX_PID" 2>/dev/null || true
+  wait "${TX_PID:-}" 2>/dev/null || true
   if [ "$KEEP" = "1" ]; then echo ""; echo "[live] artifacts kept: $WORK"; else rm -rf "$WORK"; fi
 }
 trap cleanup EXIT INT TERM
+
+# ── resident transcribe (bash 3.2-compatible: FIFOs + fixed fds 7/8) ──────────
+# Loads the 1.6 GB model ONCE; segments are fed as "<offset> <wav>" lines and
+# transcribed without reload. RESIDENT=0 falls back to one process per segment.
+start_resident() {
+  [ "${RESIDENT:-1}" = "1" ] || return 0
+  mkfifo "$WORK/tx_in" "$WORK/tx_out" 2>/dev/null || { RESIDENT=0; return 0; }
+  env ${LANGTOK:+WHISPER_LANG_ID=$LANGTOK} STREAM=1 \
+    "$BIN" "$MODEL" "$BPE" "$BPE" <"$WORK/tx_in" >"$WORK/tx_out" 2>>"$FFLOG" &
+  TX_PID=$!
+  exec 7>"$WORK/tx_in"     # hold the write end open (else binary sees EOF on stdin)
+  exec 8<"$WORK/tx_out"
+  # drain one-time setup output until the model is resident and ready
+  local line
+  while IFS= read -r line <&8; do
+    case "$line" in *"[stream] ready"*) return 0 ;; esac
+    if ! kill -0 "$TX_PID" 2>/dev/null; then   # binary died during load → fall back
+      echo "[live] resident transcribe failed to start; falling back (see $FFLOG)"
+      RESIDENT=0; TX_PID=""; return 0
+    fi
+  done
+  RESIDENT=0; TX_PID=""   # EOF before ready → fall back
+}
+
+# spin up the resident model now (loads while ffmpeg captures the first segment)
+start_resident
 
 # --replay <wav> processes a pre-recorded file through the identical
 # overlap+diar pipeline (no mic). Useful for recorded meetings and for testing.
@@ -218,16 +250,38 @@ else
   FFPID=$!
 fi
 
-# transcribe one wav and emit "W <global_time> <word>" lines (global = off + local)
+# transcribe one wav and emit "W <global_time> <word>" lines.
+# RESIDENT: feed "<offset> <wav>" to fd 7, read the binary's reply on fd 8 until
+# "<<SEG_END>>" (the binary already globalizes word times, so awk adds 0).
+# Fallback: spawn one transcribe process and add the offset in awk.
+# NOTE: must run in the MAIN shell (not a $()/pipe subshell) so fds 7/8 are live.
 words_of() { # $1=wav  $2=global_start_offset
-  env ${LANGTOK:+WHISPER_LANG_ID=$LANGTOK} "$BIN" "$MODEL" "$1" "$BPE" 2>/dev/null | awk -v off="$2" '
-    /^=== WORD TIMESTAMPS/ { m=1; next }
-    /^=== /                { m=0 }
-    m && /^[[:space:]]*\[/ {
-      t=$0; sub(/^[[:space:]]*\[/,"",t); sub(/s\].*/,"",t);
-      w=$0; sub(/^[[:space:]]*\[[^]]*\][[:space:]]*/,"",w);
-      if (w!="") printf "W %.2f %s\n", off + t, w
-    }'
+  if [ "${RESIDENT:-0}" = "1" ] && [ -n "${TX_PID:-}" ]; then
+    printf '%s %s\n' "$2" "$1" >&7
+    local line buf=""
+    while IFS= read -r line <&8; do
+      [ "$line" = "<<SEG_END>>" ] && break
+      buf="$buf$line
+"
+    done
+    printf '%s' "$buf" | awk '
+      /^=== WORD TIMESTAMPS/ { m=1; next }
+      /^=== /                { m=0 }
+      m && /^[[:space:]]*\[/ {
+        t=$0; sub(/^[[:space:]]*\[/,"",t); sub(/s\].*/,"",t);
+        w=$0; sub(/^[[:space:]]*\[[^]]*\][[:space:]]*/,"",w);
+        if (w!="") printf "W %.2f %s\n", t, w
+      }'
+  else
+    env ${LANGTOK:+WHISPER_LANG_ID=$LANGTOK} "$BIN" "$MODEL" "$1" "$BPE" 2>/dev/null | awk -v off="$2" '
+      /^=== WORD TIMESTAMPS/ { m=1; next }
+      /^=== /                { m=0 }
+      m && /^[[:space:]]*\[/ {
+        t=$0; sub(/^[[:space:]]*\[/,"",t); sub(/s\].*/,"",t);
+        w=$0; sub(/^[[:space:]]*\[[^]]*\][[:space:]]*/,"",w);
+        if (w!="") printf "W %.2f %s\n", off + t, w
+      }'
+  fi
 }
 
 # minimum samples diar_embed_wav needs (one 1.5s window @16kHz) to avoid div-by-0
@@ -260,10 +314,13 @@ process_segment() { # $1=idx  $2=cur.wav  $3=prev.wav  $4=final(0/1)
     in_wav="$comb"; in_start=$((S - OVERLAP))
   fi
 
-  local merged new_emit new_last new_spk
-  merged=$( { labels_of "$cur" "$S" "$i"; words_of "$in_wav" "$in_start"; } \
-    | awk -f merge_seg.awk -v emitted="$emitted_until" -v final="$final" \
-          -v diar="$DIAR" -v prevword="$last_word" -v prevspk="$last_spk" )
+  # collect speaker labels + word lines into a feed file IN THE MAIN SHELL (the
+  # resident fds 7/8 are not inherited by $()/pipe subshells), then merge.
+  local feed="$WORK/feed_$i.txt" merged new_emit new_last new_spk
+  { labels_of "$cur" "$S" "$i"; words_of "$in_wav" "$in_start"; } > "$feed"
+  merged=$(awk -f merge_seg.awk -v emitted="$emitted_until" -v final="$final" \
+          -v diar="$DIAR" -v prevword="$last_word" -v prevspk="$last_spk" \
+          -v segend="$((S + SEG))" "$feed")
 
   # print transcript lines only; carry control state forward across segments
   printf '%s\n' "$merged" | grep -v '^@' || true

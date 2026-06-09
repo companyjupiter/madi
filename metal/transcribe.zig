@@ -480,17 +480,9 @@ pub fn main() !void {
     const d_ca = try mtl.allocSlice(f32, MAX_TOK * ENC_SEQ);
     @memset(d_ca, 0);
 
-    // ── read audio, split into 30 s windows ─────────────────────────
-    const wav = try std.fs.cwd().readFileAlloc(alloc, wav_path, 2 * 1024 * 1024 * 1024);
-    const total = mel.wavTotalSamples(wav);
-    const n_chunks: usize = if (total <= mel.CHUNK_SAMPLES) 1 else (total + mel.CHUNK_SAMPLES - 1) / mel.CHUNK_SAMPLES;
+    // ── resident buffers + state (allocated ONCE; reused across stream jobs) ──
     const samples = try alloc.alloc(f32, mel.CHUNK_SAMPLES);
-    try out.print("[8] audio: {d} samples ({d:.1}s) → {d} chunk(s) × 30s\n", .{ total, @as(f64, @floatFromInt(total)) / 16000.0, n_chunks });
-
     var full = std.ArrayList(u8).init(alloc);
-    // Global diarization accumulator: 256-d ResNet34 speaker embeddings over
-    // 1.5 s waveform windows (real speaker timbre — AMI K=4 DER 31.7% vs 67% mel).
-    // Clustered after the loop (L2-norm + k-means, K = diar_k) → global RTTM.
     const SEG_SAMP: usize = 24000; // 1.5 s @ 16 kHz
     const SEG_SEC: f32 = 1.5;
     const SEGD: usize = diar.EMB; // 256
@@ -504,23 +496,52 @@ pub fn main() !void {
     const max_win: usize = mel.CHUNK_SAMPLES / SEG_SAMP; // 20
     const cemb = try alloc.alloc(f32, max_win * diar.EMB);
     const crms = try alloc.alloc(f32, max_win);
-    // language token for the SEED: env WHISPER_LANG_ID overrides; else 0 = auto
-    // (detected once from the SOT-position logits on the first speech chunk).
+    // language token for the SEED: env WHISPER_LANG_ID overrides; else 0 = auto.
+    // Detected ONCE (on the first speech segment) and reused for the rest of the
+    // session — in stream mode this also kills per-segment language flapping.
     var lang_tok: u32 = blk: {
         if (std.posix.getenv("WHISPER_LANG_ID")) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
         break :blk 0;
     };
-    var timer = try std.time.Timer.start();
-    var chunk: usize = 0;
-    while (chunk < n_chunks) : (chunk += 1) {
-        const got = mel.loadWavChunk(wav, chunk * mel.CHUNK_SAMPLES, samples);
-        if (chunk > 0 and got == 0) break;
-        const t_off: f32 = @as(f32, @floatFromInt(chunk)) * 30.0;
 
-        // diarization: 256-d ResNet34 speaker embedding per 1.5 s window over the
-        // whole audio (independent of the transcription chunk-VAD so sparse speech
-        // in quiet chunks is kept; relative energy VAD applied at clustering time).
-        {
+    // ── stream mode: load model ONCE, then process segment wavs from stdin ────
+    // Each stdin line is "<global_offset_seconds> <wav_path>"; we emit that
+    // segment's WORD TIMESTAMPS / TRANSCRIPTION (with global offset) and a
+    // "<<SEG_END>>" sentinel, then wait for the next line. No model reload.
+    const stream = std.posix.getenv("STREAM") != null;
+    if (stream) try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{});
+    var stdin_buf: [8192]u8 = undefined;
+    const stdin_r = std.io.getStdIn().reader();
+
+    job: while (true) {
+        // ── obtain the next job (wav path + global time offset) ──────────────
+        var cur_path: []const u8 = wav_path;
+        var g_off: f32 = 0;
+        if (stream) {
+            const line = (stdin_r.readUntilDelimiterOrEof(&stdin_buf, '\n') catch null) orelse break :job;
+            const trimmed = std.mem.trim(u8, line, " \t\r");
+            if (trimmed.len == 0) continue :job;
+            const sp = std.mem.indexOfScalar(u8, trimmed, ' ') orelse continue :job;
+            g_off = std.fmt.parseFloat(f32, trimmed[0..sp]) catch 0;
+            cur_path = std.mem.trim(u8, trimmed[sp + 1 ..], " \t\r");
+        }
+
+        const wav = try std.fs.cwd().readFileAlloc(alloc, cur_path, 2 * 1024 * 1024 * 1024);
+        defer alloc.free(wav);
+        const total = mel.wavTotalSamples(wav);
+        const n_chunks: usize = if (total <= mel.CHUNK_SAMPLES) 1 else (total + mel.CHUNK_SAMPLES - 1) / mel.CHUNK_SAMPLES;
+        if (!stream) try out.print("[8] audio: {d} samples ({d:.1}s) → {d} chunk(s) × 30s\n", .{ total, @as(f64, @floatFromInt(total)) / 16000.0, n_chunks });
+        full.clearRetainingCapacity();
+        var timer = try std.time.Timer.start();
+        var chunk: usize = 0;
+        while (chunk < n_chunks) : (chunk += 1) {
+            const got = mel.loadWavChunk(wav, chunk * mel.CHUNK_SAMPLES, samples);
+            if (chunk > 0 and got == 0) break;
+            const t_off: f32 = g_off + @as(f32, @floatFromInt(chunk)) * 30.0;
+
+            // diarization embedding accumulation — skipped in stream mode (the
+            // live runner handles speakers via its own resident clusterer).
+            if (!stream) {
             const nwin = got / SEG_SAMP;
             if (nwin > 0) {
                 const nt = @min(diar_nthreads, nwin);
@@ -677,21 +698,29 @@ pub fn main() !void {
         if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off);
         if (got < mel.CHUNK_SAMPLES) break; // reached end of audio
     }
-    const dt = @as(f64, @floatFromInt(timer.read())) / 1e9;
-    try out.print("\n=== TRANSCRIPTION ({d:.2}s, {d} chunk(s)) ===\n{s}\n", .{ dt, n_chunks, full.items });
+        const dt = @as(f64, @floatFromInt(timer.read())) / 1e9;
+        try out.print("\n=== TRANSCRIPTION ({d:.2}s, {d} chunk(s)) ===\n{s}\n", .{ dt, n_chunks, full.items });
 
-    // optional: dump raw pooled segment embeddings for offline clustering sweeps
-    if (std.posix.getenv("DIAR_DUMP")) |dp| {
-        var df = try std.fs.cwd().createFile(dp, .{});
-        defer df.close();
-        const hdr = [_]u32{ @intCast(diar_n), @intCast(SEGD) };
-        try df.writeAll(std.mem.sliceAsBytes(hdr[0..]));
-        try df.writeAll(std.mem.sliceAsBytes(diar_t0.items[0..diar_n]));
-        try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
-        try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
+        // stream mode: one segment done → emit sentinel and await the next job.
+        if (stream) {
+            try out.print("<<SEG_END>>\n", .{});
+            continue :job;
+        }
+
+        // optional: dump raw pooled segment embeddings for offline clustering sweeps
+        if (std.posix.getenv("DIAR_DUMP")) |dp| {
+            var df = try std.fs.cwd().createFile(dp, .{});
+            defer df.close();
+            const hdr = [_]u32{ @intCast(diar_n), @intCast(SEGD) };
+            try df.writeAll(std.mem.sliceAsBytes(hdr[0..]));
+            try df.writeAll(std.mem.sliceAsBytes(diar_t0.items[0..diar_n]));
+            try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
+            try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
+        }
+        try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
+        try attributeTranscript(out);
+        break :job; // single-file mode runs exactly once
     }
-    try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
-    try attributeTranscript(out);
 }
 
 fn envU(name: [:0]const u8, dflt: usize) usize {

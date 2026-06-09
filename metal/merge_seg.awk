@@ -17,7 +17,7 @@
 # Output:
 #   grouped transcript lines, then a final control line:
 #     "@EMITTED <new_emitted_until>"   (caller captures this to carry forward)
-BEGIN { ns = 0; nw = 0; if (eps == "") eps = 0.05 }
+BEGIN { ns = 0; nw = 0; if (eps == "") eps = 0.05; if (segend == "") segend = 1e9 }
 
 # normalize a word for boundary dedup: lowercase, strip surrounding punctuation
 function norm(s) { s = tolower(s); gsub(/^[^a-z0-9가-힣]+|[^a-z0-9가-힣]+$/, "", s); return s }
@@ -64,7 +64,10 @@ END {
     } else {
       line = (line == "" ? ww[i] : line " " ww[i])
     }
-    if (wt[i] > new_emitted) new_emitted = wt[i]
+    # advance the dedup watermark ONLY by plausible (in-window) timestamps —
+    # Whisper sometimes hallucinates a far-future time (e.g. 29.9s in a 6s
+    # segment); letting that set new_emitted would suppress all later segments.
+    if (wt[i] <= segend && wt[i] > new_emitted) new_emitted = wt[i]
     lastword = ww[i]
   }
   flush_line(cur_spk, line, line_t)
