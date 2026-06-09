@@ -26,18 +26,21 @@ fast baseline and wins on raw speed.** Our value is elsewhere — see "Takeaways
 ### ko60 — 60 s, Korean
 | metric | Sovereign (ours) | whisper.cpp | winner |
 |---|---|---|---|
-| encoder / 30 s chunk | ~660 ms | **571 ms** | whisper.cpp ~1.15× |
-| **decode** | **~420 tok/s (740 ms/2ch)** | ~848 ms/2ch | **ours ~1.15×** |
-| steady-state transcription (2 chunks) | ~2099 ms | **~1990 ms** | ~tie (wcpp +5%) |
+| encoder / 30 s chunk | ~650 ms | **571 ms** | whisper.cpp ~1.14× |
+| **decode** | **~460 tok/s (640 ms/2ch)** | ~848 ms/2ch | **ours ~1.3×** |
+| steady-state transcription (2 chunks) | **~1940 ms** | ~1990 ms | **ours slightly ahead** |
 | peak RSS | 1.19 GB | 1.13 GB | ~tie |
 | transcript (chars) | 1057 | 1065 | ~identical |
 
 > **Decode optimization journey** (quark-/profile-guided, all bit-exact):
-> 233 → 420 tok/s (+80%). The big win was parallelizing the cross-attention
-> output phase (`flash_cross_attn_f16kv`), which a per-kernel GPU profile flagged
-> as ~half of long-sequence decode — it had used 64 of 256 threads. After this,
-> **decode is now faster than whisper.cpp**; the remaining ~5% steady-state gap
-> is the encoder (mostly MPS GEMM, already near-optimal). Load (one-time,
+> **233 → 460 tok/s (+97%, ~2×)**. Per-kernel GPU profiling kept redirecting the
+> attack to the real bottleneck — the cross-attention kernels, not the projection
+> GEMVs. Wins: parallelize the cross-attn / self-attn output phase (was 64 of 256
+> threads → all 256), then vectorize the QK dots (cache q + half4) in
+> flash_cross_attn and extract_ca_head. After this, **decode is ~1.3× faster than
+> whisper.cpp** and steady-state transcription is **slightly ahead overall** — up
+> from ~1.4× behind at the start. The only remaining gap is the encoder (~14%,
+> dominated by MPS GEMM which is already near-optimal). Load (one-time,
 > pre-meeting) is excluded — it doesn't recur during a live session.
 
 ### Diarization — VoxConverse dev (DER, md-eval collar 0.25)
