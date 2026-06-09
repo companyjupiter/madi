@@ -143,9 +143,12 @@ fn conv2d(a: std.mem.Allocator, in: []const f32, c: usize, h: usize, w: usize, c
     ho.* = Ho; wo.* = Wo;
     const M = cv.o; const N = Ho * Wo; const K = c * cv.kh * cv.kw;
     var im_t = std.time.Timer.start() catch unreachable;
-    // im2col → cols[K][N]. Bulk via @memcpy for stride-1 (contiguous spans);
-    // only padding edges are zeroed (avoids zeroing the whole 3.5M-elem buffer).
-    const cols = try a.alloc(f32, K * N);
+    // im2col → cols[K][N]. cols is a transient; allocate from the page allocator
+    // and free it after the sgemm (NOT the per-embed arena, which never frees —
+    // accumulating 36 convs' cols × N threads was a ~1.3GB RSS leak).
+    const pa = std.heap.page_allocator;
+    const cols = try pa.alloc(f32, K * N);
+    defer pa.free(cols);
     @memset(cols, 0); // padding stays 0; valid spans overwritten below
     const wI: isize = @intCast(w);
     const WoI: isize = @intCast(Wo);
