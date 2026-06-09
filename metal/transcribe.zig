@@ -2,6 +2,17 @@
 //   WAV → mel → Conv1D×2 → 32-layer encoder → cross-KV → 4-layer autoregressive
 //   decoder → argmax → BPE decode.  Reads model.safetensors directly (F16→F32).
 // Usage: transcribe <model.safetensors> <audio.wav> <WHISPER_BPE.bin> [weights for conv via same safetensors]
+//
+// ───────────────────────────────────────────────────────────────────────────
+// THIRD-PARTY ATTRIBUTION — MIT License
+//   Speech-recognition model = OpenAI Whisper (large-v3-turbo) architecture and
+//   weights:  https://github.com/openai/whisper
+//   Copyright (c) 2022 OpenAI. Licensed under the MIT License. This is an
+//   independent Zig/Metal reimplementation of the inference path; the weights
+//   are format-converted, not modified in substance.
+//   Speaker diarization uses WeSpeaker ResNet34 (Apache-2.0) — see
+//   diar_resnet.zig. Full license texts: ../NOTICE, ../THIRD_PARTY_LICENSES.md
+// ───────────────────────────────────────────────────────────────────────────
 const std = @import("std");
 const mtl = @import("metal_backend.zig");
 const mel = @import("mel.zig");
@@ -978,11 +989,11 @@ fn attributeTranscript(out: anytype) !void {
     if (line.items.len > 0) try out.print("  [{d:.2}s] Speaker {d}:{s}\n", .{ cur_t, cur, line.items });
 }
 // Word timestamps via DTW over the alignment-head cross-attention (d_ca already
-// averages Whisper-turbo align heads {2,4}{2,11}{3,3}{3,6}{3,11}{3,14}). Ported
-// from the CUDA sibling's verified DTW (박정근) — replaces per-token argmax,
-// which picked each token's peak independently (non-monotonic → time inversions).
-// DTW finds one monotonic token→frame path maximizing total attention, so every
-// token's onset is strictly ordered. Frame = 20 ms.
+// averages Whisper-turbo align heads {2,4}{2,11}{3,3}{3,6}{3,11}{3,14}). This is
+// the canonical Whisper word-alignment method and replaces the old per-token
+// argmax, which picked each token's peak independently (non-monotonic → time
+// inversions). DTW finds one monotonic token→frame path maximizing total
+// attention, so every token's onset is strictly ordered. Frame = 20 ms.
 fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, t_off: f32) !void {
     const toks = try loadBpe(bpe_path);
     const E: usize = ENC_SEQ;

@@ -280,5 +280,14 @@ WHISPER_LANG_ID=50264 ./out/transcribe assets/model.safetensors talk.wav assets/
 - `metal/PORT.md` — CUDA/PTX → Metal 포팅 노트
 
 ## 라이선스 / 출처
-추론 코드: 본 프로젝트. 화자분리 가중치: wespeaker ResNet34(Apache-2.0, VoxCeleb
-학습 — 상용 배포 시 데이터셋 약관 확인). Whisper 가중치: OpenAI 약관 준수.
+추론 코드는 본 프로젝트의 독자 구현입니다. 두 가지 서드파티 모델을 재사용하며,
+요구되는 고지를 코드·배포물에 모두 유지합니다:
+
+- **OpenAI Whisper** large-v3-turbo — **MIT License**, © 2022 OpenAI (전사).
+  MIT도 저작권+허가 고지 유지가 **필수**입니다(면제 아님).
+- **WeSpeaker** ResNet34 — **Apache License 2.0**, © WeSpeaker authors
+  (화자분리; VoxCeleb 학습 — 상용/재배포 시 데이터셋 약관 확인). Apache-2.0은
+  NOTICE·라이선스 전문 포함 + 변경 사실 명시가 필요합니다.
+
+전체 고지·라이선스 전문은 [`NOTICE`](NOTICE)·[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md),
+소스 헤더(`metal/transcribe.zig`·`metal/diar_resnet.zig`)에도 동일 고지가 있습니다.
