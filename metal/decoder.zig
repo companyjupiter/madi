@@ -113,14 +113,14 @@ fn kGemvQ8(K: Kernels, out: [*]f32, x: [*]f32, w: Q8w, n: u32, k: u32) !void {
     var a0 = out; var a1 = w.qs; var a2 = w.scales; var a3 = x; var nn = n; var kk = k;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nn), P(&kk) };
     const s = [_]usize{ PS, PS, PS, PS, U, U };
-    try mtl.dispatch(K.gemv, .{ (n + 31) / 32, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4 → 32 rows/tg
+    try mtl.dispatch(K.gemv, .{ (n + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4 → 32 rows/tg
 }
 // Q8 GEMV with fused bias epilogue — one dispatch instead of gemv + bias_add.
 fn kGemvQ8Bias(K: Kernels, out: [*]f32, x: [*]f32, w: Q8w, bias: [*]f32, n: u32, k: u32) !void {
     var a0 = out; var a1 = w.qs; var a2 = w.scales; var a3 = x; var a4 = bias; var nn = n; var kk = k;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&nn), P(&kk) };
     const s = [_]usize{ PS, PS, PS, PS, PS, U, U };
-    try mtl.dispatch(K.gemv_bias, .{ (n + 31) / 32, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4
+    try mtl.dispatch(K.gemv_bias, .{ (n + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4
 }
 fn kGelu(K: Kernels, x: [*]f32, n: u32) !void {
     var a0 = x; var nn = n;

@@ -736,8 +736,11 @@ pub fn main() !void {
         d_pos[0] = SEED.len - 1; // first prediction step
         var n_text: u32 = 0;
         var done = false;
+        var enc_ns: u64 = 0; // CPU: command recording + commit
+        var sync_ns: u64 = 0; // GPU: execution wait
         while (n_text < max_gen and !done) {
             const this_b = @min(DBATCH, max_gen - n_text);
+            var rec_t = try std.time.Timer.start();
             try mtl.beginCommandBuffer();
             for (0..this_b) |_| {
                 try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
@@ -754,7 +757,10 @@ pub fn main() !void {
                 try kArgmax(f_argmax, d_logits, d_tokens.ptr, d_pos, MAX_TOK); // tokens[pos] = argmax
             }
             try mtl.commitCommandBuffer();
+            enc_ns += rec_t.read();
+            var sync_t = try std.time.Timer.start();
             try mtl.sync();
+            sync_ns += sync_t.read();
             // detect EOT among the this_b newly written tokens
             const base = SEED.len + n_text;
             var bi: u32 = 0;
@@ -767,7 +773,7 @@ pub fn main() !void {
         }
 
         const dec_ms = @as(f64, @floatFromInt(dt2.read())) / 1e6;
-        try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms | decode {d} tok {d:.0}ms ({d:.1} tok/s)\n", .{ chunk + 1, conv_ms, enc_ms, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0) });
+        try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms]\n", .{ chunk + 1, conv_ms, enc_ms, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6 });
         const text = try bpeDecode(bpe_path, out_tokens[SEED.len .. SEED.len + n_text]);
         // near-silence hallucination guard: drop this chunk's text when the audio
         // was quiet (loud speech keeps high seg_rms and is never dropped).
@@ -1132,7 +1138,7 @@ fn kLogitGemv(f: mtl.Function, logits: [*]f32, qs: [*]i8, sc: [*]f16, x: [*]f32,
     var a0 = logits; var a1 = qs; var a2 = sc; var a3 = x; var v = vocab; var d = dim;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&v), P(&d) };
     const s = [_]usize{ PS, PS, PS, PS, U, U };
-    try mtl.dispatch(f, .{ (vocab + 31) / 32, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4 → 32 vocab/tg
+    try mtl.dispatch(f, .{ (vocab + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4 → 32 vocab/tg
 }
 fn residual(K: dec.Kernels, x: [*]f32, y: [*]f32, n: u32) !void {
     var a0 = x; var a1 = y; var nn = n;
