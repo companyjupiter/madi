@@ -764,7 +764,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
     // relative energy VAD: keep windows with RMS > 0.3 × median RMS
     const rs = try alloc.dupe(f32, bm[0..n]); defer alloc.free(rs);
     std.mem.sort(f32, rs, {}, std.sort.asc(f32));
-    const eth = rs[n / 2] * envF("DIAR_VAD", 0.3);
+    const eth = rs[n / 2] * envF("DIAR_VAD", 0.4); // tuned on VoxConverse dev
     const keep = try alloc.alloc(usize, n); defer alloc.free(keep);
     var m: usize = 0;
     for (0..n) |i| if (bm[i] > eth) { keep[m] = i; m += 1; };
@@ -787,7 +787,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         K = @min(@as(usize, diar_k), m);
         try kmeansFit(X, m, segd, K, asg);
     } else {
-        const maxK: usize = @min(envU("DIAR_MAXK", 8), m);
+        const maxK: usize = @min(envU("DIAR_MAXK", 6), m); // tuned: 6 minimizes over-clustering (VoxConverse dev)
         const tau: f32 = envF("DIAR_SIL_TAU", 0.10); // below this → single speaker
         const tmp = try alloc.alloc(usize, m); defer alloc.free(tmp);
         var bestK: usize = 2; var bestSil: f32 = -2;
