@@ -260,6 +260,7 @@ kernel void flash_cross_attn_f16kv(
 {
     threadgroup float scores[1504];
     threadgroup float s8[8];
+    threadgroup float s_part[256]; // output partials: 64 dims × 4 t-partitions
     const uint h = tgid;
     const uint kvh = (h * nkv) / nh;
     const float rsq = rsqrt((float)hdd);
@@ -283,12 +284,20 @@ kernel void flash_cross_attn_f16kv(
     float inv = 1.0f / ssum;
     for (uint t = ltid; t < seqlen; t += 256) scores[t] *= inv;
     threadgroup_barrier(mem_flags::mem_threadgroup);
-    for (uint d = ltid; d < hdd; d += 256) {
-        float sum = 0.0f;
-        for (uint t = 0; t < seqlen; t++)
-            sum += scores[t] * (float)vc[(ulong)t * kvd + kvh * hdd + d];
-        out_buf[h * hdd + d] = sum;
-    }
+    // Output (scores·V): use ALL 256 threads = 64 dims × 4 t-partitions (was 64
+    // active threads each summing all seqlen). Each (d,part) sums its quarter,
+    // then partition 0 reduces the 4 partials. hdd=64, seqlen%4==0 (1500→375).
+    const uint od = ltid & 63;        // head dim 0..63
+    const uint op = ltid >> 6;        // partition 0..3
+    const uint t0 = (op * seqlen) / 4;
+    const uint t1 = ((op + 1) * seqlen) / 4;
+    float psum = 0.0f;
+    for (uint t = t0; t < t1; t++)
+        psum += scores[t] * (float)vc[(ulong)t * kvd + kvh * hdd + od];
+    s_part[op * 64 + od] = psum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (op == 0)
+        out_buf[h * hdd + od] = (s_part[od] + s_part[64 + od]) + (s_part[128 + od] + s_part[192 + od]);
 }
 
 kernel void extract_ca_head_f16kv(
