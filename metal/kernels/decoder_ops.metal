@@ -330,12 +330,22 @@ kernel void extract_ca_head_f16kv(
 {
     threadgroup float sc[1504];
     threadgroup float s8[8];
+    threadgroup float s_qh[64]; // query head cached once
     const uint tok = tok_ptr[0];
     const float rsq = rsqrt((float)hdd);
     const float LOG2E = 1.4426950408889634f;
+    for (uint e = ltid; e < hdd; e += 256) s_qh[e] = q[head * hdd + e];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    threadgroup const float4* q4 = (threadgroup const float4*)s_qh;
+    const uint d4n = hdd >> 2;
     for (uint t = ltid; t < seqlen; t += 256) {
+        device const half4* k4 = (device const half4*)(kc + (ulong)t * kvd + head * hdd);
         float d = 0.0f;
-        for (uint e = 0; e < hdd; e++) d += q[head * hdd + e] * (float)kc[(ulong)t * kvd + head * hdd + e];
+        for (uint i = 0; i < d4n; i++) {
+            const half4 kv = k4[i];
+            const float4 qv = q4[i];
+            d += qv.x * (float)kv.x + qv.y * (float)kv.y + qv.z * (float)kv.z + qv.w * (float)kv.w;
+        }
         sc[t] = d * rsq;
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
