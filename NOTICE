@@ -1,0 +1,36 @@
+Sovereign Whisper — Apple Silicon (Metal)
+=========================================
+
+This product includes software and machine-learning model weights developed by
+third parties. Their copyright and license notices are reproduced below and the
+full license texts are in THIRD_PARTY_LICENSES.md. These notices must be retained
+in source and binary redistributions.
+
+-------------------------------------------------------------------------------
+1. WeSpeaker — speaker-embedding model (diarization)
+-------------------------------------------------------------------------------
+   Component : ResNet34 speaker-embedding architecture + VoxCeleb-trained weights
+   Used in   : metal/diar_resnet.zig (independent reimplementation),
+               metal/assets/resnet34_diar.bin (format-converted weights)
+   Source    : https://github.com/wenet-e2e/wespeaker
+   Copyright : Copyright (c) the WeSpeaker authors
+   License   : Apache License, Version 2.0  (see THIRD_PARTY_LICENSES.md §A)
+   Changes   : Re-implemented for CPU inference in Zig; BatchNorm folded; weights
+               converted to a flat binary. No substantive change to the model.
+   Note      : VoxCeleb training data carries its own dataset terms — verify them
+               for any commercial/redistribution use of the weights.
+
+-------------------------------------------------------------------------------
+2. OpenAI Whisper — speech-recognition model (transcription)
+-------------------------------------------------------------------------------
+   Component : Whisper large-v3-turbo architecture + weights
+   Used in   : metal/transcribe.zig, metal/encoder.zig, metal/decoder.zig,
+               metal/mel.zig (independent Zig/Metal reimplementation of inference)
+   Source    : https://github.com/openai/whisper
+   Copyright : Copyright (c) 2022 OpenAI
+   License   : MIT License  (see THIRD_PARTY_LICENSES.md §B)
+   Changes   : Re-implemented inference path in Zig + Metal; weights are
+               format-converted (safetensors F16). No substantive change.
+
+-------------------------------------------------------------------------------
+All other code in this repository is original work of this project.

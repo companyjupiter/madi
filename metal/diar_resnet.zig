@@ -3,6 +3,16 @@
 // dependency); verified bit-for-bit against onnxruntime via bench/*_ref.py.
 //   pipeline: 16k mono → kaldi 80-fbank → ResNet34 (BN folded) → stats pool
 //             → FC 5120→256 → −mean_vec → (L2-norm at clustering)
+//
+// ───────────────────────────────────────────────────────────────────────────
+// THIRD-PARTY ATTRIBUTION — Apache License 2.0
+//   Speaker-embedding architecture and pretrained weights derive from WeSpeaker
+//   (ResNet34, VoxCeleb-trained):  https://github.com/wenet-e2e/wespeaker
+//   Copyright (c) the WeSpeaker authors. Licensed under the Apache License,
+//   Version 2.0. This file is an independent reimplementation; the weights are
+//   format-converted, not modified in substance.
+//   Full license text + NOTICE: ../NOTICE and ../THIRD_PARTY_LICENSES.md
+// ───────────────────────────────────────────────────────────────────────────
 const std = @import("std");
 
 pub const NMEL: usize = 80;

@@ -159,6 +159,15 @@ dedicated var, so it never collides with the shell locale `$LANG`.
   `metal/PORT.md` (CUDA→Metal port notes), `metal/bench/*.md`.
 
 ## License / provenance
-Inference code: this project. Diarization weights: wespeaker ResNet34 (Apache-2.0,
-trained on VoxCeleb — verify dataset terms for commercial use). Whisper weights
-per OpenAI's terms.
+Inference code is original work of this project. It reuses two third-party models,
+whose notices are retained as required and reproduced in full:
+
+- **OpenAI Whisper** large-v3-turbo — **MIT License**, © 2022 OpenAI
+  (transcription). MIT requires keeping the copyright + permission notice.
+- **WeSpeaker** ResNet34 — **Apache License 2.0**, © the WeSpeaker authors
+  (diarization; VoxCeleb-trained — verify dataset terms for commercial use).
+  Apache-2.0 requires keeping the NOTICE + license and stating changes.
+
+See [`NOTICE`](NOTICE) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)
+for the attributions and full license texts; source headers in
+`metal/transcribe.zig` and `metal/diar_resnet.zig` carry the same notices.

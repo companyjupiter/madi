@@ -97,6 +97,7 @@ kernel void gpu_attention(
 {
     threadgroup float scores[512];
     threadgroup float s8[8];
+    threadgroup float s_part[256]; // output partials: 64 dims × 4 t-partitions
     const uint h = tgid;
     const uint pos = pos_ptr[0];
     const uint posP1 = pos + 1;
@@ -132,14 +133,19 @@ kernel void gpu_attention(
     for (uint t = ltid; t < posP1; t += 256) scores[t] *= inv;
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
-    // Phase 3: out[h*hdd+d] = sum_t scores[t] * vc_t[d]
-    for (uint d = ltid; d < hdd; d += 256) {
-        float sum = 0.0f;
-        for (uint t = 0; t < posP1; t++) {
-            sum += scores[t] * vc[(ulong)t * kvd + kvh * hdd + d];
-        }
-        out_buf[h * hdd + d] = sum;
-    }
+    // Phase 3: out[h*hdd+d] = Σ_t scores[t]·vc_t[d]. All 256 threads = 64 dims ×
+    // 4 t-partitions (integer-divided range covers any posP1), then reduce.
+    const uint od = ltid & 63;
+    const uint op = ltid >> 6;
+    const uint t0 = (op * posP1) / 4;
+    const uint t1 = ((op + 1) * posP1) / 4;
+    float psum = 0.0f;
+    for (uint t = t0; t < t1; t++)
+        psum += scores[t] * vc[(ulong)t * kvd + kvh * hdd + od];
+    s_part[op * 64 + od] = psum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (op == 0)
+        out_buf[h * hdd + od] = (s_part[od] + s_part[64 + od]) + (s_part[128 + od] + s_part[192 + od]);
 }
 
 // extract_ca_head: recompute cross-attn softmax for ONE alignment head and
@@ -260,15 +266,26 @@ kernel void flash_cross_attn_f16kv(
 {
     threadgroup float scores[1504];
     threadgroup float s8[8];
+    threadgroup float s_part[256]; // output partials: 64 dims × 4 t-partitions
+    threadgroup float s_qh[64];    // query head cached once (was re-read per t)
     const uint h = tgid;
     const uint kvh = (h * nkv) / nh;
     const float rsq = rsqrt((float)hdd);
     const float LOG2E = 1.4426950408889634f;
 
+    // cache this head's query (64 floats) once, then vectorized half4 QK dot
+    for (uint d = ltid; d < hdd; d += 256) s_qh[d] = q_buf[h * hdd + d];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    threadgroup const float4* q4 = (threadgroup const float4*)s_qh;
+    const uint d4n = hdd >> 2;
     for (uint t = ltid; t < seqlen; t += 256) {
+        device const half4* k4 = (device const half4*)(kc + (ulong)t * kvd + kvh * hdd);
         float sum = 0.0f;
-        for (uint d = 0; d < hdd; d++)
-            sum += q_buf[h * hdd + d] * (float)kc[(ulong)t * kvd + kvh * hdd + d];
+        for (uint i = 0; i < d4n; i++) {
+            const half4 kv = k4[i];
+            const float4 qv = q4[i];
+            sum += qv.x * (float)kv.x + qv.y * (float)kv.y + qv.z * (float)kv.z + qv.w * (float)kv.w;
+        }
         scores[t] = sum * rsq;
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -283,12 +300,20 @@ kernel void flash_cross_attn_f16kv(
     float inv = 1.0f / ssum;
     for (uint t = ltid; t < seqlen; t += 256) scores[t] *= inv;
     threadgroup_barrier(mem_flags::mem_threadgroup);
-    for (uint d = ltid; d < hdd; d += 256) {
-        float sum = 0.0f;
-        for (uint t = 0; t < seqlen; t++)
-            sum += scores[t] * (float)vc[(ulong)t * kvd + kvh * hdd + d];
-        out_buf[h * hdd + d] = sum;
-    }
+    // Output (scores·V): use ALL 256 threads = 64 dims × 4 t-partitions (was 64
+    // active threads each summing all seqlen). Each (d,part) sums its quarter,
+    // then partition 0 reduces the 4 partials. hdd=64, seqlen%4==0 (1500→375).
+    const uint od = ltid & 63;        // head dim 0..63
+    const uint op = ltid >> 6;        // partition 0..3
+    const uint t0 = (op * seqlen) / 4;
+    const uint t1 = ((op + 1) * seqlen) / 4;
+    float psum = 0.0f;
+    for (uint t = t0; t < t1; t++)
+        psum += scores[t] * (float)vc[(ulong)t * kvd + kvh * hdd + od];
+    s_part[op * 64 + od] = psum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (op == 0)
+        out_buf[h * hdd + od] = (s_part[od] + s_part[64 + od]) + (s_part[128 + od] + s_part[192 + od]);
 }
 
 kernel void extract_ca_head_f16kv(
@@ -305,12 +330,22 @@ kernel void extract_ca_head_f16kv(
 {
     threadgroup float sc[1504];
     threadgroup float s8[8];
+    threadgroup float s_qh[64]; // query head cached once
     const uint tok = tok_ptr[0];
     const float rsq = rsqrt((float)hdd);
     const float LOG2E = 1.4426950408889634f;
+    for (uint e = ltid; e < hdd; e += 256) s_qh[e] = q[head * hdd + e];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    threadgroup const float4* q4 = (threadgroup const float4*)s_qh;
+    const uint d4n = hdd >> 2;
     for (uint t = ltid; t < seqlen; t += 256) {
+        device const half4* k4 = (device const half4*)(kc + (ulong)t * kvd + head * hdd);
         float d = 0.0f;
-        for (uint e = 0; e < hdd; e++) d += q[head * hdd + e] * (float)kc[(ulong)t * kvd + head * hdd + e];
+        for (uint i = 0; i < d4n; i++) {
+            const half4 kv = k4[i];
+            const float4 qv = q4[i];
+            d += qv.x * (float)kv.x + qv.y * (float)kv.y + qv.z * (float)kv.z + qv.w * (float)kv.w;
+        }
         sc[t] = d * rsq;
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
