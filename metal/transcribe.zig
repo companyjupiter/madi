@@ -1132,7 +1132,7 @@ fn kLogitGemv(f: mtl.Function, logits: [*]f32, qs: [*]i8, sc: [*]f16, x: [*]f32,
     var a0 = logits; var a1 = qs; var a2 = sc; var a3 = x; var v = vocab; var d = dim;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&v), P(&d) };
     const s = [_]usize{ PS, PS, PS, PS, U, U };
-    try mtl.dispatch(f, .{ (vocab + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+    try mtl.dispatch(f, .{ (vocab + 31) / 32, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4 → 32 vocab/tg
 }
 fn residual(K: dec.Kernels, x: [*]f32, y: [*]f32, n: u32) !void {
     var a0 = x; var a1 = y; var nn = n;

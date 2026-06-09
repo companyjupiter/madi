@@ -187,18 +187,35 @@ kernel void logit_gemv_q8(
     threadgroup float xs[1280];
     for (uint d = tiitg; d < dim; d += 256) xs[d] = x[d];
     threadgroup_barrier(mem_flags::mem_threadgroup);
-    const uint v = tgid * 8 + sgitg;
-    if (v >= vocab) return;
+    // NR0=4 row-blocking: 4 vocab rows per simdgroup, x reused from threadgroup
+    // cache. vocab(51866) is NOT % 4, so guard the tail rows.
+    const uint v0 = (tgid * 8 + sgitg) * 4;
+    if (v0 >= vocab) return;
     const uint nb = dim / 32;
-    device const char* qrow = qs + (ulong)v * dim;
-    device const half* srow = scales + (ulong)v * nb;
-    float acc = 0.0f;
+    device const char* q0 = qs + (ulong)(v0 + 0) * dim;
+    device const char* q1 = qs + (ulong)(min(v0 + 1, vocab - 1)) * dim;
+    device const char* q2 = qs + (ulong)(min(v0 + 2, vocab - 1)) * dim;
+    device const char* q3 = qs + (ulong)(min(v0 + 3, vocab - 1)) * dim;
+    device const half* s0 = scales + (ulong)(v0 + 0) * nb;
+    device const half* s1 = scales + (ulong)(min(v0 + 1, vocab - 1)) * nb;
+    device const half* s2 = scales + (ulong)(min(v0 + 2, vocab - 1)) * nb;
+    device const half* s3 = scales + (ulong)(min(v0 + 3, vocab - 1)) * nb;
+    float a0 = 0, a1 = 0, a2 = 0, a3 = 0;
     for (uint b = 0; b < nb; b++) {
         const uint d = b * 32 + tiisg;
-        acc += xs[d] * ((float)qrow[d] * (float)srow[b]);
+        const float xv = xs[d];
+        a0 += xv * ((float)q0[d] * (float)s0[b]);
+        a1 += xv * ((float)q1[d] * (float)s1[b]);
+        a2 += xv * ((float)q2[d] * (float)s2[b]);
+        a3 += xv * ((float)q3[d] * (float)s3[b]);
     }
-    acc = simd_sum(acc);
-    if (tiisg == 0) logits[v] = acc;
+    a0 = simd_sum(a0); a1 = simd_sum(a1); a2 = simd_sum(a2); a3 = simd_sum(a3);
+    if (tiisg == 0) {
+        logits[v0] = a0;
+        if (v0 + 1 < vocab) logits[v0 + 1] = a1;
+        if (v0 + 2 < vocab) logits[v0 + 2] = a2;
+        if (v0 + 3 < vocab) logits[v0 + 3] = a3;
+    }
 }
 
 // emb lookup (Q8), indirect: out[d] = dequant(qs[tokens[*pos]][d])
@@ -249,16 +266,75 @@ kernel void gemv_q8(
     ushort sgitg [[simdgroup_index_in_threadgroup]],
     ushort tiisg [[thread_index_in_simdgroup]])
 {
-    const uint n = tgid * 8 + sgitg;
-    if (n >= N) return;
+    // NR0=4 row-blocking (ggml mul_mv style): each simdgroup computes 4 output
+    // rows, loading the activation x[d] ONCE and reusing it across 4 weight rows
+    // → 4 weight streams in flight + 4-way ILP. Requires N % 4 == 0 (all decode
+    // GEMV callers: D=1280, 3D=3840, MLP=5120). 8 simdgroups → 32 rows / tg.
+    const uint n0 = (tgid * 8 + sgitg) * 4;
+    if (n0 >= N) return;
     const uint nb = K / 32;
-    device const char* qrow = qs + (ulong)n * K;
-    device const half* srow = scales + (ulong)n * nb;
-    float acc = 0.0f;
+    device const char* q0 = qs + (ulong)(n0 + 0) * K;
+    device const char* q1 = qs + (ulong)(n0 + 1) * K;
+    device const char* q2 = qs + (ulong)(n0 + 2) * K;
+    device const char* q3 = qs + (ulong)(n0 + 3) * K;
+    device const half* s0 = scales + (ulong)(n0 + 0) * nb;
+    device const half* s1 = scales + (ulong)(n0 + 1) * nb;
+    device const half* s2 = scales + (ulong)(n0 + 2) * nb;
+    device const half* s3 = scales + (ulong)(n0 + 3) * nb;
+    float a0 = 0, a1 = 0, a2 = 0, a3 = 0;
     for (uint b = 0; b < nb; b++) {
         const uint d = b * 32 + tiisg;
-        acc += x[d] * ((float)qrow[d] * (float)srow[b]);
+        const float xv = x[d];
+        a0 += xv * ((float)q0[d] * (float)s0[b]);
+        a1 += xv * ((float)q1[d] * (float)s1[b]);
+        a2 += xv * ((float)q2[d] * (float)s2[b]);
+        a3 += xv * ((float)q3[d] * (float)s3[b]);
     }
-    acc = simd_sum(acc);
-    if (tiisg == 0) out_buf[n] = acc;
+    a0 = simd_sum(a0); a1 = simd_sum(a1); a2 = simd_sum(a2); a3 = simd_sum(a3);
+    if (tiisg == 0) {
+        out_buf[n0 + 0] = a0; out_buf[n0 + 1] = a1;
+        out_buf[n0 + 2] = a2; out_buf[n0 + 3] = a3;
+    }
+}
+
+// gemv_q8 with a fused bias epilogue (out[n] = Σ + bias[n]). Folds the separate
+// bias_add dispatch into the GEMV — bit-exact (same single add), one fewer
+// dispatch per projection. Used by the decode loop's cross-q / MLP GEMVs.
+kernel void gemv_q8_bias(
+    device float*        out_buf [[buffer(0)]],
+    device const char*   qs      [[buffer(1)]],
+    device const half*   scales  [[buffer(2)]],
+    device const float*  x       [[buffer(3)]],
+    device const float*  bias    [[buffer(4)]],
+    constant uint& N [[buffer(5)]],
+    constant uint& K [[buffer(6)]],
+    uint  tgid  [[threadgroup_position_in_grid]],
+    ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n0 = (tgid * 8 + sgitg) * 4; // NR0=4 row-blocking (see gemv_q8)
+    if (n0 >= N) return;
+    const uint nb = K / 32;
+    device const char* q0 = qs + (ulong)(n0 + 0) * K;
+    device const char* q1 = qs + (ulong)(n0 + 1) * K;
+    device const char* q2 = qs + (ulong)(n0 + 2) * K;
+    device const char* q3 = qs + (ulong)(n0 + 3) * K;
+    device const half* s0 = scales + (ulong)(n0 + 0) * nb;
+    device const half* s1 = scales + (ulong)(n0 + 1) * nb;
+    device const half* s2 = scales + (ulong)(n0 + 2) * nb;
+    device const half* s3 = scales + (ulong)(n0 + 3) * nb;
+    float a0 = 0, a1 = 0, a2 = 0, a3 = 0;
+    for (uint b = 0; b < nb; b++) {
+        const uint d = b * 32 + tiisg;
+        const float xv = x[d];
+        a0 += xv * ((float)q0[d] * (float)s0[b]);
+        a1 += xv * ((float)q1[d] * (float)s1[b]);
+        a2 += xv * ((float)q2[d] * (float)s2[b]);
+        a3 += xv * ((float)q3[d] * (float)s3[b]);
+    }
+    a0 = simd_sum(a0); a1 = simd_sum(a1); a2 = simd_sum(a2); a3 = simd_sum(a3);
+    if (tiisg == 0) {
+        out_buf[n0 + 0] = a0 + bias[n0 + 0]; out_buf[n0 + 1] = a1 + bias[n0 + 1];
+        out_buf[n0 + 2] = a2 + bias[n0 + 2]; out_buf[n0 + 3] = a3 + bias[n0 + 3];
+    }
 }

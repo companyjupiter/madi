@@ -33,6 +33,7 @@ pub const Kernels = struct {
     emb: mtl.Function,
     extract: mtl.Function,
     gemv: mtl.Function,
+    gemv_bias: mtl.Function,
 
     pub fn load() mtl.Error!Kernels {
         return .{
@@ -47,6 +48,7 @@ pub const Kernels = struct {
             .emb = try mtl.getFunction("gpu_emb_lookup"),
             .extract = try mtl.getFunction("extract_ca_head_f16kv"),
             .gemv = try mtl.getFunction("gemv_q8"),
+            .gemv_bias = try mtl.getFunction("gemv_q8_bias"),
         };
     }
 };
@@ -111,7 +113,14 @@ fn kGemvQ8(K: Kernels, out: [*]f32, x: [*]f32, w: Q8w, n: u32, k: u32) !void {
     var a0 = out; var a1 = w.qs; var a2 = w.scales; var a3 = x; var nn = n; var kk = k;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nn), P(&kk) };
     const s = [_]usize{ PS, PS, PS, PS, U, U };
-    try mtl.dispatch(K.gemv, .{ (n + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+    try mtl.dispatch(K.gemv, .{ (n + 31) / 32, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4 → 32 rows/tg
+}
+// Q8 GEMV with fused bias epilogue — one dispatch instead of gemv + bias_add.
+fn kGemvQ8Bias(K: Kernels, out: [*]f32, x: [*]f32, w: Q8w, bias: [*]f32, n: u32, k: u32) !void {
+    var a0 = out; var a1 = w.qs; var a2 = w.scales; var a3 = x; var a4 = bias; var nn = n; var kk = k;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&nn), P(&kk) };
+    const s = [_]usize{ PS, PS, PS, PS, PS, U, U };
+    try mtl.dispatch(K.gemv_bias, .{ (n + 31) / 32, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4
 }
 fn kGelu(K: Kernels, x: [*]f32, n: u32) !void {
     var a0 = x; var nn = n;
@@ -183,8 +192,7 @@ pub fn decodeBlock(
     try kGemvQ8(K, s.mo, s.ao, L.ow, D, D);
     try kBRLN(K, x, s.mo, L.ob, s.xb, L.caln_w, L.caln_b, D);
     // cross-attn
-    try kGemvQ8(K, s.q, s.xb, L.cqw, D, D);
-    try kBias(K, s.q, L.cqb, D, D);
+    try kGemvQ8Bias(K, s.q, s.xb, L.cqw, L.cqb, D, D); // fused cross-Q proj + bias
     if (ca) |c| {
         for (c.heads) |h| try kExtract(K, s.q, ckc, c.weights, c.tok, h, c.inv_n, ENC_SEQ);
     }
@@ -192,10 +200,8 @@ pub fn decodeBlock(
     try kGemvQ8(K, s.mo, s.ao, L.cow, D, D);
     try kBRLN(K, x, s.mo, L.cob, s.xb, L.mln_w, L.mln_b, D);
     // MLP
-    try kGemvQ8(K, s.mh, s.xb, L.m0w, MLP, D);
-    try kBias(K, s.mh, L.m0b, MLP, MLP);
+    try kGemvQ8Bias(K, s.mh, s.xb, L.m0w, L.m0b, MLP, D); // fused up proj + bias
     try kGelu(K, s.mh, MLP);
-    try kGemvQ8(K, s.mo, s.mh, L.m2w, D, MLP);
-    try kBias(K, s.mo, L.m2b, D, D);
+    try kGemvQ8Bias(K, s.mo, s.mh, L.m2w, L.m2b, D, MLP); // fused down proj + bias
     try kRes(K, x, s.mo, D);
 }
