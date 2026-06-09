@@ -2,9 +2,10 @@
 
 Self-contained Whisper **large-v3-turbo** speech-to-text for Apple Silicon, with
 **word timestamps**, **speaker diarization** (who-said-what), **language
-auto-detection**, and long-audio chunking. Pure Zig + Metal/MSL + Apple system
-frameworks (Metal, MPS, Accelerate) — **no Python/PyTorch/onnxruntime at
-runtime**. Korean guide: [README_KR.md](README_KR.md).
+auto-detection**, long-audio chunking, and a **near-real-time live meeting mode**
+(mic → streaming speaker-attributed transcript, `.md`/`.srt` export). Pure Zig +
+Metal/MSL + Apple system frameworks (Metal, MPS, Accelerate) — **no
+Python/PyTorch/onnxruntime at runtime**. Korean guide: [README_KR.md](README_KR.md).
 
 > Highlights: peak RSS **1.1 GB** (Q8 + streaming loader), decode **~188 tok/s**,
 > diarization **9.67% DER** on VoxConverse dev (beats pyannote 3.1 SOTA ~11.2%).
@@ -66,18 +67,94 @@ Examples:
 | `DIAR_VAD` | 0.40 | energy-VAD threshold (× median RMS) |
 | `WHISPER_LANG_ID` | auto | force language token (e.g. 50259 en, 50264 ko) |
 
+## Live meeting transcription (near-real-time)
+
+`metal/live_transcribe.sh` turns the file-based `transcribe` into a streaming,
+**timestamped, speaker-attributed** meeting transcriber. It captures the mic (any
+avfoundation device) into rolling N-second segments and transcribes each one the
+moment it closes. Latency trails live audio by roughly **N + overlap + decode (~3s)**.
+
+One command is all you need:
+```bash
+cd metal
+./live_transcribe.sh --mode ko-meeting                       # Korean multi-speaker meeting
+./live_transcribe.sh -m en-meeting --md notes.md --srt notes.srt   # English + save transcript & subtitles
+./live_transcribe.sh --replay meeting.m4a -m ko              # transcribe a recording (no mic)
+./live_transcribe.sh --help                                  # full option list
+./live_transcribe.sh --list-devices                          # find your mic index
+```
+
+What it does beyond naive chunking:
+1. **Sliding-window overlap** — each segment carries `--overlap` seconds of
+   left-context and holds back its trailing word, so words split across a
+   boundary are recovered, not mangled ("country", not "company").
+2. **Consistent speaker IDs** — an online clusterer keeps the **same id for the
+   same voice** across the whole session (not reset per segment).
+3. **Resident, single-process pipeline** — the 1.6 GB model + diarization run in
+   **one resident process** (STREAM mode over a FIFO); no per-segment reload, no
+   external diarization processes. ~20% faster; language is detected once then
+   fixed (no per-segment language flapping). `--no-resident` falls back.
+4. **Hallucination guard** — drops invented words in near-silent stretches
+   (loud speech is always kept). Tune with env `HALLU_RMS` (0.020) / `HALLU_GUARD=0`.
+5. **Output** — colourized console (`--color auto|always|never`), live Markdown
+   (`--md`) and SRT subtitles (`--srt`).
+
+### Modes (`--mode`) — preset bundles; any flag overrides a preset
+| mode | preset |
+|---|---|
+| `ko` / `en` | Korean/English forced, speakers on, 8 s |
+| `meeting` | multi-speaker, 10 s, auto language |
+| `ko-meeting` / `en-meeting` | meeting + Korean/English forced |
+| `dictation` | single speaker (no diarization), text only |
+| `fast` | lowest latency (5 s, 2 s overlap, no diarization) |
+| `auto` | plain defaults (default) |
+
+### Options
+| flag | default | meaning |
+|---|---|---|
+| `-m, --mode <name>` | auto | scenario preset (table above) |
+| `-d, --device <n>` | 2 | avfoundation audio device index |
+| `-s, --seg <sec>` | 10 | segment length; longer = better diarization |
+| `-o, --overlap <sec>` | 3 | left-context; 0 disables boundary recovery |
+| `-l, --lang <id>` | auto | `ko`/`en`/`ja`/`zh`/`auto` or a raw token id |
+| `--diar <0\|1>` / `--no-diar` | 1 | consistent speaker attribution |
+| `--sim <f>` / `--maxk <n>` | 0.40 / 8 | new-speaker cosine threshold / max speakers |
+| `--duration <sec>` | — | stop after N seconds (else Ctrl-C) |
+| `--replay <wav>` | — | transcribe a recorded file instead of the mic |
+| `--md <file>` / `--srt <file>` | — | also write a Markdown transcript / SRT subtitles |
+| `--color <when>` / `--no-color` | auto | colourize speakers (auto = TTY only) |
+| `--no-resident` | (resident on) | one process per segment (debug) |
+| `--keep` | off | keep temp WAVs + state on exit |
+| `--list-devices` / `-h, --help` / `--version` | | list devices / help / version |
+
+Every flag also reads its same-named env var (flags win). `--lang` uses a
+dedicated var, so it never collides with the shell locale `$LANG`.
+
+> **Mic permission**: on first run macOS asks the GUI app hosting this shell
+> (Terminal / iTerm) for Microphone access — grant it in System Settings →
+> Privacy & Security → Microphone, then re-run.
+>
+> **Limits**: short segments crossing a speaker turn can flip mid-sentence
+> (use 8–10 s); Whisper may still mis-time/hallucinate words on noisy audio.
+> For the most accurate final copy, run the whole WAV through `transcribe` once
+> after the meeting. See `testdata/` for a KO+EN regression fixture.
+
 ## Performance (jfk, M4 Pro)
 | | baseline | now |
 |---|---|---|
 | encoder/chunk | 1390 ms | ~653 ms |
 | decode | 134 tok/s | ~188 tok/s |
 | peak RSS | 4.78 GB | **1.11 GB** |
+| live (153 s KO+EN, resident) | — | **~35 s (≈4× real-time)** |
 
 ## Project layout
-- `metal/transcribe.zig` — full pipeline (mel → conv → encoder → decoder → BPE, timestamps, diarization).
+- `metal/transcribe.zig` — full pipeline (mel → conv → encoder → decoder → BPE, timestamps, diarization) + resident STREAM mode for live use.
 - `metal/encoder.zig`, `decoder.zig`, `mel.zig`, `diar_resnet.zig` — modules.
+- `metal/live_transcribe.sh` — near-real-time meeting runner (mic capture, overlap, resident pipeline, colour/`.md`/`.srt`).
+- `metal/merge_seg.awk` — merges word timestamps with speaker labels (overlap dedup, speaker carry-over).
+- `metal/online_diar.zig`, `diar_embed_wav.zig` — standalone diar tools (used by the `--no-resident` fallback).
 - `metal/kernels/*.metal` — Metal kernels. `metal/metal_backend.{m,h}` — ObjC bridge.
-- `metal/bench/` — DER benchmark harness + diarization study docs.
+- `metal/bench/` — DER benchmark harness + diarization study docs. `metal/testdata/` — live-pipeline regression fixture.
 - Docs: `metal/STATUS.md` (current state), `metal/PERF_LOG.md` (history),
   `metal/PORT.md` (CUDA→Metal port notes), `metal/bench/*.md`.
 

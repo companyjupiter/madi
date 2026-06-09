@@ -2,7 +2,8 @@
 
 Apple Silicon에서 동작하는 자체완결형 Whisper **large-v3-turbo** 음성인식기입니다.
 **워드 타임스탬프**, **화자 분리(diarization, 누가-언제-무엇을)**, **언어 자동감지**,
-**긴 오디오 청크 처리**를 지원합니다.
+**긴 오디오 청크 처리**, 그리고 **준실시간 라이브 회의 모드**(마이크 → 흐르는 화자별
+전사, `.md`/`.srt` 저장)를 지원합니다. (라이브 사용법은 [4-b](#4-b-준실시간-회의-전사-마이크--라이브-전사)장)
 
 순수 **Zig + Metal/MSL + Apple 시스템 프레임워크(Metal·MPS·Accelerate)** 로 구현되어
 **런타임에 Python/PyTorch/onnxruntime 의존이 전혀 없습니다.** (영문: [README.md](README.md))
@@ -253,6 +254,7 @@ WHISPER_LANG_ID=50264 ./out/transcribe assets/model.safetensors talk.wav assets/
 | 디코드 | 134 tok/s | ~188 tok/s |
 | peak RSS | 4.78 GB | **1.11 GB** |
 | diarization DER (VoxConverse dev) | — | **9.67%** |
+| 라이브(153초 한+영, 상주) | — | **~35초 (실시간 ≈4배)** |
 
 ---
 
@@ -268,6 +270,10 @@ WHISPER_LANG_ID=50264 ./out/transcribe assets/model.safetensors talk.wav assets/
 ---
 
 ## 9. 더 보기
+- `metal/live_transcribe.sh` — 준실시간 라이브 회의 러너(마이크·오버랩·상주·색상·md/srt)
+- `metal/merge_seg.awk` — 워드 타임스탬프 ↔ 화자 라벨 머지(오버랩 dedup·화자 캐리오버)
+- `metal/online_diar.zig`·`diar_embed_wav.zig` — 독립 diar 도구(`--no-resident` 폴백용)
+- `metal/testdata/` — 라이브 파이프라인 회귀 픽스처(한+영) + `check.sh`
 - `metal/STATUS.md` — 현재 검증 상태(성능·RSS·DER·타임스탬프) 한눈에
 - `metal/PERF_LOG.md` — 최적화 시계열 전체 기록
 - `metal/bench/` — DER 벤치마크 하네스 + 화자분리 연구 문서
