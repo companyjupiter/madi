@@ -96,10 +96,27 @@ DIAR_K=1 ./out/transcribe assets/model.safetensors lecture.wav assets/WHISPER_BP
 
 ## 4-b. 준실시간 회의 전사 (마이크 → 라이브 전사)
 `metal/live_transcribe.sh` 는 마이크(또는 임의의 avfoundation 오디오 장치)를
-**N초 세그먼트로 굴려가며** 닫히는 즉시 `transcribe`에 넣어, 흐르는 회의록을
-실시간에 가깝게 출력합니다. 세그먼트 1개를 닫은 뒤 디코드(~3초)만큼 뒤따라가므로
-지연은 대략 **N + 3초**입니다. (진짜 스트리밍/슬라이딩 윈도우/온라인 화자분리는
-아직 미구현 — 8장 한계 참고)
+**N초 세그먼트로 굴려가며** 닫히는 즉시 전사해, 흐르는 **타임스탬프 + 화자별**
+회의록을 실시간에 가깝게 출력합니다. 지연은 대략 **N + 오버랩 + 디코드(~3초)** 입니다.
+
+순수 청크 방식의 두 가지 약점을 보완합니다:
+
+1. **슬라이딩 윈도우 오버랩 (경계 단어 복원)** — 각 세그먼트를 이전 세그먼트의
+   끝 `OVERLAP`초를 좌측 컨텍스트로 붙여 전사하고, 마지막 단어는 한 라운드
+   미뤄(holdback) 다음 세그먼트가 문맥과 함께 다시 받습니다. 경계에서 잘리던
+   단어가 살아납니다("company"→"country"). 시각·텍스트 이중 dedup으로 중복 제거.
+2. **세그먼트 간 일관 화자 ID** — 영구 온라인 클러스터러(`online_diar`)가 세션
+   전체에서 **같은 목소리 = 같은 화자 번호**를 유지합니다. 매 세그먼트 라벨이
+   리셋되던 per-file 방식과 달리, 화자가 다시 등장해도 같은 ID로 붙습니다.
+
+> 보조 도구 `diar_embed_wav`(ResNet34 임베딩)·`online_diar`(코사인 온라인 클러스터링)
+> 가 필요합니다. 빌드:
+> ```bash
+> cd metal
+> bash build.sh diar_embed_wav.zig
+> zig build-obj -O ReleaseFast -lc --name online_diar -femit-bin=build/online_diar.o online_diar.zig
+> clang -O2 build/online_diar.o -o out/online_diar
+> ```
 
 ### 오디오 장치 목록 보기
 ```bash
@@ -111,32 +128,40 @@ ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep -A20 'audio devices'
 ```bash
 cd metal
 ./live_transcribe.sh [장치인덱스] [세그먼트초]
-#  기본: 장치 2(내장 마이크), 10초 세그먼트, 언어 자동감지. Ctrl-C로 종료.
+#  기본: 장치 2(내장 마이크), 10초 세그먼트, 오버랩 3초, 화자분리 ON, 언어 자동. Ctrl-C 종료.
 ```
 예시:
 ```bash
-./live_transcribe.sh                 # 내장 마이크, 10초 세그먼트
-./live_transcribe.sh 3 8             # "Microsoft Teams Audio" 캡처, 8초
-LANG=50264 DIAR=1 ./live_transcribe.sh   # 한국어 강제 + 세그먼트별 화자표시
+./live_transcribe.sh                       # 내장 마이크, 10초, 오버랩+화자 ON
+./live_transcribe.sh 3 8                    # "Microsoft Teams Audio" 캡처, 8초
+LANG=50264 ./live_transcribe.sh            # 한국어 강제
+OVERLAP=0 DIAR=0 ./live_transcribe.sh      # 가장 빠른 순수 청크 모드
+REPLAY=meeting.wav ./live_transcribe.sh    # 녹음 파일을 같은 파이프라인으로 전사(마이크 불필요)
 ```
 
 ### 환경변수
 | 변수 | 기본 | 의미 |
 |---|---|---|
-| `DEVICE` | 2 | avfoundation 오디오 장치 인덱스(1번째 인자와 동일) |
-| `SEG` | 10 | 세그먼트 길이(초, 2번째 인자와 동일). 짧을수록 지연↓ 정확도↓ |
-| `LANG` | 자동 | 언어 토큰 강제 → `WHISPER_LANG_ID`로 전달(한 50264 / 영 50259) |
-| `DIAR` | 0 | 1이면 세그먼트별 화자 표시(※라벨은 세그먼트 내부 한정 — Speaker 0이 다음 세그먼트의 Speaker 0과 동일 보장 X) |
-| `KEEP` | 0 | 1이면 종료 시 임시 세그먼트 WAV 보존 |
+| `DEVICE` | 2 | avfoundation 오디오 장치 인덱스(1번째 인자) |
+| `SEG` | 10 | 세그먼트 길이(초, 2번째 인자). 길수록 화자분리 정확↑·지연↑ |
+| `OVERLAP` | 3 | 세그먼트당 좌측 컨텍스트(초). 0이면 기능①(경계 복원) 끔 |
+| `DIAR` | 1 | 1이면 세그먼트 간 일관 화자 귀속(기능②). 0이면 텍스트만 |
+| `DIAR_SIM` | 0.40 | 새 화자 생성 코사인 임계값. 낮추면 화자 수↓(보수적) |
+| `DIAR_MAXK` | 8 | 세션 내 최대 화자 수 |
+| `LANG` | 자동 | 언어 토큰 강제 → `WHISPER_LANG_ID`(한 50264 / 영 50259) |
+| `REPLAY` | — | 지정 시 마이크 대신 그 WAV를 분할·전사(녹음 회의/테스트) |
+| `KEEP` | 0 | 1이면 종료 시 임시 WAV+화자 상태 보존 |
 | `MODEL`/`BPE`/`BIN` | assets/… | 모델·BPE·바이너리 경로 |
 
-> **⚠️ 마이크 권한**: 최초 실행 시 macOS가 **터미널의 마이크 접근**을 묻습니다.
-> 허용해야 캡처됩니다(시스템 설정 → 개인정보 보호 및 보안 → 마이크). 권한이 없으면
-> 오디오가 안 잡히고 스크립트가 힌트를 출력합니다.
+> **⚠️ 마이크 권한**: 최초 실행 시 macOS가 **이 셸을 띄운 GUI 앱**(터미널/Claude 등)의
+> 마이크 접근을 묻습니다. 허용해야 캡처됩니다(시스템 설정 → 개인정보 보호 및 보안 →
+> 마이크). 권한이 없으면 스크립트가 힌트를 출력합니다. 토글을 바꾸면 그 앱을 재시작해야
+> 적용됩니다.
 
-> **한계(청크 방식)**: 세그먼트 경계에서 단어가 잘릴 수 있고("country"→"company" 등),
-> 화자 라벨은 세그먼트 간 일관되지 않습니다. 정확한 최종본은 회의 종료 후 전체 WAV를
-> 한 번에 `transcribe`로 돌리세요(4장).
+> **한계**: ① 5초처럼 짧은 세그먼트가 화자 전환을 가로지르면 문장 중간에 화자가
+> 흔들릴 수 있습니다(세그먼트를 8~10초로 늘리면 개선). ② 무음/잡음 구간에선 Whisper가
+> 환각 단어를 내고 워드 타임스탬프가 부정확할 수 있습니다(모델 자체 특성).
+> 가장 정확한 최종본은 회의 종료 후 전체 WAV를 한 번에 `transcribe`로 돌리세요(4장).
 
 ---
 
