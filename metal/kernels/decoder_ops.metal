@@ -267,15 +267,25 @@ kernel void flash_cross_attn_f16kv(
     threadgroup float scores[1504];
     threadgroup float s8[8];
     threadgroup float s_part[256]; // output partials: 64 dims × 4 t-partitions
+    threadgroup float s_qh[64];    // query head cached once (was re-read per t)
     const uint h = tgid;
     const uint kvh = (h * nkv) / nh;
     const float rsq = rsqrt((float)hdd);
     const float LOG2E = 1.4426950408889634f;
 
+    // cache this head's query (64 floats) once, then vectorized half4 QK dot
+    for (uint d = ltid; d < hdd; d += 256) s_qh[d] = q_buf[h * hdd + d];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    threadgroup const float4* q4 = (threadgroup const float4*)s_qh;
+    const uint d4n = hdd >> 2;
     for (uint t = ltid; t < seqlen; t += 256) {
+        device const half4* k4 = (device const half4*)(kc + (ulong)t * kvd + kvh * hdd);
         float sum = 0.0f;
-        for (uint d = 0; d < hdd; d++)
-            sum += q_buf[h * hdd + d] * (float)kc[(ulong)t * kvd + kvh * hdd + d];
+        for (uint i = 0; i < d4n; i++) {
+            const half4 kv = k4[i];
+            const float4 qv = q4[i];
+            sum += qv.x * (float)kv.x + qv.y * (float)kv.y + qv.z * (float)kv.z + qv.w * (float)kv.w;
+        }
         scores[t] = sum * rsq;
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
