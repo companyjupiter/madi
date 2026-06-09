@@ -120,38 +120,55 @@ DIAR_K=1 ./out/transcribe assets/model.safetensors lecture.wav assets/WHISPER_BP
 
 ### 오디오 장치 목록 보기
 ```bash
-ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep -A20 'audio devices'
-#  예) [2] MacBook Pro Microphone   [3] Microsoft Teams Audio
+./live_transcribe.sh --list-devices
+#  [2] MacBook Pro Microphone   [3] Microsoft Teams Audio  ...
 ```
 
-### 실행
+### 실행 (플래그 CLI)
 ```bash
 cd metal
-./live_transcribe.sh [장치인덱스] [세그먼트초]
-#  기본: 장치 2(내장 마이크), 10초 세그먼트, 오버랩 3초, 화자분리 ON, 언어 자동. Ctrl-C 종료.
-```
-예시:
-```bash
-./live_transcribe.sh                       # 내장 마이크, 10초, 오버랩+화자 ON
-./live_transcribe.sh 3 8                    # "Microsoft Teams Audio" 캡처, 8초
-LANG=50264 ./live_transcribe.sh            # 한국어 강제
-OVERLAP=0 DIAR=0 ./live_transcribe.sh      # 가장 빠른 순수 청크 모드
-REPLAY=meeting.wav ./live_transcribe.sh    # 녹음 파일을 같은 파이프라인으로 전사(마이크 불필요)
+./live_transcribe.sh --help            # 전체 옵션
+./live_transcribe.sh                   # 기본: 내장 마이크, 10초, 오버랩+화자 ON, 언어 자동. Ctrl-C 종료.
 ```
 
-### 환경변수
-| 변수 | 기본 | 의미 |
+**모드 프리셋** — `--mode <이름>`은 자주 쓰는 설정 묶음입니다(개별 플래그로 덮어쓰기 가능):
+
+| 모드 | 설정 |
+|---|---|
+| `ko` / `en` | 한국어/영어 강제, 화자 ON, 8초 |
+| `meeting` | 다화자, 10초, 언어 자동 |
+| `ko-meeting` / `en-meeting` | 위 + 한/영 강제 |
+| `dictation` | 단일 화자(화자분리 끔), 텍스트만 |
+| `fast` | 최저 지연(5초, 오버랩 2초, 화자분리 끔) |
+| `auto` | 기본값 |
+
+예시:
+```bash
+./live_transcribe.sh --mode ko-meeting          # 한국어 다화자 회의
+./live_transcribe.sh -m en -s 8 --duration 60   # 영어, 8초, 60초 후 자동 종료
+./live_transcribe.sh -m fast                    # 빠른 저지연 메모
+./live_transcribe.sh --replay meeting.m4a -m ko # 녹음 파일을 한국어로 전사(마이크 불필요)
+```
+
+### 옵션
+| 플래그 | 기본 | 의미 |
 |---|---|---|
-| `DEVICE` | 2 | avfoundation 오디오 장치 인덱스(1번째 인자) |
-| `SEG` | 10 | 세그먼트 길이(초, 2번째 인자). 길수록 화자분리 정확↑·지연↑ |
-| `OVERLAP` | 3 | 세그먼트당 좌측 컨텍스트(초). 0이면 기능①(경계 복원) 끔 |
-| `DIAR` | 1 | 1이면 세그먼트 간 일관 화자 귀속(기능②). 0이면 텍스트만 |
-| `DIAR_SIM` | 0.40 | 새 화자 생성 코사인 임계값. 낮추면 화자 수↓(보수적) |
-| `DIAR_MAXK` | 8 | 세션 내 최대 화자 수 |
-| `LANG` | 자동 | 언어 토큰 강제 → `WHISPER_LANG_ID`(한 50264 / 영 50259) |
-| `REPLAY` | — | 지정 시 마이크 대신 그 WAV를 분할·전사(녹음 회의/테스트) |
-| `KEEP` | 0 | 1이면 종료 시 임시 WAV+화자 상태 보존 |
-| `MODEL`/`BPE`/`BIN` | assets/… | 모델·BPE·바이너리 경로 |
+| `-m, --mode <이름>` | auto | 시나리오 프리셋(위 표) |
+| `-d, --device <n>` | 2 | avfoundation 오디오 장치 인덱스 |
+| `-s, --seg <초>` | 10 | 세그먼트 길이. 길수록 화자분리 정확↑·지연↑ |
+| `-o, --overlap <초>` | 3 | 좌측 컨텍스트. 0이면 기능①(경계 복원) 끔 |
+| `-l, --lang <id>` | auto | `ko`/`en`/`ja`/`zh`/`auto` 또는 raw 토큰. **모호 구간 오감지 방지(보험)** |
+| `--diar <0\|1>` / `--no-diar` | 1 | 세그먼트 간 일관 화자 귀속(기능②) |
+| `--sim <f>` | 0.40 | 새 화자 생성 코사인 임계값(낮을수록 화자 수↓) |
+| `--maxk <n>` | 8 | 세션 내 최대 화자 수 |
+| `--duration <초>` | — | N초 후 자동 종료(없으면 Ctrl-C까지) |
+| `--replay <wav>` | — | 마이크 대신 녹음 파일 전사 |
+| `--keep` | off | 종료 시 임시 WAV+화자 상태 보존 |
+| `--model/--bpe/--bin <경로>` | assets/… | 자산·바이너리 경로 |
+| `--list-devices` / `-h, --help` / `--version` | | 장치 목록 / 도움말 / 버전 |
+
+> 모든 옵션은 동명의 환경변수(`DEVICE`, `SEG`, …)로도 줄 수 있습니다(플래그가 우선).
+> `--lang`은 전용 변수라 시스템 로케일 `LANG`과 충돌하지 않습니다.
 
 > **⚠️ 마이크 권한**: 최초 실행 시 macOS가 **이 셸을 띄운 GUI 앱**(터미널/Claude 등)의
 > 마이크 접근을 묻습니다. 허용해야 캡처됩니다(시스템 설정 → 개인정보 보호 및 보안 →
