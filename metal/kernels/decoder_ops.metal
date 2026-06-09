@@ -97,6 +97,7 @@ kernel void gpu_attention(
 {
     threadgroup float scores[512];
     threadgroup float s8[8];
+    threadgroup float s_part[256]; // output partials: 64 dims × 4 t-partitions
     const uint h = tgid;
     const uint pos = pos_ptr[0];
     const uint posP1 = pos + 1;
@@ -132,14 +133,19 @@ kernel void gpu_attention(
     for (uint t = ltid; t < posP1; t += 256) scores[t] *= inv;
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
-    // Phase 3: out[h*hdd+d] = sum_t scores[t] * vc_t[d]
-    for (uint d = ltid; d < hdd; d += 256) {
-        float sum = 0.0f;
-        for (uint t = 0; t < posP1; t++) {
-            sum += scores[t] * vc[(ulong)t * kvd + kvh * hdd + d];
-        }
-        out_buf[h * hdd + d] = sum;
-    }
+    // Phase 3: out[h*hdd+d] = Σ_t scores[t]·vc_t[d]. All 256 threads = 64 dims ×
+    // 4 t-partitions (integer-divided range covers any posP1), then reduce.
+    const uint od = ltid & 63;
+    const uint op = ltid >> 6;
+    const uint t0 = (op * posP1) / 4;
+    const uint t1 = ((op + 1) * posP1) / 4;
+    float psum = 0.0f;
+    for (uint t = t0; t < t1; t++)
+        psum += scores[t] * vc[(ulong)t * kvd + kvh * hdd + od];
+    s_part[op * 64 + od] = psum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (op == 0)
+        out_buf[h * hdd + od] = (s_part[od] + s_part[64 + od]) + (s_part[128 + od] + s_part[192 + od]);
 }
 
 // extract_ca_head: recompute cross-attn softmax for ONE alignment head and
