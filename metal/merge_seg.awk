@@ -49,11 +49,15 @@ END {
   cur_spk = -2; line = ""; line_t = -1
   guard = prevword                                 # last word emitted by prior segment
   lastword = prevword
+  last_known = (prevspk == "" ? -1 : prevspk + 0)  # carry speaker across segment boundary
   for (i = 0; i <= last_idx; i++) {
     if (wt[i] <= emitted + eps) continue          # already emitted in overlap (by time)
     if (guard != "" && norm(ww[i]) == norm(guard)) { guard = ""; continue }  # text-level boundary dedup
     guard = ""                                    # only the first eligible word is guarded
     s = (diar == 1) ? spk_of(wt[i]) : -1
+    # overlap-region words sit before cur's diar grid → no label; inherit prior speaker
+    if (diar == 1 && s < 0) s = last_known
+    if (s >= 0) last_known = s
     if (s != cur_spk) {                            # speaker change → flush line
       flush_line(cur_spk, line, line_t)
       cur_spk = s; line = ww[i]; line_t = wt[i]
@@ -66,6 +70,7 @@ END {
   flush_line(cur_spk, line, line_t)
   printf "@EMITTED %.2f\n", new_emitted
   printf "@LASTWORD %s\n", lastword
+  printf "@LASTSPK %d\n", last_known
 }
 
 function flush_line(spk, txt, t,   mm, ss, hdr) {

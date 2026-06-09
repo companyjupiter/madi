@@ -74,6 +74,7 @@ FFLOG="$WORK/ffmpeg.log"
 STATE="$WORK/spk_state.bin"      # persistent online-clustering centroids
 emitted_until="-1"               # global time already printed (overlap dedup)
 last_word=""                     # text of last emitted word (boundary text dedup)
+last_spk=""                      # last emitted speaker id (carry over unlabeled overlap)
 
 cleanup() {
   [ -n "${FFPID:-}" ] && kill "$FFPID" 2>/dev/null || true
@@ -95,8 +96,9 @@ else
   echo "[live] device=$DEVICE seg=${SEG}s overlap=${OVERLAP}s diar=$DIAR lang=${LANG:-auto}"
   echo "[live] capturing… (Ctrl-C to stop)  tmp=$WORK"
   echo ""
+  # DURATION=<sec> → bounded live run (ffmpeg self-terminates, loop then drains)
   ffmpeg -hide_banner -loglevel error \
-    -f avfoundation -i ":${DEVICE}" -ar 16000 -ac 1 \
+    -f avfoundation -i ":${DEVICE}" -ar 16000 -ac 1 ${DURATION:+-t "$DURATION"} \
     -f segment -segment_time "$SEG" -reset_timestamps 1 \
     "$WORK/seg_%05d.wav" >"$FFLOG" 2>&1 &
   FFPID=$!
@@ -144,17 +146,19 @@ process_segment() { # $1=idx  $2=cur.wav  $3=prev.wav  $4=final(0/1)
     in_wav="$comb"; in_start=$((S - OVERLAP))
   fi
 
-  local merged new_emit new_last
+  local merged new_emit new_last new_spk
   merged=$( { labels_of "$cur" "$S" "$i"; words_of "$in_wav" "$in_start"; } \
     | awk -f merge_seg.awk -v emitted="$emitted_until" -v final="$final" \
-          -v diar="$DIAR" -v prevword="$last_word" )
+          -v diar="$DIAR" -v prevword="$last_word" -v prevspk="$last_spk" )
 
-  # print transcript lines only; carry control state (emitted time, last word) forward
+  # print transcript lines only; carry control state forward across segments
   printf '%s\n' "$merged" | grep -v '^@' || true
   new_emit=$(printf '%s\n' "$merged" | awk '/^@EMITTED/{print $2}')
   new_last=$(printf '%s\n' "$merged" | sed -n 's/^@LASTWORD //p')
+  new_spk=$(printf '%s\n' "$merged" | awk '/^@LASTSPK/{print $2}')
   [ -n "$new_emit" ] && emitted_until="$new_emit"
   [ -n "$new_last" ] && last_word="$new_last"
+  [ -n "$new_spk" ] && [ "$new_spk" -ge 0 ] 2>/dev/null && last_spk="$new_spk"
 }
 
 idx=0; processed=-1; waited=0
