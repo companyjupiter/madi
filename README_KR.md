@@ -167,6 +167,7 @@ cd metal
 | `--md <파일>` | — | 마크다운 회의록 동시 저장 |
 | `--srt <파일>` | — | SRT 자막 동시 저장 |
 | `--color <when>` / `--no-color` | auto | 화자별 콘솔 색상(auto=TTY일 때만) |
+| `--speakers <맵>` | — | 화자 실명 지정 `"0=박정근,1=은지"` (콘솔·md·srt 반영) |
 | `--no-resident` | (상주 ON) | 상주 모델 끄고 세그먼트마다 새 프로세스(디버그용) |
 | `--keep` | off | 종료 시 임시 WAV+화자 상태 보존 |
 | `--model/--bpe/--bin <경로>` | assets/… | 자산·바이너리 경로 |

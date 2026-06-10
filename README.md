@@ -123,6 +123,7 @@ What it does beyond naive chunking:
 | `--replay <wav>` | — | transcribe a recorded file instead of the mic |
 | `--md <file>` / `--srt <file>` | — | also write a Markdown transcript / SRT subtitles |
 | `--color <when>` / `--no-color` | auto | colourize speakers (auto = TTY only) |
+| `--speakers <map>` | — | name speakers, e.g. `"0=Alice,1=Bob"` (console + .md + .srt) |
 | `--no-resident` | (resident on) | one process per segment (debug) |
 | `--keep` | off | keep temp WAVs + state on exit |
 | `--list-devices` / `-h, --help` / `--version` | | list devices / help / version |

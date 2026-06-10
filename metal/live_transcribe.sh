@@ -31,6 +31,7 @@ RESIDENT="${RESIDENT:-1}"        # 1 = keep model resident across segments (no r
 MD_FILE="${MD_FILE:-}"           # append a Markdown transcript here
 SRT_FILE="${SRT_FILE:-}"         # append SRT subtitles here
 COLOR="${COLOR:-auto}"           # auto|always|never — colourize speakers on the console
+SPK_NAMES="${SPK_NAMES:-}"       # "0=Alice,1=Bob" — show real names for speaker ids
 LANGTOK="${WHISPER_LANG_ID:-}"   # numeric token; "" = auto. (NOT the locale $LANG)
 REPLAY="${REPLAY:-}"
 DURATION="${DURATION:-}"
@@ -105,6 +106,7 @@ OPTIONS
       --srt <file>      also write SRT subtitles
       --color <when>    auto|always|never — colourize speakers on the console (default auto)
       --no-color        shortcut for --color never
+      --speakers <map>  name speakers, e.g. "0=Alice,1=Bob" (console + .md + .srt)
       --keep            keep temp WAVs + speaker state on exit
       --model/--bpe/--bin <path>   override asset/binary paths
   -h, --help            show this help and exit
@@ -168,6 +170,7 @@ while [ $# -gt 0 ]; do
     --md)           MD_FILE="$2"; shift 2 ;;   --md=*)    MD_FILE="${1#*=}"; shift ;;
     --srt)          SRT_FILE="$2"; shift 2 ;;  --srt=*)   SRT_FILE="${1#*=}"; shift ;;
     --color)        COLOR="$2"; shift 2 ;;     --color=*) COLOR="${1#*=}"; shift ;;
+    --speakers)     SPK_NAMES="$2"; shift 2 ;; --speakers=*) SPK_NAMES="${1#*=}"; shift ;;
     --no-color)     COLOR="never"; shift ;;
     --sim)          DIAR_SIM="$2"; shift 2 ;;
     --sim=*)        DIAR_SIM="${1#*=}"; shift ;;
@@ -263,13 +266,25 @@ srt_tc() { # seconds(float) → HH:MM:SS,mmm
   awk -v s="$1" 'BEGIN{h=int(s/3600);m=int((s%3600)/60);se=int(s)%60;ms=int((s-int(s))*1000+0.5);printf "%02d:%02d:%02d,%03d",h,m,se,ms}'
 }
 
+# map a speaker id to its display label (real name from --speakers, else "Speaker N")
+spk_name() { # $1=id
+  local id="$1" pair
+  if [ -n "$SPK_NAMES" ]; then
+    local IFS=,
+    for pair in $SPK_NAMES; do
+      case "$pair" in "$id="*) printf '%s' "${pair#*=}"; return ;; esac
+    done
+  fi
+  printf 'Speaker %s' "$id"
+}
+
 render_line() { # $1=start  $2=end  $3=spk  $4..=text
   local start="$1" end="$2" spk="$3"; shift 3; local text="$*"
   [ -n "$text" ] || return 0
   local si="${start%.*}" mm ss tc who
   mm=$((si / 60)); ss=$((si % 60)); tc=$(printf '%02d:%02d' "$mm" "$ss")
   if [ "$DIAR" = "1" ]; then
-    if [ "$spk" -ge 0 ] 2>/dev/null; then who="Speaker $spk: "; else who="Speaker ?: "; fi
+    if [ "$spk" -ge 0 ] 2>/dev/null; then who="$(spk_name "$spk"): "; else who="Speaker ?: "; fi
   else who=""; fi
   # console
   if [ "$USE_COLOR" = "1" ] && [ "$DIAR" = "1" ]; then
