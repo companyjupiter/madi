@@ -132,6 +132,60 @@ regression PASS. Decode 495→~473 tok/s (−4%, per-head plane writes — accep
 for the accuracy). Residual vs wcpp's ±10 ms: pause/punctuation territory
 splits; their batched forced-alignment pass remains slightly better.
 
+### CORRECTION (2026-06-11) — the "wcpp DTW" referee was never DTW
+
+`whisper-cli --dtw large.v3.turbo -ml 1` console spans are NOT DTW: flash-attn
+(default on) silently disables DTW (`dtw_token_timestamps is not supported with
+flash_attn`), and even with `--no-flash-attn` the console/`t0` numbers come
+from the ENERGY-heuristic pass (`whisper_exp_compute_token_level_timestamps`);
+`t_dtw` only surfaces in `-ojf` JSON. Re-run with real DTW shows **our DTW is
+already at parity**: wcpp `t_dtw` end-times match our onsets token-shifted,
+0–20 ms on 19/22 jfk words. wcpp's famous ±10 ms onsets are the energy snap,
+not the alignment. And the heuristic itself is provably wrong where DTW isn't:
+it puts jfk "And" at 0.10 s — inside silence (voice starts 0.33 s).
+
+### WIN #2b — DTW + acoustic energy snap (2026-06-11)
+
+New referee: `bench/acoustic_ref.py` derives an engine-independent voiced-
+region table from the waveform (±2 ms envelope, 0.5×mean threshold) — six jfk
+word onsets are acoustically decidable. `bench/ts_compare.py` automates the
+word-by-word diff. The win: snap word ONSETS to voiced-region edges:
+
+- onset in clear silence (<0.25×chunk-mean env) → snap RIGHT to the voice
+  onset, capped at 400 ms (longer "pauses" are usually sustained soft speech);
+- onset mid-voice whose voiced region starts after the previous word's onset
+  → DTW was late, snap LEFT to the region start;
+- ambiguous (0.25–0.5×mean, soft tails like jfk "so,") or region shared with
+  the previous word (continuous speech) → keep DTW.
+
+Threshold is CHUNK-global: a word-local window gets inflated by loud neighbors
+(reverse-verified: local window read the "so," tail as silence → cascaded 3
+words wrong). The attention-rise pause snap (WIN #2 step 3) stays: it composes
+with the energy snap (reverse-verified: without it, raw DTW drops "ask"#2 to
+7.78 s and the 400 ms cap blocks the energy fix). The eot-emitting attention
+row (query = last text token) joins the DTW matrix per OpenAI/wcpp so the
+forced endpoint lands on eot, not the last word (no jfk change; matters for
+trailing-silence chunks). Per-slot 1 ms energy envelopes are computed at
+gather time (`samples` is reused across the encoder batch).
+
+| acoustically decidable onset | truth | before | after | wcpp console |
+|---|---|---|---|---|
+| And | 0.33 | 0.00 (−330) | **0.33 (0)** | 0.10 (−230) |
+| my | 0.69 | 1.08 (+390) | **0.69 (0)** | 0.68 (−10) |
+| Americans | 1.37 | 1.54 (+170) | **1.37 (0)** | 1.22 (−150) |
+| ask #1 | 3.28 | 3.34 (+60) | **3.29 (+10)** | 3.29 (+10) |
+| not | 4.03 | 3.80 (−230) | **4.03 (0)** | 4.01 (−20) |
+| ask #2 | 8.18 | 7.98 (−200) | **8.20 (+20)** | 8.19 (+10) |
+
+All six within ±20 ms — wcpp-level (and beating wcpp's console on 3/6).
+Korean cross-check (devops_ko chunk 1): every pause-adjacent onset lands
+exactly on its voiced-region start — 안녕하세요 0.03, 데바츠의 4.21, 데브옵스
+5.24, Q&A 5.83 (0 ms each). Mid-voice boundaries keep DTW (energy cannot
+split a continuous voiced run; that is model territory). jfk transcript/WER unchanged, test_decoder OK, KO+EN
+fixture PASS, devops_ko 775 words 0 non-monotonic, decode ~495–514 tok/s
+(envelope cost invisible). Diagnostic toggle: `TS_NOATTSNAP=1` disables the
+attention snap.
+
 ## 4. Speed (성능) — measured earlier this session
 
 decode 233→**495 tok/s** (+112%, ahead of whisper.cpp ~1.3×); encoder
