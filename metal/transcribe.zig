@@ -575,6 +575,41 @@ pub fn main() !void {
     const diar_sim = envF("DIAR_SIM", 0.40);
     const diar_max: u32 = @intCast(envU("DIAR_MAXK", 8));
     const stream_diar = stream and !std.mem.eql(u8, std.posix.getenv("DIAR") orelse "1", "0");
+    // ── voiceprint enrollment (stream only): VOICEPRINTS=<dir> of <name>.vec
+    // files (256×f32, unit-normalized on load). When a session speaker's centroid
+    // stabilizes and matches an enrolled print (cosine ≥ VP_SIM), emit
+    // "SPKNAME <id> <name>" once — the live runner renames the speaker. At
+    // session end the final centroids are dumped to <dir>/.last/spk<id>.vec so
+    // the runner can enroll user-named speakers for the NEXT session.
+    const vp_dir: ?[]const u8 = if (stream) std.posix.getenv("VOICEPRINTS") else null;
+    const vp_sim = envF("VP_SIM", 0.40);
+    var vp_names = std.ArrayList([]u8).init(alloc);
+    var vp_vecs = std.ArrayList([]f32).init(alloc);
+    var vp_claimed = std.ArrayList(bool).init(alloc);
+    var spk_named = std.ArrayList(bool).init(alloc); // session speaker already announced
+    if (vp_dir) |vd| {
+        if (std.fs.cwd().openDir(vd, .{ .iterate = true })) |dh| {
+            var d = dh;
+            defer d.close();
+            var it = d.iterate();
+            while (it.next() catch null) |e| {
+                if (e.kind != .file or !std.mem.endsWith(u8, e.name, ".vec")) continue;
+                const data = d.readFileAlloc(alloc, e.name, 4096) catch continue;
+                defer alloc.free(data);
+                if (data.len != diar.EMB * 4) continue;
+                const vec = try alloc.alloc(f32, diar.EMB);
+                @memcpy(std.mem.sliceAsBytes(vec), data[0 .. diar.EMB * 4]);
+                var ss: f32 = 0;
+                for (vec) |x| ss += x * x;
+                const inv = 1.0 / (@sqrt(ss) + 1e-9);
+                for (vec) |*x| x.* *= inv;
+                try vp_vecs.append(vec);
+                try vp_names.append(try alloc.dupe(u8, e.name[0 .. e.name.len - 4]));
+                try vp_claimed.append(false);
+            }
+            try out.print("[stream] {d} voiceprint(s) loaded from {s}\n", .{ vp_vecs.items.len, vd });
+        } else |_| {}
+    }
     // hallucination guard: Whisper invents words ("Oh my", "Okay okay") in near-
     // silent / ambient stretches. Drop a segment's text when the loudest 1 s
     // window is below HALLU_RMS — a *strong* utterance (shouting "아아아") has
@@ -651,6 +686,29 @@ pub fn main() !void {
                         const gt = t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC;
                         const spk = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, diar_max);
                         try out.print("SPK {d:.2} {d}\n", .{ gt, spk });
+                        // voiceprint match: once a speaker's centroid has ≥2
+                        // windows, compare to unclaimed prints; announce once.
+                        while (spk_named.items.len < cents.items.len) try spk_named.append(false);
+                        if (vp_vecs.items.len > 0 and !spk_named.items[spk] and cents.items[spk].count >= 2) {
+                            var cnorm: [diar.EMB]f32 = undefined;
+                            var css: f32 = 0;
+                            for (cents.items[spk].sum) |x| css += x * x;
+                            const cinv = 1.0 / (@sqrt(css) + 1e-9);
+                            for (0..diar.EMB) |ci| cnorm[ci] = cents.items[spk].sum[ci] * cinv;
+                            var best: f32 = -1;
+                            var bidx: usize = 0;
+                            for (vp_vecs.items, 0..) |v, vi| {
+                                if (vp_claimed.items[vi]) continue;
+                                var dt: f32 = 0;
+                                for (0..diar.EMB) |ci| dt += v[ci] * cnorm[ci];
+                                if (dt > best) { best = dt; bidx = vi; }
+                            }
+                            if (best >= vp_sim) {
+                                vp_claimed.items[bidx] = true;
+                                spk_named.items[spk] = true;
+                                try out.print("SPKNAME {d} {s}\n", .{ spk, vp_names.items[bidx] });
+                            }
+                        }
                     }
                 } else {
                     for (0..nwin) |wsg| {
@@ -848,6 +906,28 @@ pub fn main() !void {
         try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
         try attributeTranscript(out);
         break :job; // single-file mode runs exactly once
+    }
+
+    // stream session ended (stdin EOF): dump final speaker centroids so the
+    // live runner can enroll user-named speakers as voiceprints for next time.
+    if (vp_dir) |vd| {
+        if (cents.items.len > 0) {
+            var db: [512]u8 = undefined;
+            const lastdir = std.fmt.bufPrint(&db, "{s}/.last", .{vd}) catch vd;
+            std.fs.cwd().makePath(lastdir) catch {};
+            for (cents.items, 0..) |*c, i| {
+                var cnorm: [diar.EMB]f32 = undefined;
+                var css: f32 = 0;
+                for (c.sum) |x| css += x * x;
+                const cinv = 1.0 / (@sqrt(css) + 1e-9);
+                for (0..diar.EMB) |ci| cnorm[ci] = c.sum[ci] * cinv;
+                var pb: [512]u8 = undefined;
+                const path = std.fmt.bufPrint(&pb, "{s}/.last/spk{d}.vec", .{ vd, i }) catch continue;
+                const f = std.fs.cwd().createFile(path, .{}) catch continue;
+                f.writeAll(std.mem.sliceAsBytes(cnorm[0..])) catch {};
+                f.close();
+            }
+        }
     }
 }
 

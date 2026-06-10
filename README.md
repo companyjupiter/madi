@@ -125,6 +125,7 @@ What it does beyond naive chunking:
 | `--md <file>` / `--srt <file>` | — | also write a Markdown transcript / SRT subtitles |
 | `--color <when>` / `--no-color` | auto | colourize speakers (auto = TTY only) |
 | `--speakers <map>` | — | name speakers, e.g. `"0=Alice,1=Bob"` (console + .md + .srt) |
+| `--voiceprints <dir>` | — | voice enrollment: speakers you name are enrolled at session end; in later sessions enrolled voices are **auto-named by voice alone** (`VP_SIM` tunes the match, default 0.40) |
 | `--no-resident` | (resident on) | one process per segment (debug) |
 | `--keep` | off | keep temp WAVs + state on exit |
 | `--list-devices` / `-h, --help` / `--version` | | list devices / help / version |
