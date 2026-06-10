@@ -307,6 +307,25 @@ spk_name() { # $1=id
   printf 'Speaker %s' "$id"
 }
 
+# write one record to the .md/.srt files (shared by live render + final relabel)
+render_files() { # $1=start  $2=end  $3=spk  $4..=text
+  local start="$1" end="$2" spk="$3"; shift 3; local text="$*"
+  local si="${start%.*}" mm ss tc who
+  mm=$((si / 60)); ss=$((si % 60)); tc=$(printf '%02d:%02d' "$mm" "$ss")
+  if [ "$DIAR" = "1" ]; then
+    if [ "$spk" -ge 0 ] 2>/dev/null; then who="$(spk_name "$spk"): "; else who="Speaker ?: "; fi
+  else who=""; fi
+  if [ -n "$MD_FILE" ]; then
+    if [ "$DIAR" = "1" ]; then printf -- '- **[%s] %s** %s\n' "$tc" "${who%: }" "$text" >> "$MD_FILE"
+    else                       printf -- '- **[%s]** %s\n' "$tc" "$text" >> "$MD_FILE"; fi
+  fi
+  if [ -n "$SRT_FILE" ]; then
+    local e; e=$(awk -v s="$start" -v e="$end" 'BEGIN{if(e<=s+0.2)e=s+1.2;print e}')
+    SRT_N=$((SRT_N + 1))
+    printf '%s\n%s --> %s\n%s%s\n\n' "$SRT_N" "$(srt_tc "$start")" "$(srt_tc "$e")" "$who" "$text" >> "$SRT_FILE"
+  fi
+}
+
 render_line() { # $1=start  $2=end  $3=spk  $4..=text
   local start="$1" end="$2" spk="$3"; shift 3; local text="$*"
   [ -n "$text" ] || return 0
@@ -323,17 +342,45 @@ render_line() { # $1=start  $2=end  $3=spk  $4..=text
   else
     printf '  [%s] %s%s\n' "$tc" "$who" "$text"
   fi
-  # markdown
-  if [ -n "$MD_FILE" ]; then
-    if [ "$DIAR" = "1" ]; then printf -- '- **[%s] %s** %s\n' "$tc" "${who%: }" "$text" >> "$MD_FILE"
-    else                       printf -- '- **[%s]** %s\n' "$tc" "$text" >> "$MD_FILE"; fi
-  fi
-  # srt
-  if [ -n "$SRT_FILE" ]; then
-    local e; e=$(awk -v s="$start" -v e="$end" 'BEGIN{if(e<=s+0.2)e=s+1.2;print e}')
-    SRT_N=$((SRT_N + 1))
-    printf '%s\n%s --> %s\n%s%s\n\n' "$SRT_N" "$(srt_tc "$start")" "$(srt_tc "$e")" "$who" "$text" >> "$SRT_FILE"
-  fi
+  printf '%s %s %s %s\n' "$start" "$end" "$spk" "$text" >> "$WORK/lines.log"
+  render_files "$start" "$end" "$spk" "$text"
+}
+
+# session-end relabel: ask the resident binary to re-cluster the WHOLE session
+# and re-assign every diar window (SPKFIX lines), then rewrite .md/.srt with the
+# corrected speakers — the saved transcript gets file-mode quality while the
+# console stays streaming.
+final_relabel() {
+  [ "${RESIDENT:-0}" = "1" ] && [ -n "${TX_PID:-}" ] || return 0
+  [ "$DIAR" = "1" ] || return 0
+  { [ -n "$MD_FILE" ] || [ -n "$SRT_FILE" ]; } || return 0
+  [ -s "$WORK/lines.log" ] || return 0
+  printf 'FLUSH\n' >&7 2>/dev/null || return 0
+  : > "$WORK/spkfix.log"
+  local line
+  while IFS= read -r line <&8; do
+    case "$line" in
+      "<<FLUSH_END>>") break ;;
+      "SPKFIX "*) printf '%s\n' "${line#SPKFIX }" >> "$WORK/spkfix.log" ;;
+    esac
+  done
+  [ -s "$WORK/spkfix.log" ] || return 0
+  # correct each line's speaker: the SPKFIX window covering its start time
+  awk -v fixfile="$WORK/spkfix.log" '
+    BEGIN { nf = 0; while ((getline l < fixfile) > 0) { split(l, a, " "); ft[nf] = a[1]; fid[nf] = a[2]; nf++ } }
+    { st = $1 + 0; best = -1; bt = -1e9
+      for (i = 0; i < nf; i++) if (ft[i] <= st + 0.76 && ft[i] > bt) { bt = ft[i]; best = fid[i] }
+      if (best >= 0) $3 = best
+      print }
+  ' "$WORK/lines.log" > "$WORK/lines_fixed.log"
+  [ -n "$MD_FILE" ] && printf '# Transcript\n\n' > "$MD_FILE"
+  [ -n "$SRT_FILE" ] && : > "$SRT_FILE"
+  SRT_N=0
+  local rec
+  set -f
+  while IFS= read -r rec; do render_files $rec; done < "$WORK/lines_fixed.log"
+  set +f
+  echo "[live] saved transcript relabeled with final speaker clustering"
 }
 
 # spin up the resident model now (loads while ffmpeg captures the first segment)
@@ -478,7 +525,9 @@ while true; do
     fi
     idx=$((idx + 1))
     if [ "$ff_alive" -eq 0 ] && [ ! -f "$next" ]; then
-      echo ""; echo "[live] capture stopped — transcript complete."; break
+      echo ""; echo "[live] capture stopped — transcript complete."
+      final_relabel
+      break
     fi
   else
     if [ "$ff_alive" -eq 0 ]; then echo "[live] ffmpeg exited. log:"; cat "$FFLOG" 2>/dev/null; break; fi
