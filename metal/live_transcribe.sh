@@ -432,18 +432,22 @@ words_of() { # $1=wav  $2=global_start_offset
       /^=== WORD TIMESTAMPS/ { m=1; next }
       /^=== /                { m=0 }
       m && /^[[:space:]]*\[/ {
-        t=$0; sub(/^[[:space:]]*\[/,"",t); sub(/s\].*/,"",t);
+        t=$0; sub(/^[[:space:]]*\[/,"",t); sub(/s[-\]].*/,"",t);
+        e=$0; sub(/^[[:space:]]*\[[^-\]]*/,"",e);
+        if (e ~ /^-/) { sub(/^-/,"",e); sub(/s\].*/,"",e) } else e=t
         w=$0; sub(/^[[:space:]]*\[[^]]*\][[:space:]]*/,"",w);
-        if (w!="") printf "W %.2f %s\n", t, w
+        if (w!="") printf "W %.2f %.2f %s\n", t, e, w
       }'
   else
     env ${LANGTOK:+WHISPER_LANG_ID=$LANGTOK} "$BIN" "$MODEL" "$1" "$BPE" 2>/dev/null | awk -v off="$2" '
       /^=== WORD TIMESTAMPS/ { m=1; next }
       /^=== /                { m=0 }
       m && /^[[:space:]]*\[/ {
-        t=$0; sub(/^[[:space:]]*\[/,"",t); sub(/s\].*/,"",t);
+        t=$0; sub(/^[[:space:]]*\[/,"",t); sub(/s[-\]].*/,"",t);
+        e=$0; sub(/^[[:space:]]*\[[^-\]]*/,"",e);
+        if (e ~ /^-/) { sub(/^-/,"",e); sub(/s\].*/,"",e) } else e=t
         w=$0; sub(/^[[:space:]]*\[[^]]*\][[:space:]]*/,"",w);
-        if (w!="") printf "W %.2f %s\n", off + t, w
+        if (w!="") printf "W %.2f %.2f %s\n", off + t, off + e, w
       }'
   fi
 }

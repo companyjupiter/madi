@@ -17,7 +17,7 @@ def parse_ours(path):
             in_block = True
             continue
         if in_block:
-            m = re.match(r'\s*\[(\d+\.\d+)s\]\s+(.+)', line)
+            m = re.match(r'\s*\[(\d+\.\d+)s(?:-\d+\.\d+s)?\]\s+(.+)', line)
             if not m:
                 if line.strip() == '' or line.startswith('==='):
                     break
