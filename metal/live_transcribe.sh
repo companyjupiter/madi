@@ -32,6 +32,7 @@ MD_FILE="${MD_FILE:-}"           # append a Markdown transcript here
 SRT_FILE="${SRT_FILE:-}"         # append SRT subtitles here
 COLOR="${COLOR:-auto}"           # auto|always|never — colourize speakers on the console
 SPK_NAMES="${SPK_NAMES:-}"       # "0=Alice,1=Bob" — show real names for speaker ids
+VP_DIR="${VP_DIR:-}"             # voiceprint dir: auto-recognize enrolled voices + enroll named ones
 LANGTOK="${WHISPER_LANG_ID:-}"   # numeric token; "" = auto. (NOT the locale $LANG)
 REPLAY="${REPLAY:-}"
 DURATION="${DURATION:-}"
@@ -107,6 +108,10 @@ OPTIONS
       --color <when>    auto|always|never — colourize speakers on the console (default auto)
       --no-color        shortcut for --color never
       --speakers <map>  name speakers, e.g. "0=Alice,1=Bob" (console + .md + .srt)
+      --voiceprints <dir>  voice enrollment: auto-recognize voices enrolled in <dir>
+                        ("Speaker 0" → "Alice" by voice alone); speakers you name
+                        with --speakers are (re-)enrolled at session end. Resident
+                        mode only. Match threshold: env VP_SIM (default 0.40).
       --keep            keep temp WAVs + speaker state on exit
       --model/--bpe/--bin <path>   override asset/binary paths
   -h, --help            show this help and exit
@@ -171,6 +176,7 @@ while [ $# -gt 0 ]; do
     --srt)          SRT_FILE="$2"; shift 2 ;;  --srt=*)   SRT_FILE="${1#*=}"; shift ;;
     --color)        COLOR="$2"; shift 2 ;;     --color=*) COLOR="${1#*=}"; shift ;;
     --speakers)     SPK_NAMES="$2"; shift 2 ;; --speakers=*) SPK_NAMES="${1#*=}"; shift ;;
+    --voiceprints)  VP_DIR="$2"; shift 2 ;;    --voiceprints=*) VP_DIR="${1#*=}"; shift ;;
     --no-color)     COLOR="never"; shift ;;
     --sim)          DIAR_SIM="$2"; shift 2 ;;
     --sim=*)        DIAR_SIM="${1#*=}"; shift ;;
@@ -193,6 +199,10 @@ done
 if [ "$LANGTOK" = "__ERR__" ]; then
   echo "error: --lang expects ko|en|ja|zh|auto or a numeric token id"; exit 1
 fi
+# snapshot the USER-given speaker names (voiceprint SPKNAME lines append to
+# SPK_NAMES during the session; only user-named speakers get enrolled at end)
+USER_SPK_NAMES="$SPK_NAMES"
+[ -n "$VP_DIR" ] && mkdir -p "$VP_DIR"
 
 # ── sanity checks ────────────────────────────────────────────────────────────
 command -v ffmpeg >/dev/null || { echo "error: ffmpeg not found (brew install ffmpeg)"; exit 1; }
@@ -220,8 +230,26 @@ cleanup() {
   [ -n "${FFPID:-}" ] && kill "$FFPID" 2>/dev/null || true
   wait "${FFPID:-}" 2>/dev/null || true
   exec 7>&- 8<&- 2>/dev/null || true            # close FIFO fds (signals EOF → binary exits)
-  [ -n "${TX_PID:-}" ] && kill "$TX_PID" 2>/dev/null || true
-  wait "${TX_PID:-}" 2>/dev/null || true
+  # let the resident binary exit gracefully (it dumps speaker centroids on EOF)
+  if [ -n "${TX_PID:-}" ]; then
+    local _i=0
+    while kill -0 "$TX_PID" 2>/dev/null && [ "$_i" -lt 20 ]; do sleep 0.1; _i=$((_i + 1)); done
+    kill "$TX_PID" 2>/dev/null || true
+    wait "$TX_PID" 2>/dev/null || true
+  fi
+  # voiceprint enrollment: user-named speakers → <vp_dir>/<name>.vec for next session
+  if [ -n "${VP_DIR:-}" ] && [ -n "${USER_SPK_NAMES:-}" ]; then
+    local _pair _id _name
+    local IFS=,
+    for _pair in $USER_SPK_NAMES; do
+      _id="${_pair%%=*}"; _name="${_pair#*=}"
+      if [ -f "$VP_DIR/.last/spk$_id.vec" ]; then
+        cp "$VP_DIR/.last/spk$_id.vec" "$VP_DIR/$_name.vec"
+        echo "[live] enrolled voiceprint: $_name (speaker $_id)"
+      fi
+    done
+    unset IFS
+  fi
   if [ "$KEEP" = "1" ]; then echo ""; echo "[live] artifacts kept: $WORK"; else rm -rf "$WORK"; fi
 }
 trap cleanup EXIT INT TERM
@@ -234,6 +262,7 @@ start_resident() {
   mkfifo "$WORK/tx_in" "$WORK/tx_out" 2>/dev/null || { RESIDENT=0; return 0; }
   env ${LANGTOK:+WHISPER_LANG_ID=$LANGTOK} STREAM=1 \
     DIAR="$DIAR" DIAR_SIM="$DIAR_SIM" DIAR_MAXK="$DIAR_MAXK" \
+    ${VP_DIR:+VOICEPRINTS=$VP_DIR} ${VP_SIM:+VP_SIM=$VP_SIM} \
     "$BIN" "$MODEL" "$BPE" "$BPE" <"$WORK/tx_in" >"$WORK/tx_out" 2>>"$FFLOG" &
   TX_PID=$!
   exec 7>"$WORK/tx_in"     # hold the write end open (else binary sees EOF on stdin)
@@ -338,9 +367,16 @@ fi
 words_of() { # $1=wav  $2=global_start_offset
   if [ "${RESIDENT:-0}" = "1" ] && [ -n "${TX_PID:-}" ]; then
     printf '%s %s\n' "$2" "$1" >&7
-    local line buf=""
+    local line buf="" vp_id vp_name
     while IFS= read -r line <&8; do
       [ "$line" = "<<SEG_END>>" ] && break
+      case "$line" in
+        "SPKNAME "*)   # voiceprint recognized: append id=name (user names win — first match)
+          vp_id="${line#SPKNAME }"; vp_name="${vp_id#* }"; vp_id="${vp_id%% *}"
+          SPK_NAMES="${SPK_NAMES:+$SPK_NAMES,}$vp_id=$vp_name"
+          echo "[live] speaker $vp_id recognized by voice: $vp_name" >&2
+          continue ;;
+      esac
       buf="$buf$line
 "
     done

@@ -168,6 +168,7 @@ cd metal
 | `--srt <파일>` | — | SRT 자막 동시 저장 |
 | `--color <when>` / `--no-color` | auto | 화자별 콘솔 색상(auto=TTY일 때만) |
 | `--speakers <맵>` | — | 화자 실명 지정 `"0=박정근,1=은지"` (콘솔·md·srt 반영) |
+| `--voiceprints <폴더>` | — | **보이스프린트 등록/인식**: 이름 지정한 화자는 세션 종료 시 자동 등록 → 다음 회의부턴 **목소리만으로 자동 실명** (`VP_SIM` 임계값, 기본 0.40) |
 | `--no-resident` | (상주 ON) | 상주 모델 끄고 세그먼트마다 새 프로세스(디버그용) |
 | `--keep` | off | 종료 시 임시 WAV+화자 상태 보존 |
 | `--model/--bpe/--bin <경로>` | assets/… | 자산·바이너리 경로 |
@@ -236,6 +237,7 @@ cd metal
 | `DIAR_SIL_TAU` | 0.10 | 이 silhouette 미만이면 단일 화자로 판정 |
 | `DIAR_VAD` | 0.40 | 에너지 VAD 임계값 (중앙값 RMS 배수) |
 | `WHISPER_LANG_ID` | 자동 | 언어 토큰 강제 (예: 영어 50259, 한국어 50264) |
+| `ENC_BATCH` | 4(파일)/1(라이브) | 30초 청크 N개를 한 번의 배치 forward로 인코딩 — 가중치·dequant 분할상환(긴 파일 인코더 ~8%↑, 출력 byte-identical) |
 
 예) 화자가 많은 회의(>6명)는 상한을 올려서:
 ```bash

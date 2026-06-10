@@ -66,6 +66,7 @@ Examples:
 | `DIAR_SIL_TAU` | 0.10 | below this silhouette → single speaker |
 | `DIAR_VAD` | 0.40 | energy-VAD threshold (× median RMS) |
 | `WHISPER_LANG_ID` | auto | force language token (e.g. 50259 en, 50264 ko) |
+| `ENC_BATCH` | 4 (file) / 1 (live) | encode N 30s chunks in one batched forward — amortizes weight reads + dequant (~8% faster encoder on long files, byte-identical output) |
 
 ## Live meeting transcription (near-real-time)
 
@@ -124,6 +125,7 @@ What it does beyond naive chunking:
 | `--md <file>` / `--srt <file>` | — | also write a Markdown transcript / SRT subtitles |
 | `--color <when>` / `--no-color` | auto | colourize speakers (auto = TTY only) |
 | `--speakers <map>` | — | name speakers, e.g. `"0=Alice,1=Bob"` (console + .md + .srt) |
+| `--voiceprints <dir>` | — | voice enrollment: speakers you name are enrolled at session end; in later sessions enrolled voices are **auto-named by voice alone** (`VP_SIM` tunes the match, default 0.40) |
 | `--no-resident` | (resident on) | one process per segment (debug) |
 | `--keep` | off | keep temp WAVs + state on exit |
 | `--list-devices` / `-h, --help` / `--version` | | list devices / help / version |

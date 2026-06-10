@@ -399,12 +399,25 @@ pub fn main() !void {
     const c2w = try upConvWF16(sf, "model.encoder.conv2.weight", D, D, 3);
     const c2b = try upVec(sf, "model.encoder.conv2.bias");
     const enc_pe = try upVec(sf, "model.encoder.embed_positions.weight"); // [1500][D]
+    // Batched encoder width: run up to enc_batch 30s chunks through ONE forward,
+    // amortizing weight reads + JIT dequant across chunks (MPS is ~5% cheaper
+    // per row at M=3000+ and the 68ms/chunk dequant divides by the batch).
+    // ENC_BATCH env overrides; default 4 in file mode, 1 in STREAM mode (live
+    // segments are single-chunk — keeps the resident RSS unchanged).
+    const enc_batch: u32 = blk: {
+        if (std.posix.getenv("ENC_BATCH")) |s| {
+            const v = std.fmt.parseInt(u32, s, 10) catch 1;
+            break :blk @max(1, @min(8, v));
+        }
+        break :blk if (std.posix.getenv("STREAM") != null) 1 else 4;
+    };
+    const EB: usize = enc_batch;
     const conv1o = (try mtl.allocSlice(f32, D * mel.N_FRAMES)).ptr; // [D][3000] F32
     const col1 = (try mtl.allocSlice(f16, mel.N_FRAMES * (mel.N_MELS * 3))).ptr;
     const t1 = (try mtl.allocSlice(f16, mel.N_FRAMES * D)).ptr;
     const col2 = (try mtl.allocSlice(f16, ENC_SEQ * (D * 3))).ptr;
     const t2 = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
-    const d_ex = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
+    const d_ex = (try mtl.allocSlice(f32, EB * ENC_SEQ * D)).ptr;
     try out.print("[3] front-end weights loaded\n", .{});
 
     // ── load encoder weights (32 layers) ────────────────────────────
@@ -434,15 +447,15 @@ pub fn main() !void {
 
     // ── encoder scratch (F16 activations, reused per chunk) ─────────
     const escr = enc.Scratch{
-        .x_ln = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr,
-        .qkv = (try mtl.allocSlice(f16, 3 * ENC_SEQ * D)).ptr,
-        .ao = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr,
-        .mo = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr,
-        .mh = (try mtl.allocSlice(f16, ENC_SEQ * MLP)).ptr,
-        .wdq = (try mtl.allocSlice(f16, MLP * D)).ptr,
+        .x_ln = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr,
+        .qkv = (try mtl.allocSlice(f16, 3 * EB * ENC_SEQ * D)).ptr,
+        .ao = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr,
+        .mo = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr,
+        .mh = (try mtl.allocSlice(f16, EB * ENC_SEQ * MLP)).ptr,
+        .wdq = (try mtl.allocSlice(f16, MLP * D)).ptr, // weight tile — batch-independent
     };
-    const out_f16 = (try mtl.allocSlice(f16, ENC_SEQ * D)).ptr;
-    const enc_out = (try mtl.allocSlice(f32, ENC_SEQ * D)).ptr;
+    const out_f16 = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr;
+    const enc_out = (try mtl.allocSlice(f32, EB * ENC_SEQ * D)).ptr;
 
     // ── decoder weights (4 layers); cross-KV weights kept for per-chunk recompute ─
     var dlayers: [dec.NL]dec.Layer = undefined;
@@ -562,6 +575,41 @@ pub fn main() !void {
     const diar_sim = envF("DIAR_SIM", 0.40);
     const diar_max: u32 = @intCast(envU("DIAR_MAXK", 8));
     const stream_diar = stream and !std.mem.eql(u8, std.posix.getenv("DIAR") orelse "1", "0");
+    // ── voiceprint enrollment (stream only): VOICEPRINTS=<dir> of <name>.vec
+    // files (256×f32, unit-normalized on load). When a session speaker's centroid
+    // stabilizes and matches an enrolled print (cosine ≥ VP_SIM), emit
+    // "SPKNAME <id> <name>" once — the live runner renames the speaker. At
+    // session end the final centroids are dumped to <dir>/.last/spk<id>.vec so
+    // the runner can enroll user-named speakers for the NEXT session.
+    const vp_dir: ?[]const u8 = if (stream) std.posix.getenv("VOICEPRINTS") else null;
+    const vp_sim = envF("VP_SIM", 0.40);
+    var vp_names = std.ArrayList([]u8).init(alloc);
+    var vp_vecs = std.ArrayList([]f32).init(alloc);
+    var vp_claimed = std.ArrayList(bool).init(alloc);
+    var spk_named = std.ArrayList(bool).init(alloc); // session speaker already announced
+    if (vp_dir) |vd| {
+        if (std.fs.cwd().openDir(vd, .{ .iterate = true })) |dh| {
+            var d = dh;
+            defer d.close();
+            var it = d.iterate();
+            while (it.next() catch null) |e| {
+                if (e.kind != .file or !std.mem.endsWith(u8, e.name, ".vec")) continue;
+                const data = d.readFileAlloc(alloc, e.name, 4096) catch continue;
+                defer alloc.free(data);
+                if (data.len != diar.EMB * 4) continue;
+                const vec = try alloc.alloc(f32, diar.EMB);
+                @memcpy(std.mem.sliceAsBytes(vec), data[0 .. diar.EMB * 4]);
+                var ss: f32 = 0;
+                for (vec) |x| ss += x * x;
+                const inv = 1.0 / (@sqrt(ss) + 1e-9);
+                for (vec) |*x| x.* *= inv;
+                try vp_vecs.append(vec);
+                try vp_names.append(try alloc.dupe(u8, e.name[0 .. e.name.len - 4]));
+                try vp_claimed.append(false);
+            }
+            try out.print("[stream] {d} voiceprint(s) loaded from {s}\n", .{ vp_vecs.items.len, vd });
+        } else |_| {}
+    }
     // hallucination guard: Whisper invents words ("Oh my", "Okay okay") in near-
     // silent / ambient stretches. Drop a segment's text when the loudest 1 s
     // window is below HALLU_RMS — a *strong* utterance (shouting "아아아") has
@@ -594,9 +642,17 @@ pub fn main() !void {
         full.clearRetainingCapacity();
         var timer = try std.time.Timer.start();
         var chunk: usize = 0;
-        while (chunk < n_chunks) : (chunk += 1) {
+        var reached_end = false;
+        while (chunk < n_chunks and !reached_end) {
+            // ── Phase A: gather up to enc_batch speech chunks (mel→conv → d_ex slots)
+            var nb: u32 = 0;
+            var slot_toff: [8]f32 = undefined;
+            var slot_rms: [8]f32 = undefined;
+            var slot_chunk: [8]usize = undefined;
+            var slot_conv: [8]f64 = undefined;
+            gather: while (chunk < n_chunks and nb < enc_batch) {
             const got = mel.loadWavChunk(wav, chunk * mel.CHUNK_SAMPLES, samples);
-            if (chunk > 0 and got == 0) break;
+            if (chunk > 0 and got == 0) { reached_end = true; break :gather; }
             const t_off: f32 = g_off + @as(f32, @floatFromInt(chunk)) * 30.0;
 
             // diarization: 256-d ResNet34 embedding per 1.5 s window. Non-stream
@@ -630,6 +686,29 @@ pub fn main() !void {
                         const gt = t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC;
                         const spk = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, diar_max);
                         try out.print("SPK {d:.2} {d}\n", .{ gt, spk });
+                        // voiceprint match: once a speaker's centroid has ≥2
+                        // windows, compare to unclaimed prints; announce once.
+                        while (spk_named.items.len < cents.items.len) try spk_named.append(false);
+                        if (vp_vecs.items.len > 0 and !spk_named.items[spk] and cents.items[spk].count >= 2) {
+                            var cnorm: [diar.EMB]f32 = undefined;
+                            var css: f32 = 0;
+                            for (cents.items[spk].sum) |x| css += x * x;
+                            const cinv = 1.0 / (@sqrt(css) + 1e-9);
+                            for (0..diar.EMB) |ci| cnorm[ci] = cents.items[spk].sum[ci] * cinv;
+                            var best: f32 = -1;
+                            var bidx: usize = 0;
+                            for (vp_vecs.items, 0..) |v, vi| {
+                                if (vp_claimed.items[vi]) continue;
+                                var dt: f32 = 0;
+                                for (0..diar.EMB) |ci| dt += v[ci] * cnorm[ci];
+                                if (dt > best) { best = dt; bidx = vi; }
+                            }
+                            if (best >= vp_sim) {
+                                vp_claimed.items[bidx] = true;
+                                spk_named.items[spk] = true;
+                                try out.print("SPKNAME {d} {s}\n", .{ spk, vp_names.items[bidx] });
+                            }
+                        }
                     }
                 } else {
                     for (0..nwin) |wsg| {
@@ -647,11 +726,12 @@ pub fn main() !void {
         const seg_rms = maxWinRms(samples, got); // loudest 1 s window, [-1,1] RMS
         if (seg_rms <= vad_thresh) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (silence — skipped)\n", .{ chunk + 1, n_chunks, t_off });
-            if (got < mel.CHUNK_SAMPLES) break;
-            continue;
+            if (got < mel.CHUNK_SAMPLES) { reached_end = true; chunk += 1; break :gather; }
+            chunk += 1;
+            continue :gather;
         }
 
-        // front-end: mel → Conv1D×2 → enc_input
+        // front-end: mel → Conv1D×2 → enc_input (into this chunk's batch slot)
         mel.melSpectrogram(samples, mel_filters, mel_buf);
         var ct = try std.time.Timer.start();
         try mtl.beginCommandBuffer();
@@ -660,21 +740,37 @@ pub fn main() !void {
         try geluTranspose(f_geluT, conv1o, t1, c1b, mel.N_FRAMES, D);
         try imIm2col(f_im2col, col2, conv1o, D, mel.N_FRAMES, 2, 1, ENC_SEQ);
         try mtl.matmulF16Batched(col2, c2w, t2, ENC_SEQ, D, D * 3);
-        try geluPos(f_geluPos, d_ex, t2, c2b, enc_pe, ENC_SEQ * D, D);
+        try geluPos(f_geluPos, d_ex + @as(usize, nb) * ENC_SEQ * D, t2, c2b, enc_pe, ENC_SEQ * D, D);
         try mtl.commitCommandBuffer();
         try mtl.sync();
-        const conv_ms = @as(f64, @floatFromInt(ct.read())) / 1e6;
+        slot_conv[nb] = @as(f64, @floatFromInt(ct.read())) / 1e6;
+        slot_toff[nb] = t_off;
+        slot_rms[nb] = seg_rms;
+        slot_chunk[nb] = chunk;
+        nb += 1;
+        if (got < mel.CHUNK_SAMPLES) { reached_end = true; chunk += 1; break :gather; }
+        chunk += 1;
+        } // gather
+        if (nb == 0) break;
 
-        // encoder + per-chunk cross-KV
+        // ── Phase B: ONE batched encoder forward (weights + dequant amortized ×nb)
         var et = try std.time.Timer.start();
-        try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, 1);
-        const enc_ms = @as(f64, @floatFromInt(et.read())) / 1e6;
+        try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, nb);
+        const enc_ms = @as(f64, @floatFromInt(et.read())) / 1e6 / @as(f64, @floatFromInt(nb));
+
+        // ── Phase C: per-slot cross-KV + decode + timestamps (chronological order)
+        for (0..nb) |slot| {
+        const t_off = slot_toff[slot];
+        const seg_rms2 = slot_rms[slot];
+        const conv_ms = slot_conv[slot];
+        const cchunk = slot_chunk[slot];
+        const eo16 = out_f16 + slot * @as(usize, ENC_SEQ) * D;
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
             try deqW16(f_deq, cross_wdq, ckw[l], D, D);
-            try mtl.matmulF16Batched(out_f16, cross_wdq, ckc[l], ENC_SEQ, D, D);
+            try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], ENC_SEQ, D, D);
             try deqW16(f_deq, cross_wdq, cvw[l], D, D);
-            try mtl.matmulF16Batched(out_f16, cross_wdq, cvc[l], ENC_SEQ, D, D);
+            try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], ENC_SEQ, D, D);
             try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
@@ -774,19 +870,19 @@ pub fn main() !void {
         }
 
         const dec_ms = @as(f64, @floatFromInt(dt2.read())) / 1e6;
-        try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms]\n", .{ chunk + 1, conv_ms, enc_ms, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6 });
+        try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6 });
         const text = try bpeDecode(bpe_path, out_tokens[SEED.len .. SEED.len + n_text]);
         // near-silence hallucination guard: drop this chunk's text when the audio
         // was quiet (loud speech keeps high seg_rms and is never dropped).
-        const dropped = hallu_guard and seg_rms < hallu_rms;
+        const dropped = hallu_guard and seg_rms2 < hallu_rms;
         if (dropped) {
-            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (low-energy — hallucination guard, rms {d:.3})\n", .{ chunk + 1, n_chunks, t_off, seg_rms });
+            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (low-energy — hallucination guard, rms {d:.3})\n", .{ cchunk + 1, n_chunks, t_off, seg_rms2 });
         } else {
-            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ chunk + 1, n_chunks, t_off, text });
+            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ cchunk + 1, n_chunks, t_off, text });
             try full.appendSlice(text);
             if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off);
         }
-        if (got < mel.CHUNK_SAMPLES) break; // reached end of audio
+        } // slot
     }
         const dt = @as(f64, @floatFromInt(timer.read())) / 1e9;
         try out.print("\n=== TRANSCRIPTION ({d:.2}s, {d} chunk(s)) ===\n{s}\n", .{ dt, n_chunks, full.items });
@@ -810,6 +906,28 @@ pub fn main() !void {
         try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
         try attributeTranscript(out);
         break :job; // single-file mode runs exactly once
+    }
+
+    // stream session ended (stdin EOF): dump final speaker centroids so the
+    // live runner can enroll user-named speakers as voiceprints for next time.
+    if (vp_dir) |vd| {
+        if (cents.items.len > 0) {
+            var db: [512]u8 = undefined;
+            const lastdir = std.fmt.bufPrint(&db, "{s}/.last", .{vd}) catch vd;
+            std.fs.cwd().makePath(lastdir) catch {};
+            for (cents.items, 0..) |*c, i| {
+                var cnorm: [diar.EMB]f32 = undefined;
+                var css: f32 = 0;
+                for (c.sum) |x| css += x * x;
+                const cinv = 1.0 / (@sqrt(css) + 1e-9);
+                for (0..diar.EMB) |ci| cnorm[ci] = c.sum[ci] * cinv;
+                var pb: [512]u8 = undefined;
+                const path = std.fmt.bufPrint(&pb, "{s}/.last/spk{d}.vec", .{ vd, i }) catch continue;
+                const f = std.fs.cwd().createFile(path, .{}) catch continue;
+                f.writeAll(std.mem.sliceAsBytes(cnorm[0..])) catch {};
+                f.close();
+            }
+        }
     }
 }
 
