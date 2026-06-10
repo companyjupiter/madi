@@ -1559,15 +1559,39 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
             }
             if (wi > 0 and s0 <= prev_onset) s0 = @min(prev_onset + 1, ne - 1);
             w.s0 = s0;
-            w.s1 = @max(w.s1, s0 + 1);
+            w.s1 = @max(@min(w.s1, ne - 1), s0 + 1);
             prev_onset = s0;
+        }
+        // word ENDS: a word's end is the next word's REFINED onset (continuous
+        // speech) — but when that boundary follows a pause, contract LEFT to
+        // the last voiced moment so .srt lines stop when the voice stops.
+        // Probe 10 ms before the boundary (the boundary itself may BE the
+        // next word's rising edge).
+        for (words.items, 0..) |*w, wi| {
+            if (wi + 1 < words.items.len)
+                w.s1 = @max(@min(words.items[wi + 1].s0, ne - 1), w.s0 + 1);
+            // probe = min envelope in the 40-10 ms window before the boundary
+            // (a single point can land on the next word's rising edge)
+            const plo = if (w.s1 > w.s0 + 40) w.s1 - 40 else w.s0;
+            const phi = if (w.s1 > w.s0 + 10) w.s1 - 10 else w.s1;
+            var probe: f32 = 1e30;
+            for (plo..@max(phi, plo + 1)) |j| probe = @min(probe, env[j]);
+            if (probe < 0.5 * thold) {
+                const bound = w.s1; // next word's refined onset (or eot edge)
+                var k = w.s1 - 1;
+                while (k > w.s0 and env[k] < thold) k -= 1;
+                w.s1 = k + 1;
+                // soft words can sit entirely sub-threshold → keep ≥80 ms
+                if (w.s1 < w.s0 + 80) w.s1 = @min(w.s0 + 80, bound);
+            }
         }
     }
 
     try out.print("\n=== WORD TIMESTAMPS ===\n", .{});
     for (words.items) |w| {
         const ts: f32 = t_off + @as(f32, @floatFromInt(w.s0)) * 0.001;
-        try out.print("  [{d:.2}s] {s}\n", .{ ts, w.txt });
+        const te: f32 = t_off + @as(f32, @floatFromInt(w.s1)) * 0.001;
+        try out.print("  [{d:.2}s-{d:.2}s] {s}\n", .{ ts, te, w.txt });
         try g_words.append(.{ .t = ts, .txt = w.txt });
     }
 }
