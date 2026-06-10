@@ -29,7 +29,14 @@ const ENC_SEQ = dec.ENC_SEQ; // 1500
 const VOCAB = dec.VOCAB; // 51866
 const MAX_TOK = dec.MAX_TOK; // 448
 const EOT: u32 = 50257;
-const SEED = [_]u32{ 50258, 50259, 50360, 50364 }; // sot, en, transcribe, notimestamps
+// sot, lang, transcribe — NO <|notimestamps|>: timestamp-token decoding is a
+// QUALITY device, not a feature toggle. Greedy no-ts decode collapses into
+// repeat loops on hard audio (clova 5/99 chunks "Q. Q. Q."×55; whisper-cli
+// -nt reproduces the identical collapse) — the <|t0|>…<|t1|> structure
+// regularizes the decode. ts tokens are consumed by ts_rules_indirect and
+// stripped from output/word-timestamps.
+const SEED = [_]u32{ 50258, 50259, 50360 };
+const TS0: u32 = 50365; // <|0.00|>; ids ≥ TS0 are timestamp tokens
 const alloc = std.heap.page_allocator;
 
 // ── safetensors ──────────────────────────────────────────────────────
@@ -502,7 +509,8 @@ pub fn main() !void {
     const f_pe_ind = try mtl.getFunction("pos_embed_add_indirect");
     const f_step = try mtl.getFunction("step_advance");
     const f_argmax = try mtl.getFunction("argmax_no_inc");
-    const f_filt = try mtl.getFunction("logit_filter_indirect");
+    const f_filt_plain = try mtl.getFunction("logit_filter_indirect"); // no-ts greedy (default; best code-switch fidelity)
+    const f_filt_ts = try mtl.getFunction("ts_rules_indirect"); // ts-token decode (collapse-rescue mode)
     const f_suppress = try mtl.getFunction("suppress_list");
     const f_logit = try mtl.getFunction("logit_gemv_q8");
     const f_bias16 = try mtl.getFunction("bias_add_f16");
@@ -682,6 +690,9 @@ pub fn main() !void {
     // is overwritten while gathering the encoder batch, so keep one per slot
     const ENV_LEN: usize = mel.CHUNK_SAMPLES / 16 + 1;
     const slot_env = try alloc.alloc(f32, 8 * ENV_LEN);
+    // raw chunk audio per slot — the timestamp-seek re-encode needs it after
+    // `samples` has been overwritten while gathering the rest of the batch
+    const slot_samp = try alloc.alloc(f32, 8 * mel.CHUNK_SAMPLES);
     var full = std.ArrayList(u8).init(alloc);
     const SEG_SAMP: usize = 24000; // 1.5 s @ 16 kHz
     const SEG_SEC: f32 = 1.5;
@@ -953,6 +964,7 @@ pub fn main() !void {
         try mtl.sync();
         slot_conv[nb] = @as(f64, @floatFromInt(ct.read())) / 1e6;
         slot_nenv[nb] = energyEnvelope(samples[0..got], slot_env[@as(usize, nb) * ENV_LEN ..][0..ENV_LEN]);
+        @memcpy(slot_samp[@as(usize, nb) * mel.CHUNK_SAMPLES ..][0..got], samples[0..got]);
         slot_got[nb] = got;
         slot_toff[nb] = t_off;
         slot_rms[nb] = seg_rms;
@@ -1022,76 +1034,183 @@ pub fn main() !void {
         // between tokens. B steps are recorded into one command buffer; we sync
         // only once per batch (then read tokens to detect EOT).
         var dt2 = try std.time.Timer.start();
-        const sample_begin: u32 = SEED.len;
         const DBATCH: u32 = 8;
-        const max_gen: u32 = MAX_TOK - SEED.len - 1;
-        // Seed phase: fill KV[0..SEED.len-1) without prediction.
-        {
-            var sp: u32 = 0;
-            while (sp + 1 < SEED.len) : (sp += 1) {
-                d_pos[0] = sp;
+        // Seek loop — OpenAI window-seek, faithfully WITH the re-encode: a
+        // greedy ts decode may close its last segment and EOT while voiced
+        // audio remains (jfk stops at 7.52 s before the long pause). The
+        // remaining audio is then RE-ENCODED as a fresh window starting at
+        // the seek point and decoded again. Two cheaper shortcuts were
+        // reverse-verified WORSE and removed:
+        //   · banning EOT while voice remains → the model fills with junk
+        //     text when it wants to stop (wife_conv ". . . ~~" loop);
+        //   · re-decoding the SAME encoder window with a forced initial
+        //     timestamp (± <|startofprev|> prompt) → out-of-distribution,
+        //     the model re-transcribes the window start (jfk "and so," dup).
+        // The re-encode (~600 ms) only runs on the rare early-EOT chunks.
+        const senv = slot_env[slot * ENV_LEN ..][0..slot_nenv[slot]];
+        const voice_end_fr: u32 = blk: {
+            if (senv.len < 8) break :blk 0;
+            var gm: f32 = 0;
+            for (senv) |e| gm += e;
+            gm /= @floatFromInt(senv.len);
+            var ve: usize = 0;
+            for (senv, 0..) |e, ii| { if (e > 0.5 * gm) ve = ii; }
+            break :blk @intCast(ve / 20);
+        };
+        // near-silence hallucination guard: drop this chunk's text when the audio
+        // was quiet (loud speech keeps high seg_rms and is never dropped).
+        const dropped = hallu_guard and seg_rms2 < hallu_rms;
+        var chunk_text = std.ArrayList(u8).init(alloc);
+        defer chunk_text.deinit();
+        var n_tok_total: u32 = 0;
+        var enc_ns: u64 = 0; // CPU: command recording + commit
+        var sync_ns: u64 = 0; // GPU: execution wait
+        var host_ns: u64 = 0; // host post-processing (BPE decode + word DTW) — excluded from decode tok/s
+        // Hybrid decode: plain no-ts greedy first (best code-switch fidelity:
+        // ts-mode inherently transliterates EN terms in KO speech — verified
+        // engine-independent, wcpp ts-greedy says "아키텍츄럴" too). Only when
+        // the plain pass COLLAPSES into a periodic repeat loop is the chunk
+        // re-decoded in timestamp-token mode (collapse-immune) + seek.
+        var ts_mode = false;
+        var total_passes: u32 = 0;
+        mode: while (true) {
+        chunk_text.clearRetainingCapacity();
+        n_tok_total = 0;
+        var seek_fr: u32 = 0; // chunk-relative 20 ms frame the CURRENT window starts at
+        var pass: u32 = 0;
+        seek: while (pass < 6) : (pass += 1) {
+            total_passes += 1;
+            var PL: u32 = 0;
+            d_tokens[PL] = SEED[0]; // sot
+            d_tokens[PL + 1] = lang_tok;
+            d_tokens[PL + 2] = SEED[2]; // transcribe
+            PL += 3;
+            if (!ts_mode) { d_tokens[PL] = 50364; PL += 1; } // <|notimestamps|>
+            for (0..PL) |q| out_tokens[q] = d_tokens[q];
+            const sample_begin: u32 = PL;
+            const max_gen: u32 = MAX_TOK - PL - 1;
+            const pass_got: usize = cgot - @min(@as(usize, seek_fr) * 320, cgot); // samples in this window
+            const pass_off: f32 = @as(f32, @floatFromInt(seek_fr)) * 0.02; // window start within the chunk (s)
+            // Seed phase: fill KV[0..P-1) without prediction — recorded as ONE
+            // command buffer (indirect embed/pos/step; positions restart each
+            // pass, KV/ca rows are simply overwritten).
+            if (PL >= 2) {
+                d_pos[0] = 0;
                 try mtl.beginCommandBuffer();
-                try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[sp]);
-                try residual(Kd, d_x, dec_pe + @as(usize, sp) * D, D);
-                for (0..dec.NL) |l| {
-                    const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                    try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                for (0..PL - 1) |_| {
+                    try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
+                    try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
+                    for (0..dec.NL) |l| {
+                        const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
+                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                    }
+                    try kStep(f_step, d_pos);
                 }
                 try mtl.commitCommandBuffer();
                 try mtl.sync();
             }
-        }
-        d_pos[0] = SEED.len - 1; // first prediction step
-        var n_text: u32 = 0;
-        var done = false;
-        var enc_ns: u64 = 0; // CPU: command recording + commit
-        var sync_ns: u64 = 0; // GPU: execution wait
-        while (n_text < max_gen and !done) {
-            const this_b = @min(DBATCH, max_gen - n_text);
-            var rec_t = try std.time.Timer.start();
-            try mtl.beginCommandBuffer();
-            for (0..this_b) |_| {
-                try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
-                try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
-                for (0..dec.NL) |l| {
-                    const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                    try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+            d_pos[0] = PL - 1; // first prediction step
+            var n_text: u32 = 0;
+            var done = false;
+            while (n_text < max_gen and !done) {
+                const this_b = @min(DBATCH, max_gen - n_text);
+                var rec_t = try std.time.Timer.start();
+                try mtl.beginCommandBuffer();
+                for (0..this_b) |_| {
+                    try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
+                    try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
+                    for (0..dec.NL) |l| {
+                        const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
+                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                    }
+                    try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
+                    try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
+                    try kSuppress(f_suppress, d_logits, d_suppress.ptr, n_suppress);
+                    try kFilt(if (ts_mode) f_filt_ts else f_filt_plain, d_logits, d_tokens.ptr, d_pos, sample_begin);
+                    try kStep(f_step, d_pos); // pos += 1
+                    try kArgmax(f_argmax, d_logits, d_tokens.ptr, d_pos, MAX_TOK); // tokens[pos] = argmax
                 }
-                try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
-                try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
-                try kSuppress(f_suppress, d_logits, d_suppress.ptr, n_suppress);
-                try kFilt(f_filt, d_logits, d_tokens.ptr, d_pos, sample_begin);
-                try kStep(f_step, d_pos); // pos += 1
-                try kArgmax(f_argmax, d_logits, d_tokens.ptr, d_pos, MAX_TOK); // tokens[pos] = argmax
+                try mtl.commitCommandBuffer();
+                enc_ns += rec_t.read();
+                var sync_t = try std.time.Timer.start();
+                try mtl.sync();
+                sync_ns += sync_t.read();
+                // detect EOT among the this_b newly written tokens
+                const base = PL + n_text;
+                var bi: u32 = 0;
+                while (bi < this_b) : (bi += 1) {
+                    const tk = d_tokens[base + bi];
+                    out_tokens[base + bi] = tk;
+                    if (tk == EOT) { done = true; break; }
+                }
+                n_text += bi;
             }
+            n_tok_total += n_text;
+            if (!ts_mode and tokenCollapse(out_tokens[PL .. PL + n_text])) {
+                ts_mode = true; // discard this pass, re-decode in ts mode
+                try out.print("[collapse-rescue] chunk {d}: periodic repeat loop — re-decoding with timestamp tokens\n", .{cchunk + 1});
+                continue :mode;
+            }
+            if (!dropped and n_text > 0) {
+                var ht = try std.time.Timer.start();
+                const text = try bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]);
+                try chunk_text.appendSlice(text);
+                const env_off = @min(@as(usize, seek_fr) * 20, senv.len);
+                try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, PL, t_off + pass_off, pass_got, senv[env_off..]);
+                host_ns += ht.read();
+            }
+            if (!ts_mode) break :seek; // plain mode: single pass, no seek
+            // continue from the last closed segment if ≥1 s of voiced audio remains
+            var last_fr: u32 = 0; // window-relative frame of the last <|t|>
+            var any_text = false;
+            for (0..n_text) |i| {
+                const tk = out_tokens[PL + i];
+                if (tk >= TS0) last_fr = tk - TS0 else any_text = true;
+            }
+            if (!any_text or last_fr == 0) break :seek; // no forward progress
+            const new_seek = seek_fr + last_fr;
+            if (new_seek + 50 >= voice_end_fr) break :seek; // <1 s voiced left
+            seek_fr = new_seek;
+            // re-encode the remaining audio as a fresh window starting at seek
+            const soff = @as(usize, seek_fr) * 320;
+            if (soff >= cgot) break :seek;
+            const rem = cgot - soff;
+            const sbase = slot_samp[slot * mel.CHUNK_SAMPLES ..];
+            @memcpy(samples[0..rem], sbase[soff .. soff + rem]);
+            @memset(samples[rem..mel.CHUNK_SAMPLES], 0);
+            mel.melSpectrogram(samples, mel_filters, mel_buf);
+            try mtl.beginCommandBuffer();
+            try imIm2col(f_im2col, col1, mel_buf.ptr, mel.N_MELS, mel.N_FRAMES, 1, 1, mel.N_FRAMES);
+            try mtl.matmulF16Batched(col1, c1w, t1, mel.N_FRAMES, D, mel.N_MELS * 3);
+            try geluTranspose(f_geluT, conv1o, t1, c1b, mel.N_FRAMES, D);
+            try imIm2col(f_im2col, col2, conv1o, D, mel.N_FRAMES, 2, 1, ENC_SEQ);
+            try mtl.matmulF16Batched(col2, c2w, t2, ENC_SEQ, D, D * 3);
+            try geluPos(f_geluPos, d_ex + slot * @as(usize, ENC_SEQ) * D, t2, c2b, enc_pe, ENC_SEQ * D, D);
             try mtl.commitCommandBuffer();
-            enc_ns += rec_t.read();
-            var sync_t = try std.time.Timer.start();
             try mtl.sync();
-            sync_ns += sync_t.read();
-            // detect EOT among the this_b newly written tokens
-            const base = SEED.len + n_text;
-            var bi: u32 = 0;
-            while (bi < this_b) : (bi += 1) {
-                const tk = d_tokens[base + bi];
-                out_tokens[base + bi] = tk;
-                if (tk == EOT) { done = true; break; }
+            try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex + slot * @as(usize, ENC_SEQ) * D, eo16, enc_out + slot * @as(usize, ENC_SEQ) * D, escr, 1);
+            for (0..dec.NL) |l| {
+                try mtl.beginCommandBuffer();
+                try deqW16(f_deq, cross_wdq, ckw[l], D, D);
+                try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], ENC_SEQ, D, D);
+                try deqW16(f_deq, cross_wdq, cvw[l], D, D);
+                try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], ENC_SEQ, D, D);
+                try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
+                try mtl.commitCommandBuffer();
+                try mtl.sync();
             }
-            n_text += bi;
+            @memset(d_ca, 0);
+        }
+        break :mode;
         }
 
-        const dec_ms = @as(f64, @floatFromInt(dt2.read())) / 1e6;
-        try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_text, dec_ms, @as(f64, @floatFromInt(n_text)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6 });
-        const text = try bpeDecode(bpe_path, out_tokens[SEED.len .. SEED.len + n_text]);
-        // near-silence hallucination guard: drop this chunk's text when the audio
-        // was quiet (loud speech keeps high seg_rms and is never dropped).
-        const dropped = hallu_guard and seg_rms2 < hallu_rms;
+        const dec_ms = @as(f64, @floatFromInt(dt2.read() -| host_ns)) / 1e6; // word-DTW/BPE moved inside the loop; keep tok/s comparable
+        try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms | passes {d}]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_tok_total, dec_ms, @as(f64, @floatFromInt(n_tok_total)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6, total_passes });
         if (dropped) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (low-energy — hallucination guard, rms {d:.3})\n", .{ cchunk + 1, n_chunks, t_off, seg_rms2 });
         } else {
-            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ cchunk + 1, n_chunks, t_off, text });
-            try full.appendSlice(text);
-            if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off, cgot, slot_env[slot * ENV_LEN ..][0..slot_nenv[slot]]);
+            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ cchunk + 1, n_chunks, t_off, chunk_text.items });
+            try full.appendSlice(chunk_text.items);
         }
         } // slot
     }
@@ -1334,6 +1453,25 @@ fn attributeTranscript(out: anytype) !void {
 // argmax, which picked each token's peak independently (non-monotonic → time
 // inversions). DTW finds one monotonic token→frame path maximizing total
 // attention, so every token's onset is strictly ordered. Frame = 20 ms.
+// Repeat-loop collapse detector: greedy no-ts decoding can lock into a
+// periodic token loop on hard audio ("Q. Q. Q."×55 — clova 5/99 chunks).
+// Periodicity test: a run of ≥max(16, 4p) positions with tok[i]==tok[i-p]
+// at any period p ≤ 8 is far beyond natural repetition (backchannels ≈ 3-4).
+fn tokenCollapse(toks: []const u32) bool {
+    var p: usize = 1;
+    while (p <= 8) : (p += 1) {
+        if (toks.len < p + 16) break;
+        var run: usize = 0;
+        for (p..toks.len) |i| {
+            if (toks[i] == toks[i - p]) {
+                run += 1;
+                if (run >= @max(16, 4 * p)) return true;
+            } else run = 0;
+        }
+    }
+    return false;
+}
+
 // 1 ms-hop energy envelope: mean |x| over a ±2 ms window (whisper.cpp
 // get_signal_energy parity, half-window 32 samples). Returns #entries.
 fn energyEnvelope(s: []const f32, env: []f32) usize {
@@ -1352,14 +1490,28 @@ fn energyEnvelope(s: []const f32, env: []f32) usize {
     return n;
 }
 
-fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, t_off: f32, got_samples: usize, env: []const f32) !void {
+fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, seed_len: u32, t_off: f32, got_samples: usize, env: []const f32) !void {
+    const SL: usize = seed_len; // this pass's seed length (prompt + sot/lang/task)
     const toks = try loadBpe(bpe_path);
     const E: usize = ENC_SEQ;
-    const N: usize = n_text;
-    // OpenAI/wcpp keep one extra row: the attention that EMITS eot (query =
-    // last text token, position SEED.len-1+N — it exists, that step produced
-    // the eot logits). It takes the forced DTW endpoint so the last word ends
-    // where eot's attention begins instead of stretching to the final frame.
+    // ts-token decoding interleaves <|t|> tokens with text: the DTW alignment
+    // runs over TEXT tokens only (wcpp strips them the same way). tpos[k] =
+    // generated-stream index of the k-th text token; its emitting attention
+    // row is position SEED.len-1+tpos[k].
+    var tpos = std.ArrayList(usize).init(alloc);
+    defer tpos.deinit();
+    for (0..n_text) |i| {
+        if (out_tokens[SL + i] < 50257) try tpos.append(i);
+    }
+    const N: usize = tpos.items.len;
+    if (N == 0) {
+        try out.print("\n=== WORD TIMESTAMPS ===\n", .{});
+        return;
+    }
+    // OpenAI/wcpp keep one extra row: the attention of the step AFTER the
+    // last text token (it emits the closing <|t|>/eot — that step ran, the
+    // row exists). It takes the forced DTW endpoint so the last word ends
+    // where the boundary's attention begins, not at the final frame.
     const NR: usize = N + 1;
     // Clip to the chunk's ACTUAL audio frames (320 samples = 20 ms per encoder
     // frame); letting the DTW path wander into the zero-padding region skewed
@@ -1370,7 +1522,7 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     // convention holds each word's acoustic location?
     if (std.posix.getenv("TS_DIAG") != null) {
         try out.print("[ts-diag] pos: argmax_t(s) (avg over heads, raw)\n", .{});
-        for (0..N + SEED.len) |p| {
+        for (0..n_text + SL) |p| {
             var bj: usize = 0;
             var bv: f32 = -1e30;
             for (0..F) |j| {
@@ -1397,18 +1549,18 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     const inv_h: f32 = 1.0 / @as(f32, @floatFromInt(NAL));
     for (0..NAL) |h| {
         for (0..NR) |i| {
-            // OFF-BY-ONE: the attention that EMITS text token i lives at decode
-            // position SEED.len-1+i (query = previous token; logits → token i).
-            // Reading SEED.len+i used the NEXT token's emitting attention —
-            // the measured ~+350 ms late bias.
-            const row = ca[(h * MAX_TOK + SEED.len - 1 + i) * E ..][0..F];
+            // OFF-BY-ONE: the attention that EMITS a token lives at the decode
+            // position BEFORE it (query = previous token; logits → the token).
+            // Row N (the extra anchor) = the step after the last text token.
+            const gi: usize = if (i < N) tpos.items[i] else tpos.items[N - 1] + 1;
+            const row = ca[(h * MAX_TOK + SL - 1 + gi) * E ..][0..F];
             @memcpy(work[i * F ..][0..F], row);
             for (0..F) |j| rawavg[i * F + j] += row[j] * inv_h;
         }
         // per-frame z-norm across tokens (ggml_norm / torch.std_mean dim=-2).
         // wcpp/OpenAI take the stats over ALL rows of the alignment pass —
-        // seed (sot/lang/task/not) rows included — then slice; match that.
-        const NP: usize = SEED.len + N; // positions 0..NP-1 exist in the ca planes
+        // seed (sot/lang/task) rows included — then slice; match that.
+        const NP: usize = SL + n_text; // positions 0..NP-1 exist in the ca planes
         if (NR >= 2) {
             for (0..F) |j| {
                 var mu: f32 = 0;
@@ -1503,9 +1655,9 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     var words = std.ArrayList(WSpan).init(alloc);
     defer words.deinit();
     var word = std.ArrayList(u8).init(alloc);
-    var w_first: usize = 0; // first token index of the open word
+    var w_first: usize = 0; // first TEXT-token index of the open word
     for (0..N) |i| {
-        const ti = SEED.len + i;
+        const ti = SL + tpos.items[i];
         const tok_bytes = if (out_tokens[ti] < toks.len) toks[out_tokens[ti]] else "";
         const starts_word = tok_bytes.len > 0 and tok_bytes[0] == ' ';
         if (starts_word and word.items.len > 0) {
@@ -1802,6 +1954,7 @@ fn bpeDecode(path: []const u8, ids: []const u32) ![]u8 {
     }
     var buf = std.ArrayList(u8).init(alloc);
     for (ids) |id| {
+        if (id >= 50257) continue; // strip EOT/specials/timestamp tokens
         if (id < vs) try buf.appendSlice(toks[id]);
     }
     return buf.items;

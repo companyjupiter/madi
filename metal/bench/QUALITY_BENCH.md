@@ -111,6 +111,43 @@ bound (a claimed print is a voice-matched, present speaker).
 > (code-switch vocabulary) or the SHARE-style n-gram repetition detector for
 > noisy audio (no repro case in our assets; keep as a watch item, not a win).
 
+### WIN #3 — hybrid collapse-rescue decode (2026-06-11, quark-led)
+
+The repeat-loop watch item got its repro: clova (47 min KO meeting) has
+**5/99 chunks fully destroyed** by greedy loops ("Q. Q. Q."×55) — ~2.5 min of
+meeting content. The quark cross-reference against the new
+`whisper_cpp/quality` tree (host-logic taxonomy) plus engine isolation found
+the real mechanism: **NOT fallback/beam** (wcpp greedy `-nf -bs 1` transcribes
+those chunks perfectly) but **timestamp-token decoding** — `whisper-cli -nt`
+reproduces our identical collapse. The `<|t0|>…<|t1|>` segment structure is
+the regularizer.
+
+ts-mode is not a free lunch (each step measured, two shortcuts refuted):
+- ts-mode **transliterates code-switch terms** ("architecture"→"아키텍츄럴",
+  engine-independent — wcpp ts-greedy does it too), breaking the KO+EN fixture;
+- ts-mode may close the window early (EOT at a pause) → OpenAI answers with
+  seek + RE-ENCODE. Banning EOT instead → junk filler (". . . ~~", measured);
+  re-decoding the same window with forced initial ts (± <|startofprev|>
+  prompt) → out-of-distribution, re-transcribes the window start (measured);
+- pure ts-mode even collapses on a DIFFERENT chunk set (11/99 tails like
+  "네."×22 — disjoint from the no-ts set {4,63,65,80,86}).
+
+**Shipped hybrid**: plain no-ts greedy by default (code-switch fidelity,
+bit-identical text on clean assets) + token-periodicity collapse detector
+(`tokenCollapse`: run ≥ max(16, 4p) of tok[i]==tok[i−p], p ≤ 8) + on
+detection, re-decode the chunk with ts rules (`ts_rules_indirect`: OpenAI
+R1-R4 incl. the logsumexp(ts) > max(text) mass rule on raw logits) and
+OpenAI-faithful seek with re-encode of the remaining window.
+
+| metric | before | after |
+|---|---|---|
+| clova repeat-corrupted chunks | 5/99 (×44-55 loops) | **0/99** (5 rescues fire, exactly the bad set) |
+| rescued text vs wcpp reference | — | matches (NCM/LFP/모델링 content recovered) |
+| KO+EN fixture | PASS | **PASS** (plain path preserved) |
+| devops_ko / jfk text + word ts | — | bit-identical; acoustic referee unchanged (4/5 ms) |
+| decode tok/s (devops_ko) | 497-521 | 495-511 (wall time +0.2% = noise) |
+| false rescues on clean assets | — | 0 (jfk, devops_ko, wife, ES2004a) |
+
 ## 3. Word timestamps (타임스탬프)
 
 Cross-engine on jfk (both DTW, same alignment heads): 22/22 words matched, both

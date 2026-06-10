@@ -98,3 +98,16 @@ demo4 K=2 under-estimate (true 4) without breaking the rest.
 Conclusion: shipped silhouette remains the best estimator measured; demo4
 stays a `DIAR_K` hint case. Claimed-voiceprint count now feeds auto-K as a
 lower bound in live reclusters (product safety net, no estimator change).
+
+## Hybrid collapse-rescue decode (2026-06-11, quark 품질 후보 발굴)
+quark atoms: `metal_kernel__ts_rules_indirect`, `fn__tokenCollapse`,
+`fn__main` (seek loop). 교차 대조 트리: `whisper_cpp/quality/large-v3-turbo`
+(신규 config, src/whisper.cpp 호스트 품질 로직 taxonomy).
+| # | idea | result | metric |
+|---|------|--------|--------|
+| Q-1 | temperature fallback 사다리 (wcpp entropy/logprob) | ❌ 불필요 | wcpp greedy -nf 도 clova 붕괴 청크를 완벽 전사 — 구원자는 fallback이 아님 |
+| Q-2 | **ts-토큰 디코딩이 루프 붕괴의 결정 변수** | ✅ 증명 | wcpp -nt 가 우리와 동일한 "Q. Q. Q." 붕괴 재현 (엔진 독립) |
+| Q-3 | EOT 게이트 (유성 잔여 시 EOT 금지) | ❌ 역검증 | 모델이 junk 텍스트로 채움 (wife ". . . ~~") |
+| Q-4 | 재인코드 없는 seek (forced initial ts ± startofprev 프롬프트) | ❌ 역검증 | 분포 밖 — 윈도 시작부 재전사 (jfk "and so," 중복) |
+| Q-5 | 순수 ts-모드 상시 적용 | ❌ data | 코드스위치 음차("아키텍츄럴", wcpp도 동일) + 다른 11/99 청크 꼬리 붕괴 ("네."×22) |
+| Q-6 | **하이브리드: plain 기본 + 토큰 주기성 감지 시 ts+재인코드 seek 재디코드** | ✅ commit | clova 5/99→0/99 (정확히 그 5청크만 구조), 픽스처 PASS, 클린 자산 텍스트 bit-identical, tok/s 495-511(=기준), 오발동 0 |
