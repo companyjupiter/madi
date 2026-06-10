@@ -32,6 +32,7 @@ pub const Kernels = struct {
     ca: mtl.Function,
     emb: mtl.Function,
     extract: mtl.Function,
+    cacc: mtl.Function,
     gemv: mtl.Function,
     gemv_bias: mtl.Function,
 
@@ -47,6 +48,7 @@ pub const Kernels = struct {
             .ca = try mtl.getFunction("flash_cross_attn_f16kv"),
             .emb = try mtl.getFunction("gpu_emb_lookup"),
             .extract = try mtl.getFunction("extract_ca_head_f16kv"),
+            .cacc = try mtl.getFunction("ca_accumulate"),
             .gemv = try mtl.getFunction("gemv_q8"),
             .gemv_bias = try mtl.getFunction("gemv_q8_bias"),
         };
@@ -82,6 +84,7 @@ pub const Layer = struct {
 /// Per-step scratch (all [D] except mh=[MLP]).
 pub const Scratch = struct {
     xb: [*]f32, q: [*]f32, k: [*]f32, v: [*]f32, ao: [*]f32, mo: [*]f32, mh: [*]f32,
+    ca_sc: [*]f32, // [NH][ENC_SEQ] normalized cross-attn scores (flash → ca_accumulate)
 };
 
 inline fn P(x: anytype) ?*const anyopaque {
@@ -147,12 +150,19 @@ fn kAttn(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f32, vc: [*]f32, pos: [*]u32
     const s = [_]usize{ PS, PS, PS, PS, PS, U, U, U, U };
     try mtl.dispatch(K.attn, .{ NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-fn kCA(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, seqlen: u32) !void {
+fn kCA(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, seqlen: u32, sc_out: [*]f32, write_sc: u32) !void {
     var a0 = out; var a1 = q; var a2 = kc; var a3 = vc; var sl = seqlen;
-    var hd = HDD; var kvd = D; var nkv = NH; var nh = NH;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sl), P(&hd), P(&kvd), P(&nkv), P(&nh) };
-    const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U };
+    var hd = HDD; var kvd = D; var nkv = NH; var nh = NH; var a9 = sc_out; var ws = write_sc;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sl), P(&hd), P(&kvd), P(&nkv), P(&nh), P(&a9), P(&ws) };
+    const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U, PS, U };
     try mtl.dispatch(K.ca, .{ NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+// fold alignment heads' normalized scores into the word-timestamp map ca[tok][*]
+fn kAccumulate(K: Kernels, ca: [*]f32, sc: [*]f32, tok: [*]u32, align_mask: u32, inv_n: f32, seqlen: u32) !void {
+    var a0 = ca; var a1 = sc; var a2 = tok; var am = align_mask; var iv = inv_n; var sl = seqlen; var nh = NH;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&am), P(&iv), P(&sl), P(&nh) };
+    const s = [_]usize{ PS, PS, PS, U, Ff, U, U };
+    try mtl.dispatch(K.cacc, .{ 1, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn kExtract(K: Kernels, q: [*]f32, kc: [*]f16, ca: [*]f32, tok: [*]u32, head: u32, inv_n: f32, seqlen: u32) !void {
     var a0 = q; var a1 = kc; var a2 = ca; var a3 = tok; var hh = head; var iv = inv_n; var sl = seqlen; var hd = HDD; var kvd = D;
@@ -193,10 +203,14 @@ pub fn decodeBlock(
     try kBRLN(K, x, s.mo, L.ob, s.xb, L.caln_w, L.caln_b, D);
     // cross-attn
     try kGemvQ8Bias(K, s.q, s.xb, L.cqw, L.cqb, D, D); // fused cross-Q proj + bias
+    // cross-attn + (for alignment layers) publish normalized scores, then fold
+    // them into the timestamp map — no separate QK/softmax recompute (extract).
+    var align_mask: u32 = 0;
+    if (ca) |c| for (c.heads) |h| { align_mask |= (@as(u32, 1) << @as(u5, @intCast(h))); };
+    try kCA(K, s.ao, s.q, ckc, cvc, ENC_SEQ, s.ca_sc, if (align_mask != 0) @as(u32, 1) else 0);
     if (ca) |c| {
-        for (c.heads) |h| try kExtract(K, s.q, ckc, c.weights, c.tok, h, c.inv_n, ENC_SEQ);
+        if (c.heads.len > 0) try kAccumulate(K, c.weights, s.ca_sc, c.tok, align_mask, c.inv_n, ENC_SEQ);
     }
-    try kCA(K, s.ao, s.q, ckc, cvc, ENC_SEQ);
     try kGemvQ8(K, s.mo, s.ao, L.cow, D, D);
     try kBRLN(K, x, s.mo, L.cob, s.xb, L.mln_w, L.mln_b, D);
     // MLP
