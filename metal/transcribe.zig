@@ -335,6 +335,130 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
     return best_i;
 }
 
+// Periodic live re-clustering: batch k-means + silhouette auto-K over the
+// accumulated (unit-normalized) window embeddings, remapped onto the existing
+// stable speaker ids by greedy best-cosine — transcript labels and voiceprint
+// claims keep their ids. Fixes the online leader-follower's two measured
+// failure modes (QUALITY_BENCH): over-splitting far-field voices (ES2004a
+// K=8/38.3% DER) and merging similar clean voices (demo4 K=2/51.5%).
+fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []const u8, max_k: u32, fixed_k: u32) !void {
+    const segd = diar.EMB;
+    var m = emb.len / segd;
+    if (m < 8) return;
+    // stride-subsample very long sessions (keeps k-means cost bounded)
+    var X: []const f32 = emb;
+    var I: []const u8 = ids;
+    var sub: []f32 = &.{};
+    var subi: []u8 = &.{};
+    defer if (sub.len > 0) alloc.free(sub);
+    defer if (subi.len > 0) alloc.free(subi);
+    if (m > 4096) {
+        const stride = (m + 4095) / 4096;
+        const ms = (m + stride - 1) / stride;
+        sub = try alloc.alloc(f32, ms * segd);
+        subi = try alloc.alloc(u8, ms);
+        var w: usize = 0;
+        var i: usize = 0;
+        while (i < m) : (i += stride) {
+            @memcpy(sub[w * segd ..][0..segd], emb[i * segd ..][0..segd]);
+            subi[w] = ids[i];
+            w += 1;
+        }
+        X = sub[0 .. w * segd];
+        I = subi[0..w];
+        m = w;
+    }
+    // K: fixed via DIAR_K hint, else auto via simplified silhouette (same
+    // scheme as the file-mode diarizer)
+    const asg = try alloc.alloc(usize, m);
+    defer alloc.free(asg);
+    const tmp = try alloc.alloc(usize, m);
+    defer alloc.free(tmp);
+    var K: usize = undefined;
+    if (fixed_k >= 1) {
+        K = @min(@as(usize, fixed_k), m);
+        try kmeansFit(X, m, segd, K, asg);
+    } else {
+        const maxK: usize = @min(@as(usize, max_k), m);
+        var bestK: usize = 2;
+        var bestSil: f32 = -2;
+        var kk: usize = 2;
+        while (kk <= maxK) : (kk += 1) {
+            try kmeansFit(X, m, segd, kk, tmp);
+            const sil = try silhouetteSimplified(X, m, segd, tmp, kk);
+            if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
+        }
+        K = bestK;
+        if (bestSil < envF("DIAR_SIL_TAU", 0.10)) { K = 1; @memset(asg, 0); }
+    }
+    // cluster sums of unit embeddings (same scale as diarAssign's running sums)
+    const sums = try alloc.alloc(f32, K * segd);
+    defer alloc.free(sums);
+    const cnts = try alloc.alloc(u32, K);
+    defer alloc.free(cnts);
+    @memset(sums, 0);
+    @memset(cnts, 0);
+    for (0..m) |i| {
+        const k = asg[i];
+        for (0..segd) |d| sums[k * segd + d] += X[i * segd + d];
+        cnts[k] += 1;
+    }
+    // Remap clusters → stable ids by MAJORITY VOTE of each cluster's windows'
+    // already-emitted ids (continuity with what the user has seen, so
+    // --speakers "0=name" and voiceprint claims stay on the right voice).
+    // Conflicts: the cluster with more votes keeps the id. Tiny clusters
+    // (<3 windows) never mint new ids — they fold into assignment noise.
+    const ns = cents.items.len;
+    const new2stable = try alloc.alloc(isize, K);
+    defer alloc.free(new2stable);
+    @memset(new2stable, -1);
+    const taken = try alloc.alloc(bool, ns);
+    defer alloc.free(taken);
+    @memset(taken, false);
+    // votes[k][s] = #windows of cluster k previously labeled stable id s
+    const votes = try alloc.alloc(u32, K * ns);
+    defer alloc.free(votes);
+    @memset(votes, 0);
+    for (0..m) |i| {
+        const s: usize = I[i];
+        if (s < ns) votes[asg[i] * ns + s] += 1;
+    }
+    // resolve globally: repeatedly take the largest remaining (cluster, id) vote
+    var round: usize = 0;
+    while (round < @min(K, ns)) : (round += 1) {
+        var best: u32 = 0;
+        var bk: usize = 0;
+        var bs: usize = 0;
+        for (0..K) |k| {
+            if (new2stable[k] >= 0) continue;
+            for (0..ns) |s| {
+                if (taken[s]) continue;
+                if (votes[k * ns + s] > best) { best = votes[k * ns + s]; bk = k; bs = s; }
+            }
+        }
+        if (best == 0) break;
+        new2stable[bk] = @intCast(bs);
+        taken[bs] = true;
+    }
+    // write back: matched ids get the recomputed centroid; unmatched clusters
+    // mint a fresh id only if big enough. Stale ids keep their old centroid
+    // (speaker may return; voiceprint claims stay valid).
+    const min_sz: u32 = 3;
+    for (0..K) |k| {
+        if (cnts[k] == 0) continue;
+        var sidx: usize = undefined;
+        if (new2stable[k] >= 0) {
+            sidx = @intCast(new2stable[k]);
+        } else {
+            if (cnts[k] < min_sz or cents.items.len >= 32) continue;
+            try cents.append(.{ .count = 0, .sum = [_]f32{0} ** diar.EMB });
+            sidx = cents.items.len - 1;
+        }
+        cents.items[sidx].count = cnts[k];
+        @memcpy(cents.items[sidx].sum[0..], sums[k * segd ..][0..segd]);
+    }
+}
+
 pub fn main() !void {
     const out = std.io.getStdOut().writer();
     var args = try std.process.argsWithAllocator(alloc);
@@ -574,6 +698,13 @@ pub fn main() !void {
     var cents = std.ArrayList(DiarCentroid).init(alloc);
     const diar_sim = envF("DIAR_SIM", 0.40);
     const diar_max: u32 = @intCast(envU("DIAR_MAXK", 8));
+    // periodic live re-clustering: every N accepted windows, re-run batch
+    // k-means over all accumulated embeddings (DIAR_RECLUSTER=0 disables).
+    const recluster_every: usize = envU("DIAR_RECLUSTER", 16);
+    var live_emb = std.ArrayList(f32).init(alloc); // accepted windows, unit-normalized
+    var live_ids = std.ArrayList(u8).init(alloc); // each window's emitted stable id
+    var live_since: usize = 0;
+    var recl_done = false; // after the first recluster, k-means owns K (no online births)
     const stream_diar = stream and !std.mem.eql(u8, std.posix.getenv("DIAR") orelse "1", "0");
     // ── voiceprint enrollment (stream only): VOICEPRINTS=<dir> of <name>.vec
     // files (256×f32, unit-normalized on load). When a session speaker's centroid
@@ -684,7 +815,10 @@ pub fn main() !void {
                     for (0..nwin) |wsg| {
                         if (crms[wsg] < thr) continue;
                         const gt = t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC;
-                        const spk = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, diar_max);
+                        // once re-clustering owns K, suppress online births
+                        // (new speakers enter via the next k-means auto-K bump)
+                        const eff_max: u32 = if (recl_done) @intCast(cents.items.len) else diar_max;
+                        const spk = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max);
                         try out.print("SPK {d:.2} {d}\n", .{ gt, spk });
                         // voiceprint match: once a speaker's centroid has ≥2
                         // windows, compare to unclaimed prints; announce once.
@@ -707,6 +841,21 @@ pub fn main() !void {
                                 vp_claimed.items[bidx] = true;
                                 spk_named.items[spk] = true;
                                 try out.print("SPKNAME {d} {s}\n", .{ spk, vp_names.items[bidx] });
+                            }
+                        }
+                        // accumulate (diarAssign left this window unit-normalized)
+                        // and periodically re-cluster the whole session.
+                        if (recluster_every > 0) {
+                            try live_emb.appendSlice(cemb[wsg * diar.EMB ..][0 .. diar.EMB]);
+                            try live_ids.append(@intCast(@min(spk, 255)));
+                            live_since += 1;
+                            const acc_total = live_emb.items.len / diar.EMB;
+                            // first recluster early (8 windows) so short sessions
+                            // benefit too; thereafter every recluster_every windows
+                            if ((!recl_done and acc_total >= 8) or live_since >= recluster_every) {
+                                live_since = 0;
+                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k);
+                                recl_done = true;
                             }
                         }
                     }

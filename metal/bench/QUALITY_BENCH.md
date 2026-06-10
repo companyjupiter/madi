@@ -33,6 +33,28 @@ fixture) is fine on both paths.
 > stably. Ceiling = file-mode quality: **-5.8 pt DER far-field, -27 pt clean
 > multi-speaker**. Touches the voiceprint id mapping (needs stable remap).
 
+### WIN #1 — IMPLEMENTED (same day)
+
+`DIAR_RECLUSTER` (default 16, 0=off): first recluster at 8 accepted windows,
+then every 16; after the first recluster online births are suppressed (k-means
+owns K, honoring a `DIAR_K` hint when given). Clusters remap to stable ids by
+**majority vote of each cluster's already-emitted window ids** (continuity with
+what the user saw — `--speakers "0=name"` and voiceprint claims stay correct);
+tiny clusters (<3 windows) never mint ids. Streaming-emitted labels, measured:
+
+| case | before | after |
+|---|---|---|
+| ES2004a live (far-field 4spk, auto-K) | 38.33% (K=8) | **35.06% (K=6)** |
+| demo4 live + `DIAR_K=4` hint | 51.52% | **45.47%** |
+| demo4 live auto-K | 51.52% | 51.52% (silhouette picks K=2 — same in file mode; pre-existing estimator limit, needs the K hint) |
+| wife_conv (real 2-spk) | 2 main + 1 stray id | **exactly 2 speakers, ids 0/1, zero strays** |
+| voiceprints / jfk file path | — | unchanged (regression PASS) |
+
+Remaining headroom to the file-mode ceiling (~32.5%) is the *streaming penalty*:
+labels emitted before early reclusters can't be retro-corrected on a console.
+Follow-up candidate: at session end, re-emit final labels so the saved .md/.srt
+get file-mode-quality speakers (console stays streaming).
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).

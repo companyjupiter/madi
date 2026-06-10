@@ -67,6 +67,7 @@ Examples:
 | `DIAR_VAD` | 0.40 | energy-VAD threshold (× median RMS) |
 | `WHISPER_LANG_ID` | auto | force language token (e.g. 50259 en, 50264 ko) |
 | `ENC_BATCH` | 4 (file) / 1 (live) | encode N 30s chunks in one batched forward — amortizes weight reads + dequant (~8% faster encoder on long files, byte-identical output) |
+| `DIAR_RECLUSTER` | 16 | live mode: re-cluster all speaker embeddings every N windows (batch k-means + stable id remap; 0 = old online-only) |
 
 ## Live meeting transcription (near-real-time)
 
