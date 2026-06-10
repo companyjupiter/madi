@@ -341,7 +341,7 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
 // claims keep their ids. Fixes the online leader-follower's two measured
 // failure modes (QUALITY_BENCH): over-splitting far-field voices (ES2004a
 // K=8/38.3% DER) and merging similar clean voices (demo4 K=2/51.5%).
-fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []const u8, max_k: u32, fixed_k: u32, active: ?[]bool) !void {
+fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []const u8, max_k: u32, fixed_k: u32, kmin: usize, active: ?[]bool) !void {
     const segd = diar.EMB;
     var m = emb.len / segd;
     if (m < 8) return;
@@ -389,7 +389,13 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
             if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
         }
         K = bestK;
-        if (bestSil < envF("DIAR_SIL_TAU", 0.10)) { K = 1; @memset(asg, 0); }
+        if (bestSil < envF("DIAR_SIL_TAU", 0.35)) { K = 1; @memset(asg, 0); } // 0.35: see diarizeEmb
+        // voiceprint lower bound: every CLAIMED print is a speaker the session
+        // has already voice-matched — auto-K may not merge below that count
+        if (K < kmin) {
+            K = @min(kmin, m);
+            try kmeansFit(X, m, segd, K, asg);
+        }
     }
     // cluster sums of unit embeddings (same scale as diarAssign's running sums)
     const sums = try alloc.alloc(f32, K * segd);
@@ -778,7 +784,9 @@ pub fn main() !void {
             if (std.mem.eql(u8, trimmed, "FLUSH")) {
                 const mwin = live_emb.items.len / diar.EMB;
                 if (mwin >= 8 and cents.items.len > 0) {
-                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, null);
+                    var nclaim: usize = 0;
+                    for (vp_claimed.items) |c| { if (c) nclaim += 1; }
+                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
                     // normalized centroid directions; reassign against ALL ids —
                     // restricting to final-kmeans ids was reverse-verified worse
                     // (stale centroids absorb coherent subsets; md-eval -3.7pt)
@@ -903,7 +911,9 @@ pub fn main() !void {
                             // benefit too; thereafter every recluster_every windows
                             if ((!recl_done and acc_total >= 8) or live_since >= recluster_every) {
                                 live_since = 0;
-                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, null);
+                                var nclaim: usize = 0;
+                                for (vp_claimed.items) |c| { if (c) nclaim += 1; }
+                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
                                 recl_done = true;
                             }
                         }
@@ -1101,6 +1111,7 @@ pub fn main() !void {
             const hdr = [_]u32{ @intCast(diar_n), @intCast(SEGD) };
             try df.writeAll(std.mem.sliceAsBytes(hdr[0..]));
             try df.writeAll(std.mem.sliceAsBytes(diar_t0.items[0..diar_n]));
+            try df.writeAll(std.mem.sliceAsBytes(diar_bm.items[0..diar_n])); // per-window RMS (VAD replication offline)
             try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
             try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
         }
@@ -1226,7 +1237,10 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         try kmeansFit(X, m, segd, K, asg);
     } else {
         const maxK: usize = @min(envU("DIAR_MAXK", 6), m); // tuned: 6 minimizes over-clustering (VoxConverse dev)
-        const tau: f32 = envF("DIAR_SIL_TAU", 0.10); // below this → single speaker
+        // tau 0.35: VoxConverse-dev 215-file sweep — flips 5 true-1-speaker
+        // files to K=1 (DER 9.7-57.5% → 0.0-3.5%) with ZERO multi-speaker
+        // false positives (first FP appears at tau 0.40). bench/k_sweep_vox.py
+        const tau: f32 = envF("DIAR_SIL_TAU", 0.35); // below this → single speaker
         const tmp = try alloc.alloc(usize, m); defer alloc.free(tmp);
         var bestK: usize = 2; var bestSil: f32 = -2;
         var kk: usize = 2;

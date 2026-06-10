@@ -70,6 +70,33 @@ Reverse-verified: restricting reassignment to the final k-means' ids was WORSE
 (31.92→35.64 — stale centroids absorb coherent subsets); all-centroid
 reassignment kept.
 
+### Auto-K estimator study (2026-06-11) — silhouette wins, tau 0.10→0.35
+
+Offline shoot-out on VoxConverse-dev (215 files, `diar_embed_wav` dumps,
+`bench/k_study_vox.py` / `bench/k_sweep_vox.py`): the shipped silhouette
+estimator beats eigengap (27% exact), NME-SC (51%), BIC and raw AHC; the
+recursive 2-way split that fixes demo4's K=2 under-estimate offline
+(sub-sils 0.55/0.59 on the merged TTS pairs) **over-splits real recordings at
+every threshold** → REFUTED; demo4 auto-K stays a `DIAR_K`-hint case.
+
+The verified win is the K=1 gate: **DIAR_SIL_TAU 0.10 → 0.35** flips five
+true-single-speaker files to K=1 with ZERO multi-speaker false positives
+across all 215 (first FP at 0.40), confirmed at the binary level:
+
+| file (true 1 spk) | tau=0.10 | tau=0.35 |
+|---|---|---|
+| atgpi | 26.48% (K=2) | **0.38%** |
+| qppll | 18.31% (K=2) | **1.40%** |
+| qydmg | 57.50% (K=3) | **0.01%** |
+| zmndm | 54.78% (K=4) | **0.66%** |
+| zvmyn | 9.71% (K=2) | **3.52%** |
+
+≈ −0.75 pt on the VoxConverse 215-file mean (17.50 → ~16.75%). Fixtures
+unaffected (all sils ≥ 0.499): ES2004a auto-K 31.85% / forced-4 32.55%,
+demo4 forced-4 24.18% — exact match with history; KO+EN fixture PASS.
+Also: live reclusters now take the CLAIMED-voiceprint count as a K lower
+bound (a claimed print is a voice-matched, present speaker).
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).
