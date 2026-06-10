@@ -341,7 +341,7 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
 // claims keep their ids. Fixes the online leader-follower's two measured
 // failure modes (QUALITY_BENCH): over-splitting far-field voices (ES2004a
 // K=8/38.3% DER) and merging similar clean voices (demo4 K=2/51.5%).
-fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []const u8, max_k: u32, fixed_k: u32, active: ?[]bool) !void {
+fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []const u8, max_k: u32, fixed_k: u32, kmin: usize, active: ?[]bool) !void {
     const segd = diar.EMB;
     var m = emb.len / segd;
     if (m < 8) return;
@@ -389,7 +389,13 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
             if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
         }
         K = bestK;
-        if (bestSil < envF("DIAR_SIL_TAU", 0.10)) { K = 1; @memset(asg, 0); }
+        if (bestSil < envF("DIAR_SIL_TAU", 0.35)) { K = 1; @memset(asg, 0); } // 0.35: see diarizeEmb
+        // voiceprint lower bound: every CLAIMED print is a speaker the session
+        // has already voice-matched — auto-K may not merge below that count
+        if (K < kmin) {
+            K = @min(kmin, m);
+            try kmeansFit(X, m, segd, K, asg);
+        }
     }
     // cluster sums of unit embeddings (same scale as diarAssign's running sums)
     const sums = try alloc.alloc(f32, K * segd);
@@ -672,6 +678,10 @@ pub fn main() !void {
 
     // ── resident buffers + state (allocated ONCE; reused across stream jobs) ──
     const samples = try alloc.alloc(f32, mel.CHUNK_SAMPLES);
+    // per-slot 1 ms-hop energy envelope (word-boundary snapping) — `samples`
+    // is overwritten while gathering the encoder batch, so keep one per slot
+    const ENV_LEN: usize = mel.CHUNK_SAMPLES / 16 + 1;
+    const slot_env = try alloc.alloc(f32, 8 * ENV_LEN);
     var full = std.ArrayList(u8).init(alloc);
     const SEG_SAMP: usize = 24000; // 1.5 s @ 16 kHz
     const SEG_SEC: f32 = 1.5;
@@ -774,7 +784,9 @@ pub fn main() !void {
             if (std.mem.eql(u8, trimmed, "FLUSH")) {
                 const mwin = live_emb.items.len / diar.EMB;
                 if (mwin >= 8 and cents.items.len > 0) {
-                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, null);
+                    var nclaim: usize = 0;
+                    for (vp_claimed.items) |c| { if (c) nclaim += 1; }
+                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
                     // normalized centroid directions; reassign against ALL ids —
                     // restricting to final-kmeans ids was reverse-verified worse
                     // (stale centroids absorb coherent subsets; md-eval -3.7pt)
@@ -824,6 +836,7 @@ pub fn main() !void {
             var slot_chunk: [8]usize = undefined;
             var slot_conv: [8]f64 = undefined;
             var slot_got: [8]usize = undefined;
+            var slot_nenv: [8]usize = undefined;
             gather: while (chunk < n_chunks and nb < enc_batch) {
             const got = mel.loadWavChunk(wav, chunk * mel.CHUNK_SAMPLES, samples);
             if (chunk > 0 and got == 0) { reached_end = true; break :gather; }
@@ -898,7 +911,9 @@ pub fn main() !void {
                             // benefit too; thereafter every recluster_every windows
                             if ((!recl_done and acc_total >= 8) or live_since >= recluster_every) {
                                 live_since = 0;
-                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, null);
+                                var nclaim: usize = 0;
+                                for (vp_claimed.items) |c| { if (c) nclaim += 1; }
+                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
                                 recl_done = true;
                             }
                         }
@@ -937,6 +952,7 @@ pub fn main() !void {
         try mtl.commitCommandBuffer();
         try mtl.sync();
         slot_conv[nb] = @as(f64, @floatFromInt(ct.read())) / 1e6;
+        slot_nenv[nb] = energyEnvelope(samples[0..got], slot_env[@as(usize, nb) * ENV_LEN ..][0..ENV_LEN]);
         slot_got[nb] = got;
         slot_toff[nb] = t_off;
         slot_rms[nb] = seg_rms;
@@ -1075,7 +1091,7 @@ pub fn main() !void {
         } else {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ cchunk + 1, n_chunks, t_off, text });
             try full.appendSlice(text);
-            if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off, cgot);
+            if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off, cgot, slot_env[slot * ENV_LEN ..][0..slot_nenv[slot]]);
         }
         } // slot
     }
@@ -1095,6 +1111,7 @@ pub fn main() !void {
             const hdr = [_]u32{ @intCast(diar_n), @intCast(SEGD) };
             try df.writeAll(std.mem.sliceAsBytes(hdr[0..]));
             try df.writeAll(std.mem.sliceAsBytes(diar_t0.items[0..diar_n]));
+            try df.writeAll(std.mem.sliceAsBytes(diar_bm.items[0..diar_n])); // per-window RMS (VAD replication offline)
             try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
             try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
         }
@@ -1220,7 +1237,10 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         try kmeansFit(X, m, segd, K, asg);
     } else {
         const maxK: usize = @min(envU("DIAR_MAXK", 6), m); // tuned: 6 minimizes over-clustering (VoxConverse dev)
-        const tau: f32 = envF("DIAR_SIL_TAU", 0.10); // below this → single speaker
+        // tau 0.35: VoxConverse-dev 215-file sweep — flips 5 true-1-speaker
+        // files to K=1 (DER 9.7-57.5% → 0.0-3.5%) with ZERO multi-speaker
+        // false positives (first FP appears at tau 0.40). bench/k_sweep_vox.py
+        const tau: f32 = envF("DIAR_SIL_TAU", 0.35); // below this → single speaker
         const tmp = try alloc.alloc(usize, m); defer alloc.free(tmp);
         var bestK: usize = 2; var bestSil: f32 = -2;
         var kk: usize = 2;
@@ -1314,10 +1334,33 @@ fn attributeTranscript(out: anytype) !void {
 // argmax, which picked each token's peak independently (non-monotonic → time
 // inversions). DTW finds one monotonic token→frame path maximizing total
 // attention, so every token's onset is strictly ordered. Frame = 20 ms.
-fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, t_off: f32, got_samples: usize) !void {
+// 1 ms-hop energy envelope: mean |x| over a ±2 ms window (whisper.cpp
+// get_signal_energy parity, half-window 32 samples). Returns #entries.
+fn energyEnvelope(s: []const f32, env: []f32) usize {
+    const HOP: usize = 16; // 1 ms @ 16 kHz
+    const HW: usize = 32; // ±2 ms
+    if (s.len < HOP) return 0;
+    const n = @min(s.len / HOP, env.len);
+    for (0..n) |i| {
+        const c = i * HOP;
+        const lo = if (c >= HW) c - HW else 0;
+        const hi = @min(c + HW + 1, s.len);
+        var sum: f32 = 0;
+        for (s[lo..hi]) |x| sum += @abs(x);
+        env[i] = sum / @as(f32, @floatFromInt(hi - lo));
+    }
+    return n;
+}
+
+fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, t_off: f32, got_samples: usize, env: []const f32) !void {
     const toks = try loadBpe(bpe_path);
     const E: usize = ENC_SEQ;
     const N: usize = n_text;
+    // OpenAI/wcpp keep one extra row: the attention that EMITS eot (query =
+    // last text token, position SEED.len-1+N — it exists, that step produced
+    // the eot logits). It takes the forced DTW endpoint so the last word ends
+    // where eot's attention begins instead of stretching to the final frame.
+    const NR: usize = N + 1;
     // Clip to the chunk's ACTUAL audio frames (320 samples = 20 ms per encoder
     // frame); letting the DTW path wander into the zero-padding region skewed
     // onsets late (acoustic referee: ~+350 ms before this fix).
@@ -1343,17 +1386,17 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     // frames → average heads. Normalizing per head BEFORE averaging matters —
     // the averaged-matrix shortcut was reverse-verified worse.
     const NAL: usize = 6;
-    const filtered = try alloc.alloc(f32, N * F); // head-averaged, normalized+filtered
+    const filtered = try alloc.alloc(f32, NR * F); // head-averaged, normalized+filtered
     defer alloc.free(filtered);
     @memset(filtered, 0);
-    const work = try alloc.alloc(f32, N * F);
+    const work = try alloc.alloc(f32, NR * F);
     defer alloc.free(work);
-    const rawavg = try alloc.alloc(f32, N * F); // pre-norm attention (for onset snap)
+    const rawavg = try alloc.alloc(f32, NR * F); // pre-norm attention (for onset snap)
     defer alloc.free(rawavg);
     @memset(rawavg, 0);
     const inv_h: f32 = 1.0 / @as(f32, @floatFromInt(NAL));
     for (0..NAL) |h| {
-        for (0..N) |i| {
+        for (0..NR) |i| {
             // OFF-BY-ONE: the attention that EMITS text token i lives at decode
             // position SEED.len-1+i (query = previous token; logits → token i).
             // Reading SEED.len+i used the NEXT token's emitting attention —
@@ -1362,21 +1405,24 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
             @memcpy(work[i * F ..][0..F], row);
             for (0..F) |j| rawavg[i * F + j] += row[j] * inv_h;
         }
-        // per-frame z-norm across tokens (ggml_norm / torch.std_mean dim=-2)
-        if (N >= 2) {
+        // per-frame z-norm across tokens (ggml_norm / torch.std_mean dim=-2).
+        // wcpp/OpenAI take the stats over ALL rows of the alignment pass —
+        // seed (sot/lang/task/not) rows included — then slice; match that.
+        const NP: usize = SEED.len + N; // positions 0..NP-1 exist in the ca planes
+        if (NR >= 2) {
             for (0..F) |j| {
                 var mu: f32 = 0;
-                for (0..N) |i| mu += work[i * F + j];
-                mu /= @floatFromInt(N);
+                for (0..NP) |p| mu += ca[(h * MAX_TOK + p) * E + j];
+                mu /= @floatFromInt(NP);
                 var va: f32 = 0;
-                for (0..N) |i| { const d = work[i * F + j] - mu; va += d * d; }
-                const sd = @sqrt(va / @as(f32, @floatFromInt(N))) + 1e-9;
-                for (0..N) |i| work[i * F + j] = (work[i * F + j] - mu) / sd;
+                for (0..NP) |p| { const d = ca[(h * MAX_TOK + p) * E + j] - mu; va += d * d; }
+                const sd = @sqrt(va / @as(f32, @floatFromInt(NP))) + 1e-9;
+                for (0..NR) |i| work[i * F + j] = (work[i * F + j] - mu) / sd;
             }
         }
         // median-7 over frames per token row, accumulate the head average
         var win: [7]f32 = undefined;
-        for (0..N) |i| {
+        for (0..NR) |i| {
             const row = work[i * F ..][0..F];
             for (0..F) |j| {
                 for (0..7) |w| {
@@ -1400,11 +1446,11 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     // boundaries land at attention TRANSITIONS (≈ acoustic onsets) instead of
     // each token parking at its attention peak — the free-endpoint version was
     // measured ~+350 ms late (peaks sit mid-word).
-    const score = try alloc.alloc(f32, N * F);
+    const score = try alloc.alloc(f32, NR * F);
     defer alloc.free(score);
     score[0] = filtered[0];
     for (1..F) |j| score[j] = score[j - 1] + filtered[j]; // token 0 covers the prefix
-    for (1..N) |i| {
+    for (1..NR) |i| {
         score[i * F] = score[(i - 1) * F] + filtered[i * F]; // frame-0 column (degenerate)
         for (1..F) |j| {
             var m = score[(i - 1) * F + j]; // ↑ same frame, previous token
@@ -1416,10 +1462,11 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
         }
     }
 
-    // Phase 3: backtrace from the forced terminal (N-1, F-1) → per-token onsets
-    const ts_frame = try alloc.alloc(u32, N);
+    // Phase 3: backtrace from the forced terminal (NR-1, F-1) → per-token
+    // onsets. Row N (eot) takes the terminal; its onset = last word's END.
+    const ts_frame = try alloc.alloc(u32, NR);
     defer alloc.free(ts_frame);
-    var ci: usize = N - 1;
+    var ci: usize = NR - 1;
     var cj: usize = F - 1;
     while (true) {
         ts_frame[ci] = @intCast(cj); // revisited right→left; final value = token onset
@@ -1438,7 +1485,7 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     // silent stretches somewhere); stays inside the segment → monotonicity kept.
     for (0..N) |i| {
         const j0: usize = ts_frame[i];
-        const j1: usize = if (i + 1 < N) @max(@as(usize, ts_frame[i + 1]), j0 + 1) else F;
+        const j1: usize = @max(@as(usize, ts_frame[i + 1]), j0 + 1); // i+1 ≤ N (eot row bounds the last word)
         if (j1 <= j0 + 1) continue;
         var peak: f32 = -1e30;
         for (j0..j1) |j| peak = @max(peak, rawavg[i * F + j]);
@@ -1447,29 +1494,105 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
         while (js + 1 < j1 and rawavg[i * F + js] < thr) js += 1;
         // only correct PAUSES: apply when the sub-threshold stretch is ≥200 ms
         // (10 frames) (8 frames = 160 ms) — normal word onsets stay at the DTW boundary.
-        if (js - j0 >= 8) ts_frame[i] = @intCast(js);
+        if (std.posix.getenv("TS_NOATTSNAP") == null and js - j0 >= 8) ts_frame[i] = @intCast(js);
     }
 
-    // group BPE sub-words into words (space-prefixed token = new word)
+    // group BPE sub-words into words (space-prefixed token = new word),
+    // keeping each word's DTW span [onset, next word's onset) in 1 ms units
+    const WSpan = struct { s0: usize, s1: usize, txt: []u8 };
+    var words = std.ArrayList(WSpan).init(alloc);
+    defer words.deinit();
     var word = std.ArrayList(u8).init(alloc);
-    var word_start: f32 = -1;
-    try out.print("\n=== WORD TIMESTAMPS ===\n", .{});
+    var w_first: usize = 0; // first token index of the open word
     for (0..N) |i| {
         const ti = SEED.len + i;
-        const ts: f32 = t_off + @as(f32, @floatFromInt(ts_frame[i])) * 0.02; // 20 ms/frame + offset
         const tok_bytes = if (out_tokens[ti] < toks.len) toks[out_tokens[ti]] else "";
         const starts_word = tok_bytes.len > 0 and tok_bytes[0] == ' ';
         if (starts_word and word.items.len > 0) {
-            try out.print("  [{d:.2}s] {s}\n", .{ word_start, word.items });
-            try g_words.append(.{ .t = word_start, .txt = try alloc.dupe(u8, word.items) });
+            try words.append(.{ .s0 = @as(usize, ts_frame[w_first]) * 20, .s1 = @as(usize, ts_frame[i]) * 20, .txt = try alloc.dupe(u8, word.items) });
             word.clearRetainingCapacity();
         }
-        if (word.items.len == 0) word_start = ts;
+        if (word.items.len == 0) w_first = i;
         try word.appendSlice(tok_bytes);
     }
-    if (word.items.len > 0) {
-        try out.print("  [{d:.2}s] {s}\n", .{ word_start, word.items });
-        try g_words.append(.{ .t = word_start, .txt = try alloc.dupe(u8, word.items) });
+    if (word.items.len > 0)
+        try words.append(.{ .s0 = @as(usize, ts_frame[w_first]) * 20, .s1 = @as(usize, ts_frame[N]) * 20, .txt = try alloc.dupe(u8, word.items) });
+
+    // Energy snap (whisper.cpp exp_compute_token_level_timestamps VAD parity):
+    // snap word ONSETS to acoustic voice edges (judged against the raw-wave
+    // voiced-region table, NOT whisper.cpp — its console heuristic provably
+    // drops onsets into silence, e.g. jfk "And" at 0.10s vs voice at 0.33s).
+    // thold = 0.5 × mean envelope around the word (local → soft words OK).
+    //   onset in silence → the DTW boundary fell in a pause: snap RIGHT to
+    //                      the voice onset.
+    //   onset mid-voice  → if this voiced region STARTS after the previous
+    //                      word's onset, the region is this word's own and
+    //                      DTW was late: snap LEFT to the region start.
+    //                      Otherwise the region is shared with the previous
+    //                      word (continuous speech): keep DTW — energy can't
+    //                      split words inside one voiced run.
+    if (env.len > 8) {
+        const ne = env.len;
+        // CHUNK-global threshold. A word-local window gets inflated by loud
+        // neighbors (jfk "so," tail read as silence next to "my fellow…"),
+        // while the chunk mean classified every jfk boundary correctly.
+        var gmean: f32 = 0;
+        for (env) |e| gmean += e;
+        gmean /= @floatFromInt(ne);
+        const thold = 0.5 * gmean;
+        var prev_onset: usize = 0;
+        for (words.items, 0..) |*w, wi| {
+            var s0 = @min(w.s0, ne - 1);
+            const s1 = @min(@max(w.s1, s0 + 1), ne - 1);
+            if (env[s0] > thold) {
+                var k = s0;
+                while (k > 0 and env[k - 1] > thold) k -= 1;
+                if (wi == 0 or k > prev_onset) s0 = k;
+            } else if (env[s0] < 0.5 * thold) {
+                // clearly silent (hysteresis: 0.25×mean — soft speech between
+                // 0.25 and 0.5 is ambiguous and keeps its DTW onset). Cap the
+                // jump at 400 ms: a longer "pause" is more likely sustained
+                // soft speech under the global threshold than a DTW miss.
+                var k = s0;
+                while (k < s1 and env[k] < thold) k += 1;
+                if (k - s0 <= 400) s0 = k;
+            }
+            if (wi > 0 and s0 <= prev_onset) s0 = @min(prev_onset + 1, ne - 1);
+            w.s0 = s0;
+            w.s1 = @max(@min(w.s1, ne - 1), s0 + 1);
+            prev_onset = s0;
+        }
+        // word ENDS: a word's end is the next word's REFINED onset (continuous
+        // speech) — but when that boundary follows a pause, contract LEFT to
+        // the last voiced moment so .srt lines stop when the voice stops.
+        // Probe 10 ms before the boundary (the boundary itself may BE the
+        // next word's rising edge).
+        for (words.items, 0..) |*w, wi| {
+            if (wi + 1 < words.items.len)
+                w.s1 = @max(@min(words.items[wi + 1].s0, ne - 1), w.s0 + 1);
+            // probe = min envelope in the 40-10 ms window before the boundary
+            // (a single point can land on the next word's rising edge)
+            const plo = if (w.s1 > w.s0 + 40) w.s1 - 40 else w.s0;
+            const phi = if (w.s1 > w.s0 + 10) w.s1 - 10 else w.s1;
+            var probe: f32 = 1e30;
+            for (plo..@max(phi, plo + 1)) |j| probe = @min(probe, env[j]);
+            if (probe < 0.5 * thold) {
+                const bound = w.s1; // next word's refined onset (or eot edge)
+                var k = w.s1 - 1;
+                while (k > w.s0 and env[k] < thold) k -= 1;
+                w.s1 = k + 1;
+                // soft words can sit entirely sub-threshold → keep ≥80 ms
+                if (w.s1 < w.s0 + 80) w.s1 = @min(w.s0 + 80, bound);
+            }
+        }
+    }
+
+    try out.print("\n=== WORD TIMESTAMPS ===\n", .{});
+    for (words.items) |w| {
+        const ts: f32 = t_off + @as(f32, @floatFromInt(w.s0)) * 0.001;
+        const te: f32 = t_off + @as(f32, @floatFromInt(w.s1)) * 0.001;
+        try out.print("  [{d:.2}s-{d:.2}s] {s}\n", .{ ts, te, w.txt });
+        try g_words.append(.{ .t = ts, .txt = w.txt });
     }
 }
 

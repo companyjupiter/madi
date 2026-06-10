@@ -70,6 +70,33 @@ Reverse-verified: restricting reassignment to the final k-means' ids was WORSE
 (31.92→35.64 — stale centroids absorb coherent subsets); all-centroid
 reassignment kept.
 
+### Auto-K estimator study (2026-06-11) — silhouette wins, tau 0.10→0.35
+
+Offline shoot-out on VoxConverse-dev (215 files, `diar_embed_wav` dumps,
+`bench/k_study_vox.py` / `bench/k_sweep_vox.py`): the shipped silhouette
+estimator beats eigengap (27% exact), NME-SC (51%), BIC and raw AHC; the
+recursive 2-way split that fixes demo4's K=2 under-estimate offline
+(sub-sils 0.55/0.59 on the merged TTS pairs) **over-splits real recordings at
+every threshold** → REFUTED; demo4 auto-K stays a `DIAR_K`-hint case.
+
+The verified win is the K=1 gate: **DIAR_SIL_TAU 0.10 → 0.35** flips five
+true-single-speaker files to K=1 with ZERO multi-speaker false positives
+across all 215 (first FP at 0.40), confirmed at the binary level:
+
+| file (true 1 spk) | tau=0.10 | tau=0.35 |
+|---|---|---|
+| atgpi | 26.48% (K=2) | **0.38%** |
+| qppll | 18.31% (K=2) | **1.40%** |
+| qydmg | 57.50% (K=3) | **0.01%** |
+| zmndm | 54.78% (K=4) | **0.66%** |
+| zvmyn | 9.71% (K=2) | **3.52%** |
+
+≈ −0.75 pt on the VoxConverse 215-file mean (17.50 → ~16.75%). Fixtures
+unaffected (all sils ≥ 0.499): ES2004a auto-K 31.85% / forced-4 32.55%,
+demo4 forced-4 24.18% — exact match with history; KO+EN fixture PASS.
+Also: live reclusters now take the CLAIMED-voiceprint count as a K lower
+bound (a claimed print is a voice-matched, present speaker).
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).
@@ -131,6 +158,92 @@ Monotonicity preserved; transcript text unchanged; test_decoder OK; KO+EN live
 regression PASS. Decode 495→~473 tok/s (−4%, per-head plane writes — accepted
 for the accuracy). Residual vs wcpp's ±10 ms: pause/punctuation territory
 splits; their batched forced-alignment pass remains slightly better.
+
+### CORRECTION (2026-06-11) — the "wcpp DTW" referee was never DTW
+
+`whisper-cli --dtw large.v3.turbo -ml 1` console spans are NOT DTW: flash-attn
+(default on) silently disables DTW (`dtw_token_timestamps is not supported with
+flash_attn`), and even with `--no-flash-attn` the console/`t0` numbers come
+from the ENERGY-heuristic pass (`whisper_exp_compute_token_level_timestamps`);
+`t_dtw` only surfaces in `-ojf` JSON. Re-run with real DTW shows **our DTW is
+already at parity**: wcpp `t_dtw` end-times match our onsets token-shifted,
+0–20 ms on 19/22 jfk words. wcpp's famous ±10 ms onsets are the energy snap,
+not the alignment. And the heuristic itself is provably wrong where DTW isn't:
+it puts jfk "And" at 0.10 s — inside silence (voice starts 0.33 s).
+
+### WIN #2b — DTW + acoustic energy snap (2026-06-11)
+
+New referee: `bench/acoustic_ref.py` derives an engine-independent voiced-
+region table from the waveform (±2 ms envelope, 0.5×mean threshold) — six jfk
+word onsets are acoustically decidable. `bench/ts_compare.py` automates the
+word-by-word diff. The win: snap word ONSETS to voiced-region edges:
+
+- onset in clear silence (<0.25×chunk-mean env) → snap RIGHT to the voice
+  onset, capped at 400 ms (longer "pauses" are usually sustained soft speech);
+- onset mid-voice whose voiced region starts after the previous word's onset
+  → DTW was late, snap LEFT to the region start;
+- ambiguous (0.25–0.5×mean, soft tails like jfk "so,") or region shared with
+  the previous word (continuous speech) → keep DTW.
+
+Threshold is CHUNK-global: a word-local window gets inflated by loud neighbors
+(reverse-verified: local window read the "so," tail as silence → cascaded 3
+words wrong). The attention-rise pause snap (WIN #2 step 3) stays: it composes
+with the energy snap (reverse-verified: without it, raw DTW drops "ask"#2 to
+7.78 s and the 400 ms cap blocks the energy fix). The eot-emitting attention
+row (query = last text token) joins the DTW matrix per OpenAI/wcpp so the
+forced endpoint lands on eot, not the last word (no jfk change; matters for
+trailing-silence chunks). Per-slot 1 ms energy envelopes are computed at
+gather time (`samples` is reused across the encoder batch).
+
+| acoustically decidable onset | truth | before | after | wcpp console |
+|---|---|---|---|---|
+| And | 0.33 | 0.00 (−330) | **0.33 (0)** | 0.10 (−230) |
+| my | 0.69 | 1.08 (+390) | **0.69 (0)** | 0.68 (−10) |
+| Americans | 1.37 | 1.54 (+170) | **1.37 (0)** | 1.22 (−150) |
+| ask #1 | 3.28 | 3.34 (+60) | **3.29 (+10)** | 3.29 (+10) |
+| not | 4.03 | 3.80 (−230) | **4.03 (0)** | 4.01 (−20) |
+| ask #2 | 8.18 | 7.98 (−200) | **8.20 (+20)** | 8.19 (+10) |
+
+All six within ±20 ms — wcpp-level (and beating wcpp's console on 3/6).
+Korean cross-check (devops_ko chunk 1): every pause-adjacent onset lands
+exactly on its voiced-region start — 안녕하세요 0.03, 데바츠의 4.21, 데브옵스
+5.24, Q&A 5.83 (0 ms each). Mid-voice boundaries keep DTW (energy cannot
+split a continuous voiced run; that is model territory). jfk transcript/WER unchanged, test_decoder OK, KO+EN
+fixture PASS, devops_ko 775 words 0 non-monotonic, decode ~495–514 tok/s
+(envelope cost invisible). Diagnostic toggle: `TS_NOATTSNAP=1` disables the
+attention snap.
+
+### WIN #2c — word END times + automated acoustic referee (2026-06-11)
+
+Word ends now flow through the whole pipeline. The DTW end (= next word's
+refined onset) contracts LEFT out of trailing silence (min-envelope probe in
+the 40-10 ms window before the boundary; clear-silence hysteresis 0.25×mean;
+80 ms span floor for soft words). Console prints `[t0s-t1s]`, the live runner
+parses both, `merge_seg.awk` carries ends into `@LINE`, and **.srt subtitles
+now end when the voice stops** instead of at the last word's onset (verified:
+wife_conv line ends no longer span pauses; a 750 ms gap stays subtitle-free).
+
+`bench/acoustic_score.py` automates the referee at scale: every voiced-region
+edge adjacent to a ≥150 ms pause is matched to the nearest word boundary
+(±400 ms). Mid-voice boundaries stay unscored (energy can't adjudicate them).
+
+| asset | pause-adjacent onsets | ends |
+|---|---|---|
+| jfk (11 s EN) | n=7, median **4 ms** | n=7, median **5 ms** |
+| devops_ko (462 s KO podcast) | n=223, median **4 ms** | n=236, median **10 ms** |
+| clova (47 min KO real meeting) | n=851, median 77 ms | n=857, median 140 ms |
+
+clova includes overlapping speech + a known repeat-loop hallucination stretch;
+sub-150 ms median on that audio is the honest hard-case number. jfk onsets
+unchanged (ask#1 +10 ms / ask#2 +20 ms); transcript identical; KO+EN fixture
+PASS; test_decoder OK.
+
+### decode −4% — CLOSED, not reproducible (2026-06-11)
+
+3-run paired A/B on devops_ko (batch 4): pre-WIN#2 (bff9b1c) 488/470/479 vs
+current 494/480/479 tok/s — current ≥ pre on every pair. The recorded
+495→473 was run-to-run variance (±2%), not a real regression. No recovery
+work needed.
 
 ## 4. Speed (성능) — measured earlier this session
 

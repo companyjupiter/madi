@@ -5,7 +5,7 @@
 #
 # Inputs (concatenated, distinguished by a leading tag column):
 #   "S <gtime> <spk>"          speaker label: a 1.5s diar window @ global gtime
-#   "W <gtime> <word...>"      a transcribed word at global time gtime
+#   "W <gt0> <gt1> <word...>"  a transcribed word: onset gt0, voice-end gt1
 # The caller feeds S-lines first (any order), then W-lines in time order.
 #
 # Params (-v):
@@ -26,9 +26,11 @@ $1 == "S" { sp_t[ns] = $2 + 0; sp_id[ns] = $3 + 0; ns++; next }
 
 $1 == "W" {
   wt[nw] = $2 + 0
-  # rejoin the word (everything after field 2)
+  we[nw] = $3 + 0
+  if (we[nw] < wt[nw]) we[nw] = wt[nw]
+  # rejoin the word (everything after field 3)
   w = ""
-  for (i = 3; i <= NF; i++) w = (w == "" ? $i : w " " $i)
+  for (i = 4; i <= NF; i++) w = (w == "" ? $i : w " " $i)
   ww[nw] = w
   nw++
   next
@@ -60,9 +62,9 @@ END {
     if (s >= 0) last_known = s
     if (s != cur_spk) {                            # speaker change → flush line
       flush_line(cur_spk, line, line_t, line_end)
-      cur_spk = s; line = ww[i]; line_t = wt[i]; line_end = wt[i]
+      cur_spk = s; line = ww[i]; line_t = wt[i]; line_end = we[i]
     } else {
-      line = (line == "" ? ww[i] : line " " ww[i]); line_end = wt[i]
+      line = (line == "" ? ww[i] : line " " ww[i]); line_end = we[i]
     }
     # advance the dedup watermark ONLY by plausible (in-window) timestamps —
     # Whisper sometimes hallucinates a far-future time (e.g. 29.9s in a 6s

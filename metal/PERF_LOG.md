@@ -82,3 +82,19 @@ Per-stage profile (608 AMI embeds) revealed the bottleneck is NOT matmul FLOP:
 |---|------|--------|--------|--------|
 | MEM-1a (data) | reclaim mmap'd safetensors via madvise(MADV_DONTNEED, then FREE_REUSABLE) per-tensor after quantize | ❌ data | **no effect** on macOS: peak AND steady RSS flat at 2.53/2.40GB. macOS doesn't drop read-once clean file-backed pages from the resident set (DONTNEED is lazy/deactivate-only; FREE_REUSABLE is for anon malloc pages). ru_maxrss high-water never decreases. ⇒ madvise can't fix it | — |
 | MEM-1b | **mmap → pread streaming loader**: never map the 1.6GB data section; pread each tensor into one reusable scratch buffer, consume, overwrite; free scratch+fd after load | ✅ commit (memory, **headline**) | **peak RSS 2.53→1.02GB (−1.5GB, −59%!)**; steady ~0.94GB; jfk text **exact**; encoder/decode unchanged (653ms/188 tok/s); load time unchanged (3.82 vs 3.90s, 2 chunks). Biggest single memory win — exceeds all Q8 work combined | Sf pread + g_rd scratch |
+
+## Auto-K estimator study (2026-06-11, VoxConverse-dev offline)
+Harness: `bench/k_study_vox.py` + `bench/k_sweep_vox.py` on `diar_embed_wav`
+embedding dumps (215 files, gt speaker counts from ref RTTM). Goal: fix the
+demo4 K=2 under-estimate (true 4) without breaking the rest.
+| # | idea | result | metric |
+|---|------|--------|--------|
+| K-EST1 | eigengap (normalized-Laplacian, cosine affinity) | ❌ data | exact 27% vs sil 63% (51-file prelim) — under-estimates far-field badly |
+| K-EST2 | BIC elbow (spherical k-means) | ❌ data | demo4 K=3, es K=6 — no better than sil anywhere |
+| K-EST3 | raw-pairwise AHC (cosine threshold sweep 0.30-0.60) | ❌ data | far-field explodes (es: 81-469 clusters) — pairwise cosine too noisy without affinity refinement |
+| K-EST4 | NME-SC (p-binarized affinity eigengap, simplified Park et al.) | ❌ data | exact 51% vs sil 63%; under-estimates K≥5 |
+| K-EST5 | recursive 2-way split (split cluster when its sub-silhouette ≥ sub_tau) — fixes demo4 at sub_tau=0.5 (sub-sils: true-pair 0.55/0.59 vs noise 0.39-0.41) | ❌ data | VoxConverse over-split at EVERY sub_tau (0.45-0.80): best case = no-op, worst exact 50.6% vs 55.1% baseline. demo4's crisp TTS sub-structure is common in real single speakers |
+| K-EST6 | silhouette tau bump 0.10→0.25-0.40 (K=1 gate) | 🔬 candidate | K1-recall 0→14% with 0 false positives (89-file prelim) — pending full-set + DER check |
+Conclusion: shipped silhouette remains the best estimator measured; demo4
+stays a `DIAR_K` hint case. Claimed-voiceprint count now feeds auto-K as a
+lower bound in live reclusters (product safety net, no estimator change).
