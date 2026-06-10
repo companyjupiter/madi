@@ -87,6 +87,36 @@ monotonic, mean |Δ| 349 ms — but the bias is systematic (ours later on 20/22)
 > `flash_cross_attn` scratch (`ca_sc`), so per-head normalization is
 > implementable (~16 MB to keep per-head rows for text tokens).
 
+### WIN #2 — IMPLEMENTED (same day)
+
+The z-norm hypothesis was only part of it; reverse-verification found the real
+culprit chain (each step measured against the acoustic referee):
+
+1. **OFF-BY-ONE (the big one):** the attention that *emits* text token i lives
+   at decode position `SEED.len-1+i` (query = previous token); we read
+   `SEED.len+i` — the attention emitting the NEXT token → ~one-token (~350 ms)
+   systematic late bias. Confirmed by dumping per-position attention argmax
+   (`TS_DIAG=1`): row p consistently sits on the audio of token p+1.
+2. **Faithful OpenAI pipeline:** per-head planes ([6][MAX_TOK][ENC_SEQ], ca_accumulate
+   now keeps heads separate), per-frame z-norm across tokens *per head* before
+   averaging (the averaged-matrix shortcut was reverse-verified worse), median-7,
+   frame clipping to actual audio, forced-endpoint (0,0)→(N-1,F-1) DTW.
+3. **Pause-gated onset snap:** when a word's onset sits ≥160 ms before its raw
+   attention rises to 15% of segment peak (i.e., the DTW boundary fell inside a
+   pause), snap forward to the rise point. Normal words untouched.
+
+| jfk vs whisper.cpp (acoustically ±10 ms) | before | after |
+|---|---|---|
+| mean abs Δ | 349 ms | **195 ms** |
+| median | 320 ms | **160 ms** |
+| max | 820 ms | **470 ms** |
+| "ask"#1 / #2 vs acoustic onset | +400 / +320 ms | **+60 / −200 ms** |
+
+Monotonicity preserved; transcript text unchanged; test_decoder OK; KO+EN live
+regression PASS. Decode 495→~473 tok/s (−4%, per-head plane writes — accepted
+for the accuracy). Residual vs wcpp's ±10 ms: pause/punctuation territory
+splits; their batched forced-alignment pass remains slightly better.
+
 ## 4. Speed (성능) — measured earlier this session
 
 decode 233→**495 tok/s** (+112%, ahead of whisper.cpp ~1.3×); encoder

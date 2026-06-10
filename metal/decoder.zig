@@ -62,6 +62,7 @@ pub const CaCtx = struct {
     tok: [*]u32, // GPU u32 = current token row index
     heads: []const u32,
     inv_n: f32, // 1 / total_alignment_heads
+    head_base: u32 = 0, // plane offset of this layer's heads in the per-head ca buffer
 };
 
 /// Per-layer decoder weights (device ptrs). Weights are [in][out] row-major.
@@ -157,11 +158,11 @@ fn kCA(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, seqlen: u32, 
     const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U, PS, U };
     try mtl.dispatch(K.ca, .{ NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-// fold alignment heads' normalized scores into the word-timestamp map ca[tok][*]
-fn kAccumulate(K: Kernels, ca: [*]f32, sc: [*]f32, tok: [*]u32, align_mask: u32, inv_n: f32, seqlen: u32) !void {
-    var a0 = ca; var a1 = sc; var a2 = tok; var am = align_mask; var iv = inv_n; var sl = seqlen; var nh = NH;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&am), P(&iv), P(&sl), P(&nh) };
-    const s = [_]usize{ PS, PS, PS, U, Ff, U, U };
+// copy this layer's alignment-head scores into their per-head ca planes
+fn kAccumulate(K: Kernels, ca: [*]f32, sc: [*]f32, tok: [*]u32, align_mask: u32, plane_base: u32, seqlen: u32) !void {
+    var a0 = ca; var a1 = sc; var a2 = tok; var am = align_mask; var pb = plane_base; var sl = seqlen; var nh = NH; var mt = MAX_TOK;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&am), P(&pb), P(&sl), P(&nh), P(&mt) };
+    const s = [_]usize{ PS, PS, PS, U, U, U, U, U };
     try mtl.dispatch(K.cacc, .{ 1, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn kExtract(K: Kernels, q: [*]f32, kc: [*]f16, ca: [*]f32, tok: [*]u32, head: u32, inv_n: f32, seqlen: u32) !void {
@@ -209,7 +210,7 @@ pub fn decodeBlock(
     if (ca) |c| for (c.heads) |h| { align_mask |= (@as(u32, 1) << @as(u5, @intCast(h))); };
     try kCA(K, s.ao, s.q, ckc, cvc, ENC_SEQ, s.ca_sc, if (align_mask != 0) @as(u32, 1) else 0);
     if (ca) |c| {
-        if (c.heads.len > 0) try kAccumulate(K, c.weights, s.ca_sc, c.tok, align_mask, c.inv_n, ENC_SEQ);
+        if (c.heads.len > 0) try kAccumulate(K, c.weights, s.ca_sc, c.tok, align_mask, c.head_base, ENC_SEQ);
     }
     try kGemvQ8(K, s.mo, s.ao, L.cow, D, D);
     try kBRLN(K, x, s.mo, L.cob, s.xb, L.mln_w, L.mln_b, D);

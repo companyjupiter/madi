@@ -660,8 +660,13 @@ pub fn main() !void {
     const heads_l2 = [_]u32{ 4, 11 };
     const heads_l3 = [_]u32{ 3, 6, 11, 14 };
     const layer_heads = [dec.NL][]const u32{ &.{}, &.{}, &heads_l2, &heads_l3 };
+    const head_base = [dec.NL]u32{ 0, 0, 0, 2 }; // plane offset per layer (cumulative align heads)
     const inv_n: f32 = 1.0 / 6.0;
-    const d_ca = try mtl.allocSlice(f32, MAX_TOK * ENC_SEQ);
+    // Per-head alignment planes [NALIGN][MAX_TOK][ENC_SEQ] — kept separate so
+    // wordTimestamps can z-normalize each head BEFORE averaging (OpenAI timing
+    // semantics; normalizing the averaged matrix is NOT equivalent — verified).
+    const NALIGN: usize = 6;
+    const d_ca = try mtl.allocSlice(f32, NALIGN * MAX_TOK * ENC_SEQ);
     @memset(d_ca, 0);
 
     // ── resident buffers + state (allocated ONCE; reused across stream jobs) ──
@@ -781,6 +786,7 @@ pub fn main() !void {
             var slot_rms: [8]f32 = undefined;
             var slot_chunk: [8]usize = undefined;
             var slot_conv: [8]f64 = undefined;
+            var slot_got: [8]usize = undefined;
             gather: while (chunk < n_chunks and nb < enc_batch) {
             const got = mel.loadWavChunk(wav, chunk * mel.CHUNK_SAMPLES, samples);
             if (chunk > 0 and got == 0) { reached_end = true; break :gather; }
@@ -893,6 +899,7 @@ pub fn main() !void {
         try mtl.commitCommandBuffer();
         try mtl.sync();
         slot_conv[nb] = @as(f64, @floatFromInt(ct.read())) / 1e6;
+        slot_got[nb] = got;
         slot_toff[nb] = t_off;
         slot_rms[nb] = seg_rms;
         slot_chunk[nb] = chunk;
@@ -913,6 +920,7 @@ pub fn main() !void {
         const seg_rms2 = slot_rms[slot];
         const conv_ms = slot_conv[slot];
         const cchunk = slot_chunk[slot];
+        const cgot = slot_got[slot];
         const eo16 = out_f16 + slot * @as(usize, ENC_SEQ) * D;
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
@@ -938,7 +946,7 @@ pub fn main() !void {
             try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[0]);
             try residual(Kd, d_x, dec_pe, D); // pos-0 positional embedding
             for (0..dec.NL) |l| {
-                const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n };
+                const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
                 try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
             }
             try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
@@ -972,7 +980,7 @@ pub fn main() !void {
                 try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[sp]);
                 try residual(Kd, d_x, dec_pe + @as(usize, sp) * D, D);
                 for (0..dec.NL) |l| {
-                    const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n };
+                    const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
                     try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
                 }
                 try mtl.commitCommandBuffer();
@@ -992,7 +1000,7 @@ pub fn main() !void {
                 try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
                 try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
                 for (0..dec.NL) |l| {
-                    const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n };
+                    const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
                     try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
                 }
                 try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
@@ -1029,7 +1037,7 @@ pub fn main() !void {
         } else {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] {s}\n", .{ cchunk + 1, n_chunks, t_off, text });
             try full.appendSlice(text);
-            if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off);
+            if (n_text > 0) try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, t_off, cgot);
         }
         } // slot
     }
@@ -1268,63 +1276,140 @@ fn attributeTranscript(out: anytype) !void {
 // argmax, which picked each token's peak independently (non-monotonic → time
 // inversions). DTW finds one monotonic token→frame path maximizing total
 // attention, so every token's onset is strictly ordered. Frame = 20 ms.
-fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, t_off: f32) !void {
+fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, t_off: f32, got_samples: usize) !void {
     const toks = try loadBpe(bpe_path);
     const E: usize = ENC_SEQ;
     const N: usize = n_text;
+    // Clip to the chunk's ACTUAL audio frames (320 samples = 20 ms per encoder
+    // frame); letting the DTW path wander into the zero-padding region skewed
+    // onsets late (acoustic referee: ~+350 ms before this fix).
+    const F: usize = @max(@min((got_samples + 319) / 320, E), 8);
 
-    // Phase 1: median-3 filter each text-token attention row → filtered[N×E]
-    const filtered = try alloc.alloc(f32, N * E);
-    defer alloc.free(filtered);
-    for (0..N) |i| {
-        const row = ca[(SEED.len + i) * E ..][0..E];
-        const frow = filtered[i * E ..][0..E];
-        for (0..E) |j| {
-            var a = if (j > 0) row[j - 1] else row[j];
-            var b = row[j];
-            const c = if (j + 1 < E) row[j + 1] else row[j];
-            if (a > b) { const t = a; a = b; b = t; }
-            if (b > c) { b = c; }
-            if (a > b) { b = a; }
-            frow[j] = b;
-        }
-    }
-
-    // Phase 2: DTW DP — score[i][j] = max(↑ prev-tok, ↖ adv-both, ← adv-frame) + filtered[i][j]
-    const score = try alloc.alloc(f32, N * E);
-    defer alloc.free(score);
-    for (0..E) |j| score[j] = filtered[j]; // first text-token row
-    for (1..N) |i| {
-        for (0..E) |j| {
-            var m = score[(i - 1) * E + j]; // ↑ same frame, previous token
-            if (j > 0) {
-                const d = score[(i - 1) * E + j - 1]; // ↖ advance frame + token
-                if (d > m) m = d;
-                const l = score[i * E + j - 1]; // ← advance frame, same token
-                if (l > m) m = l;
+    // DIAG: dump per-position raw-attention argmax (env TS_DIAG=1) — which row
+    // convention holds each word's acoustic location?
+    if (std.posix.getenv("TS_DIAG") != null) {
+        try out.print("[ts-diag] pos: argmax_t(s) (avg over heads, raw)\n", .{});
+        for (0..N + SEED.len) |p| {
+            var bj: usize = 0;
+            var bv: f32 = -1e30;
+            for (0..F) |j| {
+                var v: f32 = 0;
+                for (0..6) |h| v += ca[(h * MAX_TOK + p) * E + j];
+                if (v > bv) { bv = v; bj = j; }
             }
-            score[i * E + j] = m + filtered[i * E + j];
+            try out.print("[ts-diag] p={d}: {d:.2}s\n", .{ p, @as(f32, @floatFromInt(bj)) * 0.02 });
+        }
+    }
+    // OpenAI timing pipeline, per alignment head (planes from ca_accumulate):
+    // z-normalize each head's [N×F] across TOKENS per frame → median-7 over
+    // frames → average heads. Normalizing per head BEFORE averaging matters —
+    // the averaged-matrix shortcut was reverse-verified worse.
+    const NAL: usize = 6;
+    const filtered = try alloc.alloc(f32, N * F); // head-averaged, normalized+filtered
+    defer alloc.free(filtered);
+    @memset(filtered, 0);
+    const work = try alloc.alloc(f32, N * F);
+    defer alloc.free(work);
+    const rawavg = try alloc.alloc(f32, N * F); // pre-norm attention (for onset snap)
+    defer alloc.free(rawavg);
+    @memset(rawavg, 0);
+    const inv_h: f32 = 1.0 / @as(f32, @floatFromInt(NAL));
+    for (0..NAL) |h| {
+        for (0..N) |i| {
+            // OFF-BY-ONE: the attention that EMITS text token i lives at decode
+            // position SEED.len-1+i (query = previous token; logits → token i).
+            // Reading SEED.len+i used the NEXT token's emitting attention —
+            // the measured ~+350 ms late bias.
+            const row = ca[(h * MAX_TOK + SEED.len - 1 + i) * E ..][0..F];
+            @memcpy(work[i * F ..][0..F], row);
+            for (0..F) |j| rawavg[i * F + j] += row[j] * inv_h;
+        }
+        // per-frame z-norm across tokens (ggml_norm / torch.std_mean dim=-2)
+        if (N >= 2) {
+            for (0..F) |j| {
+                var mu: f32 = 0;
+                for (0..N) |i| mu += work[i * F + j];
+                mu /= @floatFromInt(N);
+                var va: f32 = 0;
+                for (0..N) |i| { const d = work[i * F + j] - mu; va += d * d; }
+                const sd = @sqrt(va / @as(f32, @floatFromInt(N))) + 1e-9;
+                for (0..N) |i| work[i * F + j] = (work[i * F + j] - mu) / sd;
+            }
+        }
+        // median-7 over frames per token row, accumulate the head average
+        var win: [7]f32 = undefined;
+        for (0..N) |i| {
+            const row = work[i * F ..][0..F];
+            for (0..F) |j| {
+                for (0..7) |w| {
+                    const jj = @as(isize, @intCast(j)) + @as(isize, @intCast(w)) - 3;
+                    const jc: usize = @intCast(@max(@min(jj, @as(isize, @intCast(F - 1))), 0));
+                    win[w] = row[jc];
+                }
+                for (1..7) |a| {
+                    const v = win[a];
+                    var b = a;
+                    while (b > 0 and win[b - 1] > v) : (b -= 1) win[b] = win[b - 1];
+                    win[b] = v;
+                }
+                filtered[i * F + j] += win[3] * inv_h;
+            }
         }
     }
 
-    // Phase 3: backtrace from the best final-token frame → per-token onset frame
+    // Phase 2: classic DTW over [N×F] with FORCED endpoints (0,0)→(N-1,F-1),
+    // matching OpenAI/whisper.cpp. The path must cover every frame, so token
+    // boundaries land at attention TRANSITIONS (≈ acoustic onsets) instead of
+    // each token parking at its attention peak — the free-endpoint version was
+    // measured ~+350 ms late (peaks sit mid-word).
+    const score = try alloc.alloc(f32, N * F);
+    defer alloc.free(score);
+    score[0] = filtered[0];
+    for (1..F) |j| score[j] = score[j - 1] + filtered[j]; // token 0 covers the prefix
+    for (1..N) |i| {
+        score[i * F] = score[(i - 1) * F] + filtered[i * F]; // frame-0 column (degenerate)
+        for (1..F) |j| {
+            var m = score[(i - 1) * F + j]; // ↑ same frame, previous token
+            const d = score[(i - 1) * F + j - 1]; // ↖ advance frame + token
+            if (d > m) m = d;
+            const l = score[i * F + j - 1]; // ← advance frame, same token
+            if (l > m) m = l;
+            score[i * F + j] = m + filtered[i * F + j];
+        }
+    }
+
+    // Phase 3: backtrace from the forced terminal (N-1, F-1) → per-token onsets
     const ts_frame = try alloc.alloc(u32, N);
     defer alloc.free(ts_frame);
-    var cj: usize = 0;
-    {
-        var best: f32 = -1e30;
-        for (0..E) |j| if (score[(N - 1) * E + j] > best) { best = score[(N - 1) * E + j]; cj = j; };
-    }
     var ci: usize = N - 1;
+    var cj: usize = F - 1;
     while (true) {
-        ts_frame[ci] = @intCast(cj); // revisited left→right; final value = token onset
+        ts_frame[ci] = @intCast(cj); // revisited right→left; final value = token onset
         if (ci == 0 and cj == 0) break;
-        var ni = ci; var nj = cj; var m: f32 = -1e30;
-        if (ci > 0 and score[(ci - 1) * E + cj] > m) { m = score[(ci - 1) * E + cj]; ni = ci - 1; nj = cj; }
-        if (ci > 0 and cj > 0 and score[(ci - 1) * E + cj - 1] > m) { m = score[(ci - 1) * E + cj - 1]; ni = ci - 1; nj = cj - 1; }
-        if (cj > 0 and score[ci * E + cj - 1] > m) { m = score[ci * E + cj - 1]; ni = ci; nj = cj - 1; }
-        if (ni == ci and nj == cj) break;
+        if (ci == 0) { cj -= 1; continue; } // only ← remains
+        if (cj == 0) { ci -= 1; continue; } // only ↑ remains
+        var ni = ci - 1; var nj = cj; var m = score[(ci - 1) * F + cj]; // ↑
+        if (score[(ci - 1) * F + cj - 1] > m) { m = score[(ci - 1) * F + cj - 1]; ni = ci - 1; nj = cj - 1; } // ↖
+        if (score[ci * F + cj - 1] > m) { ni = ci; nj = cj - 1; } // ←
         ci = ni; cj = nj;
+    }
+
+    // Onset snap: within each token's path segment [onset, next_onset), move the
+    // onset forward to the first frame reaching 50% of the segment's attention
+    // peak. Fixes boundaries that drift early into pauses (the DTW must split
+    // silent stretches somewhere); stays inside the segment → monotonicity kept.
+    for (0..N) |i| {
+        const j0: usize = ts_frame[i];
+        const j1: usize = if (i + 1 < N) @max(@as(usize, ts_frame[i + 1]), j0 + 1) else F;
+        if (j1 <= j0 + 1) continue;
+        var peak: f32 = -1e30;
+        for (j0..j1) |j| peak = @max(peak, rawavg[i * F + j]);
+        const thr = peak * 0.15;
+        var js: usize = j0;
+        while (js + 1 < j1 and rawavg[i * F + js] < thr) js += 1;
+        // only correct PAUSES: apply when the sub-threshold stretch is ≥200 ms
+        // (10 frames) (8 frames = 160 ms) — normal word onsets stay at the DTW boundary.
+        if (js - j0 >= 8) ts_frame[i] = @intCast(js);
     }
 
     // group BPE sub-words into words (space-prefixed token = new word)

@@ -370,26 +370,29 @@ kernel void extract_ca_head_f16kv(
     for (uint t = ltid; t < seqlen; t += 256) row[t] += sc[t] * inv;
 }
 
-// ca_accumulate: fold the alignment heads' normalized scores (from flash_cross_attn
-// sc_out) into the word-timestamp map: ca[tok][t] += Σ_{align h} sc[h][t] · inv_n.
-// Replaces extract_ca_head's QK+softmax recompute with a cheap weighted sum — the
-// scores are identical, so timestamps stay bit-exact. One thread per t → no race.
+// ca_accumulate: copy this layer's alignment-head scores (from flash_cross_attn
+// sc_out) into their PER-HEAD ca planes [NALIGN][MAX_TOK][seqlen]. Heads stay
+// separate so wordTimestamps can z-normalize each head before averaging
+// (OpenAI timing semantics). Scores come straight from the flash kernel — no
+// QK/softmax recompute. One thread per t, one row per (plane, tok) → no race.
 kernel void ca_accumulate(
-    device float*       ca       [[buffer(0)]],  // [MAX_TOK][seqlen]
+    device float*       ca       [[buffer(0)]],  // [NALIGN][MAX_TOK][seqlen] planes
     device const float* sc       [[buffer(1)]],  // [nh][seqlen] normalized scores
     device const uint*  tok_ptr  [[buffer(2)]],
     constant uint&  align_mask [[buffer(3)]],    // bit h set → head h is an alignment head
-    constant float& inv_n      [[buffer(4)]],
+    constant uint&  plane_base [[buffer(4)]],    // plane index of this layer's first align head
     constant uint&  seqlen     [[buffer(5)]],
     constant uint&  nh         [[buffer(6)]],
+    constant uint&  max_tok    [[buffer(7)]],
     uint ltid [[thread_position_in_threadgroup]])
 {
     const uint tok = tok_ptr[0];
-    device float* row = ca + (ulong)tok * seqlen;
-    for (uint t = ltid; t < seqlen; t += 256) {
-        float acc = 0.0f;
-        for (uint h = 0; h < nh; h++)
-            if (align_mask & (1u << h)) acc += sc[(ulong)h * seqlen + t];
-        row[t] += acc * inv_n;
+    uint plane = plane_base;
+    for (uint h = 0; h < nh; h++) {
+        if (!(align_mask & (1u << h))) continue;
+        device float*       row = ca + ((ulong)plane * max_tok + tok) * seqlen;
+        device const float* src = sc + (ulong)h * seqlen;
+        for (uint t = ltid; t < seqlen; t += 256) row[t] = src[t];
+        plane++;
     }
 }
