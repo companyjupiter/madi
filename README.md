@@ -66,6 +66,7 @@ Examples:
 | `DIAR_SIL_TAU` | 0.10 | below this silhouette → single speaker |
 | `DIAR_VAD` | 0.40 | energy-VAD threshold (× median RMS) |
 | `WHISPER_LANG_ID` | auto | force language token (e.g. 50259 en, 50264 ko) |
+| `ENC_BATCH` | 4 (file) / 1 (live) | encode N 30s chunks in one batched forward — amortizes weight reads + dequant (~8% faster encoder on long files, byte-identical output) |
 
 ## Live meeting transcription (near-real-time)
 

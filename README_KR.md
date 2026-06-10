@@ -236,6 +236,7 @@ cd metal
 | `DIAR_SIL_TAU` | 0.10 | 이 silhouette 미만이면 단일 화자로 판정 |
 | `DIAR_VAD` | 0.40 | 에너지 VAD 임계값 (중앙값 RMS 배수) |
 | `WHISPER_LANG_ID` | 자동 | 언어 토큰 강제 (예: 영어 50259, 한국어 50264) |
+| `ENC_BATCH` | 4(파일)/1(라이브) | 30초 청크 N개를 한 번의 배치 forward로 인코딩 — 가중치·dequant 분할상환(긴 파일 인코더 ~8%↑, 출력 byte-identical) |
 
 예) 화자가 많은 회의(>6명)는 상한을 올려서:
 ```bash
