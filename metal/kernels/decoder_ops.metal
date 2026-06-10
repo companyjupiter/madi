@@ -261,6 +261,8 @@ kernel void flash_cross_attn_f16kv(
     constant uint& kvd    [[buffer(6)]],
     constant uint& nkv    [[buffer(7)]],
     constant uint& nh     [[buffer(8)]],
+    device float*       sc_out  [[buffer(9)]],  // [nh][seqlen] normalized scores (for ca_accumulate)
+    constant uint&      write_sc [[buffer(10)]], // 1 → write sc_out (only layers w/ align heads)
     uint tgid [[threadgroup_position_in_grid]],
     uint ltid [[thread_position_in_threadgroup]])
 {
@@ -299,6 +301,12 @@ kernel void flash_cross_attn_f16kv(
     threadgroup_barrier(mem_flags::mem_threadgroup);
     float inv = 1.0f / ssum;
     for (uint t = ltid; t < seqlen; t += 256) scores[t] *= inv;
+    // publish this head's normalized scores so ca_accumulate can fold the
+    // alignment heads into the word-timestamp map — no QK/softmax recompute.
+    if (write_sc) {
+        device float* sr = sc_out + (ulong)h * seqlen;
+        for (uint t = ltid; t < seqlen; t += 256) sr[t] = scores[t];
+    }
     threadgroup_barrier(mem_flags::mem_threadgroup);
     // Output (scores·V): use ALL 256 threads = 64 dims × 4 t-partitions (was 64
     // active threads each summing all seqlen). Each (d,part) sums its quarter,
@@ -360,4 +368,28 @@ kernel void extract_ca_head_f16kv(
     float inv = inv_n / ssum;
     device float* row = ca + (ulong)tok * seqlen;
     for (uint t = ltid; t < seqlen; t += 256) row[t] += sc[t] * inv;
+}
+
+// ca_accumulate: fold the alignment heads' normalized scores (from flash_cross_attn
+// sc_out) into the word-timestamp map: ca[tok][t] += Σ_{align h} sc[h][t] · inv_n.
+// Replaces extract_ca_head's QK+softmax recompute with a cheap weighted sum — the
+// scores are identical, so timestamps stay bit-exact. One thread per t → no race.
+kernel void ca_accumulate(
+    device float*       ca       [[buffer(0)]],  // [MAX_TOK][seqlen]
+    device const float* sc       [[buffer(1)]],  // [nh][seqlen] normalized scores
+    device const uint*  tok_ptr  [[buffer(2)]],
+    constant uint&  align_mask [[buffer(3)]],    // bit h set → head h is an alignment head
+    constant float& inv_n      [[buffer(4)]],
+    constant uint&  seqlen     [[buffer(5)]],
+    constant uint&  nh         [[buffer(6)]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    const uint tok = tok_ptr[0];
+    device float* row = ca + (ulong)tok * seqlen;
+    for (uint t = ltid; t < seqlen; t += 256) {
+        float acc = 0.0f;
+        for (uint h = 0; h < nh; h++)
+            if (align_mask & (1u << h)) acc += sc[(ulong)h * seqlen + t];
+        row[t] += acc * inv_n;
+    }
 }

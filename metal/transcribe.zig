@@ -497,6 +497,7 @@ pub fn main() !void {
         .k = d_qkv3 + D, .v = d_qkv3 + 2 * D,
         .ao = (try mtl.allocSlice(f32, D)).ptr, .mo = (try mtl.allocSlice(f32, D)).ptr,
         .mh = (try mtl.allocSlice(f32, MLP)).ptr,
+        .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr, // 20×1500 normalized scores
     };
     const skc = try alloc.alloc([*]f32, dec.NL);
     const svc = try alloc.alloc([*]f32, dec.NL);
