@@ -213,6 +213,38 @@ fixture PASS, devops_ko 775 words 0 non-monotonic, decode ~495–514 tok/s
 (envelope cost invisible). Diagnostic toggle: `TS_NOATTSNAP=1` disables the
 attention snap.
 
+### WIN #2c — word END times + automated acoustic referee (2026-06-11)
+
+Word ends now flow through the whole pipeline. The DTW end (= next word's
+refined onset) contracts LEFT out of trailing silence (min-envelope probe in
+the 40-10 ms window before the boundary; clear-silence hysteresis 0.25×mean;
+80 ms span floor for soft words). Console prints `[t0s-t1s]`, the live runner
+parses both, `merge_seg.awk` carries ends into `@LINE`, and **.srt subtitles
+now end when the voice stops** instead of at the last word's onset (verified:
+wife_conv line ends no longer span pauses; a 750 ms gap stays subtitle-free).
+
+`bench/acoustic_score.py` automates the referee at scale: every voiced-region
+edge adjacent to a ≥150 ms pause is matched to the nearest word boundary
+(±400 ms). Mid-voice boundaries stay unscored (energy can't adjudicate them).
+
+| asset | pause-adjacent onsets | ends |
+|---|---|---|
+| jfk (11 s EN) | n=7, median **4 ms** | n=7, median **5 ms** |
+| devops_ko (462 s KO podcast) | n=223, median **4 ms** | n=236, median **10 ms** |
+| clova (47 min KO real meeting) | n=851, median 77 ms | n=857, median 140 ms |
+
+clova includes overlapping speech + a known repeat-loop hallucination stretch;
+sub-150 ms median on that audio is the honest hard-case number. jfk onsets
+unchanged (ask#1 +10 ms / ask#2 +20 ms); transcript identical; KO+EN fixture
+PASS; test_decoder OK.
+
+### decode −4% — CLOSED, not reproducible (2026-06-11)
+
+3-run paired A/B on devops_ko (batch 4): pre-WIN#2 (bff9b1c) 488/470/479 vs
+current 494/480/479 tok/s — current ≥ pre on every pair. The recorded
+495→473 was run-to-run variance (±2%), not a real regression. No recovery
+work needed.
+
 ## 4. Speed (성능) — measured earlier this session
 
 decode 233→**495 tok/s** (+112%, ahead of whisper.cpp ~1.3×); encoder
