@@ -52,8 +52,23 @@ tiny clusters (<3 windows) never mint ids. Streaming-emitted labels, measured:
 
 Remaining headroom to the file-mode ceiling (~32.5%) is the *streaming penalty*:
 labels emitted before early reclusters can't be retro-corrected on a console.
-Follow-up candidate: at session end, re-emit final labels so the saved .md/.srt
-get file-mode-quality speakers (console stays streaming).
+
+### Session-end relabel — IMPLEMENTED (same day)
+
+On session end the runner sends `FLUSH`; the binary re-clusters the WHOLE
+session, re-assigns every diar window to the final centroids (`SPKFIX` lines),
+and the runner rewrites `.md`/`.srt` with the corrected speakers (+names). The
+console stays streaming; the SAVED transcript gets end-of-session quality:
+
+| saved-transcript labels (SPKFIX windows) | streaming | relabeled |
+|---|---|---|
+| demo4 + `DIAR_K=4` (short session) | 45.47% | **31.92%** |
+| ES2004a (17 min) | 35.06% | 35.13% (≈same — long sessions are already post-recluster stable) |
+| wife_conv + `--speakers "0=남편,1=아내"` | — | exactly 남편/아내, names preserved, zero strays |
+
+Reverse-verified: restricting reassignment to the final k-means' ids was WORSE
+(31.92→35.64 — stale centroids absorb coherent subsets); all-centroid
+reassignment kept.
 
 ## 2. Transcription quality (전사 품질)
 

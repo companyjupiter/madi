@@ -341,7 +341,7 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
 // claims keep their ids. Fixes the online leader-follower's two measured
 // failure modes (QUALITY_BENCH): over-splitting far-field voices (ES2004a
 // K=8/38.3% DER) and merging similar clean voices (demo4 K=2/51.5%).
-fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []const u8, max_k: u32, fixed_k: u32) !void {
+fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []const u8, max_k: u32, fixed_k: u32, active: ?[]bool) !void {
     const segd = diar.EMB;
     var m = emb.len / segd;
     if (m < 8) return;
@@ -456,6 +456,7 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         }
         cents.items[sidx].count = cnts[k];
         @memcpy(cents.items[sidx].sum[0..], sums[k * segd ..][0..segd]);
+        if (active) |a| { if (sidx < a.len) a[sidx] = true; }
     }
 }
 
@@ -708,6 +709,7 @@ pub fn main() !void {
     const recluster_every: usize = envU("DIAR_RECLUSTER", 16);
     var live_emb = std.ArrayList(f32).init(alloc); // accepted windows, unit-normalized
     var live_ids = std.ArrayList(u8).init(alloc); // each window's emitted stable id
+    var live_t0 = std.ArrayList(f32).init(alloc); // each window's global time (for SPKFIX)
     var live_since: usize = 0;
     var recl_done = false; // after the first recluster, k-means owns K (no online births)
     const stream_diar = stream and !std.mem.eql(u8, std.posix.getenv("DIAR") orelse "1", "0");
@@ -765,6 +767,41 @@ pub fn main() !void {
             const line = (stdin_r.readUntilDelimiterOrEof(&stdin_buf, '\n') catch null) orelse break :job;
             const trimmed = std.mem.trim(u8, line, " \t\r");
             if (trimmed.len == 0) continue :job;
+            // session-end relabel handshake: re-cluster over the WHOLE session,
+            // re-assign every accumulated window to the final centroids, and
+            // emit corrected labels so the runner can rewrite .md/.srt with
+            // file-mode-quality speakers (the console stays streaming).
+            if (std.mem.eql(u8, trimmed, "FLUSH")) {
+                const mwin = live_emb.items.len / diar.EMB;
+                if (mwin >= 8 and cents.items.len > 0) {
+                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, null);
+                    // normalized centroid directions; reassign against ALL ids —
+                    // restricting to final-kmeans ids was reverse-verified worse
+                    // (stale centroids absorb coherent subsets; md-eval -3.7pt)
+                    const nc = cents.items.len;
+                    const dirs = try alloc.alloc(f32, nc * diar.EMB);
+                    defer alloc.free(dirs);
+                    for (cents.items, 0..) |*c, sidx| {
+                        var ss: f32 = 0;
+                        for (c.sum) |x| ss += x * x;
+                        const inv = 1.0 / (@sqrt(ss) + 1e-9);
+                        for (0..diar.EMB) |d| dirs[sidx * diar.EMB + d] = c.sum[d] * inv;
+                    }
+                    for (0..mwin) |i| {
+                        const v = live_emb.items[i * diar.EMB ..][0 .. diar.EMB];
+                        var best: f32 = -2;
+                        var bs: usize = 0;
+                        for (0..nc) |sidx| {
+                            var dt: f32 = 0;
+                            for (0..diar.EMB) |d| dt += v[d] * dirs[sidx * diar.EMB + d];
+                            if (dt > best) { best = dt; bs = sidx; }
+                        }
+                        try out.print("SPKFIX {d:.2} {d}\n", .{ live_t0.items[i], bs });
+                    }
+                }
+                try out.print("<<FLUSH_END>>\n", .{});
+                continue :job;
+            }
             const sp = std.mem.indexOfScalar(u8, trimmed, ' ') orelse continue :job;
             g_off = std.fmt.parseFloat(f32, trimmed[0..sp]) catch 0;
             cur_path = std.mem.trim(u8, trimmed[sp + 1 ..], " \t\r");
@@ -854,13 +891,14 @@ pub fn main() !void {
                         if (recluster_every > 0) {
                             try live_emb.appendSlice(cemb[wsg * diar.EMB ..][0 .. diar.EMB]);
                             try live_ids.append(@intCast(@min(spk, 255)));
+                            try live_t0.append(gt);
                             live_since += 1;
                             const acc_total = live_emb.items.len / diar.EMB;
                             // first recluster early (8 windows) so short sessions
                             // benefit too; thereafter every recluster_every windows
                             if ((!recl_done and acc_total >= 8) or live_since >= recluster_every) {
                                 live_since = 0;
-                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k);
+                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, null);
                                 recl_done = true;
                             }
                         }
