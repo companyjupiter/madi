@@ -832,7 +832,7 @@ pub fn main() !void {
                             for (0..diar.EMB) |d| dt += v[d] * dirs[sidx * diar.EMB + d];
                             if (dt > best) { best = dt; bs = sidx; }
                         }
-                        try out.print("SPKFIX {d:.2} {d}\n", .{ live_t0.items[i], bs });
+                        try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(bs));
                     }
                 }
                 try out.print("<<FLUSH_END>>\n", .{});
@@ -907,7 +907,7 @@ pub fn main() !void {
                     for (vad_probs[0..vad_np]) |pv| {
                         if (pv >= 0.5) chunk_speech_s += 0.032;
                     }
-                    if (!stream) { // file mode: keep speech intervals for RTTM clipping
+                    { // speech intervals: file-mode RTTM clipping AND live SPK/SPKFIX clipping
                         var iv = try vad.segmentsFromProbsP(alloc, vad_probs[0..vad_np], @intCast(envU("VAD_MIN_SPEECH_MS", 60)), @intCast(envU("VAD_PAD_MS", 200)));
                         defer iv.deinit();
                         for (iv.items) |sg| try g_vad_iv.append(.{ t_off + sg.start, t_off + sg.end });
@@ -944,7 +944,11 @@ pub fn main() !void {
                         // (new speakers enter via the next k-means auto-K bump)
                         const eff_max: u32 = if (recl_done) @intCast(cents.items.len) else diar_max;
                         const spk = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max);
-                        try out.print("SPK {d:.2} {d}\n", .{ gt, spk });
+                        // far-field silence inside the 1.5 s grid window was
+                        // the live FA driver (live 44.7% vs file 18.8%) —
+                        // emit silero-clipped pieces; extra duration field is
+                        // ignored by the runner's awk (backward compatible)
+                        try emitClippedSpk(out, "SPK", gt, @intCast(spk));
                         // voiceprint match: once a speaker's centroid has ≥2
                         // windows, compare to unclaimed prints; announce once.
                         while (spk_named.items.len < cents.items.len) try spk_named.append(false);
@@ -1553,6 +1557,21 @@ fn attributeTranscript(out: anytype) !void {
 // attention, so every token's onset is strictly ordered. Frame = 20 ms.
 fn vadWorker(vm: *vad.Model, samples_: []const f32, probs: []f32, np: *usize) void {
     np.* = vm.detect(samples_, probs);
+}
+
+// Emit "<tag> <t> <id> <dur>" for each silero speech piece of the 1.5 s diar
+// window at gt; falls back to the whole window when no VAD intervals exist.
+fn emitClippedSpk(out: anytype, tag: []const u8, gt: f32, id: u32) !void {
+    if (g_vad_iv.items.len == 0) {
+        try out.print("{s} {d:.2} {d} 1.50\n", .{ tag, gt, id });
+        return;
+    }
+    for (g_vad_iv.items) |iv| {
+        const lo = @max(gt, iv[0]);
+        const hi = @min(gt + 1.5, iv[1]);
+        if (hi - lo >= 0.1)
+            try out.print("{s} {d:.2} {d} {d:.2}\n", .{ tag, lo, id, hi - lo });
+    }
 }
 
 // Repeat-loop collapse detector: greedy no-ts decoding can lock into a
