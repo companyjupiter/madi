@@ -34,3 +34,10 @@ if [ -f "$WCPP/models/for-tests-silero-v6.2.0-ggml.bin" ]; then
 else
   echo "⚠️  silero ggml not found at $WCPP/models — skipping VAD asset"
 fi
+
+# pyannote segmentation-3.0 (OSD): sherpa-onnx export → flat f32 bin
+SEG_TBZ=/tmp/pyannote_seg.tar.bz2
+[ -f /tmp/sherpa-onnx-pyannote-segmentation-3-0/model.onnx ] || { curl -sL -o $SEG_TBZ 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2' && tar xjf $SEG_TBZ -C /tmp; }
+"$VENV"/bin/pip install -q onnxruntime
+"$VENV"/bin/python bench/convert_pyannote_seg.py /tmp/sherpa-onnx-pyannote-segmentation-3-0/model.onnx assets/pyannote_osd.bin
+echo "✅ assets/pyannote_osd.bin regenerated"

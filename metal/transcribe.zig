@@ -20,6 +20,7 @@ const enc = @import("encoder.zig");
 const dec = @import("decoder.zig");
 const diar = @import("diar_resnet.zig");
 const vad = @import("vad_silero.zig");
+const osd = @import("osd_pyannote.zig");
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 
 const METALLIB = @embedFile("whisper.metallib");
@@ -304,6 +305,9 @@ const SpkSeg = struct { a: f32, b: f32, spk: i32 };
 var g_words = std.ArrayList(Word).init(alloc);
 var g_segs = std.ArrayList(SpkSeg).init(alloc);
 var g_vad_iv = std.ArrayList([2]f32).init(alloc); // silero speech intervals (global s) — clips diar segments to speech
+var g_osd_iv = std.ArrayList([2]f32).init(alloc); // pyannote OSD overlap intervals (global s) — 2nd-speaker emission
+const OsdWin = struct { t: f32, nf: u32, cls: [600]u8, pov: [600]f32 }; // one 10s model window: argmax class + P(overlap) per frame
+var g_osd_win = std.ArrayList(OsdWin).init(alloc);
 
 fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
     return std.fmt.bufPrint(buf, fmt, .{l}) catch unreachable;
@@ -545,6 +549,15 @@ pub fn main() !void {
     const vad_path = std.fmt.bufPrint(&kb_d3, "{s}/silero_vad.bin", .{bpe_dir(bpe_path)}) catch unreachable;
     var vad_model: ?vad.Model = vad.Model.load(alloc, vad_path) catch null;
     if (vad_model == null) try out.print("[vad] silero_vad.bin not found — energy-only VAD\n", .{});
+    // pyannote segmentation-3.0 (overlap detection) — opt-in OSD=1 while the
+    // 2nd-speaker emission is validated; single-label diar's overlap miss
+    // floor is 14.7% of ES2004a scored time (PERF_LOG O-1)
+    var kb_d4: [256]u8 = undefined;
+    const osd_path = std.fmt.bufPrint(&kb_d4, "{s}/pyannote_osd.bin", .{bpe_dir(bpe_path)}) catch unreachable;
+    // default ON in file mode (OSD=0 disables); live/stream stays off (latency)
+    const osd_on = std.posix.getenv("STREAM") == null and !std.mem.eql(u8, std.posix.getenv("OSD") orelse "1", "0");
+    const osd_model: ?osd.Model = if (osd_on) osd.Model.load(alloc, osd_path) catch null else null;
+    if (osd_on and osd_model == null) try out.print("[osd] pyannote_osd.bin not found — overlap emission off\n", .{});
     const c1w = try upConvWF16(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
     const c1b = try upVec(sf, "model.encoder.conv1.bias");
     const c2w = try upConvWF16(sf, "model.encoder.conv2.weight", D, D, 3);
@@ -706,6 +719,10 @@ pub fn main() !void {
     // `samples` has been overwritten while gathering the rest of the batch
     const slot_samp = try alloc.alloc(f32, 8 * mel.CHUNK_SAMPLES);
     const vad_probs = try alloc.alloc(f32, mel.CHUNK_SAMPLES / vad.N_WINDOW + 2); // silero per-32ms speech probs (per chunk)
+    const OSD_STEP: usize = osd.WIN_SAMPLES; // disjoint 10 s windows (5 s sliding measured ≈ no gain: 17.05 vs 17.12)
+    const OSD_NW: usize = mel.CHUNK_SAMPLES / OSD_STEP; // up to 6 windows per 30 s chunk
+    const osd_logp = try alloc.alloc(f32, OSD_NW * 600 * osd.N_CLASSES);
+    const osd_nf = try alloc.alloc(usize, OSD_NW);
     var full = std.ArrayList(u8).init(alloc);
     const SEG_SAMP: usize = 24000; // 1.5 s @ 16 kHz
     const SEG_SEC: f32 = 1.5;
@@ -874,6 +891,29 @@ pub fn main() !void {
             var vad_np: usize = 0;
             var chunk_speech_s: f32 = 1e9; // no model → everything passes
             var vad_thread: ?std.Thread = null;
+            var osd_threads: [4]?std.Thread = .{ null, null, null, null };
+            var osd_nw_used: usize = 0;
+            if (osd_model) |*om| {
+                // pyannote OSD on 10 s windows, threaded (≈410 ms each naive;
+                // overlaps the diar embed pool + silero below)
+                @memset(osd_nf, 0);
+                var wi: usize = 0;
+                while (wi * OSD_STEP < got and wi < OSD_NW) : (wi += 1) {
+                    const s0 = wi * OSD_STEP;
+                    const slen = @min(osd.WIN_SAMPLES, got - s0);
+                    osd_threads[wi % 4] = try std.Thread.spawn(.{}, osdWorker, .{ om, samples[s0 .. s0 + slen], osd_logp[wi * 600 * osd.N_CLASSES ..][0 .. 600 * osd.N_CLASSES], &osd_nf[wi] });
+                    if (wi % 4 == 3) { // cap concurrency at 4 OSD threads
+                        for (0..4) |q| {
+                            if (osd_threads[q]) |t_| {
+                                t_.join();
+                                osd_threads[q] = null;
+                            }
+                        }
+                    }
+                    if (slen < osd.WIN_SAMPLES) { wi += 1; break; }
+                }
+                osd_nw_used = wi;
+            }
             if (vad_model) |*vm| {
                 // run Silero on its own thread — it overlaps the ResNet diar
                 // embedding pool below (~150 ms each on a 30 s chunk), so the
@@ -911,6 +951,36 @@ pub fn main() !void {
                         var iv = try vad.segmentsFromProbsP(alloc, vad_probs[0..vad_np], @intCast(envU("VAD_MIN_SPEECH_MS", 60)), @intCast(envU("VAD_PAD_MS", 200)));
                         defer iv.deinit();
                         for (iv.items) |sg| try g_vad_iv.append(.{ t_off + sg.start, t_off + sg.end });
+                    }
+                }
+                for (0..osd_nw_used) |wi| {
+                    if (osd_threads[wi]) |t_| {
+                        t_.join();
+                        osd_threads[wi] = null;
+                    }
+                }
+                if (osd_nw_used > 0) {
+                    // store each model window's per-frame argmax class and
+                    // P(overlap): the powerset class names the LOCAL PAIR
+                    // ({0,1}/{0,2}/{1,2}) — diarizeEmb maps locals to global
+                    // speakers via their SOLO frames (the turn-taking-prior
+                    // identity was the limiter: ~85% right, DER stuck ~17.1)
+                    for (0..osd_nw_used) |wi| {
+                        const lp = osd_logp[wi * 600 * osd.N_CLASSES ..];
+                        var w: OsdWin = undefined;
+                        w.t = t_off + @as(f32, @floatFromInt(wi * OSD_STEP)) / 16000.0;
+                        w.nf = @intCast(@min(osd_nf[wi], 600));
+                        for (0..w.nf) |fi| {
+                            var best: usize = 0;
+                            var pov: f32 = 0;
+                            for (0..osd.N_CLASSES) |c| {
+                                if (lp[fi * osd.N_CLASSES + c] > lp[fi * osd.N_CLASSES + best]) best = c;
+                                if (c >= 4) pov += @exp(lp[fi * osd.N_CLASSES + c]);
+                            }
+                            w.cls[fi] = @intCast(best);
+                            w.pov[fi] = pov;
+                        }
+                        try g_osd_win.append(w);
                     }
                 }
                 if (vad_np > 0) {
@@ -1508,7 +1578,87 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         }
     }
     if (open_seg) try flush(out, &rttm, file_id, s_start, s_end, s_spk);
-    try out.print("  → {d} speaker(s) ({d}/{d} speech segments)\n", .{ nspk, m, n });
+    // OSD overlap → 2nd-speaker emission (local-track identity): within one
+    // 10 s model window, each local speaker's SOLO frames vote for a global
+    // speaker (majority of our diar-window labels at those times); an
+    // overlap frame's powerset class then names the global PAIR directly.
+    // RTTM/timeline only; word attribution (g_segs) is left untouched.
+    var n_ov: usize = 0;
+    const osd_thr = envF("OSD_THR", 0.25); // ES2004a sweep saturates at 0.25 (16.47%)
+    for (g_osd_win.items) |*w| {
+        // local → global vote per window
+        var votes: [3][16]u32 = .{ .{0} ** 16, .{0} ** 16, .{0} ** 16 };
+        for (0..w.nf) |fi| {
+            const c = w.cls[fi];
+            if (c < 1 or c > 3) continue; // solo classes only
+            const ft = w.t + (@as(f32, @floatFromInt(osd.RFIELD)) / 2.0 + @as(f32, @floatFromInt(fi * osd.SHIFT))) / 16000.0;
+            // diar window containing ft
+            for (0..n) |i| {
+                if (spk[i] < 0) continue;
+                if (ft >= t0[i] and ft < t0[i] + seg_sec) {
+                    const g: usize = @intCast(spk[i]);
+                    if (g < 16) votes[c - 1][g] += 1;
+                    break;
+                }
+            }
+        }
+        var loc2glob: [3]i32 = .{ -1, -1, -1 };
+        for (0..3) |k| {
+            var bg: usize = 0;
+            for (1..16) |g| {
+                if (votes[k][g] > votes[k][bg]) bg = g;
+            }
+            if (votes[k][bg] >= 3) loc2glob[k] = @intCast(bg); // ≥3 solo frames (50 ms) to trust
+        }
+        // overlap runs → second-speaker rows
+        const pairs = [3][2]usize{ .{ 0, 1 }, .{ 0, 2 }, .{ 1, 2 } };
+        var run_s: f32 = -1;
+        var run_e: f32 = -1;
+        var run_sec: i32 = -1;
+        for (0..w.nf) |fi| {
+            const ft = w.t + (@as(f32, @floatFromInt(osd.RFIELD)) / 2.0 + @as(f32, @floatFromInt(fi * osd.SHIFT))) / 16000.0;
+            var sec: i32 = -1;
+            if (w.pov[fi] >= osd_thr) {
+                // pair = argmax over the 3 overlap classes (cls if ≥4, else recover)
+                var pc: usize = if (w.cls[fi] >= 4) w.cls[fi] - 4 else 0;
+                if (w.cls[fi] < 4) {
+                    // pov passed threshold but argmax was solo — pick the
+                    // likelier pair containing that solo speaker
+                    const solo: usize = if (w.cls[fi] >= 1) w.cls[fi] - 1 else 0;
+                    pc = if (solo == 0) 0 else if (solo == 1) 0 else 1; // {0,1} or {0,2} default
+                    if (solo == 1) pc = 0 else if (solo == 2) pc = 1;
+                }
+                const ga = loc2glob[pairs[pc][0]];
+                const gb = loc2glob[pairs[pc][1]];
+                // primary at ft = our window label
+                var prim: i32 = -1;
+                for (0..n) |i| {
+                    if (spk[i] < 0) continue;
+                    if (ft >= t0[i] and ft < t0[i] + seg_sec) {
+                        prim = spk[i];
+                        break;
+                    }
+                }
+                if (prim >= 0) { // a 2nd speaker only ON TOP of an asserted 1st
+                    if (ga >= 0 and ga != prim) sec = ga;
+                    if (gb >= 0 and gb != prim and (sec < 0 or ga == prim)) sec = gb;
+                }
+            }
+            if (sec >= 0 and sec == run_sec) {
+                run_e = ft + 0.017;
+            } else {
+                if (run_sec >= 0 and run_e - run_s >= 0.1)
+                    n_ov += try emitOverlapRow(&rttm, file_id, run_s, run_e, run_sec);
+                run_sec = sec;
+                run_s = ft;
+                run_e = ft + 0.017;
+            }
+        }
+        if (run_sec >= 0 and run_e - run_s >= 0.1)
+            n_ov += try emitOverlapRow(&rttm, file_id, run_s, run_e, run_sec);
+    }
+    if (n_ov > 0) try out.print("  [osd] {d} overlap 2nd-speaker rows (local-track identity)\n", .{n_ov});
+        try out.print("  → {d} speaker(s) ({d}/{d} speech segments)\n", .{ nspk, m, n });
 
     if (rttm_path) |p| {
         try std.fs.cwd().writeFile(.{ .sub_path = p, .data = rttm.items });
@@ -1557,6 +1707,29 @@ fn attributeTranscript(out: anytype) !void {
 // attention, so every token's onset is strictly ordered. Frame = 20 ms.
 fn vadWorker(vm: *vad.Model, samples_: []const f32, probs: []f32, np: *usize) void {
     np.* = vm.detect(samples_, probs);
+}
+
+fn osdWorker(om: *const osd.Model, samples_: []const f32, logp: []f32, nf: *usize) void {
+    nf.* = om.forward(alloc, samples_, logp) catch 0;
+}
+
+// 2nd-speaker overlap row, clipped to the silero speech intervals — OSD fires
+// on music/crowd too (tucrg 232→462% when rows bypassed the speech gate)
+fn emitOverlapRow(rttm: *std.ArrayList(u8), file_id: []const u8, a: f32, b: f32, sp: i32) !usize {
+    var n: usize = 0;
+    if (g_vad_iv.items.len == 0) {
+        try rttm.writer().print("SPEAKER {s} 1 {d:.3} {d:.3} <NA> <NA> spk{d} <NA> <NA>\n", .{ file_id, a, b - a, sp });
+        return 1;
+    }
+    for (g_vad_iv.items) |iv| {
+        const lo = @max(a, iv[0]);
+        const hi = @min(b, iv[1]);
+        if (hi - lo >= 0.1) {
+            try rttm.writer().print("SPEAKER {s} 1 {d:.3} {d:.3} <NA> <NA> spk{d} <NA> <NA>\n", .{ file_id, lo, hi - lo, sp });
+            n += 1;
+        }
+    }
+    return n;
 }
 
 // Emit "<tag> <t> <id> <dur>" for each silero speech piece of the 1.5 s diar

@@ -180,6 +180,35 @@ floor** (our 1-spk-region miss is just 7.2%); centroid-ambiguity and
 transition-window detectors both refuted (precision ≤46% < break-even) — a
 trained OSD (pyannote-segmentation-class port) is the recorded path.
 
+### WIN #7 — sovereign OSD: pyannote segmentation-3.0 port (2026-06-11)
+
+The single-label overlap floor (WIN #6 study) is now half-open. `osd_pyannote.zig`
+ports pyannote segmentation-3.0 (SincNet → 4× BiLSTM → powerset-7) from the
+sherpa-onnx ONNX export (`bench/convert_pyannote_seg.py`), validated against
+onnxruntime to max |Δlogp| 3.5e-5 / 0 argmax mismatches, Accelerate-accelerated
+413→90 ms per 10 s window (threaded over the diar pool).
+
+Emission (file mode, default ON, `OSD=0` disables; live off for latency):
+overlap frames (P(2-spk classes) ≥ 0.25) become SECOND-speaker RTTM rows.
+Identity = **local-track mapping**: each local speaker's SOLO frames vote for
+a global speaker, so the powerset pair names the global pair directly (the
+turn-taking prior was the limiter — refuted at ~17.1%). Rows are clipped to
+silero speech intervals and require an asserted primary (without those guards
+the crowd-noise file tucrg exploded 232→462%; with them it residues at 356% —
+real multi-voice the refs don't label, a known pathology). Crowd run-length
+gating was reverse-verified harmful (ES 16.5→16.9) and rolled back.
+
+| metric | before | after |
+|---|---|---|
+| ES2004a (4-spk far-field meeting) | 18.83% | **16.49%** (miss 16.0→12.5) |
+| VoxConverse-dev 216 mean / median | 8.67 / 4.13% | **8.49 / 3.72%** |
+| VoxConverse mean excl. tucrg | 7.63% | **6.87%** |
+| K=2 / K=4 / K=5-6 / K=7+ buckets | 5.0 / 8.5 / 7.9 / 10.2 | **4.4 / 7.3 / 6.8 / 10.1** |
+| demo4 (no overlap) / KO+EN fixture / jfk | 24.18 / PASS / ok | **24.18 (0 rows) / PASS / unchanged** |
+
+Full refutation trail in PERF_LOG P-1..7 (sliding aggregation ≈ no gain,
+probability-threshold saturation, crowd guard rollback).
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).

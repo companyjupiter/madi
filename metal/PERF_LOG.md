@@ -149,3 +149,17 @@ md-eval 성분 분해(/tmp/dg 하네스)로 두 버킷의 실패 모드 분리:
 | O-2 | 중첩 탐지 #1: 센트로이드 모호도 cos2/cos1 | ❌ data | 재현 20%/오탐 6% (1.5s 풀링이 중첩 구조를 뭉갬) |
 | O-3 | 중첩 탐지 #2: 화자 전환 인접 윈도 (±모호도 결합) | ❌ data | 최선 재현 35%/정밀 46% — 2차 화자 방출 손익분기 미달 |
 | O-4 | 결론: 학습 OSD 필요 (pyannote segmentation급 포팅 = Silero급 이상 별도 프로젝트) | 📋 백로그 | 단일 라벨 구조 한계로 기록 |
+
+## 학습 OSD 포팅: pyannote segmentation-3.0 (2026-06-11)
+소버린 포팅 공식 재적용: sherpa-onnx ONNX → bench/convert_pyannote_seg.py →
+osd_pyannote.zig (SincNet+BiLSTM×4+파워셋7), onnxruntime 심판 검증
+max|Δlogp|=3.5e-5, argmax 불일치 0/589. Accelerate sgemm/sgemv로 413→90ms/10s.
+| # | idea | result | metric |
+|---|------|--------|--------|
+| P-1 | 파워셋 argmax 중첩 검출 + 턴테이킹 prior 2차 화자 | ✅ 1차 | ES2004a 18.83→17.16% (miss 16.0→12.7) |
+| P-2 | 확률 임계(P(ov)≥θ) 검출 | ✅ 미세 | θ 스윕 포화 ~17.1 |
+| P-3 | 5s 슬라이딩+프레임 평균 집계 (pyannote식) | ❌ 무익 | 17.05 vs 17.12 — 디스조인트로 회귀 |
+| P-4 | **로컬 트랙 정체성**: 파워셋 페어 + 로컬 솔로 프레임의 전역 투표 | ✅ commit | ES2004a **16.47%** (θ=0.25 포화; miss 12.5/fa 1.8/conf 2.2) |
+| P-5 | OSD 행의 silero 클리핑 우회 → tucrg 232→462% 사고 | ✅ 수정 | emitOverlapRow가 g_vad_iv 교차로만 방출 + prim≥0 가드 (1차 화자 위에만 2차) |
+| P-6 | 군중 가드 (중첩 런 ≥3s 차단) | ❌ 역검증 | tucrg 불변(런이 원래 짧음), ES만 16.49→16.92 손상 — 롤백 |
+| P-7 | tucrg 잔차 (229.7→356%) | 📋 수용 | 군중 함성 = 진짜 다성인데 ref 미라벨 — 알려진 병리 파일 |
