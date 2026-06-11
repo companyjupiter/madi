@@ -68,7 +68,8 @@ extension ModelDownloader: URLSessionDownloadDelegate {
         }
         Task { @MainActor in
             self.state = .verifying
-            let ok = AssetManifest.modelIsValid()
+            // full digest check (slow, once) — launch-time uses the fast size check
+            let ok = await Task.detached { AssetManifest.modelHashMatches() }.value
             self.state = ok ? .ready
                 : .failed("SHA-256 mismatch — re-download")
         }
