@@ -97,6 +97,38 @@ demo4 forced-4 24.18% — exact match with history; KO+EN fixture PASS.
 Also: live reclusters now take the CLAIMED-voiceprint count as a K lower
 bound (a claimed print is a voice-matched, present speaker).
 
+### WIN #4 — sovereign Silero-VAD: speech validation (2026-06-11)
+
+The next-win diagnosis (tucrg 26 s file / 4.5 s ref speech → DER 919%; pqmho
+138 s / 14.9 s → 149%) exposed a structural flaw: the relative-RMS diar VAD
+(>0.4×median) passes ~half the windows even when NOTHING is speech. Five
+cheap discriminators were measured and refuted (PERF_LOG SV-1..5): absolute
+RMS (music is LOUDER than far-field speech), <|nospeech|> (dead in
+large-v3-turbo, P≈1e-10 on pure music), word-span gating (hallucinated words
+spread over music; meetings lose overlap speech), embedding speech-direction,
+2-8 Hz syllabic modulation (vocal music has it). A trained VAD is the only
+separating signal.
+
+**Shipped**: `vad_silero.zig` — sovereign CPU port of Silero-VAD v6 (16 kHz),
+weights converted from whisper.cpp's ggml export (`bench/convert_silero.py`),
+validated against the wcpp CLI segment-for-segment (±1 frame, 4 assets);
+~170× realtime single-thread, run on its own thread overlapping the diar
+embed pool. Three gates: diar windows w/o ≥0.25 s speech get RMS zeroed
+(drops them on every path), chunks w/ <0.25 s speech skip encode/decode, and
+timeline/RTTM segments are clipped to silero speech intervals (sub-window
+precision). `DIAR_ONLY=1` mode added for ~25× faster DER sweeps.
+
+| metric | before | after |
+|---|---|---|
+| **VoxConverse-dev 216-file MEAN DER** | 17.50% | **12.37%** (median 8.63→6.91; pyannote 3.1 ≈ 11.2) |
+| K=1 bucket / K=3 bucket | 26.6% / 37.3% | **14.8% / 17.7%** |
+| tucrg / pqmho (music-dominant) | 919% / 149% | 229.7% / 77.7% (residual = annotator-conservative refs) |
+| ES2004a (far-field meeting, auto-K) | 31.85% | **26.44%** (−5.4 pt) |
+| demo4 (K=4) | 24.18% | 24.67% (+0.5, tolerated) |
+| KO+EN fixture / jfk word ts / test_decoder | PASS | **PASS** (jfk referee identical 4/5 ms) |
+| clova 99 chunks + collapse rescues | 0 corrupted, 5 rescues | unchanged |
+| devops_ko wall time | 32.8 s | 34.4 s (+4.6% — VAD threaded over diar, residual is the cost) |
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).
@@ -110,6 +142,43 @@ bound (a claimed print is a voice-matched, present speaker).
 > speech for ~5× decode cost. Remaining candidates are model-level
 > (code-switch vocabulary) or the SHARE-style n-gram repetition detector for
 > noisy audio (no repro case in our assets; keep as a watch item, not a win).
+
+### WIN #3 — hybrid collapse-rescue decode (2026-06-11, quark-led)
+
+The repeat-loop watch item got its repro: clova (47 min KO meeting) has
+**5/99 chunks fully destroyed** by greedy loops ("Q. Q. Q."×55) — ~2.5 min of
+meeting content. The quark cross-reference against the new
+`whisper_cpp/quality` tree (host-logic taxonomy) plus engine isolation found
+the real mechanism: **NOT fallback/beam** (wcpp greedy `-nf -bs 1` transcribes
+those chunks perfectly) but **timestamp-token decoding** — `whisper-cli -nt`
+reproduces our identical collapse. The `<|t0|>…<|t1|>` segment structure is
+the regularizer.
+
+ts-mode is not a free lunch (each step measured, two shortcuts refuted):
+- ts-mode **transliterates code-switch terms** ("architecture"→"아키텍츄럴",
+  engine-independent — wcpp ts-greedy does it too), breaking the KO+EN fixture;
+- ts-mode may close the window early (EOT at a pause) → OpenAI answers with
+  seek + RE-ENCODE. Banning EOT instead → junk filler (". . . ~~", measured);
+  re-decoding the same window with forced initial ts (± <|startofprev|>
+  prompt) → out-of-distribution, re-transcribes the window start (measured);
+- pure ts-mode even collapses on a DIFFERENT chunk set (11/99 tails like
+  "네."×22 — disjoint from the no-ts set {4,63,65,80,86}).
+
+**Shipped hybrid**: plain no-ts greedy by default (code-switch fidelity,
+bit-identical text on clean assets) + token-periodicity collapse detector
+(`tokenCollapse`: run ≥ max(16, 4p) of tok[i]==tok[i−p], p ≤ 8) + on
+detection, re-decode the chunk with ts rules (`ts_rules_indirect`: OpenAI
+R1-R4 incl. the logsumexp(ts) > max(text) mass rule on raw logits) and
+OpenAI-faithful seek with re-encode of the remaining window.
+
+| metric | before | after |
+|---|---|---|
+| clova repeat-corrupted chunks | 5/99 (×44-55 loops) | **0/99** (5 rescues fire, exactly the bad set) |
+| rescued text vs wcpp reference | — | matches (NCM/LFP/모델링 content recovered) |
+| KO+EN fixture | PASS | **PASS** (plain path preserved) |
+| devops_ko / jfk text + word ts | — | bit-identical; acoustic referee unchanged (4/5 ms) |
+| decode tok/s (devops_ko) | 497-521 | 495-511 (wall time +0.2% = noise) |
+| false rescues on clean assets | — | 0 (jfk, devops_ko, wife, ES2004a) |
 
 ## 3. Word timestamps (타임스탬프)
 

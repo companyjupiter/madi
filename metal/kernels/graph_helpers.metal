@@ -139,6 +139,110 @@ kernel void logit_filter_indirect(
     }
 }
 
+// ts_rules_indirect — OpenAI timestamp-token decoding rules (whisper.cpp
+// whisper_process_logits parity). <|notimestamps|> decoding collapses into
+// repeat loops on hard audio (measured: clova 5/99 chunks "Q. Q. Q."×55, and
+// whisper-cli -nt reproduces the identical collapse) — the <|t0|>…<|t1|>
+// segment structure is the regularizer that prevents it. Rules:
+//   R0 specials 50258..50364 never sampled; anti-loop ×3 ban; begin window
+//   R1 first generated token must be a timestamp ≤ <|1.00|> (max_initial_ts)
+//   R2 pairing: ts ts → next is text; (text) ts → next is ts or EOT
+//   R3 non-decreasing: ban ts below the last sampled ts (+1 if pair closed)
+//   R4 probability: if logsumexp(ts) > max(text) on the masked logits, the
+//      segment boundary is more likely than any word → force a timestamp
+//      (log-normalizer cancels, so raw logits compare directly)
+// ONE threadgroup, Block=(256,1,1), Grid=(1,1,1).
+kernel void ts_rules_indirect(
+    device float*       logits        [[buffer(0)]],
+    device const uint*  past_tokens   [[buffer(1)]],
+    constant uint& num_suppress       [[buffer(2)]],
+    device const uint*  step_ptr      [[buffer(3)]],
+    constant uint& sample_begin       [[buffer(4)]],
+    uint i [[thread_position_in_threadgroup]])
+{
+    (void)num_suppress;
+    const float NEG = -3.4e38f;
+    const uint EOT = 50257, TS0 = 50365;
+    const uint step = step_ptr[0];
+
+    // R0a: specials (sot/lang/task/notimestamps) are never sampled
+    for (uint t = i + 50258; t < TS0; t += 256) logits[t] = NEG;
+    // R0b: anti-loop — if the last 3 sampled tokens are equal, ban a 4th
+    if (i == 0 && step >= sample_begin + 3) {
+        uint t1 = past_tokens[step - 1];
+        uint t2 = past_tokens[step - 2];
+        uint t3 = past_tokens[step - 3];
+        if (t1 == t2 && t2 == t3) logits[t1] = NEG;
+    }
+    // R0c: begin window — ban EOT + space for the first 4 generated steps
+    if (step < sample_begin + 4) {
+        if (i == 0) logits[220] = NEG;
+        if (i == 1) logits[EOT] = NEG;
+    }
+
+    // R1-R3 flags — every thread derives them from the same uniform inputs
+    bool last_ts  = step > sample_begin     && past_tokens[step - 1] >= TS0;
+    bool pen_ts   = step > sample_begin + 1 && past_tokens[step - 2] >= TS0;
+    uint last_val = 0;
+    for (uint p = step; p > sample_begin; p--) {
+        uint tk = past_tokens[p - 1];
+        if (tk >= TS0) { last_val = tk; break; }
+    }
+    bool ban_text = false, ban_ts = false;
+    uint ts_floor = TS0, ts_ceil = VOCAB;
+    if (step == sample_begin) {
+        ban_text = true;          // R1: first token is a timestamp…
+        ts_ceil  = TS0 + 51;      // …no later than <|1.00|> (max_initial)
+    } else if (last_ts && pen_ts) {
+        ban_ts = true;            // R2: pair closed → text next
+    } else if (last_ts) {
+        ban_text = true;          // R2: close the pair (or EOT)
+    }
+    if (last_val >= TS0)
+        ts_floor = (last_ts && !pen_ts) ? last_val : last_val + 1; // R3
+    threadgroup_barrier(mem_flags::mem_device);
+    if (ban_text) for (uint t = i; t < EOT; t += 256) logits[t] = NEG; // EOT stays legal
+    if (ban_ts) {
+        for (uint t = i + TS0; t < VOCAB; t += 256) logits[t] = NEG;
+    } else {
+        for (uint t = i + TS0; t < ts_floor; t += 256) logits[t] = NEG;
+        for (uint t = i + ts_ceil; t < VOCAB; t += 256) logits[t] = NEG;
+    }
+    threadgroup_barrier(mem_flags::mem_device);
+
+    // R4: timestamp-mass rule on the masked logits
+    threadgroup float r_text[256], r_ts[256], r_sum[256];
+    float mt = -INFINITY, ms = -INFINITY;
+    for (uint t = i; t < TS0; t += 256) mt = max(mt, logits[t]);
+    for (uint t = i + TS0; t < VOCAB; t += 256) ms = max(ms, logits[t]);
+    r_text[i] = mt; r_ts[i] = ms;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = 128; s > 0; s >>= 1) {
+        if (i < s) {
+            r_text[i] = max(r_text[i], r_text[i + s]);
+            r_ts[i]   = max(r_ts[i],   r_ts[i + s]);
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float max_text = r_text[0], max_ts = r_ts[0];
+    float se = 0.0f;
+    if (max_ts > NEG * 0.5f) {
+        for (uint t = i + TS0; t < VOCAB; t += 256) {
+            float v = logits[t];
+            if (v > NEG * 0.5f) se += exp(v - max_ts);
+        }
+    }
+    r_sum[i] = se;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = 128; s > 0; s >>= 1) {
+        if (i < s) r_sum[i] += r_sum[i + s];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float lse_ts = max_ts + log(r_sum[0] + 1e-30f);
+    if (lse_ts > max_text) // OpenAI bans everything below TS0 here, EOT included
+        for (uint t = i; t < TS0; t += 256) logits[t] = NEG;
+}
+
 // logit_gemv_f16_cg — coalesced variant: one SIMD-group (warp) per vocab row,
 // 32 lanes split `dim` and read emb CONTIGUOUSLY (coalesced), then simd_sum.
 // Block=256 (8 warps → 8 rows/threadgroup). Replaces the 1-thread/row version

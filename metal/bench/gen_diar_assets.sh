@@ -22,3 +22,15 @@ PY
 cp /tmp/resnet34_weights.bin assets/resnet34_diar.bin
 cp /tmp/kaldi_melbank.f32   assets/kaldi_melbank.bin
 echo "✅ assets/resnet34_diar.bin + assets/kaldi_melbank.bin regenerated"
+
+# Silero-VAD v6 (16k) weights: whisper.cpp ggml export → our flat f32 bin.
+# (트레인드 VAD가 필요한 이유는 PERF_LOG 'Speech-validation study' 참조 —
+#  에너지/nospeech/단어스팬 전부 음악 분리 실패 측정 기각.)
+WCPP=${WCPP:-$HOME/antigravity/whisper.cpp}
+if [ -f "$WCPP/models/for-tests-silero-v6.2.0-ggml.bin" ]; then
+  "$VENV"/bin/python bench/convert_silero.py \
+    "$WCPP/models/for-tests-silero-v6.2.0-ggml.bin" assets/silero_vad.bin
+  echo "✅ assets/silero_vad.bin regenerated"
+else
+  echo "⚠️  silero ggml not found at $WCPP/models — skipping VAD asset"
+fi
