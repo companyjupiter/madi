@@ -70,6 +70,75 @@ pub fn main() !void {
     }
     try out.print("MPS: {d:.2}ms  M4: {d:.2}ms  ({d:.2}x)  max|Δ|={d:.4} bad={d}\n", .{ mps_ms, m4_ms, mps_ms / m4_ms, max_err, nbad });
     try q8Section();
+    try flashSection();
+}
+
+// flash attention: simdgroup 32-q kernel (referee) vs tensor-ops 64-q kernel
+pub fn flashSection() !void {
+    const out = std.io.getStdOut().writer();
+    const SEQ: u32 = 1500;
+    const SEQP: u32 = 1536; // m4 kernel reads 64-row tiles → padded alloc
+    const NH: u32 = 20;
+    const QD: u32 = NH * 64;
+    const Q = try mtl.allocSlice(f16, SEQP * QD);
+    const Kb = try mtl.allocSlice(f16, SEQP * QD);
+    const V = try mtl.allocSlice(f16, SEQP * QD);
+    const O0 = try mtl.allocSlice(f16, SEQP * QD);
+    const O1 = try mtl.allocSlice(f16, SEQP * QD);
+    var rng = std.Random.DefaultPrng.init(23);
+    const r = rng.random();
+    @memset(Q, 0);
+    @memset(Kb, 0);
+    @memset(V, 0);
+    for (Q[0 .. SEQ * QD]) |*v| v.* = @floatCast((r.float(f32) - 0.5) * 2.0);
+    for (Kb[0 .. SEQ * QD]) |*v| v.* = @floatCast((r.float(f32) - 0.5) * 2.0);
+    for (V[0 .. SEQ * QD]) |*v| v.* = @floatCast((r.float(f32) - 0.5) * 2.0);
+    const f_old = try mtl.getFunction("flash_attention_enc_f16");
+    const f_new = try mtl.getFunction("m4_flash_enc");
+    const Pf = struct {
+        fn p(x: anytype) ?*const anyopaque {
+            return @ptrCast(x);
+        }
+    }.p;
+    const ps = @sizeOf(usize);
+    const u = @sizeOf(u32);
+    var o0 = O0.ptr;
+    var o1 = O1.ptr;
+    var qp = Q.ptr;
+    var kp = Kb.ptr;
+    var vp = V.ptr;
+    var sq = SEQ;
+    var hd: u32 = 64;
+    var n = NH;
+    var t = try std.time.Timer.start();
+    for (0..21) |i| {
+        if (i == 1) t.reset();
+        try mtl.beginCommandBuffer();
+        const params = [_]?*const anyopaque{ Pf(&o0), Pf(&qp), Pf(&kp), Pf(&vp), Pf(&sq), Pf(&hd), Pf(&n) };
+        const sizes = [_]usize{ ps, ps, ps, ps, u, u, u };
+        try mtl.dispatch(f_old, .{ NH, (SEQ + 31) / 32, 1 }, .{ 128, 1, 1 }, &params, &sizes);
+        try mtl.commitCommandBuffer();
+        try mtl.sync();
+    }
+    const old_ms = @as(f64, @floatFromInt(t.read())) / 1e6 / 20.0;
+    for (0..21) |i| {
+        if (i == 1) t.reset();
+        try mtl.beginCommandBuffer();
+        const params = [_]?*const anyopaque{ Pf(&o1), Pf(&qp), Pf(&kp), Pf(&vp), Pf(&sq), Pf(&n) };
+        const sizes = [_]usize{ ps, ps, ps, ps, u, u };
+        try mtl.dispatch(f_new, .{ NH, (SEQ + 63) / 64, 1 }, .{ 128, 1, 1 }, &params, &sizes);
+        try mtl.commitCommandBuffer();
+        try mtl.sync();
+    }
+    const new_ms = @as(f64, @floatFromInt(t.read())) / 1e6 / 20.0;
+    var max_err: f32 = 0;
+    var nbad: usize = 0;
+    for (0..SEQ * QD) |i| {
+        const e = @abs(@as(f32, @floatCast(O0[i])) - @as(f32, @floatCast(O1[i])));
+        if (e > max_err) max_err = e;
+        if (e > 0.01) nbad += 1;
+    }
+    try out.print("flash old(32q): {d:.3}ms  m4(64q): {d:.3}ms  ({d:.2}x)  max|Δ|={d:.5} bad={d}\n", .{ old_ms, new_ms, old_ms / new_ms, max_err, nbad });
 }
 
 // Q8-direct section appended by phase 2 (run as: out/test_m4 — both sections execute)

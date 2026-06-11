@@ -32,9 +32,11 @@ pub const Kernels = struct {
     m4_nn: ?mtl.Function,
     m4_bias: ?mtl.Function,
     m4_bias_gelu: ?mtl.Function,
+    m4_flash: ?mtl.Function,
 
     pub fn load() mtl.Error!Kernels {
         const m4_off = if (std.posix.getenv("ENC_M4")) |v| v[0] == '0' else false;
+        const m4f_off = if (std.posix.getenv("ENC_M4F")) |v| v[0] == '0' else false; // flash-only rollback
         return .{
             .ln = try mtl.getFunction("layer_norm_f16"),
             .brln = try mtl.getFunction("bias_res_ln_f16"),
@@ -46,6 +48,7 @@ pub const Kernels = struct {
             .m4_nn = if (m4_off) null else mtl.getFunction("m4_gemm_nn") catch null,
             .m4_bias = if (m4_off) null else mtl.getFunction("m4_gemm_bias") catch null,
             .m4_bias_gelu = if (m4_off) null else mtl.getFunction("m4_gemm_bias_gelu") catch null,
+            .m4_flash = if (m4_off or m4f_off) null else mtl.getFunction("m4_flash_enc") catch null,
         };
     }
 };
@@ -126,7 +129,16 @@ fn kM4Bias(f: mtl.Function, a: [*]f16, b: [*]f16, c: [*]f16, bias: [*]f32, m: u3
 }
 
 fn kFlash(K: Kernels, out: [*]f16, q: [*]f16, k: [*]f16, v: [*]f16, seq: u32) !void {
-    var a0 = out; var a1 = q; var a2 = k; var a3 = v; var sq = seq; var hd = HDD; var n = NH;
+    var a0 = out; var a1 = q; var a2 = k; var a3 = v; var sq = seq; var n = NH;
+    if (K.m4_flash) |m4f| {
+        // tensor-ops 64-q-tile kernel; q/k/v come from the padded qkv scratch
+        // (tail tiles read ≤ 36 rows past seq — see Scratch alloc)
+        const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sq), P(&n) };
+        const s = [_]usize{ PS, PS, PS, PS, U, U };
+        try mtl.dispatch(m4f, .{ NH, (seq + 63) / 64, 1 }, .{ 128, 1, 1 }, &p, &s);
+        return;
+    }
+    var hd = HDD;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sq), P(&hd), P(&n) };
     const s = [_]usize{ PS, PS, PS, PS, U, U, U };
     try mtl.dispatch(K.flash, .{ NH, (seq + 31) / 32, 1 }, .{ 128, 1, 1 }, &p, &s);

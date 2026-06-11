@@ -251,3 +251,157 @@ kernel void m4_gemm_q8tg(
         }
     }
 }
+
+// ── Metal-4 flash attention (encoder, bidirectional) ─────────────────────
+// Rewrite of flash_attention_enc_f16 with tensor-ops: 64-query tiles (the
+// simdgroup version used 32 — halves whole-K/V streaming per element) and
+// matmul2d for both QK^T and P·V. Q/K/V are consumed IN PLACE via strided
+// device tensor views (row stride = nh*64) — no threadgroup staging copies.
+// S goes cooperative → threadgroup for the online softmax (matmul operands
+// cannot be cooperative); P·V accumulates in a cooperative tensor with
+// coordinate-based row rescaling.
+// REQUIREMENT: q/k/v buffers padded to ≥ ceil(seq/64)*64 rows (tail tiles
+// read the padding; padded K rows are masked by kcur in the softmax, padded
+// Q rows are dropped by the bounds-checked epilogue scatter).
+// Layout identical to the original: packed [seq][nh*64], head offset h*64,
+// scale 1/8. Grid: (nh, ceil(seq/64)) × 128 threads.
+kernel void m4_flash_enc(
+    device half*  out_buf [[buffer(0)]],
+    device half*  q_buf   [[buffer(1)]],
+    device half*  k_buf   [[buffer(2)]],
+    device half*  v_buf   [[buffer(3)]],
+    constant uint& seq_len [[buffer(4)]],
+    constant uint& nh      [[buffer(5)]],
+    uint2 tgid [[threadgroup_position_in_grid]],
+    uint lid [[thread_index_in_threadgroup]])
+{
+    const uint h = tgid.x;
+    const uint q0 = tgid.y * 64;
+    if (q0 >= seq_len) return;
+    const int qd = (int)(nh * 64);
+    const float scale = 0.125f;
+    const int rows_pad = (int)((seq_len + 63u) & ~63u);
+
+    threadgroup float s_sc[64 * 64];  // S scores (f32, parity with referee)
+    threadgroup half  s_p[64 * 64];   // P = exp(S - m)
+    threadgroup float s_alpha[64];
+    threadgroup float s_sum[64];
+    threadgroup float s_m[64];
+    threadgroup float s_red[2][64];   // 2-thread/row softmax partials
+
+    if (lid < 64) {
+        s_m[lid] = -INFINITY;
+        s_sum[lid] = 0.0f;
+    }
+
+    // strided device views: rows = seq (padded), cols = 64 head dims
+    auto tQ = tensor(q_buf + h * 64, dextents<int, 2>(64, rows_pad), array<int, 2>{1, qd});
+    auto tK = tensor(k_buf + h * 64, dextents<int, 2>(64, rows_pad), array<int, 2>{1, qd});
+    auto tV = tensor(v_buf + h * 64, dextents<int, 2>(64, rows_pad), array<int, 2>{1, qd});
+    auto tP = tensor(&s_p[0], dextents<int, 2>(64, 64));
+
+    constexpr auto dQK = matmul2d_descriptor(64, 64, 64, false, true, false);
+    matmul2d<dQK, execution_simdgroups<4>> opQK;
+    constexpr auto dPV = matmul2d_descriptor(
+        64, 64, 64, false, false, false,
+        matmul2d_descriptor::mode::multiply_accumulate);
+    matmul2d<dPV, execution_simdgroups<4>> opPV;
+
+    auto sQ = tQ.slice(0, (int)q0);
+    auto sP = tP.slice(0, 0);
+    auto sV0 = tV.slice(0, 0);
+    auto accO = opPV.get_destination_cooperative_tensor<
+        decltype(sP), decltype(sV0), float>();
+#pragma unroll
+    for (uint16_t i = 0; i < accO.get_capacity(); ++i) {
+        if (accO.is_valid_element(i)) accO[i] = 0;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    for (uint kv0 = 0; kv0 < seq_len; kv0 += 64) {
+        const uint kcur = min(seq_len - kv0, 64u);
+        auto sK = tK.slice(0, (int)kv0);
+        auto accS = opQK.get_destination_cooperative_tensor<
+            decltype(sQ), decltype(sK), float>();
+        opQK.run(sQ, sK, accS);
+#pragma unroll
+        for (uint16_t i = 0; i < accS.get_capacity(); ++i) {
+            if (accS.is_valid_element(i)) {
+                auto ids = accS.get_multidimensional_index(i);
+                s_sc[(uint)ids[1] * 64 + (uint)ids[0]] = accS[i];
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        // online softmax, 2 threads per query row (32 cols each), float4 reads
+        {
+            const uint qi = lid & 63u;
+            const uint hf = lid >> 6;          // 0 or 1: column half
+            const uint c0 = hf * 32u;
+            threadgroup const float4* row4 =
+                (threadgroup const float4*)(s_sc + qi * 64 + c0);
+            float4 mx4 = float4(-INFINITY);
+            for (uint k4 = 0; k4 < 8; k4++) {
+                float4 v = row4[k4] * scale;
+                // mask columns ≥ kcur (only the tail block has any)
+                const uint kb = c0 + k4 * 4;
+                if (kb + 4 > kcur) {
+                    v.x = (kb + 0 < kcur) ? v.x : -INFINITY;
+                    v.y = (kb + 1 < kcur) ? v.y : -INFINITY;
+                    v.z = (kb + 2 < kcur) ? v.z : -INFINITY;
+                    v.w = (kb + 3 < kcur) ? v.w : -INFINITY;
+                }
+                mx4 = max(mx4, v);
+            }
+            s_red[hf][qi] = max(max(mx4.x, mx4.y), max(mx4.z, mx4.w));
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+            const float old_m = s_m[qi];
+            const float new_m = max(old_m, max(s_red[0][qi], s_red[1][qi]));
+            const float alpha = (old_m == -INFINITY) ? 0.0f : exp(old_m - new_m);
+            float bs = 0.0f;
+            threadgroup half4* prow4 = (threadgroup half4*)(s_p + qi * 64 + c0);
+            for (uint k4 = 0; k4 < 8; k4++) {
+                float4 v = row4[k4] * scale;
+                const uint kb = c0 + k4 * 4;
+                float4 e = exp(v - new_m);
+                if (kb + 4 > kcur) {
+                    e.x = (kb + 0 < kcur) ? e.x : 0.0f;
+                    e.y = (kb + 1 < kcur) ? e.y : 0.0f;
+                    e.z = (kb + 2 < kcur) ? e.z : 0.0f;
+                    e.w = (kb + 3 < kcur) ? e.w : 0.0f;
+                }
+                bs += e.x + e.y + e.z + e.w;
+                prow4[k4] = half4(e);
+            }
+            s_red[hf][qi] = bs;
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+            if (hf == 0) {
+                s_m[qi] = new_m;
+                s_alpha[qi] = alpha;
+                s_sum[qi] = s_sum[qi] * alpha + s_red[0][qi] + s_red[1][qi];
+            }
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        // rescale accumulated O rows by alpha
+#pragma unroll
+        for (uint16_t i = 0; i < accO.get_capacity(); ++i) {
+            if (accO.is_valid_element(i)) {
+                auto ids = accO.get_multidimensional_index(i);
+                accO[i] *= s_alpha[(uint)ids[1]];
+            }
+        }
+        auto sV = tV.slice(0, (int)kv0);
+        opPV.run(sP, sV, accO); // O += P·V
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    // epilogue: O / sum → out (bounds-checked: drops padded Q rows)
+#pragma unroll
+    for (uint16_t i = 0; i < accO.get_capacity(); ++i) {
+        if (accO.is_valid_element(i)) {
+            auto ids = accO.get_multidimensional_index(i);
+            const uint qi = q0 + (uint)ids[1];
+            if (qi < seq_len)
+                out_buf[qi * (uint)qd + h * 64 + (uint)ids[0]] =
+                    (half)(accO[i] / (s_sum[(uint)ids[1]] + 1e-6f));
+        }
+    }
+}

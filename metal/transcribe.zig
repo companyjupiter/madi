@@ -614,7 +614,9 @@ pub fn main() !void {
     // ── encoder scratch (F16 activations, reused per chunk) ─────────
     const escr = enc.Scratch{
         .x_ln = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr,
-        .qkv = (try mtl.allocSlice(f16, 3 * EB * ENC_SEQ * D)).ptr,
+        // +64 rows: m4_flash_enc 64-row tail tiles read past the last batch's
+        // row 1500 (masked/dropped, but the bytes must exist)
+        .qkv = (try mtl.allocSlice(f16, (3 * EB * ENC_SEQ + 64) * D)).ptr,
         .ao = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr,
         .mo = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr,
         .mh = (try mtl.allocSlice(f16, EB * ENC_SEQ * MLP)).ptr,
