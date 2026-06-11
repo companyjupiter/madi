@@ -153,7 +153,7 @@ failure modes, each with its own fix (full trail in PERF_LOG B-1..B-8):
 | **mean / median** | 12.37% / 6.91% | **8.67% / 4.13%** — beats pyannote 3.1 (≈11.2%) |
 | K=1 / K=2 / K=3 | 14.8 / 7.2 / 17.7 | **5.2 / 5.0 / 14.8** |
 | K=4 / K=5-6 / K=7+ | 9.4 / 9.6 / 16.9 | **8.5 / 7.9 / 10.2** |
-| ES2004a (far-field, auto-K) | 26.44% (K=5) | **18.83% (K=4 — true K)** |
+| ES2004a (far-field, auto-K) | 26.44% (K=5) | **18.83%** (forced K=4 identical — the gain is the speech gating, NOT the K pick; legacy-VAD forced-4 reproduces 32.55 exactly. auto-K picking the true 4 is a 0-DER side effect of cleaner embeddings) |
 | demo4 (K=4) / KO+EN fixture / jfk | 24.67 / PASS / ok | **24.18 / PASS / unchanged** |
 
 Bench infra hardened after a concurrent-run contamination incident: full_bench
