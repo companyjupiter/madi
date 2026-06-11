@@ -97,6 +97,38 @@ demo4 forced-4 24.18% — exact match with history; KO+EN fixture PASS.
 Also: live reclusters now take the CLAIMED-voiceprint count as a K lower
 bound (a claimed print is a voice-matched, present speaker).
 
+### WIN #4 — sovereign Silero-VAD: speech validation (2026-06-11)
+
+The next-win diagnosis (tucrg 26 s file / 4.5 s ref speech → DER 919%; pqmho
+138 s / 14.9 s → 149%) exposed a structural flaw: the relative-RMS diar VAD
+(>0.4×median) passes ~half the windows even when NOTHING is speech. Five
+cheap discriminators were measured and refuted (PERF_LOG SV-1..5): absolute
+RMS (music is LOUDER than far-field speech), <|nospeech|> (dead in
+large-v3-turbo, P≈1e-10 on pure music), word-span gating (hallucinated words
+spread over music; meetings lose overlap speech), embedding speech-direction,
+2-8 Hz syllabic modulation (vocal music has it). A trained VAD is the only
+separating signal.
+
+**Shipped**: `vad_silero.zig` — sovereign CPU port of Silero-VAD v6 (16 kHz),
+weights converted from whisper.cpp's ggml export (`bench/convert_silero.py`),
+validated against the wcpp CLI segment-for-segment (±1 frame, 4 assets);
+~170× realtime single-thread, run on its own thread overlapping the diar
+embed pool. Three gates: diar windows w/o ≥0.25 s speech get RMS zeroed
+(drops them on every path), chunks w/ <0.25 s speech skip encode/decode, and
+timeline/RTTM segments are clipped to silero speech intervals (sub-window
+precision). `DIAR_ONLY=1` mode added for ~25× faster DER sweeps.
+
+| metric | before | after |
+|---|---|---|
+| **VoxConverse-dev 216-file MEAN DER** | 17.50% | **12.37%** (median 8.63→6.91; pyannote 3.1 ≈ 11.2) |
+| K=1 bucket / K=3 bucket | 26.6% / 37.3% | **14.8% / 17.7%** |
+| tucrg / pqmho (music-dominant) | 919% / 149% | 229.7% / 77.7% (residual = annotator-conservative refs) |
+| ES2004a (far-field meeting, auto-K) | 31.85% | **26.44%** (−5.4 pt) |
+| demo4 (K=4) | 24.18% | 24.67% (+0.5, tolerated) |
+| KO+EN fixture / jfk word ts / test_decoder | PASS | **PASS** (jfk referee identical 4/5 ms) |
+| clova 99 chunks + collapse rescues | 0 corrupted, 5 rescues | unchanged |
+| devops_ko wall time | 32.8 s | 34.4 s (+4.6% — VAD threaded over diar, residual is the cost) |
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).

@@ -19,6 +19,7 @@ const mel = @import("mel.zig");
 const enc = @import("encoder.zig");
 const dec = @import("decoder.zig");
 const diar = @import("diar_resnet.zig");
+const vad = @import("vad_silero.zig");
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 
 const METALLIB = @embedFile("whisper.metallib");
@@ -302,6 +303,7 @@ const Word = struct { t: f32, txt: []const u8 };
 const SpkSeg = struct { a: f32, b: f32, spk: i32 };
 var g_words = std.ArrayList(Word).init(alloc);
 var g_segs = std.ArrayList(SpkSeg).init(alloc);
+var g_vad_iv = std.ArrayList([2]f32).init(alloc); // silero speech intervals (global s) — clips diar segments to speech
 
 fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
     return std.fmt.bufPrint(buf, fmt, .{l}) catch unreachable;
@@ -533,6 +535,15 @@ pub fn main() !void {
     var kb_d2: [256]u8 = undefined;
     const diar_mb = std.fmt.bufPrint(&kb_d2, "{s}/kaldi_melbank.bin", .{bpe_dir(bpe_path)}) catch unreachable;
     var diar_model = try diar.Model.load(alloc, diar_w, diar_mb);
+    // Silero-VAD (sovereign CPU port) — trained speech/non-speech verdict.
+    // Energy/relative-RMS cannot reject music (pqmho music RMS > close-mic
+    // speech RMS) and <|nospeech|> is dead in large-v3-turbo; Silero is the
+    // signal that separates (measured: pqmho 138s → 11.4s vs ref 14.9s).
+    // Optional asset: absent → legacy energy-only behavior.
+    var kb_d3: [256]u8 = undefined;
+    const vad_path = std.fmt.bufPrint(&kb_d3, "{s}/silero_vad.bin", .{bpe_dir(bpe_path)}) catch unreachable;
+    var vad_model: ?vad.Model = vad.Model.load(alloc, vad_path) catch null;
+    if (vad_model == null) try out.print("[vad] silero_vad.bin not found — energy-only VAD\n", .{});
     const c1w = try upConvWF16(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
     const c1b = try upVec(sf, "model.encoder.conv1.bias");
     const c2w = try upConvWF16(sf, "model.encoder.conv2.weight", D, D, 3);
@@ -693,6 +704,7 @@ pub fn main() !void {
     // raw chunk audio per slot — the timestamp-seek re-encode needs it after
     // `samples` has been overwritten while gathering the rest of the batch
     const slot_samp = try alloc.alloc(f32, 8 * mel.CHUNK_SAMPLES);
+    const vad_probs = try alloc.alloc(f32, mel.CHUNK_SAMPLES / vad.N_WINDOW + 2); // silero per-32ms speech probs (per chunk)
     var full = std.ArrayList(u8).init(alloc);
     const SEG_SAMP: usize = 24000; // 1.5 s @ 16 kHz
     const SEG_SEC: f32 = 1.5;
@@ -853,6 +865,21 @@ pub fn main() !void {
             if (chunk > 0 and got == 0) { reached_end = true; break :gather; }
             const t_off: f32 = g_off + @as(f32, @floatFromInt(chunk)) * 30.0;
 
+            // Silero speech mask for this chunk (32 ms frames). Drives both
+            // gates below: diar windows without ≥0.25 s of speech get their
+            // RMS zeroed (the existing relative-RMS VAD then drops them on
+            // every path — file timeline/RTTM, live SPK, FLUSH relabel), and
+            // a chunk with <0.25 s of speech total skips encode/decode.
+            var vad_np: usize = 0;
+            var chunk_speech_s: f32 = 1e9; // no model → everything passes
+            var vad_thread: ?std.Thread = null;
+            if (vad_model) |*vm| {
+                // run Silero on its own thread — it overlaps the ResNet diar
+                // embedding pool below (~150 ms each on a 30 s chunk), so the
+                // trained VAD costs ~0 wall time on the gather path
+                vad_thread = try std.Thread.spawn(.{}, vadWorker, .{ vm, samples[0..got], vad_probs, &vad_np });
+            }
+
             // diarization: 256-d ResNet34 embedding per 1.5 s window. Non-stream
             // accumulates for end-of-file k-means; stream mode clusters online
             // (resident centroids) and emits "SPK <gtime> <id>" right away.
@@ -872,6 +899,30 @@ pub fn main() !void {
                     spawned += 1;
                 }
                 for (0..spawned) |ti| threads[ti].join();
+                if (vad_thread) |vt| {
+                    vt.join();
+                    vad_thread = null;
+                    chunk_speech_s = 0;
+                    for (vad_probs[0..vad_np]) |pv| {
+                        if (pv >= 0.5) chunk_speech_s += 0.032;
+                    }
+                    if (!stream) { // file mode: keep speech intervals for RTTM clipping
+                        var iv = try vad.segmentsFromProbs(alloc, vad_probs[0..vad_np]);
+                        defer iv.deinit();
+                        for (iv.items) |sg| try g_vad_iv.append(.{ t_off + sg.start, t_off + sg.end });
+                    }
+                }
+                if (vad_np > 0) {
+                    for (0..nwin) |wsg| {
+                        const f0 = wsg * SEG_SAMP / vad.N_WINDOW; // 1.5 s window → 32 ms frames
+                        const f1 = @min(f0 + SEG_SAMP / vad.N_WINDOW, vad_np);
+                        var sp_s: f32 = 0;
+                        for (vad_probs[f0..f1]) |pv| {
+                            if (pv >= 0.5) sp_s += 0.032;
+                        }
+                        if (sp_s < 0.25) crms[wsg] = 0; // non-speech window (music/noise/silence)
+                    }
+                }
                 if (stream_diar) {
                     // per-segment relative-energy VAD: keep windows RMS > 0.3×median
                     var rtmp: [64]f32 = undefined;
@@ -940,11 +991,27 @@ pub fn main() !void {
             }
         }
 
+        if (vad_thread) |vt| { // diar block skipped (no-diar stream) — join here
+            vt.join();
+            vad_thread = null;
+            chunk_speech_s = 0;
+            for (vad_probs[0..vad_np]) |pv| {
+                if (pv >= 0.5) chunk_speech_s += 0.032;
+            }
+        }
+        // DIAR_ONLY=1: diarization-only run (DER benches) — diar windows +
+        // silero intervals are complete at this point; whisper encode/decode
+        // contributes nothing to the RTTM. ~20× faster VoxConverse sweeps.
+        if (std.posix.getenv("DIAR_ONLY") != null) {
+            if (got < mel.CHUNK_SAMPLES) { reached_end = true; chunk += 1; break :gather; }
+            chunk += 1;
+            continue :gather;
+        }
         // VAD: skip silent chunks entirely (no mel/encode/decode) — avoids the
         // silence-hallucination junk and saves compute on quiet meeting stretches.
         const seg_rms = maxWinRms(samples, got); // loudest 1 s window, [-1,1] RMS
-        if (seg_rms <= vad_thresh) {
-            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (silence — skipped)\n", .{ chunk + 1, n_chunks, t_off });
+        if (seg_rms <= vad_thresh or chunk_speech_s < 0.25) {
+            if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] ({s} — skipped)\n", .{ chunk + 1, n_chunks, t_off, if (seg_rms <= vad_thresh) @as([]const u8, "silence") else "non-speech" });
             if (got < mel.CHUNK_SAMPLES) { reached_end = true; chunk += 1; break :gather; }
             chunk += 1;
             continue :gather;
@@ -1003,9 +1070,16 @@ pub fn main() !void {
         for (SEED, 0..) |s, i| { d_tokens[i] = s; out_tokens[i] = s; }
         @memset(d_ca, 0);
 
-        // language detection (Whisper-style): the prediction at the <|sot|>
-        // position is the language token. Detect once (constant per file) by
-        // arg-max over the language-token range [50259..50358]; env override skips.
+        // SOT probe (every chunk): the prediction at the <|sot|> position
+        // carries TWO model-side signals from one cheap forward —
+        //   · language token arg-max [50259..50358] (detected once per file)
+        //   · P(<|nospeech|>=50363): the model's own speech/non-speech verdict.
+        //     Energy cannot make this call — measured: pqmho's music has
+        //     HIGHER window RMS (p25 0.154) than wife real speech (med 0.052)
+        //     or ES2004a far-field (med 0.0067).
+        // (P(nospeech) was measured here and REFUTED: ≈1e-10 on pure music and
+        // real speech alike — <|nospeech|> is dead in large-v3-turbo. The SOT
+        // probe stays lang-detect-only; see PERF_LOG SV-2.)
         if (lang_tok == 0) {
             d_pos[0] = 0;
             try mtl.beginCommandBuffer();
@@ -1019,7 +1093,8 @@ pub fn main() !void {
             try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
-            var bl: u32 = 50259; var bv: f32 = d_logits[50259];
+            var bl: u32 = 50259;
+            var bv: f32 = d_logits[50259];
             var lt: u32 = 50259;
             while (lt <= 50358) : (lt += 1) { if (d_logits[lt] > bv) { bv = d_logits[lt]; bl = lt; } }
             lang_tok = bl;
@@ -1388,7 +1463,18 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
     var rttm = std.ArrayList(u8).init(alloc);
     defer rttm.deinit();
     const flush = struct {
+        // emit [a,b] clipped to the silero speech intervals (sub-window
+        // precision — a 1.5 s diar window containing 0.3 s of speech must
+        // not claim 1.5 s of speaker time; tucrg measured 919% DER that way)
         fn f(o: anytype, r: *std.ArrayList(u8), fid: []const u8, a: f32, b: f32, sp: i32) !void {
+            if (g_vad_iv.items.len == 0) return emit(o, r, fid, a, b, sp);
+            for (g_vad_iv.items) |iv| {
+                const lo = @max(a, iv[0]);
+                const hi = @min(b, iv[1]);
+                if (hi - lo >= 0.1) try emit(o, r, fid, lo, hi, sp);
+            }
+        }
+        fn emit(o: anytype, r: *std.ArrayList(u8), fid: []const u8, a: f32, b: f32, sp: i32) !void {
             try o.print("  [{d:.2}s - {d:.2}s] Speaker {d}\n", .{ a, b, sp });
             try r.writer().print("SPEAKER {s} 1 {d:.3} {d:.3} <NA> <NA> spk{d} <NA> <NA>\n", .{ fid, a, b - a, sp });
             g_segs.append(.{ .a = a, .b = b, .spk = sp }) catch {};
@@ -1453,6 +1539,10 @@ fn attributeTranscript(out: anytype) !void {
 // argmax, which picked each token's peak independently (non-monotonic → time
 // inversions). DTW finds one monotonic token→frame path maximizing total
 // attention, so every token's onset is strictly ordered. Frame = 20 ms.
+fn vadWorker(vm: *vad.Model, samples_: []const f32, probs: []f32, np: *usize) void {
+    np.* = vm.detect(samples_, probs);
+}
+
 // Repeat-loop collapse detector: greedy no-ts decoding can lock into a
 // periodic token loop on hard audio ("Q. Q. Q."×55 — clova 5/99 chunks).
 // Periodicity test: a run of ≥max(16, 4p) positions with tok[i]==tok[i-p]

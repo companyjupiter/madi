@@ -37,7 +37,8 @@ for i, id_ in enumerate(ids):
     wav, ref = os.path.join(AUDIO, id_ + ".wav"), os.path.join(VOX, "dev", id_ + ".rttm")
     tmp, sysr = f"/tmp/{id_}.wav", f"/tmp/{id_}.sys.rttm"
     subprocess.run(["ffmpeg", "-y", "-i", wav, "-ar", "16000", "-ac", "1", tmp], capture_output=True)
-    subprocess.run([TR, MODEL, tmp, BPE, sysr], capture_output=True)
+    subprocess.run([TR, MODEL, tmp, BPE, sysr], capture_output=True,
+                   env={**os.environ, "DIAR_ONLY": "1"})  # DER needs diar only (~20x faster)
     d, k = der(ref, sysr), nspk(ref)
     rec = {"id": id_, "der": d, "nspk": k}
     open(RESULTS, "a").write(json.dumps(rec) + "\n")

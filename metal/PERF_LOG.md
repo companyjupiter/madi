@@ -111,3 +111,17 @@ quark atoms: `metal_kernel__ts_rules_indirect`, `fn__tokenCollapse`,
 | Q-4 | 재인코드 없는 seek (forced initial ts ± startofprev 프롬프트) | ❌ 역검증 | 분포 밖 — 윈도 시작부 재전사 (jfk "and so," 중복) |
 | Q-5 | 순수 ts-모드 상시 적용 | ❌ data | 코드스위치 음차("아키텍츄럴", wcpp도 동일) + 다른 11/99 청크 꼬리 붕괴 ("네."×22) |
 | Q-6 | **하이브리드: plain 기본 + 토큰 주기성 감지 시 ts+재인코드 seek 재디코드** | ✅ commit | clova 5/99→0/99 (정확히 그 5청크만 구조), 픽스처 PASS, 클린 자산 텍스트 bit-identical, tok/s 495-511(=기준), 오발동 0 |
+
+## Speech-validation study (2026-06-11, 후속: VAD 거짓 경보)
+재현: tucrg(26s 중 발화 4.5s) DER 919%, pqmho(138s 중 14.9s) 149% — 거짓
+경보가 채점 발화의 수 배. diar VAD가 상대 임계(>0.4×median)라 음악/잡음만
+있어도 절반가량 통과.
+| # | idea | result | metric |
+|---|------|--------|--------|
+| SV-1 | 절대 RMS 하한 | ❌ data | pqmho 음악 RMS p25=0.154 > wife 실발화 med 0.052 > ES2004a far-field med 0.0067 — 에너지로 음악/발화 분리 불가 |
+| SV-2 | no_speech_prob (모델측, OpenAI 공식) | ❌ data | **large-v3-turbo에서 <|nospeech|>는 죽어있음**: 순수 음악(pqmho)과 실발화(jfk) 모두 P≈1e-11~1e-10. 디지털 침묵 한정이 아니라 전면적 (증류 캘리브레이션 소실 추정). SOT 프로브는 lang-detect와 공용으로 유지 |
+| SV-3 | 단어 스팬 게이팅 (Whisper 자체 = VAD) | 🔬 측정 중 | tucrg 전사가 정확히 희소 발화만 검출 — RTTM을 단어 스팬 합집합으로 게이트 |
+| SV-3 | 단어 스팬 게이팅 (Whisper=VAD) | ❌ 역검증 | 양방향 실패: 음악 위 환각 단어가 DTW로 퍼져 마스크 미축소(tucrg 25s/26s), 회의 중첩 발화 잘림(ES2004a 31.9→47.8% 역회귀) |
+| SV-4 | 임베딩 발화-방향 분리 (ResNet 코사인) | ❌ data | tucrg 진짜 발화가 음악보다 낮음 (-0.04 vs +0.03) — far-field 전이 실패 |
+| SV-5 | 2-8Hz 음절 변조 비율 | ❌ data | 보컬 음악이 음절 대역 변조 보유 (pqmho 음악 0.582 ≈ 발화 0.578) |
+| SV-6 | **Silero-VAD v6 소버린 포팅** (vad_silero.zig, wcpp ggml 가중치 + CLI 교차검증 ±1프레임) | ✅ commit | 윈도 게이트(crms 0화) + 청크 스킵 + RTTM 서브윈도 클리핑. tucrg 919→230%, pqmho 149→78%, **ES2004a 31.85→26.44%(-5.4pt)**, demo4 24.18→24.67, 픽스처 PASS, clova 99/99 + rescue 5 정상. diar 스레드풀과 병행 실행으로 벽시계 비용 ~0 |
