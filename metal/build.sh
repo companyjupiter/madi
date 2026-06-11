@@ -21,7 +21,11 @@ AIR=()
 for m in kernels/*.metal; do
     [ "$(basename "$m")" = "smoke.metal" ] && continue   # smoke has its own lib
     base="$(basename "$m" .metal)"
-    xcrun metal -c "$m" -o "$BUILD/${base}.air" -std=metal3.0 -Wall -Werror
+    case "$base" in
+        m4_*) STD=metal4.0 ;;   # Metal 4 tensor-ops kernels
+        *)    STD=metal3.0 ;;
+    esac
+    xcrun metal -c "$m" -o "$BUILD/${base}.air" -std=$STD -Wall -Werror
     AIR+=("$BUILD/${base}.air")
 done
 xcrun metallib "${AIR[@]}" -o "$BUILD/whisper.metallib"

@@ -28,8 +28,15 @@ pub const Kernels = struct {
     flash: mtl.Function,
     cvt: mtl.Function,
     deq: mtl.Function,
+    // Metal 4 tensor-ops GEMMs (ENC_M4=0 falls back to MPS)
+    m4_nn: ?mtl.Function,
+    m4_bias: ?mtl.Function,
+    m4_bias_gelu: ?mtl.Function,
+    m4_flash: ?mtl.Function,
 
     pub fn load() mtl.Error!Kernels {
+        const m4_off = if (std.posix.getenv("ENC_M4")) |v| v[0] == '0' else false;
+        const m4f_off = if (std.posix.getenv("ENC_M4F")) |v| v[0] == '0' else false; // flash-only rollback
         return .{
             .ln = try mtl.getFunction("layer_norm_f16"),
             .brln = try mtl.getFunction("bias_res_ln_f16"),
@@ -38,6 +45,10 @@ pub const Kernels = struct {
             .flash = try mtl.getFunction("flash_attention_enc_f16"),
             .cvt = try mtl.getFunction("cvt_f16_f32"),
             .deq = try mtl.getFunction("dequant_q8_f16"),
+            .m4_nn = if (m4_off) null else mtl.getFunction("m4_gemm_nn") catch null,
+            .m4_bias = if (m4_off) null else mtl.getFunction("m4_gemm_bias") catch null,
+            .m4_bias_gelu = if (m4_off) null else mtl.getFunction("m4_gemm_bias_gelu") catch null,
+            .m4_flash = if (m4_off or m4f_off) null else mtl.getFunction("m4_flash_enc") catch null,
         };
     }
 };
@@ -70,6 +81,7 @@ pub const Scratch = struct {
     mo: [*]f16,
     mh: [*]f16,
     wdq: [*]f16, // weight dequant scratch, size >= MLP*D
+    wdq2: [*]f16, // second tile — lets the next dequant overlap the previous GEMM
 };
 
 inline fn P(x: anytype) ?*const anyopaque {
@@ -103,8 +115,30 @@ fn kGelu(K: Kernels, x: [*]f16, n: u32) !void {
     const s = [_]usize{ PS, U };
     try mtl.dispatch(K.gelu, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
+fn kM4(f: mtl.Function, a: [*]f16, b: [*]f16, c: [*]f16, m: u32, n: u32, k: u32) !void {
+    var a0 = a; var a1 = b; var a2 = c; var mm = m; var nn = n; var kk = k;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&mm), P(&nn), P(&kk) };
+    const sz = [_]usize{ PS, PS, PS, U, U, U };
+    try mtl.dispatch(f, .{ (n + 63) / 64, (m + 63) / 64, 1 }, .{ 128, 1, 1 }, &p, &sz);
+}
+fn kM4Bias(f: mtl.Function, a: [*]f16, b: [*]f16, c: [*]f16, bias: [*]f32, m: u32, n: u32, k: u32) !void {
+    var a0 = a; var a1 = b; var a2 = c; var a3 = bias; var mm = m; var nn = n; var kk = k;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&mm), P(&nn), P(&kk) };
+    const sz = [_]usize{ PS, PS, PS, PS, U, U, U };
+    try mtl.dispatch(f, .{ (n + 63) / 64, (m + 63) / 64, 1 }, .{ 128, 1, 1 }, &p, &sz);
+}
+
 fn kFlash(K: Kernels, out: [*]f16, q: [*]f16, k: [*]f16, v: [*]f16, seq: u32) !void {
-    var a0 = out; var a1 = q; var a2 = k; var a3 = v; var sq = seq; var hd = HDD; var n = NH;
+    var a0 = out; var a1 = q; var a2 = k; var a3 = v; var sq = seq; var n = NH;
+    if (K.m4_flash) |m4f| {
+        // tensor-ops 64-q-tile kernel; q/k/v come from the padded qkv scratch
+        // (tail tiles read ≤ 36 rows past seq — see Scratch alloc)
+        const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sq), P(&n) };
+        const s = [_]usize{ PS, PS, PS, PS, U, U };
+        try mtl.dispatch(m4f, .{ NH, (seq + 63) / 64, 1 }, .{ 128, 1, 1 }, &p, &s);
+        return;
+    }
+    var hd = HDD;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sq), P(&hd), P(&n) };
     const s = [_]usize{ PS, PS, PS, PS, U, U, U };
     try mtl.dispatch(K.flash, .{ NH, (seq + 31) / 32, 1 }, .{ 128, 1, 1 }, &p, &s);
@@ -147,29 +181,53 @@ pub fn forward(
 
     const dnb = @as(usize, D) / 32; // scale blocks per D-length row
     for (layers, 0..) |L, li| {
-        // q/k/v: dequant Q8 slice of stacked qkv_w → wdq, then MPS F16 GEMM
-        try kDeq(K, s.wdq, L.qkv_w, D, D);
-        try mtl.matmulF16Batched(s.x_ln, s.wdq, q, M, D, D);
-        try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
-        try mtl.matmulF16Batched(s.x_ln, s.wdq, k, M, D, D);
-        try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
-        try mtl.matmulF16Batched(s.x_ln, s.wdq, v, M, D, D);
-        try kBias(K, q, L.q_b, M * D, D);
-        try kBias(K, k, L.k_b, M * D, D);
-        try kBias(K, v, L.v_b, M * D, D);
+        // q/k/v: dequant Q8 slice of stacked qkv_w → wdq, then GEMM(+bias).
+        // Metal4 tensor-ops path fuses the bias epilogue into the GEMM tile
+        // while it is cache-hot (MPS + separate bias_add_f16 = an extra full
+        // M×D memory pass each); ENC_M4=0 reverts to MPS.
+        if (K.m4_bias) |m4b| {
+            try kDeq(K, s.wdq, L.qkv_w, D, D);
+            try kM4Bias(m4b, s.x_ln, s.wdq, q, L.q_b, M, D, D);
+            try kDeq(K, s.wdq2, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
+            try kM4Bias(m4b, s.x_ln, s.wdq2, k, L.k_b, M, D, D);
+            try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+            try kM4Bias(m4b, s.x_ln, s.wdq, v, L.v_b, M, D, D);
+        } else {
+            try kDeq(K, s.wdq, L.qkv_w, D, D);
+            try mtl.matmulF16Batched(s.x_ln, s.wdq, q, M, D, D);
+            try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
+            try mtl.matmulF16Batched(s.x_ln, s.wdq, k, M, D, D);
+            try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+            try mtl.matmulF16Batched(s.x_ln, s.wdq, v, M, D, D);
+            try kBias(K, q, L.q_b, M * D, D);
+            try kBias(K, k, L.k_b, M * D, D);
+            try kBias(K, v, L.v_b, M * D, D);
+        }
         for (0..batch_count) |bi| {
             const off = bi * ENC_SEQ * D;
             try kFlash(K, s.ao + off, q + off, k + off, v + off, ENC_SEQ);
         }
         try kDeq(K, s.wdq, L.o_w, D, D);
-        try mtl.matmulF16Batched(s.ao, s.wdq, s.mo, M, D, D);
+        if (K.m4_nn) |m4| {
+            try kM4(m4, s.ao, s.wdq, s.mo, M, D, D);
+        } else {
+            try mtl.matmulF16Batched(s.ao, s.wdq, s.mo, M, D, D);
+        }
         try kBRLN(K, x, s.mo, L.o_b, s.x_ln, L.mln_w, L.mln_b, D, M);
         try kDeq(K, s.wdq, L.m0_w, MLP, D);
-        try mtl.matmulF16Batched(s.x_ln, s.wdq, s.mh, M, MLP, D);
-        try kBias(K, s.mh, L.m0_b, M * MLP, MLP);
-        try kGelu(K, s.mh, M * MLP);
-        try kDeq(K, s.wdq, L.m2_w, D, MLP);
-        try mtl.matmulF16Batched(s.mh, s.wdq, s.mo, M, D, MLP);
+        if (K.m4_bias_gelu) |m4bg| {
+            try kM4Bias(m4bg, s.x_ln, s.wdq, s.mh, L.m0_b, M, MLP, D);
+        } else {
+            try mtl.matmulF16Batched(s.x_ln, s.wdq, s.mh, M, MLP, D);
+            try kBias(K, s.mh, L.m0_b, M * MLP, MLP);
+            try kGelu(K, s.mh, M * MLP);
+        }
+        try kDeq(K, s.wdq2, L.m2_w, D, MLP);
+        if (K.m4_nn) |m4| {
+            try kM4(m4, s.mh, s.wdq2, s.mo, M, D, MLP);
+        } else {
+            try mtl.matmulF16Batched(s.mh, s.wdq2, s.mo, M, D, MLP);
+        }
         if (li + 1 < layers.len) {
             try kBRLN(K, x, s.mo, L.m2_b, s.x_ln, layers[li + 1].aln_w, layers[li + 1].aln_b, D, M);
         } else {

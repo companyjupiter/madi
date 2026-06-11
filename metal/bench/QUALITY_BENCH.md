@@ -129,6 +129,93 @@ precision). `DIAR_ONLY=1` mode added for ~25× faster DER sweeps.
 | clova 99 chunks + collapse rescues | 0 corrupted, 5 rescues | unchanged |
 | devops_ko wall time | 32.8 s | 34.4 s (+4.6% — VAD threaded over diar, residual is the cost) |
 
+### WIN #5 — bucket breakthrough: K-floor + speech-gate tuning (2026-06-11)
+
+md-eval component decomposition on the two worst buckets found two separate
+failure modes, each with its own fix (full trail in PERF_LOG B-1..B-8):
+
+1. **K=3 bucket (miss-dominated)**: FA ≈ 0 but miss 12-27% while Silero's
+   recall floor is 1-5% — the loss was OUR gating. Fixes: silero is now
+   AUTHORITATIVE for window selection (crms binarized {0,1} — the old
+   relative-RMS gate dropped quiet-speech windows), clip pad 30→200 ms,
+   min-speech 250→60 ms (`VAD_PAD_MS`/`VAD_MIN_SPEECH_MS`).
+2. **7+ bucket (confusion-dominated, 20-41%)**: the DIAR_MAXK=6 cap (5 of the
+   worst 10 saturated at K=6). Raising the cap alone wrecks tiny single-spk
+   files (silhouette splits hqyok's 14 windows into 10 "speakers", sil 0.835,
+   57→77%); damaged vs helped files separate perfectly by window count
+   (m=14-26 vs m≥79) → **windows-per-speaker floor**
+   `maxK_eff = clamp(m/8, 2, 10)` (`DIAR_KWIN`, file mode; live stays maxK 8).
+3. K=2↔3 estimator residue: margins ±0.03 both directions on cleaned
+   embeddings — no safe lever, recursive split re-refuted.
+
+| VoxConverse-dev 216 files | shipped | **now** |
+|---|---|---|
+| **mean / median** | 12.37% / 6.91% | **8.67% / 4.13%** — beats pyannote 3.1 (≈11.2%) |
+| K=1 / K=2 / K=3 | 14.8 / 7.2 / 17.7 | **5.2 / 5.0 / 14.8** |
+| K=4 / K=5-6 / K=7+ | 9.4 / 9.6 / 16.9 | **8.5 / 7.9 / 10.2** |
+| ES2004a (far-field, auto-K) | 26.44% (K=5) | **18.83%** (forced K=4 identical — the gain is the speech gating, NOT the K pick; legacy-VAD forced-4 reproduces 32.55 exactly. auto-K picking the true 4 is a 0-DER side effect of cleaner embeddings) |
+| demo4 (K=4) / KO+EN fixture / jfk | 24.67 / PASS / ok | **24.18 / PASS / unchanged** |
+
+Bench infra hardened after a concurrent-run contamination incident: full_bench
+takes an exclusive flock and a private per-run RTTM dir.
+
+### WIN #6 — live silero clipping: saved transcripts reach file-mode quality (2026-06-11)
+
+New harness `bench/live_der.py` replays the exact runner job structure (10 s
+segments + 3 s left context) and scores both label streams. Diagnosis: live
+SPK windows were raw 1.5 s grid blocks while file mode got silero interval
+clipping — far-field silence became live FA (44.65% vs file 18.83%). Fix:
+`SPK`/`SPKFIX` now emit silero-clipped pieces (4th duration field; the
+runner's awk ignores it — backward compatible), and speech intervals
+accumulate in stream mode too.
+
+| ES2004a live | before | after |
+|---|---|---|
+| streaming console labels | 44.65% | **25.66%** |
+| relabeled saved transcript | 37.54% | **18.43%** (= file mode 18.83%) |
+
+KO+EN fixture PASS; file mode byte-identical.
+
+**Live OSD follow-up (same day, PERF_LOG L-3)**: stream mode now runs the
+OSD too (default ON, `OSD=0` disables; +26 ms/segment measured). At FLUSH
+the relabeled windows drive the local-track identity and `SPKOV` rows go
+out silero-clipped; the runner renders interruption markers
+("⟨+Speaker N 겹침⟩") into the saved `.md`. ES2004a saved transcript
+18.43 → **17.41%** (116 overlap rows); clean-dialogue fixtures emit zero
+markers. Overlap study (PERF_LOG O-1..4): ES2004a ref overlap = **14.7% of scored time = the single-label miss
+floor** (our 1-spk-region miss is just 7.2%); centroid-ambiguity and
+transition-window detectors both refuted (precision ≤46% < break-even) — a
+trained OSD (pyannote-segmentation-class port) is the recorded path.
+
+### WIN #7 — sovereign OSD: pyannote segmentation-3.0 port (2026-06-11)
+
+The single-label overlap floor (WIN #6 study) is now half-open. `osd_pyannote.zig`
+ports pyannote segmentation-3.0 (SincNet → 4× BiLSTM → powerset-7) from the
+sherpa-onnx ONNX export (`bench/convert_pyannote_seg.py`), validated against
+onnxruntime to max |Δlogp| 3.5e-5 / 0 argmax mismatches, Accelerate-accelerated
+413→90 ms per 10 s window (threaded over the diar pool).
+
+Emission (file mode, default ON, `OSD=0` disables; live off for latency):
+overlap frames (P(2-spk classes) ≥ 0.25) become SECOND-speaker RTTM rows.
+Identity = **local-track mapping**: each local speaker's SOLO frames vote for
+a global speaker, so the powerset pair names the global pair directly (the
+turn-taking prior was the limiter — refuted at ~17.1%). Rows are clipped to
+silero speech intervals and require an asserted primary (without those guards
+the crowd-noise file tucrg exploded 232→462%; with them it residues at 356% —
+real multi-voice the refs don't label, a known pathology). Crowd run-length
+gating was reverse-verified harmful (ES 16.5→16.9) and rolled back.
+
+| metric | before | after |
+|---|---|---|
+| ES2004a (4-spk far-field meeting) | 18.83% | **16.49%** (miss 16.0→12.5) |
+| VoxConverse-dev 216 mean / median | 8.67 / 4.13% | **8.49 / 3.72%** |
+| VoxConverse mean excl. tucrg | 7.63% | **6.87%** |
+| K=2 / K=4 / K=5-6 / K=7+ buckets | 5.0 / 8.5 / 7.9 / 10.2 | **4.4 / 7.3 / 6.8 / 10.1** |
+| demo4 (no overlap) / KO+EN fixture / jfk | 24.18 / PASS / ok | **24.18 (0 rows) / PASS / unchanged** |
+
+Full refutation trail in PERF_LOG P-1..7 (sliding aggregation ≈ no gain,
+probability-threshold saturation, crowd guard rollback).
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).
@@ -313,6 +400,29 @@ PASS; test_decoder OK.
 current 494/480/479 tok/s — current ≥ pre on every pair. The recorded
 495→473 was run-to-run variance (±2%), not a real regression. No recovery
 work needed.
+
+### WIN #8 — Metal-4 tensor-ops encoder, phase 1 (2026-06-11)
+
+The "no cheap speed wins left / Metal-4 = endgame" item has begun. MSL 4
+tensor views over raw device pointers (non-const — the mpp headers have no
+const overloads) mean ZERO runtime changes: the in-shader `mpp::tensor_ops`
+GEMM slots into the existing dispatch path. Untuned 64×64/4-simdgroup matmul
+already edges MPS (3.64 vs 3.83 ms on the fc1 shape, max|Δ|=0), and the real
+win is the fused epilogue: GEMM+bias and GEMM+bias+erf-GELU apply while the
+tile is cache-hot, deleting the separate bias_add_f16/gelu_f16 full passes.
+All 6 encoder GEMMs replaced; `ENC_M4=0` reverts to MPS.
+
+| encoder ms/chunk | MPS | **Metal-4** |
+|---|---|---|
+| batch 4 (file mode, 3-run) | 569/568/569 | **511/512/511 (−10.1%)** |
+| batch 1 (live-shaped) | 643-647 | **588** |
+| whisper.cpp same model | 571 | — (first clear win) |
+
+jfk words + spans byte-identical across paths; KO+EN fixture PASS;
+test_decoder OK. Phase 2 roadmap (PERF_LOG M4-roadmap): Q8-direct GEMM
+(half×int8 is a first-class tensor-ops combo — kills the 77 ms dequant and
+halves weight traffic), then a tensor-ops rewrite of flash_attention_enc
+(160 ms), and the int4 path when a Q4 model lands.
 
 ## 4. Speed (성능) — measured earlier this session
 
