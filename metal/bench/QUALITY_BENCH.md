@@ -159,6 +159,27 @@ failure modes, each with its own fix (full trail in PERF_LOG B-1..B-8):
 Bench infra hardened after a concurrent-run contamination incident: full_bench
 takes an exclusive flock and a private per-run RTTM dir.
 
+### WIN #6 — live silero clipping: saved transcripts reach file-mode quality (2026-06-11)
+
+New harness `bench/live_der.py` replays the exact runner job structure (10 s
+segments + 3 s left context) and scores both label streams. Diagnosis: live
+SPK windows were raw 1.5 s grid blocks while file mode got silero interval
+clipping — far-field silence became live FA (44.65% vs file 18.83%). Fix:
+`SPK`/`SPKFIX` now emit silero-clipped pieces (4th duration field; the
+runner's awk ignores it — backward compatible), and speech intervals
+accumulate in stream mode too.
+
+| ES2004a live | before | after |
+|---|---|---|
+| streaming console labels | 44.65% | **25.66%** |
+| relabeled saved transcript | 37.54% | **18.43%** (= file mode 18.83%) |
+
+KO+EN fixture PASS; file mode byte-identical. Overlap study (PERF_LOG
+O-1..4): ES2004a ref overlap = **14.7% of scored time = the single-label miss
+floor** (our 1-spk-region miss is just 7.2%); centroid-ambiguity and
+transition-window detectors both refuted (precision ≤46% < break-even) — a
+trained OSD (pyannote-segmentation-class port) is the recorded path.
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).
