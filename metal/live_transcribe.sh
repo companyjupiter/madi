@@ -357,21 +357,34 @@ final_relabel() {
   [ -s "$WORK/lines.log" ] || return 0
   printf 'FLUSH\n' >&7 2>/dev/null || return 0
   : > "$WORK/spkfix.log"
+  : > "$WORK/spkov.log"
   local line
   while IFS= read -r line <&8; do
     case "$line" in
       "<<FLUSH_END>>") break ;;
       "SPKFIX "*) printf '%s\n' "${line#SPKFIX }" >> "$WORK/spkfix.log" ;;
+      "SPKOV "*)  printf '%s\n' "${line#SPKOV }"  >> "$WORK/spkov.log" ;;
     esac
   done
   [ -s "$WORK/spkfix.log" ] || return 0
   # correct each line's speaker: the SPKFIX window covering its start time
-  awk -v fixfile="$WORK/spkfix.log" '
-    BEGIN { nf = 0; while ((getline l < fixfile) > 0) { split(l, a, " "); ft[nf] = a[1]; fid[nf] = a[2]; nf++ } }
-    { st = $1 + 0; best = -1; bt = -1e9
+  # relabel each line + append an interruption marker when an OSD overlap
+  # row (a SECOND speaker active inside the line's span) intersects it
+  awk -v fixfile="$WORK/spkfix.log" -v ovfile="$WORK/spkov.log" '
+    BEGIN { nf = 0; while ((getline l < fixfile) > 0) { split(l, a, " "); ft[nf] = a[1]; fid[nf] = a[2]; nf++ }
+            nov = 0; while ((getline l < ovfile) > 0) { split(l, a, " "); ot[nov] = a[1]; oid[nov] = a[2]; od[nov] = a[3]; nov++ } }
+    { st = $1 + 0; en = $2 + 0; best = -1; bt = -1e9
       for (i = 0; i < nf; i++) if (ft[i] <= st + 0.76 && ft[i] > bt) { bt = ft[i]; best = fid[i] }
       if (best >= 0) $3 = best
-      print }
+      mark = ""; delete seen
+      for (i = 0; i < nov; i++) {
+        os = ot[i] + 0; oe = os + od[i]
+        if (oe > st && os < en && oid[i] != $3 && !(oid[i] in seen)) {
+          seen[oid[i]] = 1
+          mark = mark " ⟨+Speaker " oid[i] " 겹침⟩"
+        }
+      }
+      print $0 mark }
   ' "$WORK/lines.log" > "$WORK/lines_fixed.log"
   [ -n "$MD_FILE" ] && printf '# Transcript\n\n' > "$MD_FILE"
   [ -n "$SRT_FILE" ] && : > "$SRT_FILE"

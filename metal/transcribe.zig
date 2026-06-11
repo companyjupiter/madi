@@ -554,8 +554,10 @@ pub fn main() !void {
     // floor is 14.7% of ES2004a scored time (PERF_LOG O-1)
     var kb_d4: [256]u8 = undefined;
     const osd_path = std.fmt.bufPrint(&kb_d4, "{s}/pyannote_osd.bin", .{bpe_dir(bpe_path)}) catch unreachable;
-    // default ON in file mode (OSD=0 disables); live/stream stays off (latency)
-    const osd_on = std.posix.getenv("STREAM") == null and !std.mem.eql(u8, std.posix.getenv("OSD") orelse "1", "0");
+    // default ON in file AND stream mode (OSD=0 disables). Live cost: ~90 ms
+    // per 10 s window (Accelerate path), threaded over the diar embed pool —
+    // measured ~5% of per-segment processing latency.
+    const osd_on = !std.mem.eql(u8, std.posix.getenv("OSD") orelse "1", "0");
     const osd_model: ?osd.Model = if (osd_on) osd.Model.load(alloc, osd_path) catch null else null;
     if (osd_on and osd_model == null) try out.print("[osd] pyannote_osd.bin not found — overlap emission off\n", .{});
     const c1w = try upConvWF16(sf, "model.encoder.conv1.weight", D, mel.N_MELS, 3);
@@ -841,6 +843,8 @@ pub fn main() !void {
                         const inv = 1.0 / (@sqrt(ss) + 1e-9);
                         for (0..diar.EMB) |d| dirs[sidx * diar.EMB + d] = c.sum[d] * inv;
                     }
+                    const fix_ids = try alloc.alloc(i32, mwin);
+                    defer alloc.free(fix_ids);
                     for (0..mwin) |i| {
                         const v = live_emb.items[i * diar.EMB ..][0 .. diar.EMB];
                         var best: f32 = -2;
@@ -850,8 +854,12 @@ pub fn main() !void {
                             for (0..diar.EMB) |d| dt += v[d] * dirs[sidx * diar.EMB + d];
                             if (dt > best) { best = dt; bs = sidx; }
                         }
+                        fix_ids[i] = @intCast(bs);
                         try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(bs));
                     }
+                    // overlap rows for the saved transcript: same local-track
+                    // identity as diarizeEmb, against the RELABELED windows
+                    try emitOsdOverlap(out, live_t0.items[0..mwin], fix_ids);
                 }
                 try out.print("<<FLUSH_END>>\n", .{});
                 continue :job;
@@ -1746,6 +1754,91 @@ fn emitClippedSpk(out: anytype, tag: []const u8, gt: f32, id: u32) !void {
         if (hi - lo >= 0.1)
             try out.print("{s} {d:.2} {d} {d:.2}\n", .{ tag, lo, id, hi - lo });
     }
+}
+
+// Live-session OSD overlap emission: same local-track identity as the
+// file-mode diarizeEmb block, but against the FLUSH-relabeled 1.5 s windows;
+// emits "SPKOV <t> <global_id> <dur>" pieces clipped to silero speech.
+fn emitOsdOverlap(out: anytype, t0s: []const f32, ids: []const i32) !void {
+    if (g_osd_win.items.len == 0) return;
+    const osd_thr = envF("OSD_THR", 0.25);
+    const pairs = [3][2]usize{ .{ 0, 1 }, .{ 0, 2 }, .{ 1, 2 } };
+    var n_ov: usize = 0;
+    for (g_osd_win.items) |*w| {
+        var votes: [3][16]u32 = .{ .{0} ** 16, .{0} ** 16, .{0} ** 16 };
+        for (0..w.nf) |fi| {
+            const c = w.cls[fi];
+            if (c < 1 or c > 3) continue; // solo classes vote
+            const ft = w.t + (@as(f32, @floatFromInt(osd.RFIELD)) / 2.0 + @as(f32, @floatFromInt(fi * osd.SHIFT))) / 16000.0;
+            for (t0s, 0..) |t0, i| {
+                if (ft >= t0 and ft < t0 + 1.5) {
+                    const g: usize = @intCast(@max(ids[i], 0));
+                    if (g < 16) votes[c - 1][g] += 1;
+                    break;
+                }
+            }
+        }
+        var loc2glob: [3]i32 = .{ -1, -1, -1 };
+        for (0..3) |k| {
+            var bg: usize = 0;
+            for (1..16) |g| {
+                if (votes[k][g] > votes[k][bg]) bg = g;
+            }
+            if (votes[k][bg] >= 3) loc2glob[k] = @intCast(bg);
+        }
+        var run_s: f32 = -1;
+        var run_e: f32 = -1;
+        var run_sec: i32 = -1;
+        for (0..w.nf) |fi| {
+            const ft = w.t + (@as(f32, @floatFromInt(osd.RFIELD)) / 2.0 + @as(f32, @floatFromInt(fi * osd.SHIFT))) / 16000.0;
+            var sec: i32 = -1;
+            if (w.pov[fi] >= osd_thr) {
+                const pc: usize = if (w.cls[fi] >= 4) w.cls[fi] - 4 else 0;
+                const ga = loc2glob[pairs[pc][0]];
+                const gb = loc2glob[pairs[pc][1]];
+                var prim: i32 = -1;
+                for (t0s, 0..) |t0, i| {
+                    if (ft >= t0 and ft < t0 + 1.5) {
+                        prim = ids[i];
+                        break;
+                    }
+                }
+                if (prim >= 0) {
+                    if (ga >= 0 and ga != prim) sec = ga;
+                    if (gb >= 0 and gb != prim and (sec < 0 or ga == prim)) sec = gb;
+                }
+            }
+            if (sec >= 0 and sec == run_sec) {
+                run_e = ft + 0.017;
+            } else {
+                if (run_sec >= 0 and run_e - run_s >= 0.1)
+                    n_ov += try emitOvPieces(out, run_s, run_e, run_sec);
+                run_sec = sec;
+                run_s = ft;
+                run_e = ft + 0.017;
+            }
+        }
+        if (run_sec >= 0 and run_e - run_s >= 0.1)
+            n_ov += try emitOvPieces(out, run_s, run_e, run_sec);
+    }
+    if (n_ov > 0) try out.print("[osd] {d} live overlap rows\n", .{n_ov});
+}
+
+fn emitOvPieces(out: anytype, a: f32, b: f32, sp: i32) !usize {
+    var n: usize = 0;
+    if (g_vad_iv.items.len == 0) {
+        try out.print("SPKOV {d:.2} {d} {d:.2}\n", .{ a, sp, b - a });
+        return 1;
+    }
+    for (g_vad_iv.items) |iv| {
+        const lo = @max(a, iv[0]);
+        const hi = @min(b, iv[1]);
+        if (hi - lo >= 0.1) {
+            try out.print("SPKOV {d:.2} {d} {d:.2}\n", .{ lo, sp, hi - lo });
+            n += 1;
+        }
+    }
+    return n;
 }
 
 // Repeat-loop collapse detector: greedy no-ts decoding can lock into a

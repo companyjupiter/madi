@@ -174,8 +174,15 @@ accumulate in stream mode too.
 | streaming console labels | 44.65% | **25.66%** |
 | relabeled saved transcript | 37.54% | **18.43%** (= file mode 18.83%) |
 
-KO+EN fixture PASS; file mode byte-identical. Overlap study (PERF_LOG
-O-1..4): ES2004a ref overlap = **14.7% of scored time = the single-label miss
+KO+EN fixture PASS; file mode byte-identical.
+
+**Live OSD follow-up (same day, PERF_LOG L-3)**: stream mode now runs the
+OSD too (default ON, `OSD=0` disables; +26 ms/segment measured). At FLUSH
+the relabeled windows drive the local-track identity and `SPKOV` rows go
+out silero-clipped; the runner renders interruption markers
+("⟨+Speaker N 겹침⟩") into the saved `.md`. ES2004a saved transcript
+18.43 → **17.41%** (116 overlap rows); clean-dialogue fixtures emit zero
+markers. Overlap study (PERF_LOG O-1..4): ES2004a ref overlap = **14.7% of scored time = the single-label miss
 floor** (our 1-spk-region miss is just 7.2%); centroid-ambiguity and
 transition-window detectors both refuted (precision ≤46% < break-even) — a
 trained OSD (pyannote-segmentation-class port) is the recorded path.

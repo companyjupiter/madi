@@ -37,11 +37,15 @@ out = subprocess.run([f'{M}/out/transcribe', f'{M}/assets/model.safetensors', '/
 
 spk = {}     # piece start -> (id, dur); re-emitted overlap pieces keep the LATEST label
 spkfix = {}
+spkov = []   # overlap 2nd-speaker rows (start, id, dur)
 for line in out.splitlines():
-    m = re.match(r'(SPKFIX|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?$', line)
+    m = re.match(r'(SPKFIX|SPKOV|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?$', line)
     if m:
-        d = (spkfix if m.group(1) == 'SPKFIX' else spk)
-        d[round(float(m.group(2)), 2)] = (int(m.group(3)), float(m.group(4) or 1.5))
+        if m.group(1) == 'SPKOV':
+            spkov.append((float(m.group(2)), int(m.group(3)), float(m.group(4) or 1.5)))
+        else:
+            d = (spkfix if m.group(1) == 'SPKFIX' else spk)
+            d[round(float(m.group(2)), 2)] = (int(m.group(3)), float(m.group(4) or 1.5))
 
 def rttm_of(labels, path, fid):
     with open(path, 'w') as f:
@@ -62,4 +66,12 @@ print(f'STREAMING DER = {der(f"{tmp}/stream.rttm")}%')
 if spkfix:
     rttm_of(spkfix, f'{tmp}/relabel.rttm', fid)
     print(f'RELABELED DER = {der(f"{tmp}/relabel.rttm")}%')
+    if spkov:
+        with open(f'{tmp}/relabel_ov.rttm', 'w') as f:
+            for t in sorted(spkfix):
+                sid, dur = spkfix[t]
+                f.write(f'SPEAKER {fid} 1 {t:.3f} {dur:.3f} <NA> <NA> spk{sid} <NA> <NA>\n')
+            for t, sid, dur in spkov:
+                f.write(f'SPEAKER {fid} 1 {t:.3f} {dur:.3f} <NA> <NA> spk{sid} <NA> <NA>\n')
+        print(f'RELABELED+OSD DER = {der(f"{tmp}/relabel_ov.rttm")}%  ({len(spkov)} overlap rows)')
 print(f'(rttms in {tmp})')
