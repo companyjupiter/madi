@@ -224,12 +224,16 @@ pub const Segment = struct { start: f32, end: f32 };
 // min_speech 250 ms, min_silence 100 ms, pad 30 ms, no max-duration split,
 // 200 ms adjacent-gap merge). Returns seconds.
 pub fn segmentsFromProbs(alloc: std.mem.Allocator, probs: []const f32) !std.ArrayList(Segment) {
+    return segmentsFromProbsP(alloc, probs, 250, 30);
+}
+
+pub fn segmentsFromProbsP(alloc: std.mem.Allocator, probs: []const f32, min_speech_ms: u32, pad_ms: u32) !std.ArrayList(Segment) {
     const SR: f32 = 16000;
     const threshold: f32 = 0.5;
     const neg_threshold: f32 = threshold - 0.15;
     const min_silence: i64 = 16000 * 100 / 1000;
-    const min_speech: i64 = 16000 * 250 / 1000;
-    const pad_s: i64 = 16000 * 30 / 1000;
+    const min_speech: i64 = @as(i64, @intCast(min_speech_ms)) * 16;
+    const pad_s: i64 = @as(i64, @intCast(pad_ms)) * 16;
     const audio_len: i64 = @intCast(probs.len * N_WINDOW);
 
     var raw = std.ArrayList([2]i64).init(alloc);

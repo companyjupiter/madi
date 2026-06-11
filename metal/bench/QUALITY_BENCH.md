@@ -129,6 +129,36 @@ precision). `DIAR_ONLY=1` mode added for ~25× faster DER sweeps.
 | clova 99 chunks + collapse rescues | 0 corrupted, 5 rescues | unchanged |
 | devops_ko wall time | 32.8 s | 34.4 s (+4.6% — VAD threaded over diar, residual is the cost) |
 
+### WIN #5 — bucket breakthrough: K-floor + speech-gate tuning (2026-06-11)
+
+md-eval component decomposition on the two worst buckets found two separate
+failure modes, each with its own fix (full trail in PERF_LOG B-1..B-8):
+
+1. **K=3 bucket (miss-dominated)**: FA ≈ 0 but miss 12-27% while Silero's
+   recall floor is 1-5% — the loss was OUR gating. Fixes: silero is now
+   AUTHORITATIVE for window selection (crms binarized {0,1} — the old
+   relative-RMS gate dropped quiet-speech windows), clip pad 30→200 ms,
+   min-speech 250→60 ms (`VAD_PAD_MS`/`VAD_MIN_SPEECH_MS`).
+2. **7+ bucket (confusion-dominated, 20-41%)**: the DIAR_MAXK=6 cap (5 of the
+   worst 10 saturated at K=6). Raising the cap alone wrecks tiny single-spk
+   files (silhouette splits hqyok's 14 windows into 10 "speakers", sil 0.835,
+   57→77%); damaged vs helped files separate perfectly by window count
+   (m=14-26 vs m≥79) → **windows-per-speaker floor**
+   `maxK_eff = clamp(m/8, 2, 10)` (`DIAR_KWIN`, file mode; live stays maxK 8).
+3. K=2↔3 estimator residue: margins ±0.03 both directions on cleaned
+   embeddings — no safe lever, recursive split re-refuted.
+
+| VoxConverse-dev 216 files | shipped | **now** |
+|---|---|---|
+| **mean / median** | 12.37% / 6.91% | **8.67% / 4.13%** — beats pyannote 3.1 (≈11.2%) |
+| K=1 / K=2 / K=3 | 14.8 / 7.2 / 17.7 | **5.2 / 5.0 / 14.8** |
+| K=4 / K=5-6 / K=7+ | 9.4 / 9.6 / 16.9 | **8.5 / 7.9 / 10.2** |
+| ES2004a (far-field, auto-K) | 26.44% (K=5) | **18.83% (K=4 — true K)** |
+| demo4 (K=4) / KO+EN fixture / jfk | 24.67 / PASS / ok | **24.18 / PASS / unchanged** |
+
+Bench infra hardened after a concurrent-run contamination incident: full_bench
+takes an exclusive flock and a private per-run RTTM dir.
+
 ## 2. Transcription quality (전사 품질)
 
 - jfk: **WER 0.0%** (22/22 words).

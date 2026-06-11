@@ -3,7 +3,13 @@
 # the shipped tuned defaults (auto-K, maxK=6, vad=0.40). Resumable + incremental:
 # each file's result is appended to RESULTS jsonl immediately, so a kill/restart
 # skips finished files. Final summary → bench/FULL_BENCH_RESULT.md.
-import os, glob, subprocess, json, statistics, time
+import os, glob, subprocess, json, statistics, time, sys, fcntl, tempfile
+_lock = open('/tmp/full_bench.lock', 'w')
+try:
+    fcntl.flock(_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except OSError:
+    sys.exit('another full_bench.py is running — refusing to race it')
+RTTM_DIR = tempfile.mkdtemp(prefix='fb_rttm_')
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # metal/
 VOX = os.path.expanduser("~/Downloads/benchmark_samples/voxconverse")
 AUDIO = os.path.expanduser("~/Downloads/benchmark_samples/audio")
@@ -11,8 +17,8 @@ MODEL = os.path.join(ROOT, "assets/model.safetensors")
 BPE = os.path.join(ROOT, "assets/WHISPER_BPE.bin")
 TR = os.path.join(ROOT, "out/transcribe")
 MDEVAL = os.path.join(ROOT, "bench/md-eval.pl")
-RESULTS = "/tmp/full_bench_results.jsonl"
-SUMMARY = os.path.join(ROOT, "bench/FULL_BENCH_RESULT.md")
+RESULTS = os.environ.get("BENCH_RESULTS", "/tmp/full_bench_results.jsonl")
+SUMMARY = os.environ.get("BENCH_SUMMARY", os.path.join(ROOT, "bench/FULL_BENCH_RESULT.md"))
 
 def nspk(r): return len({l.split()[7] for l in open(r) if l.startswith("SPEAKER")})
 def der(ref, sysr):
@@ -35,7 +41,7 @@ for i, id_ in enumerate(ids):
     if id_ in done:
         continue
     wav, ref = os.path.join(AUDIO, id_ + ".wav"), os.path.join(VOX, "dev", id_ + ".rttm")
-    tmp, sysr = f"/tmp/{id_}.wav", f"/tmp/{id_}.sys.rttm"
+    tmp, sysr = os.path.join(RTTM_DIR, id_ + ".wav"), os.path.join(RTTM_DIR, id_ + ".sys.rttm")
     subprocess.run(["ffmpeg", "-y", "-i", wav, "-ar", "16000", "-ac", "1", tmp], capture_output=True)
     subprocess.run([TR, MODEL, tmp, BPE, sysr], capture_output=True,
                    env={**os.environ, "DIAR_ONLY": "1"})  # DER needs diar only (~20x faster)

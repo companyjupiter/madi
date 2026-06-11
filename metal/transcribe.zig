@@ -388,7 +388,8 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         K = @min(@as(usize, fixed_k), m);
         try kmeansFit(X, m, segd, K, asg);
     } else {
-        const maxK: usize = @min(@as(usize, max_k), m);
+        const kwin = envU("DIAR_KWIN", 8);
+        const maxK: usize = @min(@min(@as(usize, max_k), m), @max(2, m / @max(kwin, 1))); // windows-per-speaker floor (see diarizeEmb)
         var bestK: usize = 2;
         var bestSil: f32 = -2;
         var kk: usize = 2;
@@ -907,12 +908,18 @@ pub fn main() !void {
                         if (pv >= 0.5) chunk_speech_s += 0.032;
                     }
                     if (!stream) { // file mode: keep speech intervals for RTTM clipping
-                        var iv = try vad.segmentsFromProbs(alloc, vad_probs[0..vad_np]);
+                        var iv = try vad.segmentsFromProbsP(alloc, vad_probs[0..vad_np], @intCast(envU("VAD_MIN_SPEECH_MS", 60)), @intCast(envU("VAD_PAD_MS", 200)));
                         defer iv.deinit();
                         for (iv.items) |sg| try g_vad_iv.append(.{ t_off + sg.start, t_off + sg.end });
                     }
                 }
                 if (vad_np > 0) {
+                    // silero is AUTHORITATIVE for window selection: binarize
+                    // crms to {0,1} so the downstream relative-RMS gates
+                    // degenerate to keep-iff-speech. The RMS gate dropped
+                    // QUIET SPEECH windows (mevkw: 23.4% miss vs 0.9%
+                    // silero floor — the loss was ours, not the model's).
+                    const sp_gate = envF("DIAR_VAD_SP", 0.15);
                     for (0..nwin) |wsg| {
                         const f0 = wsg * SEG_SAMP / vad.N_WINDOW; // 1.5 s window → 32 ms frames
                         const f1 = @min(f0 + SEG_SAMP / vad.N_WINDOW, vad_np);
@@ -920,7 +927,7 @@ pub fn main() !void {
                         for (vad_probs[f0..f1]) |pv| {
                             if (pv >= 0.5) sp_s += 0.032;
                         }
-                        if (sp_s < 0.25) crms[wsg] = 0; // non-speech window (music/noise/silence)
+                        crms[wsg] = if (sp_s >= sp_gate) 1.0 else 0.0;
                     }
                 }
                 if (stream_diar) {
@@ -1430,7 +1437,12 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         K = @min(@as(usize, diar_k), m);
         try kmeansFit(X, m, segd, K, asg);
     } else {
-        const maxK: usize = @min(envU("DIAR_MAXK", 6), m); // tuned: 6 minimizes over-clustering (VoxConverse dev)
+        // windows-per-speaker floor: a K-speaker split needs ≥DIAR_KWIN
+        // windows each on average — silhouette happily splits a 14-window
+        // single-speaker file into 10 "speakers" (hqyok sil=0.835, DER 57→77%)
+        // while real 8-20-speaker meetings have m≥79. Floor separates them.
+        const kwin = envU("DIAR_KWIN", 8);
+        const maxK: usize = @min(@min(envU("DIAR_MAXK", 10), m), @max(2, m / @max(kwin, 1)));
         // tau 0.35: VoxConverse-dev 215-file sweep — flips 5 true-1-speaker
         // files to K=1 (DER 9.7-57.5% → 0.0-3.5%) with ZERO multi-speaker
         // false positives (first FP appears at tau 0.40). bench/k_sweep_vox.py
