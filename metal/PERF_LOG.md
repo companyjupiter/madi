@@ -163,3 +163,16 @@ max|Δlogp|=3.5e-5, argmax 불일치 0/589. Accelerate sgemm/sgemv로 413→90ms
 | P-5 | OSD 행의 silero 클리핑 우회 → tucrg 232→462% 사고 | ✅ 수정 | emitOverlapRow가 g_vad_iv 교차로만 방출 + prim≥0 가드 (1차 화자 위에만 2차) |
 | P-6 | 군중 가드 (중첩 런 ≥3s 차단) | ❌ 역검증 | tucrg 불변(런이 원래 짧음), ES만 16.49→16.92 손상 — 롤백 |
 | P-7 | tucrg 잔차 (229.7→356%) | 📋 수용 | 군중 함성 = 진짜 다성인데 ref 미라벨 — 알려진 병리 파일 |
+
+## Metal-4 tensor-ops 인코더 — Phase 1 (2026-06-11)
+quark atoms: `metal_kernel__m4_gemm_nn`, `metal_kernel__m4_gemm_bias`,
+`metal_kernel__m4_gemm_bias_gelu`, `fn__forward`(encoder dual-path).
+toolchain: Xcode 26.5, -std=metal4.0 (m4_*.metal만), MPP tensor_ops.
+| # | idea | result | metric |
+|---|------|--------|--------|
+| M4-1 | 셰이더 내 raw 포인터 tensor 뷰 (런타임 MTLTensor 불필요) | ✅ 검증 | **비-const 필수** (mpp 헤더에 const 오버로드 없음 — "Unsupported type" 정적 단언의 정체) |
+| M4-2 | 순수 tensor-ops GEMM vs MPS (fc1 형상 1500×5120×1280, 64×64타일/4SG/동적K) | ✅ data | **3.64ms vs 3.83ms (1.05×)**, max|Δ|=0 — 미튜닝으로 MPS 동급+ |
+| M4-3 | mode::multiply가 기본(덮어쓰기) — zero-init 패스 불필요 | ✅ 확인 | descriptor 7번째 인자 |
+| M4-4 | **융합 에필로그**: GEMM+bias, GEMM+bias+erf-GELU (타일 cache-hot 상태서 적용; bias_add_f16/gelu_f16 전체 패스 제거) | ✅ commit | run()은 lvalue 슬라이스 요구 |
+| M4-5 | 인코더 6 GEMM 전부 교체 (ENC_M4=0 = MPS 폴백 이중 경로) | ✅ commit | **배치4 569→511ms(-10.1%), 배치1 647→588ms**; jfk 단어·스팬 바이트 동일; wcpp 571ms 최초 추월 |
+| M4-roadmap | Phase 2: Q8 직행 GEMM (half×int8 네이티브 — dequant 77ms+가중치 트래픽 ½ 제거, k-loop+coop tensor로 블록 스케일), Phase 3: flash_attention_enc tensor-ops 재작성 (160ms), int4 경로 (모델 Q4 시) | 📋 | 지원표: half×int8→half/float, int4b_format까지 1급 |

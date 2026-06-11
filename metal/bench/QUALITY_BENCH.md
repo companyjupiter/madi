@@ -394,6 +394,29 @@ current 494/480/479 tok/s — current ≥ pre on every pair. The recorded
 495→473 was run-to-run variance (±2%), not a real regression. No recovery
 work needed.
 
+### WIN #8 — Metal-4 tensor-ops encoder, phase 1 (2026-06-11)
+
+The "no cheap speed wins left / Metal-4 = endgame" item has begun. MSL 4
+tensor views over raw device pointers (non-const — the mpp headers have no
+const overloads) mean ZERO runtime changes: the in-shader `mpp::tensor_ops`
+GEMM slots into the existing dispatch path. Untuned 64×64/4-simdgroup matmul
+already edges MPS (3.64 vs 3.83 ms on the fc1 shape, max|Δ|=0), and the real
+win is the fused epilogue: GEMM+bias and GEMM+bias+erf-GELU apply while the
+tile is cache-hot, deleting the separate bias_add_f16/gelu_f16 full passes.
+All 6 encoder GEMMs replaced; `ENC_M4=0` reverts to MPS.
+
+| encoder ms/chunk | MPS | **Metal-4** |
+|---|---|---|
+| batch 4 (file mode, 3-run) | 569/568/569 | **511/512/511 (−10.1%)** |
+| batch 1 (live-shaped) | 643-647 | **588** |
+| whisper.cpp same model | 571 | — (first clear win) |
+
+jfk words + spans byte-identical across paths; KO+EN fixture PASS;
+test_decoder OK. Phase 2 roadmap (PERF_LOG M4-roadmap): Q8-direct GEMM
+(half×int8 is a first-class tensor-ops combo — kills the 77 ms dequant and
+halves weight traffic), then a tensor-ops rewrite of flash_attention_enc
+(160 ms), and the int4 path when a Q4 model lands.
+
 ## 4. Speed (성능) — measured earlier this session
 
 decode 233→**495 tok/s** (+112%, ahead of whisper.cpp ~1.3×); encoder

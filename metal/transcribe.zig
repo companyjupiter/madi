@@ -617,6 +617,7 @@ pub fn main() !void {
         .mo = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr,
         .mh = (try mtl.allocSlice(f16, EB * ENC_SEQ * MLP)).ptr,
         .wdq = (try mtl.allocSlice(f16, MLP * D)).ptr, // weight tile — batch-independent
+        .wdq2 = (try mtl.allocSlice(f16, MLP * D)).ptr,
     };
     const out_f16 = (try mtl.allocSlice(f16, EB * ENC_SEQ * D)).ptr;
     const enc_out = (try mtl.allocSlice(f32, EB * ENC_SEQ * D)).ptr;
