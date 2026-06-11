@@ -38,6 +38,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
+  "$APP_DIR"/Sovereign/UI/Theme.swift
   "$APP_DIR"/Sovereign/UI/ContentView.swift
   "$APP_DIR"/Sovereign/UI/TranscriptView.swift
   "$APP_DIR"/Sovereign/UI/ModelGateView.swift

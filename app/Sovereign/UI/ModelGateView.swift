@@ -8,9 +8,10 @@ struct ModelGateView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "waveform.circle").font(.system(size: 48))
-                .foregroundStyle(.tint)
-            Text("Sovereign Whisper").font(.title2).bold()
+            Image(systemName: "waveform.circle")
+                .font(.system(size: Theme.Size.gateIcon))
+                .foregroundStyle(Theme.Colors.accent)
+            Text("Sovereign Whisper").font(Theme.Fonts.appTitle)
 
             switch downloader.state {
             case .checking, .idle:
@@ -20,8 +21,9 @@ struct ModelGateView: View {
                     ProgressView(value: p) {
                         Text("Downloading model (\(Int(p * 100))%)")
                     }
-                    .frame(width: 320)
-                    Text("~1.5 GB · one time").font(.caption).foregroundStyle(.secondary)
+                    .frame(width: Theme.Size.gateProgressW)
+                    Text("~1.5 GB · one time").font(Theme.Fonts.status)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                     Button("Cancel") { downloader.cancel() }
                 }
             case .verifying:

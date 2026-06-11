@@ -1,5 +1,7 @@
 // TranscriptView.swift — scrolling speaker-attributed transcript with
 // interruption markers, auto-scrolling to the newest line.
+// All visual constants come from Theme (generated from design/tokens.json) —
+// the designer restyles via Figma token export, not by editing this file.
 
 import SwiftUI
 
@@ -7,17 +9,15 @@ struct TranscriptView: View {
     let lines: [Line]
     let names: [Int: String]
 
-    private let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .red, .indigo]
-
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: Theme.Space.lineGap) {
                     ForEach(lines) { line in
                         row(line).id(line.id)
                     }
                 }
-                .padding(16)
+                .padding(Theme.Space.window)
             }
             .onChange(of: lines.count) { _, _ in
                 if let last = lines.last {
@@ -28,14 +28,16 @@ struct TranscriptView: View {
     }
 
     private func row(_ line: Line) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Circle().fill(color(line.speaker)).frame(width: 8, height: 8)
-                Text(name(line.speaker)).font(.caption).bold()
-                    .foregroundStyle(color(line.speaker))
-                Text(timecode(line.start)).font(.caption2).foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: Theme.Space.lineInner) {
+            HStack(spacing: Theme.Space.chipGap) {
+                Circle().fill(Theme.Colors.speaker(line.speaker))
+                    .frame(width: Theme.Size.speakerDot, height: Theme.Size.speakerDot)
+                Text(name(line.speaker)).font(Theme.Fonts.speaker)
+                    .foregroundStyle(Theme.Colors.speaker(line.speaker))
+                Text(timecode(line.start)).font(Theme.Fonts.timestamp)
+                    .foregroundStyle(Theme.Colors.textTertiary)
             }
-            Text(attributed(line))
+            Text(attributed(line)).font(Theme.Fonts.body)
         }
     }
 
@@ -43,15 +45,14 @@ struct TranscriptView: View {
         var s = AttributedString(line.text)
         for ov in line.overlapSpeakers {
             var marker = AttributedString("  ⟨+\(name(ov)) 겹침⟩")
-            marker.foregroundColor = color(ov)
-            marker.font = .caption.italic()
+            marker.foregroundColor = Theme.Colors.speaker(ov)
+            marker.font = Theme.Fonts.overlap
             s += marker
         }
         return s
     }
 
     private func name(_ id: Int) -> String { names[id] ?? "Speaker \(id)" }
-    private func color(_ id: Int) -> Color { palette[((id % palette.count) + palette.count) % palette.count] }
     private func timecode(_ t: Double) -> String {
         String(format: "%02d:%02d", Int(t) / 60, Int(t) % 60)
     }

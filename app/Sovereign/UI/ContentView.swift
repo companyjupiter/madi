@@ -24,12 +24,12 @@ struct ContentView: View {
         HStack(spacing: 16) {
             recordButton
             LevelMeter(level: session.level)
-                .frame(width: 120, height: 10)
+                .frame(width: Theme.Size.meterW, height: Theme.Size.meterH)
             Spacer()
             phaseLabel
             exportMenu
         }
-        .padding(12)
+        .padding(Theme.Space.controlBar)
     }
 
     @ViewBuilder private var recordButton: some View {
@@ -49,7 +49,7 @@ struct ContentView: View {
     }
 
     private var phaseLabel: some View {
-        Text(phaseText).foregroundStyle(.secondary).font(.caption)
+        Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
     }
     private var phaseText: String {
         switch session.phase {
@@ -85,8 +85,8 @@ struct LevelMeter: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(.quaternary)
-                Capsule().fill(.green)
+                Capsule().fill(Theme.Colors.meterTrack)
+                Capsule().fill(Theme.Colors.meterFill)
                     .frame(width: geo.size.width * CGFloat(min(1, level)))
             }
         }

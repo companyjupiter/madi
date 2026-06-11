@@ -27,7 +27,7 @@ struct SovereignApp: App {
     var body: some Scene {
         WindowGroup("Sovereign Whisper") {
             ContentView(session: session, downloader: downloader)
-                .frame(minWidth: 720, minHeight: 480)
+                .frame(minWidth: Theme.Size.windowMinW, minHeight: Theme.Size.windowMinH)
                 .task { downloader.ensureModel() }
         }
         .windowStyle(.titleBar)
