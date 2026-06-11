@@ -176,3 +176,4 @@ toolchain: Xcode 26.5, -std=metal4.0 (m4_*.metal만), MPP tensor_ops.
 | M4-4 | **융합 에필로그**: GEMM+bias, GEMM+bias+erf-GELU (타일 cache-hot 상태서 적용; bias_add_f16/gelu_f16 전체 패스 제거) | ✅ commit | run()은 lvalue 슬라이스 요구 |
 | M4-5 | 인코더 6 GEMM 전부 교체 (ENC_M4=0 = MPS 폴백 이중 경로) | ✅ commit | **배치4 569→511ms(-10.1%), 배치1 647→588ms**; jfk 단어·스팬 바이트 동일; wcpp 571ms 최초 추월 |
 | M4-roadmap | Phase 2: Q8 직행 GEMM (half×int8 네이티브 — dequant 77ms+가중치 트래픽 ½ 제거, k-loop+coop tensor로 블록 스케일), Phase 3: flash_attention_enc tensor-ops 재작성 (160ms), int4 경로 (모델 Q4 시) | 📋 | 지원표: half×int8→half/float, int4b_format까지 1급 |
+| M4-6 | **Q8 직행 GEMM (Phase 2)** — A: 32-K coop 스케일 패스, B: TG 타일 dequant(tilek 128/256) | ❌ 기각 (M4급) | A 0.57× / B(128) 0.84× / B(256) 0.56× vs dequant+f16GEMM 4.3ms. 원인: 열당 24 TG가 동일 가중치 타일 중복 dequant — legacy의 레이어 단위 1회 dequant+SLC 상주 왕복이 사실상 최적. 정확성은 검증(max|Δ|=0.0005). **M5 GPU neural accelerator(네이티브 int8 matmul)에서 뒤집힐 후보** — 커널·하네스 보존 |
