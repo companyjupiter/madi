@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>            <string>Sovereign Whisper</string>
+  <key>CFBundleDisplayName</key>     <string>Sovereign Whisper</string>
+  <key>CFBundleIdentifier</key>      <string>com.companyjupiter.sovereign-whisper</string>
+  <key>CFBundleVersion</key>         <string>1</string>
+  <key>CFBundleShortVersionString</key> <string>1.0</string>
+  <key>CFBundlePackageType</key>     <string>APPL</string>
+  <key>CFBundleExecutable</key>      <string>Sovereign</string>
+  <key>LSMinimumSystemVersion</key>  <string>13.0</string>
+  <!-- arm64-only (M1+); Metal-4 kernels auto-fall back to MPS on older OS -->
+  <key>LSRequiresNativeExecution</key> <true/>
+  <key>LSApplicationCategoryType</key> <string>public.app-category.productivity</string>
+
+  <!-- Microphone permission rationale (required or capture crashes) -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Sovereign Whisper transcribes your meetings on-device. Audio never leaves your Mac.</string>
+
+  <key>NSHighResolutionCapable</key> <true/>
+</dict>
+</plist>

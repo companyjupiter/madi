@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Microphone capture (AVAudioEngine) -->
+  <key>com.apple.security.device.audio-input</key> <true/>
+
+  <!-- NOT sandboxed: Developer ID DMG distribution; we spawn the engine binary
+       and read/write temp segment files. (Mac App Store would require
+       App Sandbox + a redesign, see DESIGN.md section 9.)
+       Hardened Runtime is enabled via the codesign runtime option, not here.
+       The engine child process is a separate Mach-O signed with the same
+       Developer ID + runtime; no JIT entitlement is needed unless a future
+       kernel path requires it (measure first). -->
+</dict>
+</plist>

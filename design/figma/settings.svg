@@ -1,0 +1,53 @@
+<svg width="420" height="260" viewBox="0 0 420 260" xmlns="http://www.w3.org/2000/svg" font-family="SF Pro Text, -apple-system, Helvetica">
+  <!-- Screen: Settings window (Transcription tab active) -->
+  <g id="settings-window">
+    <rect id="window-bg" width="420" height="260" rx="10" fill="#ECECEC"/>
+    <g id="titlebar">
+      <rect width="420" height="28" rx="10" fill="#E0E0E0"/>
+      <rect y="14" width="420" height="14" fill="#E0E0E0"/>
+      <circle id="traffic-close" cx="20" cy="14" r="6" fill="#FF5F57"/>
+      <text id="window-title" x="210" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#3C3C43" opacity="0.85">Settings</text>
+    </g>
+
+    <g id="tabs">
+      <g id="tab-transcription-active">
+        <rect x="120" y="36" width="92" height="40" rx="6" fill="#FFFFFF"/>
+        <text x="166" y="56" text-anchor="middle" font-size="16" fill="#007AFF">💬</text>
+        <text x="166" y="70" text-anchor="middle" font-size="10" fill="#007AFF">Transcription</text>
+      </g>
+      <g id="tab-model">
+        <text x="254" y="56" text-anchor="middle" font-size="16" fill="#3C3C43" opacity="0.6">📦</text>
+        <text x="254" y="70" text-anchor="middle" font-size="10" fill="#3C3C43" opacity="0.6">Model</text>
+      </g>
+    </g>
+
+    <g id="form">
+      <rect id="form-bg" x="16" y="88" width="388" height="150" rx="8" fill="#FFFFFF"/>
+
+      <g id="row-diarization">
+        <text x="32" y="114" font-size="13" fill="#000000" opacity="0.85">Speaker diarization</text>
+        <g id="toggle-on">
+          <rect x="352" y="102" width="36" height="20" rx="10" fill="#28CD41"/>
+          <circle cx="379" cy="112" r="8" fill="#FFFFFF"/>
+        </g>
+      </g>
+
+      <g id="row-osd">
+        <text x="32" y="148" font-size="13" fill="#000000" opacity="0.85">Overlapped-speech detection</text>
+        <g id="toggle-on-2">
+          <rect x="352" y="136" width="36" height="20" rx="10" fill="#28CD41"/>
+          <circle cx="379" cy="146" r="8" fill="#FFFFFF"/>
+        </g>
+      </g>
+
+      <g id="row-language">
+        <text x="32" y="182" font-size="13" fill="#000000" opacity="0.85">Language</text>
+        <g id="picker">
+          <rect x="280" y="170" width="108" height="20" rx="5" fill="#FFFFFF" stroke="#000000" stroke-opacity="0.15"/>
+          <text x="290" y="184" font-size="12" fill="#000000" opacity="0.85">Auto-detect</text>
+          <text x="378" y="184" font-size="9" fill="#3C3C43" opacity="0.6">▲▼</text>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

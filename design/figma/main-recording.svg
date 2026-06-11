@@ -1,0 +1,60 @@
+<svg width="720" height="480" viewBox="0 0 720 480" xmlns="http://www.w3.org/2000/svg" font-family="SF Pro Text, -apple-system, Helvetica">
+  <!-- Screen: main window, recording state. All values from design/tokens.json -->
+  <g id="window">
+    <rect id="window-bg" width="720" height="480" rx="10" fill="#ECECEC"/>
+    <g id="titlebar">
+      <rect width="720" height="28" rx="10" fill="#E0E0E0"/>
+      <rect y="14" width="720" height="14" fill="#E0E0E0"/>
+      <circle id="traffic-close" cx="20" cy="14" r="6" fill="#FF5F57"/>
+      <circle id="traffic-min" cx="40" cy="14" r="6" fill="#FEBC2E"/>
+      <circle id="traffic-zoom" cx="60" cy="14" r="6" fill="#28C840"/>
+      <text id="window-title" x="360" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#3C3C43" opacity="0.85">Sovereign Whisper</text>
+    </g>
+
+    <g id="transcript-area">
+      <rect id="transcript-bg" x="0" y="28" width="720" height="404" fill="#FFFFFF"/>
+
+      <g id="line-1">
+        <circle id="speaker-dot" cx="20" cy="52" r="4" fill="#007AFF"/>
+        <text id="speaker-name" x="30" y="56" font-size="10" font-weight="700" fill="#007AFF">Speaker 0</text>
+        <text id="timestamp" x="88" y="56" font-size="10" fill="#3C3C43" opacity="0.30">00:00</text>
+        <text id="line-text" x="16" y="74" font-size="13" fill="#000000" opacity="0.85">아 마이크 테스트 다들 들어오셨죠? 바로 스프린트 리뷰 시작하겠습니다.</text>
+      </g>
+
+      <g id="line-2">
+        <circle id="speaker-dot" cx="20" cy="100" r="4" fill="#FF9500"/>
+        <text id="speaker-name" x="30" y="104" font-size="10" font-weight="700" fill="#FF9500">Speaker 1</text>
+        <text id="timestamp" x="88" y="104" font-size="10" fill="#3C3C43" opacity="0.30">00:12</text>
+        <text id="line-text" x="16" y="122" font-size="13" fill="#000000" opacity="0.85">이번 주 핵심 마일스톤은 로컬 환경에서 구동되는 Sovereign AI 엔진의 추론 레이턴시를</text>
+        <text id="line-text-2" x="16" y="140" font-size="13" fill="#000000" opacity="0.85">극한으로 잡는 거였습니다.</text>
+      </g>
+
+      <g id="line-3-with-overlap">
+        <circle id="speaker-dot" cx="20" cy="166" r="4" fill="#007AFF"/>
+        <text id="speaker-name" x="30" y="170" font-size="10" font-weight="700" fill="#007AFF">Speaker 0</text>
+        <text id="timestamp" x="88" y="170" font-size="10" fill="#3C3C43" opacity="0.30">00:31</text>
+        <text id="line-text" x="16" y="188" font-size="13" fill="#000000" opacity="0.85">결과가 기가 막힙니다. 495 tokens per second까지 치고 올라갔습니다.
+      <tspan id="overlap-marker" font-size="10" font-style="italic" fill="#FF9500" opacity="1">  ⟨+Speaker 1 겹침⟩</tspan></text>
+      </g>
+    </g>
+
+    <g id="control-bar">
+      <line id="divider" x1="0" y1="432" x2="720" y2="432" stroke="#000000" stroke-opacity="0.12"/>
+      <rect id="controlbar-bg" x="0" y="432" width="720" height="48" fill="#F6F6F6"/>
+      <g id="stop-button">
+        <rect x="12" y="444" width="76" height="24" rx="6" fill="#FFFFFF" stroke="#000000" stroke-opacity="0.15"/>
+        <circle cx="26" cy="456" r="6" fill="#FF3B30"/>
+        <rect x="23.5" y="453.5" width="5" height="5" rx="1" fill="#FFFFFF"/>
+        <text x="38" y="460" font-size="12" fill="#000000" opacity="0.85">Stop</text>
+      </g>
+      <g id="level-meter">
+        <rect id="meter-track" x="104" y="451" width="120" height="10" rx="5" fill="#000000" opacity="0.10"/>
+        <rect id="meter-fill" x="104" y="451" width="78" height="10" rx="5" fill="#28CD41"/>
+      </g>
+      <text id="phase-label" x="600" y="460" text-anchor="end" font-size="10" fill="#3C3C43" opacity="0.60">Recording</text>
+      <g id="export-menu">
+        <text x="664" y="460" font-size="12" fill="#007AFF">Export ▾</text>
+      </g>
+    </g>
+  </g>
+</svg>

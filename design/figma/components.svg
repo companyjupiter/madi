@@ -1,0 +1,84 @@
+<svg width="720" height="560" viewBox="0 0 720 560" xmlns="http://www.w3.org/2000/svg" font-family="SF Pro Text, -apple-system, Helvetica">
+  <!-- Component sheet: every reusable piece, labeled with its token name.
+       The designer turns these into Figma components; token names map 1:1 to
+       design/tokens.json → Theme.swift. -->
+  <rect width="720" height="560" fill="#FAFAFA"/>
+  <text x="24" y="36" font-size="17" font-weight="700" fill="#000000" opacity="0.85">Sovereign Whisper — Components &amp; Tokens</text>
+
+  <!-- ── speaker palette ── -->
+  <g id="speaker-palette">
+    <text x="24" y="72" font-size="12" font-weight="600" fill="#3C3C43" opacity="0.6">color.speaker.0–7</text>
+    <g id="swatch-0"><rect x="24"  y="84" width="56" height="32" rx="6" fill="#007AFF"/><text x="52"  y="132" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">0 blue</text></g>
+    <g id="swatch-1"><rect x="92"  y="84" width="56" height="32" rx="6" fill="#FF9500"/><text x="120" y="132" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">1 orange</text></g>
+    <g id="swatch-2"><rect x="160" y="84" width="56" height="32" rx="6" fill="#28CD41"/><text x="188" y="132" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">2 green</text></g>
+    <g id="swatch-3"><rect x="228" y="84" width="56" height="32" rx="6" fill="#AF52DE"/><text x="256" y="132" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">3 purple</text></g>
+    <g id="swatch-4"><rect x="296" y="84" width="56" height="32" rx="6" fill="#FF2D55"/><text x="324" y="132" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">4 pink</text></g>
+    <g id="swatch-5"><rect x="364" y="84" width="56" height="32" rx="6" fill="#30B0C7"/><text x="392" y="132" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">5 teal</text></g>
+    <g id="swatch-6"><rect x="432" y="84" width="56" height="32" rx="6" fill="#FF3B30"/><text x="460" y="132" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">6 red</text></g>
+    <g id="swatch-7"><rect x="500" y="84" width="56" height="32" rx="6" fill="#5856D6"/><text x="528" y="132" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">7 indigo</text></g>
+  </g>
+
+  <!-- ── semantic colors ── -->
+  <g id="semantic-colors">
+    <text x="24" y="170" font-size="12" font-weight="600" fill="#3C3C43" opacity="0.6">color.semantic</text>
+    <g id="sw-accent"><rect x="24" y="182" width="56" height="32" rx="6" fill="#007AFF"/><text x="52" y="230" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">accent</text></g>
+    <g id="sw-recording"><rect x="92" y="182" width="56" height="32" rx="6" fill="#FF3B30"/><text x="120" y="230" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">recording</text></g>
+    <g id="sw-meterFill"><rect x="160" y="182" width="56" height="32" rx="6" fill="#28CD41"/><text x="188" y="230" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">meterFill</text></g>
+    <g id="sw-overlapMarker"><rect x="228" y="182" width="56" height="32" rx="6" fill="#FF9500"/><text x="256" y="230" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">overlapMarker</text></g>
+    <g id="sw-textSecondary"><rect x="296" y="182" width="56" height="32" rx="6" fill="#3C3C43" opacity="0.6"/><text x="324" y="230" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">textSecondary</text></g>
+    <g id="sw-textTertiary"><rect x="364" y="182" width="56" height="32" rx="6" fill="#3C3C43" opacity="0.3"/><text x="392" y="230" text-anchor="middle" font-size="9" fill="#3C3C43" opacity="0.6">textTertiary</text></g>
+  </g>
+
+  <!-- ── transcript line anatomy ── -->
+  <g id="component-transcript-line">
+    <text x="24" y="276" font-size="12" font-weight="600" fill="#3C3C43" opacity="0.6">TranscriptLine (size.speakerDot=8 · space.chipGap=6 · space.lineInner=2)</text>
+    <rect x="24" y="288" width="500" height="56" rx="8" fill="#FFFFFF" stroke="#000000" stroke-opacity="0.08"/>
+    <circle id="speaker-dot" cx="44" cy="306" r="4" fill="#007AFF"/>
+    <text id="speaker-name" x="54" y="310" font-size="10" font-weight="700" fill="#007AFF">Speaker 0</text>
+    <text id="timestamp" x="112" y="310" font-size="10" fill="#3C3C43" opacity="0.30">00:31</text>
+    <text id="line-text" x="40" y="330" font-size="13" fill="#000000" opacity="0.85">결과가 기가 막힙니다.
+      <tspan id="overlap-marker" font-size="10" font-style="italic" fill="#FF9500">  ⟨+Speaker 1 겹침⟩</tspan></text>
+  </g>
+
+  <!-- ── buttons ── -->
+  <g id="component-buttons">
+    <text x="24" y="388" font-size="12" font-weight="600" fill="#3C3C43" opacity="0.6">Buttons</text>
+    <g id="btn-record">
+      <rect x="24" y="400" width="92" height="24" rx="6" fill="#FFFFFF" stroke="#000000" stroke-opacity="0.15"/>
+      <circle cx="40" cy="412" r="6" fill="none" stroke="#FF3B30" stroke-width="1.5"/>
+      <circle cx="40" cy="412" r="3" fill="#FF3B30"/>
+      <text x="52" y="416" font-size="12" fill="#000000" opacity="0.85">Record</text>
+      <text x="24" y="442" font-size="9" fill="#3C3C43" opacity="0.6">record (idle)</text>
+    </g>
+    <g id="btn-stop">
+      <rect x="140" y="400" width="76" height="24" rx="6" fill="#FFFFFF" stroke="#000000" stroke-opacity="0.15"/>
+      <circle cx="154" cy="412" r="6" fill="#FF3B30"/>
+      <rect x="151.5" y="409.5" width="5" height="5" rx="1" fill="#FFFFFF"/>
+      <text x="166" y="416" font-size="12" fill="#000000" opacity="0.85">Stop</text>
+      <text x="140" y="442" font-size="9" fill="#3C3C43" opacity="0.6">stop (recording)</text>
+    </g>
+    <g id="btn-export">
+      <text x="248" y="416" font-size="12" fill="#007AFF">Export ▾</text>
+      <text x="240" y="442" font-size="9" fill="#3C3C43" opacity="0.6">export menu</text>
+    </g>
+  </g>
+
+  <!-- ── level meter states ── -->
+  <g id="component-level-meter">
+    <text x="24" y="478" font-size="12" font-weight="600" fill="#3C3C43" opacity="0.6">LevelMeter (size.meterW=120 · size.meterH=10 · radius.meter=5)</text>
+    <g id="meter-empty">
+      <rect x="24" y="490" width="120" height="10" rx="5" fill="#000000" opacity="0.10"/>
+      <text x="24" y="518" font-size="9" fill="#3C3C43" opacity="0.6">0%</text>
+    </g>
+    <g id="meter-65">
+      <rect x="168" y="490" width="120" height="10" rx="5" fill="#000000" opacity="0.10"/>
+      <rect x="168" y="490" width="78" height="10" rx="5" fill="#28CD41"/>
+      <text x="168" y="518" font-size="9" fill="#3C3C43" opacity="0.6">65% — meterFill</text>
+    </g>
+    <g id="meter-full">
+      <rect x="312" y="490" width="120" height="10" rx="5" fill="#000000" opacity="0.10"/>
+      <rect x="312" y="490" width="120" height="10" rx="5" fill="#28CD41"/>
+      <text x="312" y="518" font-size="9" fill="#3C3C43" opacity="0.6">100%</text>
+    </g>
+  </g>
+</svg>
