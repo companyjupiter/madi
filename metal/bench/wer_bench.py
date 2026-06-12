@@ -19,6 +19,7 @@ Single-instance flock guard (lesson: parallel engine runs corrupt shared state).
 import argparse, fcntl, json, os, re, subprocess, sys, tempfile, time
 
 M = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # metal/
+LANG_TOKEN = ''  # set by fleurs mode (forced-language decoding)
 VENV = '/tmp/werenv/bin/python'  # jiwer + whisper_normalizer live here
 
 
@@ -31,6 +32,20 @@ def collect_librispeech(root):
                 for line in open(os.path.join(dirpath, f)):
                     uid, text = line.strip().split(' ', 1)
                     utts.append((uid, os.path.join(dirpath, uid + '.flac'), text))
+    utts.sort()
+    return utts
+
+
+def collect_fleurs(root):
+    """[(utt_id, wav_path, ref)] from FLEURS test.tsv (id\twav\ttranscript...).
+    Audio is already 16k mono wav — fed to the engine as-is."""
+    utts = []
+    for line in open(os.path.join(root, 'test.tsv')):
+        cols = line.rstrip('\n').split('\t')
+        if len(cols) < 3:
+            continue
+        uid, wav, ref = cols[0], cols[1], cols[2].strip().strip('"')
+        utts.append((uid, os.path.join(root, 'test', wav), ref))
     utts.sort()
     return utts
 
@@ -57,6 +72,8 @@ def run_engine(utts, out_path):
 
     wav_dir = tempfile.mkdtemp(prefix='wer_wav_')
     env = {**os.environ, 'STREAM': '1', 'DIAR': '0'}
+    if LANG_TOKEN:
+        env['WHISPER_LANG_ID'] = LANG_TOKEN  # forced language (published FLEURS evals force it)
     proc = subprocess.Popen(
         [f'{M}/out/transcribe', f'{M}/assets/model.safetensors', '/dev/null',
          f'{M}/assets/WHISPER_BPE.bin'],
@@ -73,9 +90,12 @@ def run_engine(utts, out_path):
     done = 0
     audio_s = 0.0
     for uid, flac, ref in utts:
-        wav = os.path.join(wav_dir, uid + '.wav')
-        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', flac,
-                        '-ar', '16000', '-ac', '1', wav], check=True)
+        if flac.endswith('.wav'):
+            wav = flac  # FLEURS ships 16k mono wav already
+        else:
+            wav = os.path.join(wav_dir, uid + '.wav')
+            subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', flac,
+                            '-ar', '16000', '-ac', '1', wav], check=True)
         proc.stdin.write(f'0.0 {wav}\n')
         proc.stdin.flush()
         # read until <<SEG_END>>, grab the TRANSCRIPTION section body
@@ -92,7 +112,8 @@ def run_engine(utts, out_path):
         hyp = ' '.join(hyp_lines)
         out.write(json.dumps({'id': uid, 'ref': ref, 'hyp': hyp}, ensure_ascii=False) + '\n')
         out.flush()
-        os.unlink(wav)
+        if wav != flac:
+            os.unlink(wav)
         done += 1
         audio_s += os.path.getsize(flac) / 32000  # rough (flac ~16kbit/s/ch? just progress)
         if done % 100 == 0:
@@ -137,24 +158,58 @@ for w,i,r,h in per[:10]:
 '''
 
 
-def score(jsonl):
-    subprocess.run([VENV, '-c', SCORE_SNIPPET, jsonl], check=True)
+KO_SCORE_SNIPPET = r'''
+import json, sys
+import jiwer
+from whisper_normalizer.basic import BasicTextNormalizer
+norm = BasicTextNormalizer()
+refs, hyps = [], []
+for line in open(sys.argv[1]):
+    d = json.loads(line)
+    r, h = norm(d['ref']), norm(d['hyp'])
+    if not r.strip():
+        continue
+    refs.append(r)
+    hyps.append(h if h.strip() else '*')
+cer = jiwer.cer(refs, hyps)
+wer = jiwer.wer(refs, hyps)
+print(f'utterances: {len(refs)}')
+print(f'CER = {cer*100:.2f}%   WER(space-token) = {wer*100:.2f}%')
+per = []
+for i,(r,h) in enumerate(zip(refs,hyps)):
+    per.append((jiwer.cer(r,h), r, h))
+per.sort(reverse=True)
+print('--- worst 5 ---')
+for c,r,h in per[:5]:
+    print(f'[{c*100:.0f}%] REF: {r[:80]}')
+    print(f'        HYP: {h[:80]}')
+'''
+
+
+def score(jsonl, korean=False):
+    subprocess.run([VENV, '-c', KO_SCORE_SNIPPET if korean else SCORE_SNIPPET, jsonl], check=True)
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('mode', choices=['librispeech', 'rescore'])
+    ap.add_argument('mode', choices=['librispeech', 'fleurs', 'rescore', 'rescore-ko'])
     ap.add_argument('path')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--out', default='/tmp/wer/results.jsonl')
     a = ap.parse_args()
     if a.mode == 'rescore':
         score(a.path)
+    elif a.mode == 'rescore-ko':
+        score(a.path, korean=True)
     else:
-        utts = collect_librispeech(a.path)
+        if a.mode == 'fleurs':
+            LANG_TOKEN = '50264'  # Korean
+            utts = collect_fleurs(a.path)
+        else:
+            utts = collect_librispeech(a.path)
         if a.limit:
             utts = utts[:a.limit]
         print(f'{len(utts)} utterances')
         os.makedirs(os.path.dirname(a.out), exist_ok=True)
         run_engine(utts, a.out)
-        score(a.out)
+        score(a.out, korean=(a.mode == 'fleurs'))
