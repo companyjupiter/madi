@@ -36,12 +36,24 @@ def collect_librispeech(root):
 
 
 def run_engine(utts, out_path):
-    """Feed all utterances through ONE resident engine; save hyps as jsonl."""
+    """Feed all utterances through ONE resident engine; save hyps as jsonl.
+    Resumable: per-utt flush + skip ids already in out_path (interrupted runs
+    lose nothing — lesson from the overnight kill at 1624/2620)."""
     lock = open('/tmp/wer_bench.lock', 'w')
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         sys.exit('another wer_bench is running (flock) — refusing to race')
+
+    done_ids = set()
+    if os.path.exists(out_path):
+        for line in open(out_path):
+            try:
+                done_ids.add(json.loads(line)['id'])
+            except (json.JSONDecodeError, KeyError):
+                pass  # truncated tail line from a kill — re-run that utt
+        utts = [u for u in utts if u[0] not in done_ids]
+        print(f'resume: {len(done_ids)} done, {len(utts)} remaining')
 
     wav_dir = tempfile.mkdtemp(prefix='wer_wav_')
     env = {**os.environ, 'STREAM': '1', 'DIAR': '0'}
@@ -56,7 +68,7 @@ def run_engine(utts, out_path):
         if line.startswith('[stream] ready'):
             break
 
-    out = open(out_path, 'w')
+    out = open(out_path, 'a')  # append: resume must not wipe prior rows
     t0 = time.time()
     done = 0
     audio_s = 0.0
