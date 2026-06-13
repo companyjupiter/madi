@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """wer_bench.py — absolute ASR quality: WER on standard benchmarks.
 
+RESULTS LIVE IN metal/bench/wer_runs/ (gitignored) — NOT /tmp: macOS periodic
+cleanup deleted a full day of /tmp results (datasets, venv, both LibriSpeech
+jsonls). Durable paths only.
+
 Closes the product-evaluation gap "no absolute quality numbers": runs the
 resident engine (STREAM mode, model loaded ONCE) over a standard test set and
 scores with the OFFICIAL Whisper text normalizer + jiwer, so the number is
@@ -20,7 +24,7 @@ import argparse, fcntl, json, os, re, subprocess, sys, tempfile, time
 
 M = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # metal/
 LANG_TOKEN = ''  # set by fleurs mode (forced-language decoding)
-VENV = '/tmp/werenv/bin/python'  # jiwer + whisper_normalizer live here
+VENV = os.path.join(M, 'bench/wer_runs/venv/bin/python')  # jiwer + whisper_normalizer
 
 
 def collect_librispeech(root):
@@ -71,7 +75,11 @@ def run_engine(utts, out_path):
         print(f'resume: {len(done_ids)} done, {len(utts)} remaining')
 
     wav_dir = tempfile.mkdtemp(prefix='wer_wav_')
-    env = {**os.environ, 'STREAM': '1', 'DIAR': '0'}
+    env = {**os.environ, 'STREAM': '1', 'DIAR': '0',
+           # pure-ASR measurement: bypass the product's energy gate — FLEURS
+           # masters at very low gain (peak 0.02, max-1s-RMS 0.004 < default
+           # VAD_THRESH 0.010) and the gate silently skipped 222/382 chunks
+           'VAD_THRESH': '0'}
     if LANG_TOKEN:
         env['WHISPER_LANG_ID'] = LANG_TOKEN  # forced language (published FLEURS evals force it)
     proc = subprocess.Popen(
@@ -90,12 +98,19 @@ def run_engine(utts, out_path):
     done = 0
     audio_s = 0.0
     for uid, flac, ref in utts:
-        if flac.endswith('.wav'):
-            wav = flac  # FLEURS ships 16k mono wav already
-        else:
-            wav = os.path.join(wav_dir, uid + '.wav')
-            subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', flac,
-                            '-ar', '16000', '-ac', '1', wav], check=True)
+        # ALWAYS re-encode to canonical pcm_s16le (FLEURS ships float32 wavs the
+        # engine's PCM16 parser reads as 0 samples) AND peak-normalize to -1 dBFS:
+        # FLEURS masters at ~-33 dBFS peak, below BOTH product speech gates
+        # (energy VAD_THRESH and silero's amplitude sensitivity). Linear gain is
+        # ASR-neutral; on normally-mastered sources it is a no-op.
+        wav = os.path.join(wav_dir, uid + '.wav')
+        vd = subprocess.run(['ffmpeg', '-i', flac, '-af', 'volumedetect',
+                             '-f', 'null', '-'], capture_output=True, text=True).stderr
+        mv = re.search(r'max_volume: (-?[0-9.]+) dB', vd)
+        gain = max(0.0, -1.0 - float(mv.group(1))) if mv else 0.0
+        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', flac,
+                        '-af', f'volume={gain:.1f}dB',
+                        '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav], check=True)
         proc.stdin.write(f'0.0 {wav}\n')
         proc.stdin.flush()
         # read until <<SEG_END>>, grab the TRANSCRIPTION section body
@@ -112,8 +127,7 @@ def run_engine(utts, out_path):
         hyp = ' '.join(hyp_lines)
         out.write(json.dumps({'id': uid, 'ref': ref, 'hyp': hyp}, ensure_ascii=False) + '\n')
         out.flush()
-        if wav != flac:
-            os.unlink(wav)
+        os.unlink(wav)
         done += 1
         audio_s += os.path.getsize(flac) / 32000  # rough (flac ~16kbit/s/ch? just progress)
         if done % 100 == 0:
@@ -195,7 +209,7 @@ if __name__ == '__main__':
     ap.add_argument('mode', choices=['librispeech', 'fleurs', 'rescore', 'rescore-ko'])
     ap.add_argument('path')
     ap.add_argument('--limit', type=int, default=0)
-    ap.add_argument('--out', default='/tmp/wer/results.jsonl')
+    ap.add_argument('--out', default=os.path.join(M, 'bench/wer_runs/results.jsonl'))
     a = ap.parse_args()
     if a.mode == 'rescore':
         score(a.path)
