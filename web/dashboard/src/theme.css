@@ -1,0 +1,61 @@
+/* theme.css — design tokens (design/tokens.json) as CSS variables, plus a dark
+   "control-room" surface palette. Keep the brand/speaker/state colors in sync
+   with app/Sovereign/UI/Theme.swift so the web + macOS products match. */
+:root {
+  /* brand / state (design/tokens.json) */
+  --accent: #007AFF;
+  --recording: #FF3B30;
+  --meter-fill: #28CD41;
+  --low-conf: #FF9F0A;       /* amber — low-confidence word highlight */
+  --overlap: #FF9500;        /* ⟨+Speaker N 겹침⟩ */
+
+  /* speaker palette (8) — Theme.swift speakerPalette */
+  --spk-0: #007AFF; --spk-1: #FF9500; --spk-2: #28CD41; --spk-3: #AF52DE;
+  --spk-4: #FF2D55; --spk-5: #30B0C7; --spk-6: #FF3B30; --spk-7: #5856D6;
+
+  /* dark dashboard surfaces (information-dense control-room aesthetic) */
+  --bg:        #0E1217;
+  --panel:     #161B22;
+  --panel-2:   #1C232C;
+  --border:    #283039;
+  --text:      #E6EDF3;
+  --text-2:    #9DA7B3;
+  --text-3:    #5C6773;
+  --good:      #28CD41;
+  --warn:      #FF9F0A;
+  --bad:       #FF3B30;
+
+  --radius: 10px;
+  --gap: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo',
+    'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font-size: 13px; -webkit-font-smoothing: antialiased; }
+
+.mono { font-family: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.panel-h {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-weight: 600; letter-spacing: -0.01em;
+}
+.panel-h .sub { color: var(--text-3); font-weight: 400; font-size: 11px; }
+.panel-b { padding: 12px 14px; overflow: auto; min-height: 0; }
+
+.badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  background: var(--panel-2); color: var(--text-2); border: 1px solid var(--border); }
+.badge.live { background: rgba(255,59,48,.15); color: var(--recording); border-color: transparent; }
+.badge.ok   { background: rgba(40,205,65,.15); color: var(--good); border-color: transparent; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
