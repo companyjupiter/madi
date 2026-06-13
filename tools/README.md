@@ -25,3 +25,27 @@ python3 tools/srt_broadcast.py web/fixtures/jfk3.events.jsonl --cps 17 --max-lin
 
 Verified: devops_ko (KO, 164 cues), jfk3 (EN, 10), devops_ko_biased (106) all
 pass the hard rules. The macOS app's `Exporters.srt` can adopt this segmentation.
+
+## `captions.py` — multi-format export (editor-compatible)
+
+Reuses the same cue segmentation and renders the formats professional editors
+import natively, plus a shareable HTML transcript:
+
+| format | extension | target |
+|---|---|---|
+| SubRip | `.srt` | DaVinci Resolve, Premiere, Final Cut — universal |
+| WebVTT | `.vtt` | browsers (`<track>`), most editors |
+| iTunes Timed Text / TTML | `.itt` | **Final Cut Pro** & **Premiere** native captions |
+| FCPXML | `.fcpxml` | **Final Cut Pro** project with a caption track |
+| HTML | `.html` | self-contained interactive transcript (speaker colors, timestamps, low-confidence amber, hover for confidence) |
+
+Every XML format is validated (ElementTree parse) before writing.
+
+```sh
+python3 tools/captions.py web/fixtures/devops_ko.events.jsonl --out-base out \
+  --fmt srt,vtt,itt,fcpxml,html --fps 30 --lang ko
+```
+
+Verified: all 5 formats generate for KO/EN/biased fixtures; `.itt`/`.fcpxml` are
+well-formed XML with one caption per cue; the HTML carries every word span with
+its confidence and speaker attribution.
