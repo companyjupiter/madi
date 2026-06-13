@@ -816,7 +816,6 @@ pub fn main() !void {
     // Silero STFT magnitudes too small → product goes totally silent). Normalize
     // a scratch copy to a target peak for the gates/detectors ONLY. AGC=0 reverts.
     const agc_on = !std.mem.eql(u8, std.posix.getenv("AGC") orelse "1", "0");
-    const gate_buf = try alloc.alloc(f32, mel.CHUNK_SAMPLES);
     if (stream) try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{});
     var stdin_buf: [8192]u8 = undefined;
     const stdin_r = std.io.getStdIn().reader();
@@ -910,27 +909,30 @@ pub fn main() !void {
             var vad_thread: ?std.Thread = null;
             var osd_threads: [4]?std.Thread = .{ null, null, null, null };
             var osd_nw_used: usize = 0;
-            // ── gate-only AGC ─────────────────────────────────────────────
-            // Normalize a scratch copy to target peak 0.3 for the speech gates +
-            // trained detectors (energy RMS, Silero, OSD). The encoder keeps the
-            // ORIGINAL samples (level-robust: FLEURS CER 3.99% on raw low-gain).
-            // Normal/loud audio (peak ≥ 0.3) → gain 1.0 → gates see identical
-            // input → bit-exact. cap 32× so true silence stays below the gate.
-            const GATE_PEAK_TARGET: f32 = 0.3;
-            const GATE_GAIN_MAX: f32 = 32.0;
-            var chunk_peak: f32 = 0;
-            for (samples[0..got]) |x| {
-                const a = @abs(x);
-                if (a > chunk_peak) chunk_peak = a;
+            // ── AGC ───────────────────────────────────────────────────────
+            // Quiet sources (quiet mic, far speaker, low-gain masters) make BOTH
+            // the speech gates AND the encoder fail — gates read silence, and the
+            // encoder emits empty/degraded text even on MODERATELY quiet audio
+            // (peak 0.11–0.23 FLEURS utts came out empty until boosted). When a
+            // chunk is below the normal-speech floor, normalize it toward a target
+            // peak (−1 dBFS — the level that gave FLEURS CER 3.99%) IN PLACE so
+            // gates AND encoder both see a healthy level. Normal/loud audio
+            // (peak ≥ ACTIVATE) is untouched → bit-exact. AGC=0 reverts.
+            const AGC_ACTIVATE: f32 = 0.30;
+            const AGC_TARGET: f32 = 0.90;
+            const AGC_GAIN_MAX: f32 = 40.0;
+            if (agc_on) {
+                var pk: f32 = 0;
+                for (samples[0..got]) |x| {
+                    const a = @abs(x);
+                    if (a > pk) pk = a;
+                }
+                if (pk > 1e-6 and pk < AGC_ACTIVATE) {
+                    const g = @min(AGC_GAIN_MAX, AGC_TARGET / pk);
+                    for (samples[0..got]) |*x| x.* *= g;
+                }
             }
-            const gate_gain: f32 = if (agc_on and chunk_peak > 1e-6)
-                @min(GATE_GAIN_MAX, @max(@as(f32, 1.0), GATE_PEAK_TARGET / chunk_peak))
-            else
-                1.0;
-            const gate_samples: []f32 = if (gate_gain == 1.0) samples[0..got] else blk: {
-                for (samples[0..got], 0..) |x, i| gate_buf[i] = x * gate_gain;
-                break :blk gate_buf[0..got];
-            };
+            const gate_samples: []f32 = samples[0..got];
             if (osd_model) |*om| {
                 // pyannote OSD on 10 s windows, threaded (≈410 ms each naive;
                 // overlaps the diar embed pool + silero below)
