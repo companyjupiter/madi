@@ -1,4 +1,5 @@
 import { SessionState, langLabel } from '../types'
+import { buildCues, toSRT, toVTT, toHTML, download } from '../export'
 
 const FIXTURES = [
   { id: 'jfk3', label: 'JFK (영어·1화자)' },
@@ -29,6 +30,24 @@ export function TopBar({ state, fixture, onFixture, live, mode, onMode }:
       </div>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        {state.words.length > 0 && (() => {
+          const exp = (fmt: 'srt' | 'vtt' | 'html') => {
+            const cues = buildCues(state.words)
+            if (fmt === 'srt') download('transcript.srt', toSRT(cues), 'text/plain')
+            else if (fmt === 'vtt') download('transcript.vtt', toVTT(cues), 'text/vtt')
+            else download('transcript.html', toHTML(state), 'text/html')
+          }
+          const btn = { background: 'var(--panel-2)', color: 'var(--text-2)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '6px 10px', fontSize: 12, cursor: 'pointer' } as const
+          return (
+            <div style={{ display: 'flex', gap: 4 }} title="현재 세션을 편집기/공유용으로 내보내기">
+              <span style={{ color: 'var(--text-3)', fontSize: 12, alignSelf: 'center', marginRight: 2 }}>내보내기</span>
+              <button style={btn} onClick={() => exp('srt')}>SRT</button>
+              <button style={btn} onClick={() => exp('vtt')}>VTT</button>
+              <button style={btn} onClick={() => exp('html')}>HTML</button>
+            </div>
+          )
+        })()}
         <button onClick={() => onMode(mode === 'live' ? 'instant' : 'live')}
           title="라이브 브릿지(127.0.0.1:5274)에서 엔진 실시간 스트림"
           style={{ background: mode === 'live' ? 'var(--recording)' : 'var(--panel-2)',
