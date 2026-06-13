@@ -71,11 +71,11 @@ export function SpeakerPanel({ s }: { s: SessionState }) {
   return (
     <Panel title="화자 분석" sub={s.diar ? `silhouette ${s.diar.silhouette.toFixed(2)} · 분리도 ${s.diar.sep.toFixed(2)}` : ''}
       style={{ gridArea: 'spk' }}>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 14 }}>
-        {donut.length > 0 && <Donut data={donut} />}
+      <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 12 }}>
+        {donut.length > 0 && <Donut data={donut} size={96} thickness={15} />}
         <div style={{ flex: 1 }}><Bars data={bars} fmt={(v) => `${v.toFixed(0)}s`} /></div>
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>발화 타임라인</div>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>발화 타임라인 <span style={{ color: 'var(--text-3)' }}>(0–{Math.round(dur)}s)</span></div>
       <Timeline segs={s.spkSegs} duration={dur} speakers={ps.map((p) => p.spk)} />
     </Panel>
   )
