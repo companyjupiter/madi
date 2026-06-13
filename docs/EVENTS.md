@@ -28,11 +28,12 @@ should **ignore unknown `"t"` values and unknown fields** (forward-compat).
 Reserved fields are emitted with defaults *today* so UI can bind to the final
 data model before the producing feature lands:
 
-| field | on event | today | becomes real in |
+| field | on event | status | notes |
 |---|---|---|---|
-| `fallback` | `seg` | `"none"` | P1 (temperature/logprob fallback) — `"logprob"`/`"compression"`/`"collapse"` |
-| `temp` | `seg` | `0.0` | P1 — the temperature the accepted pass used |
-| `spk` | `word` | `-1` | (diar runs after decode; resolve speaker from `spk_seg`) |
+| `avg_logprob` | `seg` | **real** | mean ln(token softmax prob) — decode certainty |
+| `fallback` | `seg` | **real** | `"none"` / `"collapse"` (periodic repeat) / `"logprob"` (avg_logprob<−1.0 → ts re-decode) |
+| `temp` | `seg` | reserved `0.0` | only a stochastic temperature sweep would set it (deferred — not a WER mover here, see PERF_LOG P1) |
+| `spk` | `word` | `-1` | diar runs after decode; resolve speaker from `spk_seg` |
 | `bias_hits` | `seg` | *(absent)* | P3 (term biasing) |
 
 ## Event types
@@ -42,7 +43,7 @@ data model before the producing feature lands:
 | `meta` | once, first line | `v` (schema ver), `model`, `lang` (Whisper lang-token id; 0=auto), `sr` |
 | `ready` | stream mode, model resident | — |
 | `word` | each aligned word | `t0`,`t1` (global s), `conf` (0–1 softmax prob), `spk` (−1 until attributed), `text` |
-| `seg` | each 30 s chunk decoded | `idx`, `t0`,`t1` (s), `dropped` (hallucination-guard), `fallback`,`temp` (reserved), `tok_s`,`enc_ms`,`dec_ms`,`passes` (perf), `text` |
+| `seg` | each 30 s chunk decoded | `idx`, `t0`,`t1` (s), `dropped` (hallucination-guard), `avg_logprob`, `fallback`,`temp`, `tok_s`,`enc_ms`,`dec_ms`,`passes` (perf), `text` |
 | `spk_seg` | each speaker-attributed run | `t0` (global s), `spk` (speaker id), `text` |
 | `diar` | once per file/flush | `speakers` (final K), `silhouette`, `sep` (max centroid cosdist — solo-split gate signal), `tau`, `segments` (speech windows) |
 | `seg_end` | stream: one job done | — |

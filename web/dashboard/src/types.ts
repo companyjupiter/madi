@@ -7,7 +7,8 @@ export interface ReadyEvent { t: 'ready' }
 export interface WordEvent { t: 'word'; t0: number; t1: number; conf: number; spk: number; text: string }
 export interface SegEvent {
   t: 'seg'; idx: number; t0: number; t1: number; dropped: boolean
-  fallback: string; temp: number              // reserved → real in P1
+  avg_logprob: number                           // mean ln(token prob) — decode certainty
+  fallback: string; temp: number                // fallback: none|collapse|logprob; temp reserved
   tok_s: number; enc_ms: number; dec_ms: number; passes: number
   text: string
   bias_hits?: string[]                          // reserved → real in P3
