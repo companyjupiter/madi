@@ -384,6 +384,99 @@ var g_osd_iv = std.ArrayList([2]f32).init(alloc); // pyannote OSD overlap interv
 const OsdWin = struct { t: f32, nf: u32, cls: [600]u8, pov: [600]f32 }; // one 10s model window: argmax class + P(overlap) per frame
 var g_osd_win = std.ArrayList(OsdWin).init(alloc);
 
+// ── structured event stream (opt-in EVENTS_FILE) ─────────────────────────────
+// A MACHINE contract emitted ALONGSIDE the frozen stdout text contract (the
+// Swift parser + its unit tests stay byte-for-byte valid). One JSON object per
+// line, each tagged with "t"; the stream is versioned by the leading
+// {"t":"meta","v":1}. Web dashboard / future consumers tail this file. The
+// authority is docs/EVENTS.md. Reserved fields (fallback/temp/bias_hits) are
+// emitted as defaults now so downstream UI can bind to them before P1/P3 land —
+// the data model is stable from day one (see ui-ux-scaffold-contract).
+var g_ev: ?std.fs.File = null;
+fn evOpen() void {
+    if (std.posix.getenv("EVENTS_FILE")) |p| g_ev = std.fs.cwd().createFile(p, .{}) catch null;
+}
+fn evLine(s: []const u8) void {
+    const f = g_ev orelse return;
+    f.writeAll(s) catch {};
+    f.writeAll("\n") catch {};
+}
+// JSON-escape a string value (incl. surrounding quotes). Raw UTF-8 ≥0x80 passes
+// through unescaped — valid JSON — so Korean text stays human-readable.
+fn evStr(wr: anytype, s: []const u8) !void {
+    try wr.writeByte('"');
+    for (s) |c| switch (c) {
+        '"' => try wr.writeAll("\\\""),
+        '\\' => try wr.writeAll("\\\\"),
+        '\n' => try wr.writeAll("\\n"),
+        '\r' => try wr.writeAll("\\r"),
+        '\t' => try wr.writeAll("\\t"),
+        0...8, 11, 12, 14...31 => try wr.print("\\u{x:0>4}", .{c}),
+        else => try wr.writeByte(c),
+    };
+    try wr.writeByte('"');
+}
+fn evMeta(model: []const u8, lang: u32, sr: u32) void {
+    if (g_ev == null) return;
+    var b: [512]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&b);
+    const w = fbs.writer();
+    w.writeAll("{\"t\":\"meta\",\"v\":1,\"model\":") catch return;
+    evStr(w, model) catch return;
+    w.print(",\"lang\":{d},\"sr\":{d}}}", .{ lang, sr }) catch return;
+    evLine(fbs.getWritten());
+}
+fn evReady() void {
+    evLine("{\"t\":\"ready\"}");
+}
+fn evWord(t0: f32, t1: f32, text: []const u8, conf: f32, spk: i32) void {
+    if (g_ev == null) return;
+    var b: [1024]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&b);
+    const w = fbs.writer();
+    w.print("{{\"t\":\"word\",\"t0\":{d:.3},\"t1\":{d:.3},\"conf\":{d:.4},\"spk\":{d},\"text\":", .{ t0, t1, conf, spk }) catch return;
+    evStr(w, std.mem.trim(u8, text, " ")) catch return;
+    w.writeByte('}') catch return;
+    evLine(fbs.getWritten());
+}
+fn evSeg(idx: u32, t0: f32, t1: f32, text: []const u8, tok_s: f32, enc_ms: f32, dec_ms: f32, passes: u32, dropped: bool) void {
+    if (g_ev == null) return;
+    var b: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&b);
+    const w = fbs.writer();
+    // reserved quality fields (fallback/temp) default here; P1 will populate them
+    w.print("{{\"t\":\"seg\",\"idx\":{d},\"t0\":{d:.2},\"t1\":{d:.2},\"dropped\":{},\"fallback\":\"none\",\"temp\":0.0,\"tok_s\":{d:.1},\"enc_ms\":{d:.0},\"dec_ms\":{d:.0},\"passes\":{d},\"text\":", .{ idx, t0, t1, dropped, tok_s, enc_ms, dec_ms, passes }) catch return;
+    evStr(w, std.mem.trim(u8, text, " \n")) catch return;
+    w.writeByte('}') catch return;
+    evLine(fbs.getWritten());
+}
+fn evSpeakerSeg(t: f32, spk: i32, text: []const u8) void {
+    if (g_ev == null) return;
+    var b: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&b);
+    const w = fbs.writer();
+    w.print("{{\"t\":\"spk_seg\",\"t0\":{d:.2},\"spk\":{d},\"text\":", .{ t, spk }) catch return;
+    evStr(w, std.mem.trim(u8, text, " ")) catch return;
+    w.writeByte('}') catch return;
+    evLine(fbs.getWritten());
+}
+fn evDiar(speakers: usize, sil: f32, sep: f32, tau: f32, segs: usize) void {
+    if (g_ev == null) return;
+    var b: [256]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&b);
+    const w = fbs.writer();
+    w.print("{{\"t\":\"diar\",\"speakers\":{d},\"silhouette\":{d:.3},\"sep\":{d:.3},\"tau\":{d:.2},\"segments\":{d}}}", .{ speakers, sil, sep, tau, segs }) catch return;
+    evLine(fbs.getWritten());
+}
+fn evEnd(tag: []const u8) void {
+    if (g_ev == null) return;
+    var b: [64]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&b);
+    const w = fbs.writer();
+    w.print("{{\"t\":\"{s}\"}}", .{tag}) catch return;
+    evLine(fbs.getWritten());
+}
+
 fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
     return std.fmt.bufPrint(buf, fmt, .{l}) catch unreachable;
 }
@@ -560,6 +653,7 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
 
 pub fn main() !void {
     const out = std.io.getStdOut().writer();
+    evOpen(); // structured event stream (opt-in EVENTS_FILE) — frozen stdout text contract unaffected
     g_q4 = !std.mem.eql(u8, std.posix.getenv("Q4") orelse "0", "0"); // int4 quality probe
     if (std.posix.getenv("QBITS")) |b| { // 4/5/6-bit sweep: levels = 2^(b-1)-1
         const nbits = std.fmt.parseInt(u6, b, 10) catch 4;
@@ -924,7 +1018,8 @@ pub fn main() !void {
     // Silero STFT magnitudes too small → product goes totally silent). Normalize
     // a scratch copy to a target peak for the gates/detectors ONLY. AGC=0 reverts.
     const agc_on = !std.mem.eql(u8, std.posix.getenv("AGC") orelse "1", "0");
-    if (stream) try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{});
+    evMeta("whisper-large-v3-turbo-q8", lang_tok, mel.SAMPLE_RATE); // structured contract header (both modes)
+    if (stream) { evReady(); try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{}); }
     var stdin_buf: [8192]u8 = undefined;
     const stdin_r = std.io.getStdIn().reader();
 
@@ -976,6 +1071,7 @@ pub fn main() !void {
                     // identity as diarizeEmb, against the RELABELED windows
                     try emitOsdOverlap(out, live_t0.items[0..mwin], fix_ids);
                 }
+                evEnd("flush_end");
                 try out.print("<<FLUSH_END>>\n", .{});
                 continue :job;
             }
@@ -1000,6 +1096,7 @@ pub fn main() !void {
             std.debug.print("[skip] {s}: {s}\n", .{ cur_path, why });
             if (stream) {
                 try out.print("=== TRANSCRIPTION (0.00s, 0 chunk(s)) ===\n", .{});
+                evEnd("seg_end");
                 try out.print("<<SEG_END>>\n", .{});
                 continue :job;
             }
@@ -1530,6 +1627,7 @@ pub fn main() !void {
 
         const dec_ms = @as(f64, @floatFromInt(dt2.read() -| host_ns)) / 1e6; // word-DTW/BPE moved inside the loop; keep tok/s comparable
         try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms | passes {d}]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_tok_total, dec_ms, @as(f64, @floatFromInt(n_tok_total)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6, total_passes });
+        evSeg(@intCast(cchunk), t_off, t_off + @as(f32, @floatFromInt(cgot)) / 16000.0, chunk_text.items, @as(f32, @floatFromInt(n_tok_total)) / @as(f32, @floatCast(dec_ms / 1000.0)), @floatCast(enc_ms), @floatCast(dec_ms), total_passes, dropped);
         if (dropped) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (low-energy — hallucination guard, rms {d:.3})\n", .{ cchunk + 1, n_chunks, t_off, seg_rms2 });
         } else {
@@ -1543,6 +1641,7 @@ pub fn main() !void {
 
         // stream mode: one segment done → emit sentinel and await the next job.
         if (stream) {
+            evEnd("seg_end");
             try out.print("<<SEG_END>>\n", .{});
             continue :job;
         }
@@ -1699,6 +1798,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
     // Choose K: fixed (diar_k≥1) or auto via simplified-silhouette over 2..maxK.
     const asg = try alloc.alloc(usize, m); defer alloc.free(asg);
     var K: usize = undefined;
+    var ev_sil: f32 = 0; var ev_sep: f32 = 2; var ev_tau: f32 = 0; // for the structured diar event
     if (diar_k >= 1) {
         K = @min(@as(usize, diar_k), m);
         try kmeansFit(X, m, segd, K, asg);
@@ -1726,8 +1826,10 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         // delivery variation) — max centroid cosdist < DIAR_MIN_SEP → one speaker
         if (K >= 2) {
             const sep = maxCentroidCosDist(X, m, segd, asg, K);
+            ev_sep = sep;
             if (sep < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); bestSil = -2; }
         }
+        ev_sil = bestSil; ev_tau = tau;
         try out.print("  [auto-K] K={d} (silhouette {d:.3}, tau {d:.2})\n", .{ K, bestSil, tau });
     }
 
@@ -1857,6 +1959,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
     }
     if (n_ov > 0) try out.print("  [osd] {d} overlap 2nd-speaker rows (local-track identity)\n", .{n_ov});
         try out.print("  → {d} speaker(s) ({d}/{d} speech segments)\n", .{ nspk, m, n });
+        evDiar(@intCast(nspk), ev_sil, ev_sep, ev_tau, m);
 
     if (rttm_path) |p| {
         try std.fs.cwd().writeFile(.{ .sub_path = p, .data = rttm.items });
@@ -1889,13 +1992,13 @@ fn attributeTranscript(out: anytype) !void {
     for (g_words.items) |w| {
         const sp = speakerAt(w.t);
         if (sp != cur) {
-            if (line.items.len > 0) try out.print("  [{d:.2}s] Speaker {d}:{s}\n", .{ cur_t, cur, line.items });
+            if (line.items.len > 0) { try out.print("  [{d:.2}s] Speaker {d}:{s}\n", .{ cur_t, cur, line.items }); evSpeakerSeg(cur_t, cur, line.items); }
             line.clearRetainingCapacity();
             cur = sp; cur_t = w.t;
         }
         try line.appendSlice(w.txt); // txt already has a leading space for word starts
     }
-    if (line.items.len > 0) try out.print("  [{d:.2}s] Speaker {d}:{s}\n", .{ cur_t, cur, line.items });
+    if (line.items.len > 0) { try out.print("  [{d:.2}s] Speaker {d}:{s}\n", .{ cur_t, cur, line.items }); evSpeakerSeg(cur_t, cur, line.items); }
 }
 // Word timestamps via DTW over the alignment-head cross-attention (d_ca already
 // averages Whisper-turbo align heads {2,4}{2,11}{3,3}{3,6}{3,11}{3,14}). This is
@@ -2329,6 +2432,7 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
         } else {
             try out.print("  [{d:.2}s-{d:.2}s] {s}\n", .{ ts, te, w.txt });
         }
+        evWord(ts, te, w.txt, w.conf, -1); // spk resolved later via spk_seg (diar runs after decode)
         try g_words.append(.{ .t = ts, .txt = w.txt });
     }
 }
