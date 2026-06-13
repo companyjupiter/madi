@@ -544,7 +544,6 @@ kernel void argmax_conf(
     const float zmax = sv[0];
     const uint  amax = si[0];
     threadgroup_barrier(mem_flags::mem_threadgroup);
-    // pass 2: partition function Σ exp(z − zmax)
     float lsum = 0.0f;
     for (uint i = t_id; i < VOCAB; i += 1024) lsum += exp(logits[i] - zmax);
     sv[t_id] = lsum;

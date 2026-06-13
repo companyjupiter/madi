@@ -2200,7 +2200,7 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     defer words.deinit();
     var word = std.ArrayList(u8).init(alloc);
     var w_first: usize = 0; // first TEXT-token index of the open word
-    var wconf: f32 = 1.0; // min softmax-confidence over the open word's tokens
+    var wconf: f32 = 1e30; // min metric over the open word's tokens (lower=uncertain; 1e30 so any metric range works)
     for (0..N) |i| {
         const ti = SL + tpos.items[i];
         const tok_bytes = if (out_tokens[ti] < toks.len) toks[out_tokens[ti]] else "";
@@ -2208,7 +2208,7 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
         if (starts_word and word.items.len > 0) {
             try words.append(.{ .s0 = @as(usize, ts_frame[w_first]) * 20, .s1 = @as(usize, ts_frame[i]) * 20, .txt = try alloc.dupe(u8, word.items), .conf = wconf });
             word.clearRetainingCapacity();
-            wconf = 1.0;
+            wconf = 1e30;
         }
         if (word.items.len == 0) w_first = i;
         try word.appendSlice(tok_bytes);

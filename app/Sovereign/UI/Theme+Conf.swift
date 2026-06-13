@@ -3,4 +3,4 @@
 // Chosen from validation: real errors fall at 0.36–0.54, correct words 0.94–1.0,
 // so 0.65 cleanly separates with low false-positives.
 import Foundation
-extension Theme { static let confThreshold = 0.65 }
+extension Theme { static let confThreshold = 0.55 }

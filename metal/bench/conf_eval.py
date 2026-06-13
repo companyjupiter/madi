@@ -21,7 +21,7 @@ N = int(sys.argv[1]) if len(sys.argv) > 1 else 40
 rows = [l.rstrip('\n').split('\t') for l in open(os.path.join(FLEURS, 'test.tsv'))]
 rows = [(r[1], r[2]) for r in rows if len(r) >= 3][:N]
 
-env = {**os.environ, 'STREAM': '1', 'DIAR': '0', 'CONF': '1', 'WHISPER_LANG_ID': '50264'}
+env = {**os.environ, 'STREAM': '1', 'DIAR': '0', 'CONF': '1', 'WHISPER_LANG_ID': '50264', 'METRIC': os.environ.get('METRIC','prob')}
 proc = subprocess.Popen([f'{M}/out/transcribe', f'{M}/assets/model.safetensors', '/dev/null',
                          f'{M}/assets/WHISPER_BPE.bin'],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -30,7 +30,7 @@ for line in proc.stdout:
     if line.startswith('[stream] ready'):
         break
 
-WORD = re.compile(r'^\s*\[[0-9.]+s-[0-9.]+s\]\s+(.*?)\s+«conf ([0-9.]+)»\s*$')
+WORD = re.compile(r'^\s*\[[0-9.]+s-[0-9.]+s\]\s+(.*?)\s+«conf (-?[0-9.]+)»\s*$')
 samples = []  # (hyp_words_with_conf, ref) per file
 for wav, ref in rows:
     proc.stdin.write(f'0.0 {os.path.join(FLEURS, "test", wav)}\n'); proc.stdin.flush()
@@ -81,14 +81,18 @@ import statistics
 ce = [c for c, e in pairs if e]; cc = [c for c, e in pairs if not e]
 print(f'conf  mean: error={statistics.mean(ce):.3f}  correct={statistics.mean(cc):.3f}')
 print(f'conf median: error={statistics.median(ce):.3f}  correct={statistics.median(cc):.3f}')
-print('--- threshold sweep (flag if conf < T) ---')
-print(f'{"T":>5} {"flagged":>8} {"precision":>10} {"recall":>8} {"F1":>6}')
-for T in [0.40, 0.50, 0.55, 0.60, 0.65, 0.70, 0.80, 0.90]:
-    flagged = [(c, e) for c, e in pairs if c < T]
+import os as _os
+print(f'--- bottom-X% sweep (flag most-uncertain X%) metric={_os.environ.get("METRIC","prob")} ---')
+print(f'{"X%":>5} {"flagged":>8} {"precision":>10} {"recall":>8} {"F1":>6}')
+vals = sorted(c for c, _ in pairs)  # ascending: lower = more uncertain
+for X in [5, 10, 15, 20, 30, 40]:
+    k = max(1, int(len(pairs) * X / 100))
+    thr = vals[k - 1]
+    flagged = [(c, e) for c, e in pairs if c <= thr]
     tp = sum(e for _, e in flagged)
     prec = tp / len(flagged) if flagged else 0
     rec = tp / errs if errs else 0
     f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0
-    print(f'{T:>5.2f} {len(flagged):>8} {prec:>10.2f} {rec:>8.2f} {f1:>6.2f}')
+    print(f'{X:>4}% {len(flagged):>8} {prec:>10.2f} {rec:>8.2f} {f1:>6.2f}')
 '''
 subprocess.run([VENV, '-c', SCORE, data], check=True)
