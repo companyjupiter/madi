@@ -439,13 +439,14 @@ fn evWord(t0: f32, t1: f32, text: []const u8, conf: f32, spk: i32) void {
     w.writeByte('}') catch return;
     evLine(fbs.getWritten());
 }
-fn evSeg(idx: u32, t0: f32, t1: f32, text: []const u8, tok_s: f32, enc_ms: f32, dec_ms: f32, passes: u32, dropped: bool) void {
+fn evSeg(idx: u32, t0: f32, t1: f32, text: []const u8, tok_s: f32, enc_ms: f32, dec_ms: f32, passes: u32, dropped: bool, avg_lp: f32, fallback: []const u8) void {
     if (g_ev == null) return;
     var b: [8192]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&b);
     const w = fbs.writer();
-    // reserved quality fields (fallback/temp) default here; P1 will populate them
-    w.print("{{\"t\":\"seg\",\"idx\":{d},\"t0\":{d:.2},\"t1\":{d:.2},\"dropped\":{},\"fallback\":\"none\",\"temp\":0.0,\"tok_s\":{d:.1},\"enc_ms\":{d:.0},\"dec_ms\":{d:.0},\"passes\":{d},\"text\":", .{ idx, t0, t1, dropped, tok_s, enc_ms, dec_ms, passes }) catch return;
+    // avg_logprob + fallback now real (fallback: none/collapse/logprob); temp
+    // stays reserved (only a stochastic temperature sweep would set it — deferred)
+    w.print("{{\"t\":\"seg\",\"idx\":{d},\"t0\":{d:.2},\"t1\":{d:.2},\"dropped\":{},\"avg_logprob\":{d:.3},\"fallback\":\"{s}\",\"temp\":0.0,\"tok_s\":{d:.1},\"enc_ms\":{d:.0},\"dec_ms\":{d:.0},\"passes\":{d},\"text\":", .{ idx, t0, t1, dropped, avg_lp, fallback, tok_s, enc_ms, dec_ms, passes }) catch return;
     evStr(w, std.mem.trim(u8, text, " \n")) catch return;
     w.writeByte('}') catch return;
     evLine(fbs.getWritten());
@@ -1484,6 +1485,9 @@ pub fn main() !void {
         var chunk_text = std.ArrayList(u8).init(alloc);
         defer chunk_text.deinit();
         var n_tok_total: u32 = 0;
+        var sum_lp: f64 = 0; // Σ ln(token prob) over accepted text tokens (avg_logprob)
+        var n_lp: u32 = 0;
+        var fb_reason: []const u8 = "none"; // rescue reason for the seg event (none/collapse/logprob)
         var enc_ns: u64 = 0; // CPU: command recording + commit
         var sync_ns: u64 = 0; // GPU: execution wait
         var host_ns: u64 = 0; // host post-processing (BPE decode + word DTW) — excluded from decode tok/s
@@ -1497,6 +1501,7 @@ pub fn main() !void {
         mode: while (true) {
         chunk_text.clearRetainingCapacity();
         n_tok_total = 0;
+        sum_lp = 0; n_lp = 0;
         var seek_fr: u32 = 0; // chunk-relative 20 ms frame the CURRENT window starts at
         var pass: u32 = 0;
         seek: while (pass < 6) : (pass += 1) {
@@ -1567,12 +1572,29 @@ pub fn main() !void {
                 n_text += bi;
             }
             n_tok_total += n_text;
-            if (!ts_mode and tokenCollapse(out_tokens[PL .. PL + n_text])) {
+            // this pass's avg_logprob: mean ln(softmax prob) over its tokens
+            // (d_conf[pos] = argmax prob). High for confident decodes — a genuine
+            // repeat stays high (jfk3 3× real repeat −0.03), only DEGENERATE decodes
+            // sink low. Measured (test-other worst/best, bench/logprob_probe.py):
+            // best mean −0.07, worst mean −0.44, but <−1.0 fires on 0/30 normal utts
+            // and only the 1 catastrophic over-generation → a precise, FP-free net.
+            var pass_lp: f64 = 0; var pass_nlp: u32 = 0;
+            for (0..n_text) |i| { const c = d_conf[PL + i]; if (c > 0) { pass_lp += @log(@as(f64, c)); pass_nlp += 1; } }
+            const pass_avg_lp: f64 = if (pass_nlp > 0) pass_lp / @as(f64, @floatFromInt(pass_nlp)) else 0;
+            // rescue trigger: periodic collapse (existing) OR a degenerate decode
+            // (avg_logprob below LOGPROB_RESCUE, default −1.0 — Whisper's threshold).
+            // The ts-mode re-decode is collapse-immune AND timestamp-anchored, so a
+            // short utterance the plain pass over-ran gets a clean EOT. Safety net,
+            // not a WER mover (the residual errors are confident substitutions —
+            // re-decode can't fix those; see PERF_LOG P1).
+            if (!ts_mode and (tokenCollapse(out_tokens[PL .. PL + n_text]) or pass_avg_lp < envF("LOGPROB_RESCUE", -1.0))) {
                 ts_mode = true; // discard this pass, re-decode in ts mode
-                try out.print("[collapse-rescue] chunk {d}: periodic repeat loop — re-decoding with timestamp tokens\n", .{cchunk + 1});
+                fb_reason = if (pass_avg_lp < envF("LOGPROB_RESCUE", -1.0)) "logprob" else "collapse";
+                try out.print("[rescue] chunk {d}: {s} — re-decoding with timestamp tokens\n", .{ cchunk + 1, fb_reason });
                 continue :mode;
             }
             if (!dropped and n_text > 0) {
+                sum_lp += pass_lp; n_lp += pass_nlp; // accumulate for the seg event
                 var ht = try std.time.Timer.start();
                 const text = try bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]);
                 try chunk_text.appendSlice(text);
@@ -1627,7 +1649,8 @@ pub fn main() !void {
 
         const dec_ms = @as(f64, @floatFromInt(dt2.read() -| host_ns)) / 1e6; // word-DTW/BPE moved inside the loop; keep tok/s comparable
         try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms | passes {d}]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_tok_total, dec_ms, @as(f64, @floatFromInt(n_tok_total)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6, total_passes });
-        evSeg(@intCast(cchunk), t_off, t_off + @as(f32, @floatFromInt(cgot)) / 16000.0, chunk_text.items, @as(f32, @floatFromInt(n_tok_total)) / @as(f32, @floatCast(dec_ms / 1000.0)), @floatCast(enc_ms), @floatCast(dec_ms), total_passes, dropped);
+        const avg_lp: f32 = if (n_lp > 0) @floatCast(sum_lp / @as(f64, @floatFromInt(n_lp))) else 0;
+        evSeg(@intCast(cchunk), t_off, t_off + @as(f32, @floatFromInt(cgot)) / 16000.0, chunk_text.items, @as(f32, @floatFromInt(n_tok_total)) / @as(f32, @floatCast(dec_ms / 1000.0)), @floatCast(enc_ms), @floatCast(dec_ms), total_passes, dropped, avg_lp, fb_reason);
         if (dropped) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (low-energy — hallucination guard, rms {d:.3})\n", .{ cchunk + 1, n_chunks, t_off, seg_rms2 });
         } else {

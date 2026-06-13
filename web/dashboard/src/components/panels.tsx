@@ -86,8 +86,22 @@ export function QualityPanel({ s }: { s: SessionState }) {
   const hist = confHistogram(s.words)
   const low = s.words.filter((w) => w.conf < LOW_CONF).sort((a, b) => a.conf - b.conf).slice(0, 24)
   const lowCutBin = Math.round(LOW_CONF * 10)
+  const rescued = s.segs.filter((g) => g.fallback && g.fallback !== 'none')
+  const minLp = s.segs.length ? Math.min(...s.segs.map((g) => g.avg_logprob ?? 0)) : 0
   return (
     <Panel title="품질 신호" sub={`임계 ${(LOW_CONF * 100).toFixed(0)}%`} style={{ gridArea: 'ql' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <div style={{ flex: 1, background: 'var(--panel-2)', borderRadius: 8, padding: '8px 10px' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>최저 avg_logprob</div>
+          <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: minLp < -1 ? 'var(--bad)' : minLp < -0.5 ? 'var(--warn)' : 'var(--good)' }}>{minLp.toFixed(2)}</div>
+        </div>
+        <div style={{ flex: 1, background: 'var(--panel-2)', borderRadius: 8, padding: '8px 10px' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>재디코드(rescue)</div>
+          <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: rescued.length ? 'var(--warn)' : 'var(--good)' }}>
+            {rescued.length}{rescued.length > 0 && <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-3)' }}> · {[...new Set(rescued.map((r) => r.fallback))].join('/')}</span>}
+          </div>
+        </div>
+      </div>
       <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>단어 신뢰도 분포 (0→100%)</div>
       <Histogram bins={hist} lowCutBin={lowCutBin} />
       <div style={{ fontSize: 11, color: 'var(--text-3)', margin: '14px 0 6px' }}>

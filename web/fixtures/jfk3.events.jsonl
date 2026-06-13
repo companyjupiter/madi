@@ -1,9 +1,9 @@
 {"t":"meta","v":1,"model":"whisper-large-v3-turbo-q8","lang":0,"sr":16000}
 {"t":"word","t0":0.332,"t1":0.499,"conf":0.9228,"spk":-1,"text":"And"}
-{"t":"word","t0":0.499,"t1":0.993,"conf":0.7502,"spk":-1,"text":"so,"}
+{"t":"word","t0":0.499,"t1":0.993,"conf":0.7503,"spk":-1,"text":"so,"}
 {"t":"word","t0":0.993,"t1":1.200,"conf":0.9993,"spk":-1,"text":"my"}
 {"t":"word","t0":1.200,"t1":1.280,"conf":0.9995,"spk":-1,"text":"fellow"}
-{"t":"word","t0":1.369,"t1":2.109,"conf":0.9547,"spk":-1,"text":"Americans,"}
+{"t":"word","t0":1.369,"t1":2.109,"conf":0.9548,"spk":-1,"text":"Americans,"}
 {"t":"word","t0":3.293,"t1":3.655,"conf":0.9793,"spk":-1,"text":"ask"}
 {"t":"word","t0":4.025,"t1":4.285,"conf":0.9930,"spk":-1,"text":"not"}
 {"t":"word","t0":4.460,"t1":4.540,"conf":0.9923,"spk":-1,"text":"what"}
@@ -43,7 +43,7 @@
 {"t":"word","t0":20.452,"t1":20.763,"conf":1.0000,"spk":-1,"text":"for"}
 {"t":"word","t0":20.763,"t1":20.832,"conf":0.9999,"spk":-1,"text":"your"}
 {"t":"word","t0":20.832,"t1":21.184,"conf":0.9998,"spk":-1,"text":"country."}
-{"t":"word","t0":21.850,"t1":22.499,"conf":0.7354,"spk":-1,"text":"And"}
+{"t":"word","t0":21.850,"t1":22.499,"conf":0.7356,"spk":-1,"text":"And"}
 {"t":"word","t0":22.499,"t1":22.993,"conf":0.9998,"spk":-1,"text":"so,"}
 {"t":"word","t0":22.993,"t1":23.180,"conf":1.0000,"spk":-1,"text":"my"}
 {"t":"word","t0":23.180,"t1":23.260,"conf":1.0000,"spk":-1,"text":"fellow"}
@@ -56,16 +56,16 @@
 {"t":"word","t0":28.226,"t1":28.600,"conf":0.9995,"spk":-1,"text":"can"}
 {"t":"word","t0":28.600,"t1":28.680,"conf":0.9999,"spk":-1,"text":"do"}
 {"t":"word","t0":28.706,"t1":28.909,"conf":0.9997,"spk":-1,"text":"for"}
-{"t":"word","t0":29.014,"t1":29.522,"conf":0.8867,"spk":-1,"text":"you,"}
-{"t":"seg","idx":0,"t0":0.00,"t1":30.00,"dropped":false,"fallback":"none","temp":0.0,"tok_s":490.7,"enc_ms":508,"dec_ms":141,"passes":1,"text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you,"}
-{"t":"word","t0":30.196,"t1":30.487,"conf":0.7787,"spk":-1,"text":"Ask"}
+{"t":"word","t0":29.014,"t1":29.522,"conf":0.8866,"spk":-1,"text":"you,"}
+{"t":"seg","idx":0,"t0":0.00,"t1":30.00,"dropped":false,"avg_logprob":-0.024,"fallback":"none","temp":0.0,"tok_s":513.8,"enc_ms":495,"dec_ms":134,"passes":1,"text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you,"}
+{"t":"word","t0":30.196,"t1":30.487,"conf":0.7782,"spk":-1,"text":"Ask"}
 {"t":"word","t0":30.520,"t1":30.755,"conf":0.9910,"spk":-1,"text":"what"}
 {"t":"word","t0":30.912,"t1":31.200,"conf":0.9896,"spk":-1,"text":"you"}
 {"t":"word","t0":31.200,"t1":31.330,"conf":0.9990,"spk":-1,"text":"can"}
 {"t":"word","t0":31.330,"t1":31.449,"conf":0.9987,"spk":-1,"text":"do"}
 {"t":"word","t0":31.450,"t1":31.763,"conf":0.9970,"spk":-1,"text":"for"}
 {"t":"word","t0":31.763,"t1":31.817,"conf":0.9983,"spk":-1,"text":"your"}
-{"t":"word","t0":31.817,"t1":32.590,"conf":0.8611,"spk":-1,"text":"country."}
-{"t":"seg","idx":1,"t0":30.00,"t1":33.00,"dropped":false,"fallback":"none","temp":0.0,"tok_s":257.9,"enc_ms":508,"dec_ms":35,"passes":1,"text":"Ask what you can do for your country."}
+{"t":"word","t0":31.817,"t1":32.590,"conf":0.8610,"spk":-1,"text":"country."}
+{"t":"seg","idx":1,"t0":30.00,"t1":33.00,"dropped":false,"avg_logprob":-0.048,"fallback":"none","temp":0.0,"tok_s":281.8,"enc_ms":495,"dec_ms":32,"passes":1,"text":"Ask what you can do for your country."}
 {"t":"diar","speakers":1,"silhouette":-2.000,"sep":0.326,"tau":0.35,"segments":22}
 {"t":"spk_seg","t0":0.33,"spk":0,"text":"And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. And so, my fellow Americans, ask not what your country can do for you, Ask what you can do for your country."}
