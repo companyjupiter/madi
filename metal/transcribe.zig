@@ -46,6 +46,12 @@ const TS0: u32 = 50365; // <|0.00|>; ids ≥ TS0 are timestamp tokens
 // reject Q4 cheaply if it tanks quality before building the real Q4 pipeline.
 var g_q4: bool = false;
 var g_qmax: f32 = 7.0; // clamp level: 4bit→7, 5bit→15, 6bit→31 (env QBITS)
+// term biasing: <|startofprev|> + these tokens seed the decoder toward domain
+// vocabulary (names, jargon). Encoded once from env PROMPT. g_bias_words holds
+// the space-split prompt words for the seg event's bias_hits.
+var g_prompt: []u32 = &.{};
+var g_bias_words = std.ArrayList([]const u8).init(alloc);
+const STARTOFPREV: u32 = 50362; // large-v3 special (sot 50258 · translate 50359 · transcribe 50360 · startoflm 50361 · startofprev 50362)
 inline fn q4r(w: f32, blk_max: f32) f32 {
     if (!g_q4 or blk_max <= 0) return w;
     const s = blk_max / g_qmax;
@@ -448,6 +454,19 @@ fn evSeg(idx: u32, t0: f32, t1: f32, text: []const u8, tok_s: f32, enc_ms: f32, 
     // stays reserved (only a stochastic temperature sweep would set it — deferred)
     w.print("{{\"t\":\"seg\",\"idx\":{d},\"t0\":{d:.2},\"t1\":{d:.2},\"dropped\":{},\"avg_logprob\":{d:.3},\"fallback\":\"{s}\",\"temp\":0.0,\"tok_s\":{d:.1},\"enc_ms\":{d:.0},\"dec_ms\":{d:.0},\"passes\":{d},\"text\":", .{ idx, t0, t1, dropped, avg_lp, fallback, tok_s, enc_ms, dec_ms, passes }) catch return;
     evStr(w, std.mem.trim(u8, text, " \n")) catch return;
+    // bias_hits: which biasing terms actually surfaced in this segment's text
+    if (g_bias_words.items.len > 0) {
+        w.writeAll(",\"bias_hits\":[") catch return;
+        var first = true;
+        for (g_bias_words.items) |bw| {
+            if (std.mem.indexOf(u8, text, bw) != null) {
+                if (!first) w.writeByte(',') catch return;
+                evStr(w, bw) catch return;
+                first = false;
+            }
+        }
+        w.writeByte(']') catch return;
+    }
     w.writeByte('}') catch return;
     evLine(fbs.getWritten());
 }
@@ -667,6 +686,18 @@ pub fn main() !void {
     const bpe_path = args.next() orelse "assets/WHISPER_BPE.bin";
     const rttm_out = args.next(); // optional 4th arg: write system RTTM here (DER scoring)
     const spk_arg = args.next(); // optional 5th arg: number of speakers (0/absent = 2)
+    // term biasing: env PROMPT = space-separated domain vocabulary. Encoded once,
+    // prepended as <|startofprev|> context so the decoder leans toward these
+    // words (names, jargon). A leading space matches the BPE space convention.
+    if (std.posix.getenv("PROMPT")) |p| {
+        if (p.len > 0) {
+            const spaced = std.fmt.allocPrint(alloc, " {s}", .{p}) catch p;
+            g_prompt = bpeEncode(bpe_path, spaced) catch &.{};
+            var it = std.mem.tokenizeScalar(u8, p, ' ');
+            while (it.next()) |w| g_bias_words.append(w) catch {};
+            try out.print("[prompt] biasing {d} word(s) → {d} tokens\n", .{ g_bias_words.items.len, g_prompt.len });
+        }
+    }
     // file-id for RTTM = wav basename without extension
     const wav_base = std.fs.path.basename(wav_path);
     const file_id = if (std.mem.lastIndexOfScalar(u8, wav_base, '.')) |dot| wav_base[0..dot] else wav_base;
@@ -1507,6 +1538,12 @@ pub fn main() !void {
         seek: while (pass < 6) : (pass += 1) {
             total_passes += 1;
             var PL: u32 = 0;
+            // term-biasing prefix: <|startofprev|> + prompt tokens, seeded before
+            // the SOT (KV-filled, never predicted) so they bias generation.
+            if (g_prompt.len > 0 and g_prompt.len + 8 < MAX_TOK) {
+                d_tokens[PL] = STARTOFPREV; PL += 1;
+                for (g_prompt) |t| { d_tokens[PL] = t; PL += 1; }
+            }
             d_tokens[PL] = SEED[0]; // sot
             d_tokens[PL + 1] = lang_tok;
             d_tokens[PL + 2] = task_tok; // transcribe(50360) / translate(50359)
@@ -2472,6 +2509,33 @@ fn loadBpe(path: []const u8) ![][]const u8 {
         off += l;
     }
     return toks;
+}
+
+// Greedy longest-match byte-level BPE encoder (text → token ids). The vocab
+// stores raw UTF-8 bytes (bpeDecode appends them verbatim), so encoding is a
+// straight longest-prefix match against the vocab — Korean included. Not a true
+// merge-rank BPE, but term-biasing prompts are forgiving: the goal is to seed
+// the jargon's tokens into context, and a near-tokenization biases just as well.
+fn bpeEncode(path: []const u8, text: []const u8) ![]u32 {
+    const toks = try loadBpe(path);
+    var map = std.StringHashMap(u32).init(alloc);
+    var maxlen: usize = 1;
+    for (toks, 0..) |tk, i| {
+        if (i >= 50257 or tk.len == 0) continue; // text tokens only (skip specials)
+        try map.put(tk, @intCast(i));
+        if (tk.len > maxlen) maxlen = tk.len;
+    }
+    var out = std.ArrayList(u32).init(alloc);
+    var i: usize = 0;
+    while (i < text.len) {
+        var matched = false;
+        var L = @min(maxlen, text.len - i);
+        while (L >= 1) : (L -= 1) {
+            if (map.get(text[i .. i + L])) |id| { try out.append(id); i += L; matched = true; break; }
+        }
+        if (!matched) i += 1; // unencodable byte — skip
+    }
+    return out.toOwnedSlice();
 }
 
 // ── small launch helpers (single-buffer kernels) ─────────────────────
