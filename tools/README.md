@@ -49,3 +49,17 @@ python3 tools/captions.py web/fixtures/devops_ko.events.jsonl --out-base out \
 Verified: all 5 formats generate for KO/EN/biased fixtures; `.itt`/`.fcpxml` are
 well-formed XML with one caption per cue; the HTML carries every word span with
 its confidence and speaker attribution.
+
+## `minutes.py` — structured meeting minutes
+
+No LLM: derives meeting minutes purely from the contract signals — speaker turns
+(`spk_seg`), topic **sections** (split where the real silence between turns
+exceeds `--gap` seconds, computed from word end→start), per-speaker talk share,
+and a review list (low-confidence words). Output is Markdown.
+
+```sh
+python3 tools/minutes.py web/fixtures/devops_ko.events.jsonl --gap 6 --out minutes.md
+```
+
+Verified: devops_ko (2-speaker Q&A) → 51 turns, 3 topic sections at `--gap 6`,
+46/53% talk share, 35 review terms; jfk3 (1 speaker) → 1 turn, 1 section.
