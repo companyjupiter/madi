@@ -58,7 +58,7 @@ def run_engine(utts, out_path):
     """Feed all utterances through ONE resident engine; save hyps as jsonl.
     Resumable: per-utt flush + skip ids already in out_path (interrupted runs
     lose nothing — lesson from the overnight kill at 1624/2620)."""
-    lock = open('/tmp/wer_bench.lock', 'w')
+    lock = open(os.path.join(M, 'bench/wer_runs/.lock'), 'w')
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -74,7 +74,11 @@ def run_engine(utts, out_path):
         utts = [u for u in utts if u[0] not in done_ids]
         print(f'resume: {len(done_ids)} done, {len(utts)} remaining')
 
-    wav_dir = tempfile.mkdtemp(prefix='wer_wav_')
+    # scratch under wer_runs (durable disk): a /tmp/$TMPDIR cleanup mid-run
+    # would crash the next write — keep it off the volatile temp filesystems
+    scratch_root = os.path.join(M, 'bench/wer_runs/scratch')
+    os.makedirs(scratch_root, exist_ok=True)
+    wav_dir = tempfile.mkdtemp(prefix='wer_wav_', dir=scratch_root)
     env = {**os.environ, 'STREAM': '1', 'DIAR': '0',
            # pure-ASR measurement: bypass the product's energy gate — FLEURS
            # masters at very low gain (peak 0.02, max-1s-RMS 0.004 < default
