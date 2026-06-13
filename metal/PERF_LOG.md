@@ -29,6 +29,7 @@ front-end conv1d_gelu ~50 ms × 2.
 ## Results (newest first)
 | # | idea | result | metric | commit |
 |---|------|--------|--------|--------|
+| SOLO-1 | **솔로 화자 과분할 게이트** (quark atom: `fn__maxCentroidCosDist`, diarizeEmb+liveRecluster 양 경로) — silhouette는 상대지표((b−a)/max)라 단일화자가 발성변이로 고-silhouette 서브클러스터로 쪼개짐. **절대 분리 게이트**: 선택된 분할의 **max 쌍별 centroid 코사인거리 < DIAR_MIN_SEP(0.50)** → K=1 붕괴. file·live 동일 적용(보이스프린트 하한 전) | ✅ commit·**깨끗한 A/B 무회귀** | 동기: jfk3 단일화자가 K=2 과분할(silhouette 0.530>tau 0.35). 측정: 단일 max=0.326 vs 실멀티 전부 ≥0.727 → 0.50이 갭 한가운데. **동일 바이너리 A/B(게이트 OFF=DIAR_MIN_SEP −1 vs ON, VoxConverse-dev 216파일)**: gt=1 버킷 **4.93→1.84%(−3.09pt)**, **gt=2/3/4/5-6/7+ 전부 Δ+0.00pt 바이트동일**(멀티 0개 변경), MEAN 8.35→**8.03%(−0.31pt)**. 게이트 발동=정확히 5파일 전부 gt=1 단일화자(pqmho 39.72→6.56, hqyok 21.85→3.63), **실멀티 거짓붕괴 0건**. stale baseline(maxK=10)의 gt=3 "악화"는 config차(maxK 10→6)였음을 매칭 A/B로 확정. jfk3 K=2→K=1 검증, devops 2화자 K=2 불변. bench/gate_ab.py 보존 |
 | 1 | conv1d_gelu F16 weights | ❌ revert | conv 23–47ms/call, no clear gain (weights cached across time axis → compute-bound, not bandwidth) | — |
 | 2 | decoder cross-attn F16 K/V cache | ✅ commit (memory) | decode 120→123 tok/s (speed neutral, within noise); cross-KV cache 61→30 MB; correct | flash_cross_attn_f16kv + extract_ca_head_f16kv |
 | 3 | decoder proj GEMVs → custom F16 GEMV (replace MPS M=1) | ❌ revert | decode 212→712ms (3.4× SLOWER); MPS M=1 GEMV is already well-optimized, naive 1-thread/col kernel far worse | — |
