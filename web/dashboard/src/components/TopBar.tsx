@@ -3,6 +3,7 @@ import { SessionState, langLabel } from '../types'
 const FIXTURES = [
   { id: 'jfk3', label: 'JFK (영어·1화자)' },
   { id: 'devops_ko', label: '데브옵스 Q&A (한국어·2화자)' },
+  { id: 'devops_ko_biased', label: '데브옵스 Q&A (용어 바이어싱)' },
 ]
 
 export function TopBar({ state, fixture, onFixture, live }:

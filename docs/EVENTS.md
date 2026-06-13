@@ -34,7 +34,7 @@ data model before the producing feature lands:
 | `fallback` | `seg` | **real** | `"none"` / `"collapse"` (periodic repeat) / `"logprob"` (avg_logprob<−1.0 → ts re-decode) |
 | `temp` | `seg` | reserved `0.0` | only a stochastic temperature sweep would set it (deferred — not a WER mover here, see PERF_LOG P1) |
 | `spk` | `word` | `-1` | diar runs after decode; resolve speaker from `spk_seg` |
-| `bias_hits` | `seg` | *(absent)* | P3 (term biasing) |
+| `bias_hits` | `seg` | **real** when `PROMPT` set | array of biasing terms that surfaced in the segment (absent when no prompt) |
 
 ## Event types
 

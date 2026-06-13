@@ -88,6 +88,7 @@ export function QualityPanel({ s }: { s: SessionState }) {
   const lowCutBin = Math.round(LOW_CONF * 10)
   const rescued = s.segs.filter((g) => g.fallback && g.fallback !== 'none')
   const minLp = s.segs.length ? Math.min(...s.segs.map((g) => g.avg_logprob ?? 0)) : 0
+  const biasHits = [...new Set(s.segs.flatMap((g) => g.bias_hits ?? []))]
   return (
     <Panel title="품질 신호" sub={`임계 ${(LOW_CONF * 100).toFixed(0)}%`} style={{ gridArea: 'ql' }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -102,6 +103,17 @@ export function QualityPanel({ s }: { s: SessionState }) {
           </div>
         </div>
       </div>
+      {biasHits.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>적용된 용어 바이어싱 ({biasHits.length})</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {biasHits.map((t, i) => (
+              <span key={i} style={{ fontSize: 12, background: 'rgba(0,122,255,.15)', color: 'var(--accent)',
+                border: '1px solid var(--accent)', borderRadius: 6, padding: '2px 8px' }}>{t}</span>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>단어 신뢰도 분포 (0→100%)</div>
       <Histogram bins={hist} lowCutBin={lowCutBin} />
       <div style={{ fontSize: 11, color: 'var(--text-3)', margin: '14px 0 6px' }}>
