@@ -476,3 +476,42 @@ kernel void gemv_q8_bias_res(
     acc = simd_sum(acc);
     if (tiisg == 0) out_buf[n] = out_buf[n] + acc + bias[n]; // residual fold
 }
+
+// ── fused decoder qkv: gemv + per-section bias + KV-store (5 kernels → 1) ──
+// Self-attn projects xb→[q|k|v] (stacked [3D][D]), then q+=qb, v+=vb (k has no
+// bias), and k,v are stored to the KV cache at pos. Folds gemv + kBias×2 +
+// kStore×2 into one full-grid launch. BIT-IDENTICAL: q=acc+qb, k=acc (cache,
+// no bias), v=acc+vb (cache) — identical to the unfused arithmetic. kAttn reads
+// q from q_out and k,v from the cache, so the k|v stage buffer is never needed.
+kernel void gemv_q8_qkv(
+    device float*        q_out  [[buffer(0)]],  // s.q[0..D] (query + bias)
+    device const char*   qs     [[buffer(1)]],
+    device const half*   scales [[buffer(2)]],
+    device const float*  x      [[buffer(3)]],  // xb
+    device const float*  qb     [[buffer(4)]],  // q bias [D]
+    device const float*  vb     [[buffer(5)]],  // v bias [D]
+    device float*        kc     [[buffer(6)]],  // k cache
+    device float*        vc     [[buffer(7)]],  // v cache
+    device const uint*   pos_ptr[[buffer(8)]],
+    constant uint& D [[buffer(9)]],             // head total dim (= gemv in-dim K)
+    uint tgid [[threadgroup_position_in_grid]], ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n = tgid * 8 + sgitg;            // output index in [0, 3D)
+    if (n >= 3 * D) return;
+    const uint kv = D / 4;
+    device const char4*  q4 = (device const char4*)(qs + (ulong)n * D);
+    device const float4* x4 = (device const float4*)x;
+    device const half*   srow = scales + (ulong)n * (D / 32);
+    float acc = 0.0f;
+    for (uint p = tiisg; p < kv; p += 32) {
+        const char4 qv = q4[p]; const float4 xv = x4[p]; const float sc = (float)srow[p >> 3];
+        acc += (xv.x * (float)qv.x + xv.y * (float)qv.y + xv.z * (float)qv.z + xv.w * (float)qv.w) * sc;
+    }
+    acc = simd_sum(acc);
+    if (tiisg != 0) return;
+    const uint pos = pos_ptr[0];
+    if (n < D)          q_out[n] = acc + qb[n];                       // q + bias
+    else if (n < 2 * D) kc[(ulong)pos * D + (n - D)] = acc;           // k → cache (no bias)
+    else                vc[(ulong)pos * D + (n - 2 * D)] = acc + vb[n - 2 * D]; // v + bias → cache
+}
