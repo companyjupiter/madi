@@ -15,10 +15,11 @@ export interface SegEvent {
 }
 export interface SpkSegEvent { t: 'spk_seg'; t0: number; spk: number; text: string }
 export interface DiarEvent { t: 'diar'; speakers: number; silhouette: number; sep: number; tau: number; segments: number }
+export interface PartialEvent { t: 'partial'; t0: number; text: string }
 export interface EndEvent { t: 'seg_end' | 'flush_end' }
 
 export type EngineEvent =
-  | MetaEvent | ReadyEvent | WordEvent | SegEvent | SpkSegEvent | DiarEvent | EndEvent
+  | MetaEvent | ReadyEvent | WordEvent | SegEvent | SpkSegEvent | DiarEvent | PartialEvent | EndEvent
 
 // ── Derived dashboard state (what the panels render) ─────────────────────────
 export interface SessionState {
@@ -28,11 +29,12 @@ export interface SessionState {
   segs: SegEvent[]
   spkSegs: SpkSegEvent[]
   diar?: DiarEvent
+  partial: string            // live in-progress text (cleared when its seg lands)
   ended: boolean
 }
 
 export const emptySession = (): SessionState => ({
-  ready: false, words: [], segs: [], spkSegs: [], ended: false,
+  ready: false, words: [], segs: [], spkSegs: [], partial: '', ended: false,
 })
 
 /** Fold one event into the session (pure — easy to unit-test / replay live). */
@@ -41,7 +43,8 @@ export function reduce(s: SessionState, e: EngineEvent): SessionState {
     case 'meta': return { ...s, meta: e }
     case 'ready': return { ...s, ready: true }
     case 'word': return { ...s, words: [...s.words, e] }
-    case 'seg': return { ...s, segs: [...s.segs, e] }
+    case 'partial': return { ...s, partial: e.text }
+    case 'seg': return { ...s, segs: [...s.segs, e], partial: '' } // seg supersedes the partial
     case 'spk_seg': return { ...s, spkSegs: [...s.spkSegs, e] }
     case 'diar': return { ...s, diar: e }
     case 'seg_end':

@@ -6,8 +6,9 @@ const FIXTURES = [
   { id: 'devops_ko_biased', label: '데브옵스 Q&A (용어 바이어싱)' },
 ]
 
-export function TopBar({ state, fixture, onFixture, live }:
-  { state: SessionState; fixture: string; onFixture: (f: string) => void; live: boolean }) {
+export function TopBar({ state, fixture, onFixture, live, mode, onMode }:
+  { state: SessionState; fixture: string; onFixture: (f: string) => void; live: boolean
+    mode: 'instant' | 'live'; onMode: (m: 'instant' | 'live') => void }) {
   return (
     <header style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 18px',
       borderBottom: '1px solid var(--border)', background: 'var(--panel)' }}>
@@ -28,10 +29,17 @@ export function TopBar({ state, fixture, onFixture, live }:
       </div>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button onClick={() => onMode(mode === 'live' ? 'instant' : 'live')}
+          title="라이브 브릿지(127.0.0.1:5274)에서 엔진 실시간 스트림"
+          style={{ background: mode === 'live' ? 'var(--recording)' : 'var(--panel-2)',
+            color: mode === 'live' ? '#fff' : 'var(--text-2)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          {mode === 'live' ? '● LIVE 중지' : '▶ 라이브'}
+        </button>
         <span style={{ color: 'var(--text-3)', fontSize: 12 }}>데모 소스</span>
-        <select value={fixture} onChange={(e) => onFixture(e.target.value)}
+        <select value={fixture} onChange={(e) => onFixture(e.target.value)} disabled={mode === 'live'}
           style={{ background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '6px 10px', fontSize: 12 }}>
+            borderRadius: 8, padding: '6px 10px', fontSize: 12, opacity: mode === 'live' ? 0.5 : 1 }}>
           {FIXTURES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
         </select>
       </div>

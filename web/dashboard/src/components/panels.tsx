@@ -38,7 +38,7 @@ export function TranscriptPanel({ s }: { s: SessionState }) {
         <span className="sub">{s.words.length} 단어</span>
       </div>
       <div className="panel-b" ref={ref} style={{ lineHeight: 1.9 }}>
-        {rows.length === 0 && <span style={{ color: 'var(--text-3)' }}>대기 중…</span>}
+        {rows.length === 0 && !s.partial && <span style={{ color: 'var(--text-3)' }}>대기 중…</span>}
         {rows.map((r, i) => (
           <div key={i} style={{ marginBottom: 10 }}>
             <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: spkColor(r.spk),
@@ -57,6 +57,12 @@ export function TranscriptPanel({ s }: { s: SessionState }) {
             })}
           </div>
         ))}
+        {s.partial && (
+          <div style={{ marginTop: 4, color: 'var(--text-2)', fontStyle: 'italic' }}>
+            <span style={{ color: 'var(--recording)', fontWeight: 700, fontSize: 11, marginRight: 6 }}>● 인식 중</span>
+            {s.partial}<span style={{ opacity: 0.5 }}>▍</span>
+          </div>
+        )}
       </div>
     </section>
   )
