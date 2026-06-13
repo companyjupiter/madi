@@ -14,6 +14,7 @@ enum Theme {
         static let textSecondary = Color(red: 0.2353, green: 0.2353, blue: 0.2627, opacity: 0.6)
         static let textTertiary = Color(red: 0.2353, green: 0.2353, blue: 0.2627, opacity: 0.3)
         static let overlapMarker = Color(red: 1.0000, green: 0.5843, blue: 0.0000, opacity: 1.0)
+        static let lowConf = Color(red: 1.0000, green: 0.6235, blue: 0.0392, opacity: 1.0)
         static let speakerPalette: [Color] = [
             Color(red: 0.0000, green: 0.4784, blue: 1.0000, opacity: 1.0),  // blue
             Color(red: 1.0000, green: 0.5843, blue: 0.0000, opacity: 1.0),  // orange

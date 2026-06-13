@@ -19,6 +19,7 @@ struct Word: Identifiable {
     let t0: Double
     let t1: Double
     let text: String
+    var conf: Double = 1.0   // softmax confidence of the chosen token(s); <1 = uncertain
 }
 
 struct Line: Identifiable {
@@ -26,8 +27,17 @@ struct Line: Identifiable {
     var speaker: Int
     var start: Double
     var end: Double
-    var text: String
+    var words: [Word]                 // per-word, so the view can flag low-confidence words
     var overlapSpeakers: [Int] = []   // from SPKOV, rendered as interruption markers
+    /// Plain joined text (for export / SRT / Markdown).
+    var text: String {
+        var s = ""
+        for w in words {
+            if !s.isEmpty, w.text.first.map({ !",.!?…".contains($0) }) ?? true { s += " " }
+            s += w.text
+        }
+        return s
+    }
 }
 
 @Observable
@@ -55,8 +65,8 @@ final class TranscriptStore {
         case .wordSectionBegin:
             merger.segmentBreak()
             rebuildLive()
-        case .word(let t0, let t1, let text):
-            merger.add(Word(t0: t0, t1: t1, text: text))
+        case .word(let t0, let t1, let text, let conf):
+            merger.add(Word(t0: t0, t1: t1, text: text, conf: conf))
             rebuildLive()
         case .speaker(let l):        spk.append(l); rebuildLive()
         case .speakerFix(let l):     spkFix.append(l)
@@ -108,18 +118,12 @@ final class TranscriptStore {
             let sp = speakerAt(w.t0)
             if var last = out.last, last.speaker == sp, w.t0 - last.end < lineBreakGap {
                 last.end = max(last.end, w.t1)
-                last.text += separator(last.text, w.text) + w.text
+                last.words.append(w)
                 out[out.count - 1] = last
             } else {
-                out.append(Line(speaker: sp, start: w.t0, end: w.t1, text: w.text))
+                out.append(Line(speaker: sp, start: w.t0, end: w.t1, words: [w]))
             }
         }
         return out
-    }
-
-    /// No space before punctuation-glued tokens; space otherwise.
-    private func separator(_ prev: String, _ next: String) -> String {
-        if next.first.map({ ",.!?…".contains($0) }) == true { return "" }
-        return prev.isEmpty ? "" : " "
     }
 }

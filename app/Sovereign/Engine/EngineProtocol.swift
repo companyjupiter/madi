@@ -17,7 +17,7 @@ import Foundation
 enum EngineEvent: Equatable {
     case ready
     case wordSectionBegin
-    case word(t0: Double, t1: Double, text: String)
+    case word(t0: Double, t1: Double, text: String, conf: Double)
     case speaker(SpeakerLabel)        // SPK
     case speakerFix(SpeakerLabel)     // SPKFIX
     case speakerOverlap(SpeakerLabel) // SPKOV
@@ -78,13 +78,20 @@ enum EngineProtocol {
     static func parseWord(_ line: String) -> EngineEvent? {
         guard let close = line.firstIndex(of: "]") else { return nil }
         let bracket = line[line.index(after: line.startIndex)..<close] // "<t0>s-<t1>s"
-        let body = line[line.index(after: close)...]
+        var body = line[line.index(after: close)...]
             .trimmingCharacters(in: .whitespaces)
+        // optional confidence suffix:  word  «conf 0.42»
+        var conf = 1.0
+        if let r = body.range(of: "«conf ") {
+            let tail = body[r.upperBound...]
+            conf = Double(tail.prefix { $0 != "»" }) ?? 1.0
+            body = String(body[..<r.lowerBound]).trimmingCharacters(in: .whitespaces)
+        }
         let span = bracket.replacingOccurrences(of: "s", with: "")
         let ends = span.split(separator: "-", maxSplits: 1)
         guard let t0 = Double(ends.first ?? "") else { return nil }
         let t1 = ends.count > 1 ? (Double(ends[1]) ?? t0) : t0
         guard !body.isEmpty else { return nil }
-        return .word(t0: t0, t1: t1, text: body)
+        return .word(t0: t0, t1: t1, text: body, conf: conf)
     }
 }

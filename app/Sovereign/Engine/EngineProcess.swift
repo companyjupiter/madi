@@ -54,6 +54,7 @@ final class EngineProcess {
         ]
         var env = ProcessInfo.processInfo.environment
         env["STREAM"] = "1"
+        env["CONF"] = "1" // emit per-word confidence «conf x.xx» for low-conf highlighting
         env["DIAR"] = config.diarize ? "1" : "0"
         env["OSD"] = config.osd ? "1" : "0"
         env["DIAR_MAXK"] = String(config.maxSpeakers)
