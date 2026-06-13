@@ -18,14 +18,16 @@ struct RemoteAsset {
 }
 
 enum AssetManifest {
-    /// The large model fetched on first run.
-    /// sha256/size = the shipping large-v3-turbo Q8 safetensors (verified asset).
+    /// The large model fetched on first run — the pre-quantized Q8 build
+    /// (bench/quantize_q8.py output), 1.86x smaller than F16 with proven zero
+    /// quality change (engine loads its Q8 directly; WHASH weight-identity).
+    /// sha256/size = the shipping Q8 safetensors.
     /// TODO(hosting): url is a placeholder until the CDN bucket exists.
     static let model = RemoteAsset(
-        name: "model.safetensors",
-        url: URL(string: "https://CHANGE-ME.example/sovereign/model.safetensors")!,
-        sha256: "542566a422ae4f3fd23f1ba11add198fca01bbf82e66e6a2857b3f608b1eb9d1",
-        sizeBytes: 1_617_824_864
+        name: "model.q8.safetensors",
+        url: URL(string: "https://CHANGE-ME.example/sovereign/model.q8.safetensors")!,
+        sha256: "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+        sizeBytes: 867_485_320
     )
 
     /// App Support root: ~/Library/Application Support/Sovereign/
