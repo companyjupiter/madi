@@ -5,6 +5,7 @@
 
 import Foundation
 import Observation
+import CoreAudio
 
 @Observable
 @MainActor
@@ -19,6 +20,8 @@ final class SessionController: EngineProcessDelegate {
     let transcript = TranscriptStore()
 
     var diarize = true
+    var inputDeviceID: AudioDeviceID?          // nil = system default mic
+    var availableInputs: [AudioInputDevice] { AudioDevices.inputs() }
     var osd = true
     var languageTokenID: Int?
     var speakerNames: [Int: String] = [:]
@@ -48,6 +51,7 @@ final class SessionController: EngineProcessDelegate {
         e.delegate = self
         engine = e
 
+        capture.inputDeviceID = inputDeviceID  // bind chosen mic before start
         capture.onSegment = { [weak self] offset, url in
             self?.engine?.feed(offset: offset, wav: url)
         }
