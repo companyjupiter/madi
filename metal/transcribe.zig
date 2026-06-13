@@ -749,6 +749,11 @@ pub fn main() !void {
         if (std.posix.getenv("WHISPER_LANG_ID")) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
         break :blk 0;
     };
+    // task token: <|transcribe|>=50360 (default) or <|translate|>=50359 (X→English,
+    // Whisper-native). TRANSLATE=1 → on-device live translation; source language
+    // is still detected/forced via lang_tok, only the OUTPUT becomes English.
+    const translate = !std.mem.eql(u8, std.posix.getenv("TRANSLATE") orelse "0", "0");
+    const task_tok: u32 = if (translate) 50359 else 50360;
 
     // ── stream mode: load model ONCE, then process segment wavs from stdin ────
     // Each stdin line is "<global_offset_seconds> <wav_path>"; we emit that
@@ -1241,6 +1246,8 @@ pub fn main() !void {
         }
         d_tokens[1] = lang_tok;
         out_tokens[1] = lang_tok;
+        d_tokens[2] = task_tok; // transcribe(50360) / translate(50359)
+        out_tokens[2] = task_tok;
 
         // GPU-resident autoregressive decode (idea from the SHARE build's CUDA
         // Graph replay): the whole step runs on-GPU — indirect embed, blocks,
@@ -1297,7 +1304,7 @@ pub fn main() !void {
             var PL: u32 = 0;
             d_tokens[PL] = SEED[0]; // sot
             d_tokens[PL + 1] = lang_tok;
-            d_tokens[PL + 2] = SEED[2]; // transcribe
+            d_tokens[PL + 2] = task_tok; // transcribe(50360) / translate(50359)
             PL += 3;
             if (!ts_mode) { d_tokens[PL] = 50364; PL += 1; } // <|notimestamps|>
             for (0..PL) |q| out_tokens[q] = d_tokens[q];
