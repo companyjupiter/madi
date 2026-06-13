@@ -35,6 +35,8 @@ pub const Kernels = struct {
     cacc: mtl.Function,
     gemv: mtl.Function,
     gemv_bias: mtl.Function,
+    gemv_bias_gelu: mtl.Function, // MLP up: gemv+bias+gelu fused (drops kGelu)
+    gemv_bias_res: mtl.Function, // MLP down: gemv+bias+residual fused (drops kRes)
 
     pub fn load() mtl.Error!Kernels {
         return .{
@@ -51,6 +53,8 @@ pub const Kernels = struct {
             .cacc = try mtl.getFunction("ca_accumulate"),
             .gemv = try mtl.getFunction("gemv_q8"),
             .gemv_bias = try mtl.getFunction("gemv_q8_bias"),
+            .gemv_bias_gelu = try mtl.getFunction("gemv_q8_bias_gelu"),
+            .gemv_bias_res = try mtl.getFunction("gemv_q8_bias_res"),
         };
     }
 };
@@ -125,6 +129,13 @@ fn kGemvQ8Bias(K: Kernels, out: [*]f32, x: [*]f32, w: Q8w, bias: [*]f32, n: u32,
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&nn), P(&kk) };
     const s = [_]usize{ PS, PS, PS, PS, PS, U, U };
     try mtl.dispatch(K.gemv_bias, .{ (n + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s); // NR0=4
+}
+// gemv+bias with a fused epilogue (gelu or residual) — same args, drops a kernel.
+fn kGemvQ8BiasEpi(f: mtl.Function, out: [*]f32, x: [*]f32, w: Q8w, bias: [*]f32, n: u32, k: u32) !void {
+    var a0 = out; var a1 = w.qs; var a2 = w.scales; var a3 = x; var a4 = bias; var nn = n; var kk = k;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&nn), P(&kk) };
+    const s = [_]usize{ PS, PS, PS, PS, PS, U, U };
+    try mtl.dispatch(f, .{ (n + 7) / 8, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn kGelu(K: Kernels, x: [*]f32, n: u32) !void {
     var a0 = x; var nn = n;
@@ -214,9 +225,8 @@ pub fn decodeBlock(
     }
     try kGemvQ8(K, s.mo, s.ao, L.cow, D, D);
     try kBRLN(K, x, s.mo, L.cob, s.xb, L.mln_w, L.mln_b, D);
-    // MLP
-    try kGemvQ8Bias(K, s.mh, s.xb, L.m0w, L.m0b, MLP, D); // fused up proj + bias
-    try kGelu(K, s.mh, MLP);
-    try kGemvQ8Bias(K, s.mo, s.mh, L.m2w, L.m2b, D, MLP); // fused down proj + bias
-    try kRes(K, x, s.mo, D);
+    // MLP — gelu folded into up-proj epilogue, residual folded into down-proj
+    // epilogue (drops kGelu + kRes; bit-identical). x += down(gelu(up(xb))).
+    try kGemvQ8BiasEpi(K.gemv_bias_gelu, s.mh, s.xb, L.m0w, L.m0b, MLP, D);
+    try kGemvQ8BiasEpi(K.gemv_bias_res, x, s.mh, L.m2w, L.m2b, D, MLP);
 }

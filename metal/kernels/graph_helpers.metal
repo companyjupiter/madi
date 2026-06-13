@@ -408,3 +408,71 @@ kernel void gemv_q8_bias(
     acc = simd_sum(acc);
     if (tiisg == 0) out_buf[n] = acc + bias[n];
 }
+
+// ── decode-path GEMV epilogue fusions (dispatch reduction) ───────────────
+// Fold the per-output elementwise tail (gelu / residual) into the gemv's
+// thread-0 write while the result is register-hot — removes a separate tiny
+// full-grid kernel launch per layer (the decode is GPU-launch-latency-bound,
+// ~80 kernels/token; gpu-sync is GPU exec, not CPU sync — measured). Output is
+// BIT-IDENTICAL: (acc+bias) is the same f32, gelu input identical, residual is
+// the same x + (acc+bias) add.
+inline float gelu_erf32(float xv) { // EXACT copy of gelu_f32 (Abramowitz-Stegun)
+    float z = xv * 0.7071067811865476f;
+    float az = fabs(z);
+    float sign = (z < 0.0f) ? -1.0f : 1.0f;
+    float t = 1.0f / fma(az, 0.3275911f, 1.0f);
+    float poly = fma(1.061405429f, t, -1.453152027f);
+    poly = fma(poly, t, 1.421413741f);
+    poly = fma(poly, t, -0.284496736f);
+    poly = fma(poly, t, 0.254829592f);
+    poly = poly * t;
+    float ex = exp2(max(-az * az * 1.4426950408889634f, -80.0f));
+    float erf = sign * (1.0f - poly * ex);
+    return 0.5f * xv * (1.0f + erf);
+}
+
+kernel void gemv_q8_bias_gelu(
+    device float* out_buf [[buffer(0)]], device const char* qs [[buffer(1)]],
+    device const half* scales [[buffer(2)]], device const float* x [[buffer(3)]],
+    device const float* bias [[buffer(4)]],
+    constant uint& N [[buffer(5)]], constant uint& K [[buffer(6)]],
+    uint tgid [[threadgroup_position_in_grid]], ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n = tgid * 8 + sgitg;
+    if (n >= N) return;
+    const uint kv = K / 4;
+    device const char4* q4 = (device const char4*)(qs + (ulong)n * K);
+    device const float4* x4 = (device const float4*)x;
+    device const half* srow = scales + (ulong)n * (K / 32);
+    float acc = 0.0f;
+    for (uint p = tiisg; p < kv; p += 32) {
+        const char4 qv = q4[p]; const float4 xv = x4[p]; const float sc = (float)srow[p >> 3];
+        acc += (xv.x * (float)qv.x + xv.y * (float)qv.y + xv.z * (float)qv.z + xv.w * (float)qv.w) * sc;
+    }
+    acc = simd_sum(acc);
+    if (tiisg == 0) out_buf[n] = gelu_erf32(acc + bias[n]);
+}
+
+kernel void gemv_q8_bias_res(
+    device float* out_buf [[buffer(0)]], device const char* qs [[buffer(1)]],
+    device const half* scales [[buffer(2)]], device const float* x [[buffer(3)]],
+    device const float* bias [[buffer(4)]],
+    constant uint& N [[buffer(5)]], constant uint& K [[buffer(6)]],
+    uint tgid [[threadgroup_position_in_grid]], ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n = tgid * 8 + sgitg;
+    if (n >= N) return;
+    const uint kv = K / 4;
+    device const char4* q4 = (device const char4*)(qs + (ulong)n * K);
+    device const float4* x4 = (device const float4*)x;
+    device const half* srow = scales + (ulong)n * (K / 32);
+    float acc = 0.0f;
+    for (uint p = tiisg; p < kv; p += 32) {
+        const char4 qv = q4[p]; const float4 xv = x4[p]; const float sc = (float)srow[p >> 3];
+        acc += (xv.x * (float)qv.x + xv.y * (float)qv.y + xv.z * (float)qv.z + xv.w * (float)qv.w) * sc;
+    }
+    acc = simd_sum(acc);
+    if (tiisg == 0) out_buf[n] = out_buf[n] + acc + bias[n]; // residual fold
+}
