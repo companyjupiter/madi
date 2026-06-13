@@ -39,6 +39,18 @@ const EOT: u32 = 50257;
 // stripped from output/word-timestamps.
 const SEED = [_]u32{ 50258, 50259, 50360 };
 const TS0: u32 = 50365; // <|0.00|>; ids ≥ TS0 are timestamp tokens
+
+// int4 quality probe: when set (env Q4=1), every Q8-quantized weight is first
+// rounded to 4-bit (symmetric per-32-block, 15 levels) BEFORE the existing Q8
+// quant — measures the WER cost of int4 with NO kernel/format change, so we can
+// reject Q4 cheaply if it tanks quality before building the real Q4 pipeline.
+var g_q4: bool = false;
+var g_qmax: f32 = 7.0; // clamp level: 4bit→7, 5bit→15, 6bit→31 (env QBITS)
+inline fn q4r(w: f32, blk_max: f32) f32 {
+    if (!g_q4 or blk_max <= 0) return w;
+    const s = blk_max / g_qmax;
+    return std.math.clamp(@round(w / s), -g_qmax, g_qmax) * s;
+}
 const alloc = std.heap.page_allocator;
 
 // ── safetensors ──────────────────────────────────────────────────────
@@ -136,7 +148,8 @@ fn upVecQ8(sf: Sf, key: []const u8, rows: usize, dim: usize) !Q8 {
             sc[v * nb + b] = @floatCast(scale);
             const inv = 1.0 / scale;
             for (0..32) |i| {
-                const q = std.math.clamp(@round(h2f(u16s[v * dim + b * 32 + i]) * inv), -127.0, 127.0);
+                const w = q4r(h2f(u16s[v * dim + b * 32 + i]), mx);
+                const q = std.math.clamp(@round(w * inv), -127.0, 127.0);
                 qs[v * dim + b * 32 + i] = @intFromFloat(q);
             }
         }
@@ -200,7 +213,8 @@ fn quantInto(u16s: [*]align(1) const u16, qs: [*]i8, sc: [*]f16, out_ch: usize, 
             sc[row * nb + b] = @floatCast(scale);
             const inv = 1.0 / scale;
             for (0..32) |i| {
-                const q = std.math.clamp(@round(h2f(u16s[o * in_ch + b * 32 + i]) * inv), -127.0, 127.0);
+                const w = q4r(h2f(u16s[o * in_ch + b * 32 + i]), mx);
+                const q = std.math.clamp(@round(w * inv), -127.0, 127.0);
                 qs[row * in_ch + b * 32 + i] = @intFromFloat(q);
             }
         }
@@ -482,6 +496,11 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
 
 pub fn main() !void {
     const out = std.io.getStdOut().writer();
+    g_q4 = !std.mem.eql(u8, std.posix.getenv("Q4") orelse "0", "0"); // int4 quality probe
+    if (std.posix.getenv("QBITS")) |b| { // 4/5/6-bit sweep: levels = 2^(b-1)-1
+        const nbits = std.fmt.parseInt(u6, b, 10) catch 4;
+        g_qmax = @floatFromInt((@as(u32, 1) << @as(u5, @intCast(nbits - 1))) - 1);
+    }
     var args = try std.process.argsWithAllocator(alloc);
     _ = args.next();
     const model_path = args.next() orelse "assets/model.safetensors";
@@ -664,7 +683,12 @@ pub fn main() !void {
     }
     const dln_w = try upVec(sf, "model.decoder.layer_norm.weight");
     const dln_b = try upVec(sf, "model.decoder.layer_norm.bias");
+    // Q4_K_M-style mixed precision: keep the tied embed/output head at Q8 (it
+    // directly produces logits → Q4 noise flips argmax). Q4KEEPHEAD=1 probes this.
+    const keep_head = g_q4 and !std.mem.eql(u8, std.posix.getenv("Q4KEEPHEAD") orelse "0", "0");
+    if (keep_head) g_q4 = false;
     const tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0
+    if (keep_head) g_q4 = true;
     const dec_pe = try upVec(sf, "model.decoder.embed_positions.weight"); // [448][D]
     // all weights now in unified GPU buffers — release the read scratch + fd
     if (g_rd.len > 0) { alloc.free(g_rd); g_rd = &.{}; }
