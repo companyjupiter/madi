@@ -479,6 +479,9 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         }
         K = bestK;
         if (bestSil < envF("DIAR_SIL_TAU", 0.35)) { K = 1; @memset(asg, 0); } // 0.35: see diarizeEmb
+        // absolute-separation gate (same as file mode): a presenter whose voice
+        // varies splits with high silhouette but close centroids → one speaker
+        if (K >= 2 and maxCentroidCosDist(X, m, segd, asg, K) < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); }
         // voiceprint lower bound: every CLAIMED print is a speaker the session
         // has already voice-matched — auto-K may not merge below that count
         if (K < kmin) {
@@ -1622,6 +1625,30 @@ fn kmeansFit(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize) !voi
         for (0..K) |c| if (ccnt[c] > 0) for (0..segd) |j| { cent[c * segd + j] = csum[c * segd + j] / @as(f32, @floatFromInt(ccnt[c])); };
     }
 }
+// Max pairwise centroid cosine distance — ABSOLUTE speaker separation. The
+// silhouette is RELATIVE ((b-a)/max), so a single speaker whose delivery varies
+// (presentation tone/energy) splits into well-separated sub-clusters with high
+// silhouette. But all sub-cluster centroids stay CLOSE (same voice): measured
+// jfk3 single-speaker max=0.326 vs every real multi-speaker file max≥0.727.
+// Gate on this to reject single-speaker over-splits without merging real
+// speakers (a multi-speaker file has ≥2 far centroids → max high → unaffected).
+fn maxCentroidCosDist(X: []const f32, m: usize, segd: usize, asg: []const usize, K: usize) f32 {
+    if (K < 2) return 2;
+    const mu = alloc.alloc(f32, K * segd) catch return 2; defer alloc.free(mu);
+    const cnt = alloc.alloc(usize, K) catch return 2; defer alloc.free(cnt);
+    @memset(mu, 0); @memset(cnt, 0);
+    for (0..m) |i| { cnt[asg[i]] += 1; for (0..segd) |j| mu[asg[i] * segd + j] += X[i * segd + j]; }
+    for (0..K) |c| if (cnt[c] > 0) for (0..segd) |j| { mu[c * segd + j] /= @as(f32, @floatFromInt(cnt[c])); };
+    var maxd: f32 = -2;
+    for (0..K) |a| for (a + 1..K) |b| {
+        var dot: f32 = 0; var na: f32 = 0; var nb: f32 = 0;
+        for (0..segd) |j| { dot += mu[a*segd+j]*mu[b*segd+j]; na += mu[a*segd+j]*mu[a*segd+j]; nb += mu[b*segd+j]*mu[b*segd+j]; }
+        const cd = 1.0 - dot / (@sqrt(na*nb) + 1e-9);
+        if (cd > maxd) maxd = cd;
+    };
+    return maxd;
+}
+
 // Simplified silhouette (centroid distance, O(m·K·segd)) for auto-K selection.
 fn silhouetteSimplified(X: []const f32, m: usize, segd: usize, asg: []const usize, K: usize) !f32 {
     if (K < 2) return -2;
@@ -1695,6 +1722,12 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
             if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
         }
         if (bestSil < tau) { K = 1; @memset(asg, 0); } else K = bestK;
+        // absolute-separation gate: reject single-speaker over-splits (presenter
+        // delivery variation) — max centroid cosdist < DIAR_MIN_SEP → one speaker
+        if (K >= 2) {
+            const sep = maxCentroidCosDist(X, m, segd, asg, K);
+            if (sep < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); bestSil = -2; }
+        }
         try out.print("  [auto-K] K={d} (silhouette {d:.3}, tau {d:.2})\n", .{ K, bestSil, tau });
     }
 
