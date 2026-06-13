@@ -879,6 +879,24 @@ pub fn main() !void {
         const wav = try std.fs.cwd().readFileAlloc(alloc, cur_path, 2 * 1024 * 1024 * 1024);
         defer alloc.free(wav);
         const total = mel.wavTotalSamples(wav);
+        // W-3: fail loudly instead of crashing on empty / unsupported audio.
+        // 0 samples used to reach Silero/mel and SIGSEGV; an unsupported codec
+        // (non-PCM16/float32) used to decode as silence with no signal.
+        if (total == 0) {
+            const why: []const u8 = if (wav.len < 44)
+                "empty or truncated WAV file"
+            else if (mel.wavFmt(wav).fmt == .unsupported)
+                "unsupported WAV format (need PCM16 or float32 mono/stereo)"
+            else
+                "no audio data (0 samples)";
+            std.debug.print("[skip] {s}: {s}\n", .{ cur_path, why });
+            if (stream) {
+                try out.print("=== TRANSCRIPTION (0.00s, 0 chunk(s)) ===\n", .{});
+                try out.print("<<SEG_END>>\n", .{});
+                continue :job;
+            }
+            return;
+        }
         const n_chunks: usize = if (total <= mel.CHUNK_SAMPLES) 1 else (total + mel.CHUNK_SAMPLES - 1) / mel.CHUNK_SAMPLES;
         if (!stream) try out.print("[8] audio: {d} samples ({d:.1}s) → {d} chunk(s) × 30s\n", .{ total, @as(f64, @floatFromInt(total)) / 16000.0, n_chunks });
         full.clearRetainingCapacity();
