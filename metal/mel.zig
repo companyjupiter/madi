@@ -122,51 +122,74 @@ pub fn melSpectrogramRaw(
     }
 }
 
-/// Total mono sample count of a 16-bit PCM WAV (0 if unsupported).
-pub fn wavTotalSamples(wav_data: []const u8) usize {
-    var header_size: usize = 44;
-    if (wav_data.len > 4) {
-        for (0..wav_data.len - 4) |i| {
-            if (std.mem.eql(u8, wav_data[i .. i + 4], "data")) {
-                header_size = i + 8;
-                break;
-            }
-        }
-    }
-    if (wav_data.len < 36) return 0;
+/// Supported PCM sample encodings.
+pub const WavFmt = enum { pcm16, float32, unsupported };
+
+/// Inspect the fmt chunk: returns (format, channels). PCM16 (tag 1, 16-bit) and
+/// IEEE float32 (tag 3, 32-bit) are supported; anything else → .unsupported so
+/// the caller can fail loudly instead of silently producing 0 samples (FLEURS
+/// ships float32 — was read as silence, see W-3).
+pub fn wavFmt(wav_data: []const u8) struct { fmt: WavFmt, channels: u16 } {
+    if (wav_data.len < 36) return .{ .fmt = .unsupported, .channels = 0 };
+    const tag = @as(*align(1) const u16, @ptrCast(wav_data.ptr + 20)).*;
     const channels = @as(*align(1) const u16, @ptrCast(wav_data.ptr + 22)).*;
     const bits_ps = @as(*align(1) const u16, @ptrCast(wav_data.ptr + 34)).*;
-    if (bits_ps != 16 or channels == 0) return 0;
-    return (wav_data.len - header_size) / (bits_ps / 8) / channels;
+    if (channels == 0) return .{ .fmt = .unsupported, .channels = 0 };
+    const f: WavFmt = if ((tag == 1 or tag == 0xFFFE) and bits_ps == 16)
+        .pcm16
+    else if ((tag == 3 or tag == 0xFFFE) and bits_ps == 32)
+        .float32
+    else
+        .unsupported;
+    return .{ .fmt = f, .channels = channels };
 }
 
-/// Decode a 16-bit PCM WAV into mono f32 samples in [-1,1), starting at
+fn wavHeaderSize(wav_data: []const u8) usize {
+    if (wav_data.len > 4) {
+        for (0..wav_data.len - 4) |i| {
+            if (std.mem.eql(u8, wav_data[i .. i + 4], "data")) return i + 8;
+        }
+    }
+    return 44;
+}
+
+/// Total mono sample count of a supported WAV (0 if unsupported/empty).
+pub fn wavTotalSamples(wav_data: []const u8) usize {
+    const info = wavFmt(wav_data);
+    if (info.fmt == .unsupported) return 0;
+    const header_size = wavHeaderSize(wav_data);
+    if (wav_data.len <= header_size) return 0;
+    const bps: usize = if (info.fmt == .pcm16) 2 else 4;
+    return (wav_data.len - header_size) / bps / info.channels;
+}
+
+/// Decode a PCM16 or float32 WAV into mono f32 samples in [-1,1), starting at
 /// `offset_samples`, returning up to CHUNK_SAMPLES (zero-padded). Returns the
-/// number of real (non-pad) samples written.
+/// number of real (non-pad) samples written (0 if unsupported/empty).
 pub fn loadWavChunk(wav_data: []const u8, offset_samples: usize, out: []f32) usize {
     std.debug.assert(out.len >= CHUNK_SAMPLES);
     @memset(out[0..CHUNK_SAMPLES], 0);
 
-    var header_size: usize = 44;
-    if (wav_data.len > 4) {
-        for (0..wav_data.len - 4) |i| {
-            if (std.mem.eql(u8, wav_data[i .. i + 4], "data")) {
-                header_size = i + 8;
-                break;
-            }
-        }
-    }
+    const info = wavFmt(wav_data);
+    if (info.fmt == .unsupported) return 0;
+    const header_size = wavHeaderSize(wav_data);
+    if (wav_data.len <= header_size) return 0;
     const pcm = wav_data[header_size..];
-    const channels = @as(*align(1) const u16, @ptrCast(wav_data.ptr + 22)).*;
-    const bits_ps = @as(*align(1) const u16, @ptrCast(wav_data.ptr + 34)).*;
-    if (bits_ps != 16 or channels == 0) return 0;
-    const total = pcm.len / (bits_ps / 8) / channels;
+    const channels = info.channels;
+    const bps: usize = if (info.fmt == .pcm16) 2 else 4;
+    const total = pcm.len / bps / channels;
     const start = @min(offset_samples, total);
-    const avail = total - start;
-    const n = @min(avail, CHUNK_SAMPLES);
-    const pcm16 = @as([*]align(1) const i16, @ptrCast(pcm.ptr));
-    for (0..n) |i| {
-        out[i] = @as(f32, @floatFromInt(pcm16[(start + i) * channels])) / 32768.0;
+    const n = @min(total - start, CHUNK_SAMPLES);
+    switch (info.fmt) {
+        .pcm16 => {
+            const p = @as([*]align(1) const i16, @ptrCast(pcm.ptr));
+            for (0..n) |i| out[i] = @as(f32, @floatFromInt(p[(start + i) * channels])) / 32768.0;
+        },
+        .float32 => {
+            const p = @as([*]align(1) const f32, @ptrCast(pcm.ptr));
+            for (0..n) |i| out[i] = p[(start + i) * channels]; // already [-1,1]
+        },
+        .unsupported => unreachable,
     }
     return n;
 }

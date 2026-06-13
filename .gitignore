@@ -60,3 +60,5 @@ app/*.xcodeproj/xcuserdata/
 app/DerivedData/
 *.dmg
 metal/bench/wer_runs/
+metal/bench/runs/*
+!metal/bench/runs/README.md

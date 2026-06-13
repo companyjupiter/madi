@@ -12,7 +12,10 @@ import numpy as np
 
 MAXK = 6
 CAP = 400
-CACHE = '/tmp/voxk_cache.jsonl'
+import os as _os
+_RUNS = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'bench/runs')
+_os.makedirs(_RUNS, exist_ok=True)
+CACHE = _os.path.join(_RUNS, 'voxk_cache.jsonl')  # durable: /tmp cleanup once cost a day
 
 
 def load(path):

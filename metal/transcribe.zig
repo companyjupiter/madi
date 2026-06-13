@@ -39,7 +39,32 @@ const EOT: u32 = 50257;
 // stripped from output/word-timestamps.
 const SEED = [_]u32{ 50258, 50259, 50360 };
 const TS0: u32 = 50365; // <|0.00|>; ids ≥ TS0 are timestamp tokens
+
+// int4 quality probe: when set (env Q4=1), every Q8-quantized weight is first
+// rounded to 4-bit (symmetric per-32-block, 15 levels) BEFORE the existing Q8
+// quant — measures the WER cost of int4 with NO kernel/format change, so we can
+// reject Q4 cheaply if it tanks quality before building the real Q4 pipeline.
+var g_q4: bool = false;
+var g_qmax: f32 = 7.0; // clamp level: 4bit→7, 5bit→15, 6bit→31 (env QBITS)
+inline fn q4r(w: f32, blk_max: f32) f32 {
+    if (!g_q4 or blk_max <= 0) return w;
+    const s = blk_max / g_qmax;
+    return std.math.clamp(@round(w / s), -g_qmax, g_qmax) * s;
+}
 const alloc = std.heap.page_allocator;
+
+// FNV-1a over raw bytes / a Q8 weight (qs+scales) — for the WHASH bit-identity
+// proof (Q8-file load == F16-quantize at the weight level).
+fn fnvBytes(seed: u64, bytes: []const u8) u64 {
+    var x = seed;
+    for (bytes) |b| { x ^= b; x *%= 0x100000001b3; }
+    return x;
+}
+fn fnvQ8(seed: u64, w: anytype, nq: usize, nsc: usize) u64 {
+    var x = fnvBytes(seed, @as([*]const u8, @ptrCast(w.qs))[0..nq]);
+    x = fnvBytes(x, @as([*]const u8, @ptrCast(w.scales))[0 .. nsc * 2]);
+    return x;
+}
 
 // ── safetensors ──────────────────────────────────────────────────────
 // pread-based loader: the 1.6GB data section is NEVER mmap'd/resident. Each
@@ -64,6 +89,18 @@ const Sf = struct {
         const json = try alloc.alloc(u8, n);
         if (try std.posix.pread(fd, json, 8) != n) return error.BadHeader;
         return .{ .fd = fd, .off = 8 + n, .size = sz, .json = json };
+    }
+    /// True if a tensor key is present in the header (no data read). Used to
+    /// detect a pre-quantized Q8 model (K.qs present) vs an F16 model.
+    fn has(self: Sf, key: []const u8) bool {
+        var kbuf: [160]u8 = undefined;
+        const q = std.fmt.bufPrint(&kbuf, "\"{s}\"", .{key}) catch return false;
+        return std.mem.indexOf(u8, self.json, q) != null;
+    }
+    fn has2(self: Sf, key: []const u8, suffix: []const u8) bool {
+        var kbuf: [180]u8 = undefined;
+        const q = std.fmt.bufPrint(&kbuf, "\"{s}{s}\"", .{ key, suffix }) catch return false;
+        return std.mem.indexOf(u8, self.json, q) != null;
     }
     /// Raw F16 bytes for a tensor key (null if absent). Valid until the next
     /// raw() call — the returned slice aliases the shared scratch buffer.
@@ -123,6 +160,12 @@ fn upVecF16(sf: Sf, key: []const u8) ![*]f16 {
 const Q8 = dec.Q8w;
 /// Quantize an F16 [rows][dim] tensor to Q8_0 (int8 + per-32-block fp16 scale).
 fn upVecQ8(sf: Sf, key: []const u8, rows: usize, dim: usize) !Q8 {
+    if (sf.has2(key, ".qs")) {
+        const qs = try mtl.allocSlice(i8, rows * dim);
+        const sc = try mtl.allocSlice(f16, rows * (dim / 32));
+        try readQ8(sf, key, qs.ptr, sc.ptr, 0, 0, rows, dim);
+        return .{ .qs = qs.ptr, .scales = sc.ptr };
+    }
     const r = sf.raw(key) orelse return error.MissingTensor;
     const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. rows * dim];
     const nb = dim / 32;
@@ -136,7 +179,8 @@ fn upVecQ8(sf: Sf, key: []const u8, rows: usize, dim: usize) !Q8 {
             sc[v * nb + b] = @floatCast(scale);
             const inv = 1.0 / scale;
             for (0..32) |i| {
-                const q = std.math.clamp(@round(h2f(u16s[v * dim + b * 32 + i]) * inv), -127.0, 127.0);
+                const w = q4r(h2f(u16s[v * dim + b * 32 + i]), mx);
+                const q = std.math.clamp(@round(w * inv), -127.0, 127.0);
                 qs[v * dim + b * 32 + i] = @intFromFloat(q);
             }
         }
@@ -200,13 +244,36 @@ fn quantInto(u16s: [*]align(1) const u16, qs: [*]i8, sc: [*]f16, out_ch: usize, 
             sc[row * nb + b] = @floatCast(scale);
             const inv = 1.0 / scale;
             for (0..32) |i| {
-                const q = std.math.clamp(@round(h2f(u16s[o * in_ch + b * 32 + i]) * inv), -127.0, 127.0);
+                const w = q4r(h2f(u16s[o * in_ch + b * 32 + i]), mx);
+                const q = std.math.clamp(@round(w * inv), -127.0, 127.0);
                 qs[row * in_ch + b * 32 + i] = @intFromFloat(q);
             }
         }
     }
 }
+// Read a pre-quantized weight's qs(int8 [out][in]) + scales(f16 [out][in/32])
+// straight into the dest buffers at element offsets. Copies qs out before
+// reading scales (raw() aliases one shared scratch buffer). Used when the model
+// file is the Q8 build (K.qs present) — bit-identical to in-load quantInto.
+fn readQ8(sf: Sf, key: []const u8, qs: [*]i8, sc: [*]f16, q_off: usize, s_off: usize, out_ch: usize, in_ch: usize) !void {
+    var kb: [180]u8 = undefined;
+    const kq = std.fmt.bufPrint(&kb, "{s}.qs", .{key}) catch unreachable;
+    const rq = sf.raw(kq) orelse return error.MissingTensor;
+    const nq = out_ch * in_ch; // i8 bytes
+    @memcpy(@as([*]u8, @ptrCast(qs + q_off))[0..nq], rq[0..nq]);
+    const ksc = std.fmt.bufPrint(&kb, "{s}.scales", .{key}) catch unreachable;
+    const rs = sf.raw(ksc) orelse return error.MissingTensor;
+    const ns = out_ch * (in_ch / 32) * 2; // f16 bytes
+    @memcpy(@as([*]u8, @ptrCast(sc + s_off))[0..ns], rs[0..ns]);
+}
+
 fn upMatQ8(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize) !enc.Q8 {
+    if (sf.has2(key, ".qs")) {
+        const qs = try mtl.allocSlice(i8, out_ch * in_ch);
+        const sc = try mtl.allocSlice(f16, out_ch * (in_ch / 32));
+        try readQ8(sf, key, qs.ptr, sc.ptr, 0, 0, out_ch, in_ch);
+        return .{ .qs = qs.ptr, .scales = sc.ptr };
+    }
     const r = sf.raw(key) orelse return error.MissingTensor;
     const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr));
     const qs = try mtl.allocSlice(i8, out_ch * in_ch);
@@ -223,6 +290,10 @@ fn upQKVQ8enc(sf: Sf, l: usize) !enc.Q8 {
     const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
     for (names, 0..) |nm, blk| {
         const key = std.fmt.bufPrint(&kbuf, "model.encoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        if (sf.has2(key, ".qs")) {
+            try readQ8(sf, key, qs.ptr, sc.ptr, blk * @as(usize, D) * D, blk * @as(usize, D) * nb, D, D);
+            continue;
+        }
         const r = sf.raw(key) orelse return error.MissingTensor;
         const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr));
         quantInto(u16s, qs.ptr, sc.ptr, D, D, blk * @as(usize, D));
@@ -261,6 +332,10 @@ fn upQKVQ8(sf: Sf, l: usize) !Q8 {
     const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
     for (names, 0..) |nm, blk| {
         const key = std.fmt.bufPrint(&kbuf, "model.decoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        if (sf.has2(key, ".qs")) {
+            try readQ8(sf, key, qs.ptr, sc.ptr, blk * @as(usize, D) * D, blk * @as(usize, D) * nb, D, D);
+            continue;
+        }
         const r = sf.raw(key) orelse return error.MissingTensor;
         const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. @as(usize, D) * D];
         const ro = blk * @as(usize, D);
@@ -288,7 +363,7 @@ fn upQKV(sf: Sf, l: usize) ![*]f32 {
     const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
     for (names, 0..) |nm, blk| {
         const key = std.fmt.bufPrint(&kbuf, "model.decoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
-        const r = sf.raw(key) orelse return error.MissingTensor;
+            const r = sf.raw(key) orelse return error.MissingTensor;
         const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. @as(usize, D) * D];
         const co = blk * @as(usize, D);
         for (0..D) |o| for (0..D) |i| {
@@ -482,6 +557,11 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
 
 pub fn main() !void {
     const out = std.io.getStdOut().writer();
+    g_q4 = !std.mem.eql(u8, std.posix.getenv("Q4") orelse "0", "0"); // int4 quality probe
+    if (std.posix.getenv("QBITS")) |b| { // 4/5/6-bit sweep: levels = 2^(b-1)-1
+        const nbits = std.fmt.parseInt(u6, b, 10) catch 4;
+        g_qmax = @floatFromInt((@as(u32, 1) << @as(u5, @intCast(nbits - 1))) - 1);
+    }
     var args = try std.process.argsWithAllocator(alloc);
     _ = args.next();
     const model_path = args.next() orelse "assets/model.safetensors";
@@ -664,7 +744,26 @@ pub fn main() !void {
     }
     const dln_w = try upVec(sf, "model.decoder.layer_norm.weight");
     const dln_b = try upVec(sf, "model.decoder.layer_norm.bias");
+    // Q4_K_M-style mixed precision: keep the tied embed/output head at Q8 (it
+    // directly produces logits → Q4 noise flips argmax). Q4KEEPHEAD=1 probes this.
+    const keep_head = g_q4 and !std.mem.eql(u8, std.posix.getenv("Q4KEEPHEAD") orelse "0", "0");
+    if (keep_head) g_q4 = false;
     const tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0
+    // WHASH=1: prove the Q8-file load is bit-identical to F16-quantize at the
+    // WEIGHT level (transcripts are nondeterministic via GPU FP, so the proof
+    // must be on weights). Covers all 4 Q8 loaders: upVecQ8(tok_emb,ow),
+    // upQKVQ8(dec qkv), upMatQ8(enc o_w), upQKVQ8enc(enc qkv).
+    if (std.posix.getenv("WHASH") != null) {
+        const nb = @as(usize, D) / 32;
+        var x: u64 = 0xcbf29ce484222325;
+        x = fnvQ8(x, tok_emb, VOCAB * D, VOCAB * nb);
+        x = fnvQ8(x, dlayers[0].qkvw, 3 * @as(usize, D) * D, 3 * @as(usize, D) * nb);
+        x = fnvQ8(x, dlayers[0].ow, @as(usize, D) * D, @as(usize, D) * nb);
+        x = fnvQ8(x, elayers[0].o_w, @as(usize, D) * D, @as(usize, D) * nb);
+        x = fnvQ8(x, elayers[0].qkv_w, 3 * @as(usize, D) * D, 3 * @as(usize, D) * nb);
+        std.debug.print("[whash] {x}\n", .{x});
+    }
+    if (keep_head) g_q4 = true;
     const dec_pe = try upVec(sf, "model.decoder.embed_positions.weight"); // [448][D]
     // all weights now in unified GPU buffers — release the read scratch + fd
     if (g_rd.len > 0) { alloc.free(g_rd); g_rd = &.{}; }
@@ -749,6 +848,11 @@ pub fn main() !void {
         if (std.posix.getenv("WHISPER_LANG_ID")) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
         break :blk 0;
     };
+    // task token: <|transcribe|>=50360 (default) or <|translate|>=50359 (X→English,
+    // Whisper-native). TRANSLATE=1 → on-device live translation; source language
+    // is still detected/forced via lang_tok, only the OUTPUT becomes English.
+    const translate = !std.mem.eql(u8, std.posix.getenv("TRANSLATE") orelse "0", "0");
+    const task_tok: u32 = if (translate) 50359 else 50360;
 
     // ── stream mode: load model ONCE, then process segment wavs from stdin ────
     // Each stdin line is "<global_offset_seconds> <wav_path>"; we emit that
@@ -811,6 +915,11 @@ pub fn main() !void {
     const hallu_guard = !std.mem.eql(u8, std.posix.getenv("HALLU_GUARD") orelse "1", "0");
     const hallu_rms = envF("HALLU_RMS", 0.020);
     const vad_thresh = envF("VAD_THRESH", 0.010);
+    // gate-only AGC: low-gain sources (quiet mic, far speaker; FLEURS masters at
+    // −33 dBFS) were silently dropped by BOTH speech gates (energy RMS and
+    // Silero STFT magnitudes too small → product goes totally silent). Normalize
+    // a scratch copy to a target peak for the gates/detectors ONLY. AGC=0 reverts.
+    const agc_on = !std.mem.eql(u8, std.posix.getenv("AGC") orelse "1", "0");
     if (stream) try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{});
     var stdin_buf: [8192]u8 = undefined;
     const stdin_r = std.io.getStdIn().reader();
@@ -874,6 +983,24 @@ pub fn main() !void {
         const wav = try std.fs.cwd().readFileAlloc(alloc, cur_path, 2 * 1024 * 1024 * 1024);
         defer alloc.free(wav);
         const total = mel.wavTotalSamples(wav);
+        // W-3: fail loudly instead of crashing on empty / unsupported audio.
+        // 0 samples used to reach Silero/mel and SIGSEGV; an unsupported codec
+        // (non-PCM16/float32) used to decode as silence with no signal.
+        if (total == 0) {
+            const why: []const u8 = if (wav.len < 44)
+                "empty or truncated WAV file"
+            else if (mel.wavFmt(wav).fmt == .unsupported)
+                "unsupported WAV format (need PCM16 or float32 mono/stereo)"
+            else
+                "no audio data (0 samples)";
+            std.debug.print("[skip] {s}: {s}\n", .{ cur_path, why });
+            if (stream) {
+                try out.print("=== TRANSCRIPTION (0.00s, 0 chunk(s)) ===\n", .{});
+                try out.print("<<SEG_END>>\n", .{});
+                continue :job;
+            }
+            return;
+        }
         const n_chunks: usize = if (total <= mel.CHUNK_SAMPLES) 1 else (total + mel.CHUNK_SAMPLES - 1) / mel.CHUNK_SAMPLES;
         if (!stream) try out.print("[8] audio: {d} samples ({d:.1}s) → {d} chunk(s) × 30s\n", .{ total, @as(f64, @floatFromInt(total)) / 16000.0, n_chunks });
         full.clearRetainingCapacity();
@@ -904,6 +1031,30 @@ pub fn main() !void {
             var vad_thread: ?std.Thread = null;
             var osd_threads: [4]?std.Thread = .{ null, null, null, null };
             var osd_nw_used: usize = 0;
+            // ── AGC ───────────────────────────────────────────────────────
+            // Quiet sources (quiet mic, far speaker, low-gain masters) make BOTH
+            // the speech gates AND the encoder fail — gates read silence, and the
+            // encoder emits empty/degraded text even on MODERATELY quiet audio
+            // (peak 0.11–0.23 FLEURS utts came out empty until boosted). When a
+            // chunk is below the normal-speech floor, normalize it toward a target
+            // peak (−1 dBFS — the level that gave FLEURS CER 3.99%) IN PLACE so
+            // gates AND encoder both see a healthy level. Normal/loud audio
+            // (peak ≥ ACTIVATE) is untouched → bit-exact. AGC=0 reverts.
+            const AGC_ACTIVATE: f32 = 0.30;
+            const AGC_TARGET: f32 = 0.90;
+            const AGC_GAIN_MAX: f32 = 40.0;
+            if (agc_on) {
+                var pk: f32 = 0;
+                for (samples[0..got]) |x| {
+                    const a = @abs(x);
+                    if (a > pk) pk = a;
+                }
+                if (pk > 1e-6 and pk < AGC_ACTIVATE) {
+                    const g = @min(AGC_GAIN_MAX, AGC_TARGET / pk);
+                    for (samples[0..got]) |*x| x.* *= g;
+                }
+            }
+            const gate_samples: []f32 = samples[0..got];
             if (osd_model) |*om| {
                 // pyannote OSD on 10 s windows, threaded (≈410 ms each naive;
                 // overlaps the diar embed pool + silero below)
@@ -912,7 +1063,7 @@ pub fn main() !void {
                 while (wi * OSD_STEP < got and wi < OSD_NW) : (wi += 1) {
                     const s0 = wi * OSD_STEP;
                     const slen = @min(osd.WIN_SAMPLES, got - s0);
-                    osd_threads[wi % 4] = try std.Thread.spawn(.{}, osdWorker, .{ om, samples[s0 .. s0 + slen], osd_logp[wi * 600 * osd.N_CLASSES ..][0 .. 600 * osd.N_CLASSES], &osd_nf[wi] });
+                    osd_threads[wi % 4] = try std.Thread.spawn(.{}, osdWorker, .{ om, gate_samples[s0 .. s0 + slen], osd_logp[wi * 600 * osd.N_CLASSES ..][0 .. 600 * osd.N_CLASSES], &osd_nf[wi] });
                     if (wi % 4 == 3) { // cap concurrency at 4 OSD threads
                         for (0..4) |q| {
                             if (osd_threads[q]) |t_| {
@@ -929,7 +1080,7 @@ pub fn main() !void {
                 // run Silero on its own thread — it overlaps the ResNet diar
                 // embedding pool below (~150 ms each on a 30 s chunk), so the
                 // trained VAD costs ~0 wall time on the gather path
-                vad_thread = try std.Thread.spawn(.{}, vadWorker, .{ vm, samples[0..got], vad_probs, &vad_np });
+                vad_thread = try std.Thread.spawn(.{}, vadWorker, .{ vm, gate_samples, vad_probs, &vad_np });
             }
 
             // diarization: 256-d ResNet34 embedding per 1.5 s window. Non-stream
@@ -1101,7 +1252,7 @@ pub fn main() !void {
         }
         // VAD: skip silent chunks entirely (no mel/encode/decode) — avoids the
         // silence-hallucination junk and saves compute on quiet meeting stretches.
-        const seg_rms = maxWinRms(samples, got); // loudest 1 s window, [-1,1] RMS
+        const seg_rms = maxWinRms(gate_samples, got); // loudest 1 s window, [-1,1] RMS (AGC-normalized)
         if (seg_rms <= vad_thresh or chunk_speech_s < 0.25) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] ({s} — skipped)\n", .{ chunk + 1, n_chunks, t_off, if (seg_rms <= vad_thresh) @as([]const u8, "silence") else "non-speech" });
             if (got < mel.CHUNK_SAMPLES) { reached_end = true; chunk += 1; break :gather; }
@@ -1194,6 +1345,8 @@ pub fn main() !void {
         }
         d_tokens[1] = lang_tok;
         out_tokens[1] = lang_tok;
+        d_tokens[2] = task_tok; // transcribe(50360) / translate(50359)
+        out_tokens[2] = task_tok;
 
         // GPU-resident autoregressive decode (idea from the SHARE build's CUDA
         // Graph replay): the whole step runs on-GPU — indirect embed, blocks,
@@ -1250,7 +1403,7 @@ pub fn main() !void {
             var PL: u32 = 0;
             d_tokens[PL] = SEED[0]; // sot
             d_tokens[PL + 1] = lang_tok;
-            d_tokens[PL + 2] = SEED[2]; // transcribe
+            d_tokens[PL + 2] = task_tok; // transcribe(50360) / translate(50359)
             PL += 3;
             if (!ts_mode) { d_tokens[PL] = 50364; PL += 1; } // <|notimestamps|>
             for (0..PL) |q| out_tokens[q] = d_tokens[q];

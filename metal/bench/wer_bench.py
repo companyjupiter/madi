@@ -79,11 +79,9 @@ def run_engine(utts, out_path):
     scratch_root = os.path.join(M, 'bench/wer_runs/scratch')
     os.makedirs(scratch_root, exist_ok=True)
     wav_dir = tempfile.mkdtemp(prefix='wer_wav_', dir=scratch_root)
-    env = {**os.environ, 'STREAM': '1', 'DIAR': '0',
-           # pure-ASR measurement: bypass the product's energy gate — FLEURS
-           # masters at very low gain (peak 0.02, max-1s-RMS 0.004 < default
-           # VAD_THRESH 0.010) and the gate silently skipped 222/382 chunks
-           'VAD_THRESH': '0'}
+    # engine's gate-only AGC (default on) handles low-gain sources — the bench
+    # measures the REAL product path now (no gate bypass, no external normalize)
+    env = {**os.environ, 'STREAM': '1', 'DIAR': '0'}
     if LANG_TOKEN:
         env['WHISPER_LANG_ID'] = LANG_TOKEN  # forced language (published FLEURS evals force it)
     proc = subprocess.Popen(
@@ -102,18 +100,11 @@ def run_engine(utts, out_path):
     done = 0
     audio_s = 0.0
     for uid, flac, ref in utts:
-        # ALWAYS re-encode to canonical pcm_s16le (FLEURS ships float32 wavs the
-        # engine's PCM16 parser reads as 0 samples) AND peak-normalize to -1 dBFS:
-        # FLEURS masters at ~-33 dBFS peak, below BOTH product speech gates
-        # (energy VAD_THRESH and silero's amplitude sensitivity). Linear gain is
-        # ASR-neutral; on normally-mastered sources it is a no-op.
+        # re-encode to canonical pcm_s16le: FLEURS ships float32 wavs the engine's
+        # PCM16 parser reads as 0 samples (W-3). Low gain is handled IN-ENGINE by
+        # the gate-only AGC now — no external normalization needed.
         wav = os.path.join(wav_dir, uid + '.wav')
-        vd = subprocess.run(['ffmpeg', '-i', flac, '-af', 'volumedetect',
-                             '-f', 'null', '-'], capture_output=True, text=True).stderr
-        mv = re.search(r'max_volume: (-?[0-9.]+) dB', vd)
-        gain = max(0.0, -1.0 - float(mv.group(1))) if mv else 0.0
         subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', flac,
-                        '-af', f'volume={gain:.1f}dB',
                         '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav], check=True)
         proc.stdin.write(f'0.0 {wav}\n')
         proc.stdin.flush()

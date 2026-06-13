@@ -75,13 +75,19 @@ codesign --force --sign - "$BUNDLE/Contents/MacOS/transcribe"
 codesign --force --sign - --entitlements "$APP_DIR/Sovereign/Sovereign.entitlements" "$BUNDLE"
 
 # ── 4. optional: seed the model so first run skips the (placeholder) download ─
+# model name must match AssetManifest.model.name (the Q8 build)
+MODEL_Q8="$ROOT/metal/bench/runs/model.q8.safetensors"
 if [ "${SEED_MODEL:-0}" = "1" ]; then
   SUP="$HOME/Library/Application Support/Sovereign"
   mkdir -p "$SUP"
-  ln -sf "$ROOT/metal/assets/model.safetensors" "$SUP/model.safetensors"
-  echo "[4/4] model seeded → $SUP/model.safetensors (symlink)"
+  if [ -f "$MODEL_Q8" ]; then
+    ln -sf "$MODEL_Q8" "$SUP/model.q8.safetensors"
+    echo "[4/4] Q8 model seeded → $SUP/model.q8.safetensors (symlink)"
+  else
+    echo "[4/4] ⚠ Q8 model missing ($MODEL_Q8) — run bench/quantize_q8.py first"
+  fi
 else
-  echo "[4/4] (no model seed; SEED_MODEL=1 to symlink the repo model)"
+  echo "[4/4] (no model seed; SEED_MODEL=1 to symlink the repo Q8 model)"
 fi
 
 du -sh "$BUNDLE"
