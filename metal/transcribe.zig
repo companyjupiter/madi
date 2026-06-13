@@ -435,6 +435,19 @@ fn evMeta(model: []const u8, lang: u32, sr: u32) void {
 fn evReady() void {
     evLine("{\"t\":\"ready\"}");
 }
+// streaming partial hypothesis: the in-progress text after each decode batch.
+// Live consumers render it immediately and replace it when the final seg lands.
+var g_partials = false;
+fn evPartial(t0: f32, text: []const u8) void {
+    if (g_ev == null) return;
+    var b: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&b);
+    const w = fbs.writer();
+    w.print("{{\"t\":\"partial\",\"t0\":{d:.2},\"text\":", .{t0}) catch return;
+    evStr(w, std.mem.trim(u8, text, " \n")) catch return;
+    w.writeByte('}') catch return;
+    evLine(fbs.getWritten());
+}
 fn evWord(t0: f32, t1: f32, text: []const u8, conf: f32, spk: i32) void {
     if (g_ev == null) return;
     var b: [1024]u8 = undefined;
@@ -674,6 +687,7 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
 pub fn main() !void {
     const out = std.io.getStdOut().writer();
     evOpen(); // structured event stream (opt-in EVENTS_FILE) — frozen stdout text contract unaffected
+    g_partials = std.posix.getenv("PARTIALS") != null; // streaming partial-hypothesis events (live)
     g_q4 = !std.mem.eql(u8, std.posix.getenv("Q4") orelse "0", "0"); // int4 quality probe
     if (std.posix.getenv("QBITS")) |b| { // 4/5/6-bit sweep: levels = 2^(b-1)-1
         const nbits = std.fmt.parseInt(u6, b, 10) catch 4;
@@ -1607,6 +1621,11 @@ pub fn main() !void {
                     if (tk == EOT) { done = true; break; }
                 }
                 n_text += bi;
+                // streaming partial: emit the in-progress text after this batch
+                if (g_partials and !dropped and n_text > 0) {
+                    const ptext = bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]) catch "";
+                    evPartial(t_off + pass_off, ptext);
+                }
             }
             n_tok_total += n_text;
             // this pass's avg_logprob: mean ln(softmax prob) over its tokens
@@ -2497,7 +2516,9 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     }
 }
 
+var g_bpe_cache: ?[][]const u8 = null;
 fn loadBpe(path: []const u8) ![][]const u8 {
+    if (g_bpe_cache) |c| return c; // load the 64 MB vocab once (per-word/partial decode reuse)
     const bytes = try std.fs.cwd().readFileAlloc(alloc, path, 64 * 1024 * 1024);
     var off: usize = 4;
     const vs = std.mem.readInt(u32, bytes[0..4], .little);
@@ -2508,6 +2529,7 @@ fn loadBpe(path: []const u8) ![][]const u8 {
         toks[i] = bytes[off .. off + l];
         off += l;
     }
+    g_bpe_cache = toks;
     return toks;
 }
 
@@ -2718,20 +2740,11 @@ fn readBinU32(dir: []const u8, name: []const u8) ![]u32 {
 
 // WHISPER_BPE.bin: u32 vocab_size, then per-id (u32 len + raw bytes).
 fn bpeDecode(path: []const u8, ids: []const u32) ![]u8 {
-    const bytes = try std.fs.cwd().readFileAlloc(alloc, path, 64 * 1024 * 1024);
-    var off: usize = 4;
-    const vs = std.mem.readInt(u32, bytes[0..4], .little);
-    var toks = try alloc.alloc([]const u8, vs);
-    for (0..vs) |i| {
-        const l = std.mem.readInt(u32, bytes[off..][0..4], .little);
-        off += 4;
-        toks[i] = bytes[off .. off + l];
-        off += l;
-    }
+    const toks = try loadBpe(path); // cached vocab (no per-call 64 MB reload)
     var buf = std.ArrayList(u8).init(alloc);
     for (ids) |id| {
         if (id >= 50257) continue; // strip EOT/specials/timestamp tokens
-        if (id < vs) try buf.appendSlice(toks[id]);
+        if (id < toks.len) try buf.appendSlice(toks[id]);
     }
     return buf.items;
 }

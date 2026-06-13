@@ -12,7 +12,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { EngineEvent, SessionState, emptySession, reduce } from './types'
 
-export type SourceMode = 'instant' | 'replay'
+export type SourceMode = 'instant' | 'replay' | 'live'
+
+// the live bridge (web/bridge/server.mjs) streams the same event contract via SSE
+const BRIDGE = 'http://127.0.0.1:5274/events'
 
 export function useEvents(fixture: string, mode: SourceMode = 'instant') {
   const [state, setState] = useState<SessionState>(emptySession)
@@ -23,6 +26,18 @@ export function useEvents(fixture: string, mode: SourceMode = 'instant') {
     let cancelled = false
     if (timer.current) { clearInterval(timer.current); timer.current = null }
     setState(emptySession()); setLoading(true)
+
+    if (mode === 'live') {
+      // live: connect to the bridge SSE; it runs the engine and streams events
+      setLoading(false)
+      const es = new EventSource(BRIDGE)
+      es.onmessage = (m) => {
+        try { const e = JSON.parse(m.data) as EngineEvent; setState((s) => reduce(s, e)) } catch { /* keepalive */ }
+      }
+      es.addEventListener('done', () => es.close())
+      es.onerror = () => { /* bridge offline — stays empty */ }
+      return () => es.close()
+    }
 
     fetch(`fixtures/${fixture}.events.jsonl`)
       .then((r) => r.text())

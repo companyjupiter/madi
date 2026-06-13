@@ -42,6 +42,7 @@ data model before the producing feature lands:
 |---|---|---|
 | `meta` | once, first line | `v` (schema ver), `model`, `lang` (Whisper lang-token id; 0=auto), `sr` |
 | `ready` | stream mode, model resident | — |
+| `partial` | each decode batch (opt-in `PARTIALS=1`) | `t0` (s), `text` (in-progress hypothesis; superseded by the segment's `seg`) |
 | `word` | each aligned word | `t0`,`t1` (global s), `conf` (0–1 softmax prob), `spk` (−1 until attributed), `text` |
 | `seg` | each 30 s chunk decoded | `idx`, `t0`,`t1` (s), `dropped` (hallucination-guard), `avg_logprob`, `fallback`,`temp`, `tok_s`,`enc_ms`,`dec_ms`,`passes` (perf), `text` |
 | `spk_seg` | each speaker-attributed run | `t0` (global s), `spk` (speaker id), `text` |

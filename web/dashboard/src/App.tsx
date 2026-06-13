@@ -7,14 +7,16 @@ import { TranscriptPanel, SpeakerPanel, QualityPanel, PerfPanel } from './compon
 
 export default function App() {
   const [fixture, setFixture] = useState('devops_ko')
-  // 'instant' = full session at once; 'replay' = stream events for a live feel.
-  const [mode] = useState<'instant' | 'replay'>('instant')
+  // 'instant' = fixture all at once; 'live' = SSE from the bridge (real engine).
+  const [mode, setMode] = useState<'instant' | 'live'>('instant')
   const { state, loading } = useEvents(fixture, mode)
   const k = kpis(state)
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <TopBar state={state} fixture={fixture} onFixture={setFixture} live={mode === 'replay' && !state.ended} />
+      <TopBar state={state} fixture={fixture} onFixture={setFixture}
+        live={mode === 'live' && !state.ended}
+        mode={mode} onMode={setMode} />
       <KpiRow k={k} />
       <main style={{
         flex: 1, minHeight: 0, padding: '0 18px 18px', display: 'grid', gap: 12,

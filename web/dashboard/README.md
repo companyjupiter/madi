@@ -57,13 +57,29 @@ src/
 - **Charts**: `charts.tsx` is hand-rolled SVG (no chart-lib lock-in). Swap for a
   chart library if you prefer — the panels pass plain data.
 
-## Live bridge (next)
+## Live mode (implemented)
 
-`useEvents.ts` is the seam. Today it `fetch`es a fixture and replays it. For a
-live session, run the engine with `EVENTS_FILE` pointed at a fifo/socket, have a
-tiny server stream new lines over **SSE/WebSocket**, and swap the fixture fetch
-for an `EventSource`. The reducer and every panel stay unchanged — they already
-consume events incrementally.
+`web/bridge/server.mjs` is the live bridge: it runs the engine (STREAM mode,
+`PARTIALS=1`) on a wav and streams its events over **SSE**. Start it, then hit
+the **▶ 라이브** button in the top bar:
+
+```sh
+node web/bridge/server.mjs           # → http://127.0.0.1:5274/events
+```
+
+The dashboard's `useEvents.ts` opens an `EventSource` to the bridge; the reducer
+and panels are unchanged from fixture mode — the live feed and a fixture replay
+push the identical contract. Streaming `partial` events render an **● 인식 중**
+in-progress line in the transcript that the final `seg` supersedes. No mic
+needed: the bridge streams a file through the same STREAM code path live capture
+uses.
+
+**Known gap:** stream mode emits the transcript + partials + per-segment metrics
+live, but not the `diar`/`spk_seg` events (those are file-mode `diarizeEmb`; live
+diarization is the online `SPK/SPKFIX` path, not yet wired to the event stream).
+So the 화자 분석 panel populates in fixture/instant mode; live mode shows the
+transcript, quality, and performance panels. Wiring live speaker events is the
+next step.
 
 ## Reserved fields (already in the model)
 
