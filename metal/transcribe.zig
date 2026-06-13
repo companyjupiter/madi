@@ -1963,7 +1963,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
     // overlap frame's powerset class then names the global PAIR directly.
     // RTTM/timeline only; word attribution (g_segs) is left untouched.
     var n_ov: usize = 0;
-    const osd_thr = envF("OSD_THR", 0.25); // ES2004a sweep saturates at 0.25 (16.47%)
+    const osd_thr = envF("OSD_THR", 0.45); // P2b/H: VoxConverse-dev sweep — 0.45 cuts noise-clip false overlaps (tucrg 356→315) for MEAN 8.03→7.82% (live path keeps 0.25, L-3-tuned)
     for (g_osd_win.items) |*w| {
         // local → global vote per window
         var votes: [3][16]u32 = .{ .{0} ** 16, .{0} ** 16, .{0} ** 16 };
