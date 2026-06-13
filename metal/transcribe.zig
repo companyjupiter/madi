@@ -53,6 +53,19 @@ inline fn q4r(w: f32, blk_max: f32) f32 {
 }
 const alloc = std.heap.page_allocator;
 
+// FNV-1a over raw bytes / a Q8 weight (qs+scales) — for the WHASH bit-identity
+// proof (Q8-file load == F16-quantize at the weight level).
+fn fnvBytes(seed: u64, bytes: []const u8) u64 {
+    var x = seed;
+    for (bytes) |b| { x ^= b; x *%= 0x100000001b3; }
+    return x;
+}
+fn fnvQ8(seed: u64, w: anytype, nq: usize, nsc: usize) u64 {
+    var x = fnvBytes(seed, @as([*]const u8, @ptrCast(w.qs))[0..nq]);
+    x = fnvBytes(x, @as([*]const u8, @ptrCast(w.scales))[0 .. nsc * 2]);
+    return x;
+}
+
 // ── safetensors ──────────────────────────────────────────────────────
 // pread-based loader: the 1.6GB data section is NEVER mmap'd/resident. Each
 // tensor is pread into a single reusable scratch buffer, consumed (copied or
@@ -76,6 +89,18 @@ const Sf = struct {
         const json = try alloc.alloc(u8, n);
         if (try std.posix.pread(fd, json, 8) != n) return error.BadHeader;
         return .{ .fd = fd, .off = 8 + n, .size = sz, .json = json };
+    }
+    /// True if a tensor key is present in the header (no data read). Used to
+    /// detect a pre-quantized Q8 model (K.qs present) vs an F16 model.
+    fn has(self: Sf, key: []const u8) bool {
+        var kbuf: [160]u8 = undefined;
+        const q = std.fmt.bufPrint(&kbuf, "\"{s}\"", .{key}) catch return false;
+        return std.mem.indexOf(u8, self.json, q) != null;
+    }
+    fn has2(self: Sf, key: []const u8, suffix: []const u8) bool {
+        var kbuf: [180]u8 = undefined;
+        const q = std.fmt.bufPrint(&kbuf, "\"{s}{s}\"", .{ key, suffix }) catch return false;
+        return std.mem.indexOf(u8, self.json, q) != null;
     }
     /// Raw F16 bytes for a tensor key (null if absent). Valid until the next
     /// raw() call — the returned slice aliases the shared scratch buffer.
@@ -135,6 +160,12 @@ fn upVecF16(sf: Sf, key: []const u8) ![*]f16 {
 const Q8 = dec.Q8w;
 /// Quantize an F16 [rows][dim] tensor to Q8_0 (int8 + per-32-block fp16 scale).
 fn upVecQ8(sf: Sf, key: []const u8, rows: usize, dim: usize) !Q8 {
+    if (sf.has2(key, ".qs")) {
+        const qs = try mtl.allocSlice(i8, rows * dim);
+        const sc = try mtl.allocSlice(f16, rows * (dim / 32));
+        try readQ8(sf, key, qs.ptr, sc.ptr, 0, 0, rows, dim);
+        return .{ .qs = qs.ptr, .scales = sc.ptr };
+    }
     const r = sf.raw(key) orelse return error.MissingTensor;
     const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. rows * dim];
     const nb = dim / 32;
@@ -220,7 +251,29 @@ fn quantInto(u16s: [*]align(1) const u16, qs: [*]i8, sc: [*]f16, out_ch: usize, 
         }
     }
 }
+// Read a pre-quantized weight's qs(int8 [out][in]) + scales(f16 [out][in/32])
+// straight into the dest buffers at element offsets. Copies qs out before
+// reading scales (raw() aliases one shared scratch buffer). Used when the model
+// file is the Q8 build (K.qs present) — bit-identical to in-load quantInto.
+fn readQ8(sf: Sf, key: []const u8, qs: [*]i8, sc: [*]f16, q_off: usize, s_off: usize, out_ch: usize, in_ch: usize) !void {
+    var kb: [180]u8 = undefined;
+    const kq = std.fmt.bufPrint(&kb, "{s}.qs", .{key}) catch unreachable;
+    const rq = sf.raw(kq) orelse return error.MissingTensor;
+    const nq = out_ch * in_ch; // i8 bytes
+    @memcpy(@as([*]u8, @ptrCast(qs + q_off))[0..nq], rq[0..nq]);
+    const ksc = std.fmt.bufPrint(&kb, "{s}.scales", .{key}) catch unreachable;
+    const rs = sf.raw(ksc) orelse return error.MissingTensor;
+    const ns = out_ch * (in_ch / 32) * 2; // f16 bytes
+    @memcpy(@as([*]u8, @ptrCast(sc + s_off))[0..ns], rs[0..ns]);
+}
+
 fn upMatQ8(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize) !enc.Q8 {
+    if (sf.has2(key, ".qs")) {
+        const qs = try mtl.allocSlice(i8, out_ch * in_ch);
+        const sc = try mtl.allocSlice(f16, out_ch * (in_ch / 32));
+        try readQ8(sf, key, qs.ptr, sc.ptr, 0, 0, out_ch, in_ch);
+        return .{ .qs = qs.ptr, .scales = sc.ptr };
+    }
     const r = sf.raw(key) orelse return error.MissingTensor;
     const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr));
     const qs = try mtl.allocSlice(i8, out_ch * in_ch);
@@ -237,6 +290,10 @@ fn upQKVQ8enc(sf: Sf, l: usize) !enc.Q8 {
     const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
     for (names, 0..) |nm, blk| {
         const key = std.fmt.bufPrint(&kbuf, "model.encoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        if (sf.has2(key, ".qs")) {
+            try readQ8(sf, key, qs.ptr, sc.ptr, blk * @as(usize, D) * D, blk * @as(usize, D) * nb, D, D);
+            continue;
+        }
         const r = sf.raw(key) orelse return error.MissingTensor;
         const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr));
         quantInto(u16s, qs.ptr, sc.ptr, D, D, blk * @as(usize, D));
@@ -275,6 +332,10 @@ fn upQKVQ8(sf: Sf, l: usize) !Q8 {
     const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
     for (names, 0..) |nm, blk| {
         const key = std.fmt.bufPrint(&kbuf, "model.decoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
+        if (sf.has2(key, ".qs")) {
+            try readQ8(sf, key, qs.ptr, sc.ptr, blk * @as(usize, D) * D, blk * @as(usize, D) * nb, D, D);
+            continue;
+        }
         const r = sf.raw(key) orelse return error.MissingTensor;
         const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. @as(usize, D) * D];
         const ro = blk * @as(usize, D);
@@ -302,7 +363,7 @@ fn upQKV(sf: Sf, l: usize) ![*]f32 {
     const names = [_][]const u8{ "q_proj", "k_proj", "v_proj" };
     for (names, 0..) |nm, blk| {
         const key = std.fmt.bufPrint(&kbuf, "model.decoder.layers.{d}.self_attn.{s}.weight", .{ l, nm }) catch unreachable;
-        const r = sf.raw(key) orelse return error.MissingTensor;
+            const r = sf.raw(key) orelse return error.MissingTensor;
         const u16s = @as([*]align(1) const u16, @ptrCast(r.ptr))[0 .. @as(usize, D) * D];
         const co = blk * @as(usize, D);
         for (0..D) |o| for (0..D) |i| {
@@ -688,6 +749,20 @@ pub fn main() !void {
     const keep_head = g_q4 and !std.mem.eql(u8, std.posix.getenv("Q4KEEPHEAD") orelse "0", "0");
     if (keep_head) g_q4 = false;
     const tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0
+    // WHASH=1: prove the Q8-file load is bit-identical to F16-quantize at the
+    // WEIGHT level (transcripts are nondeterministic via GPU FP, so the proof
+    // must be on weights). Covers all 4 Q8 loaders: upVecQ8(tok_emb,ow),
+    // upQKVQ8(dec qkv), upMatQ8(enc o_w), upQKVQ8enc(enc qkv).
+    if (std.posix.getenv("WHASH") != null) {
+        const nb = @as(usize, D) / 32;
+        var x: u64 = 0xcbf29ce484222325;
+        x = fnvQ8(x, tok_emb, VOCAB * D, VOCAB * nb);
+        x = fnvQ8(x, dlayers[0].qkvw, 3 * @as(usize, D) * D, 3 * @as(usize, D) * nb);
+        x = fnvQ8(x, dlayers[0].ow, @as(usize, D) * D, @as(usize, D) * nb);
+        x = fnvQ8(x, elayers[0].o_w, @as(usize, D) * D, @as(usize, D) * nb);
+        x = fnvQ8(x, elayers[0].qkv_w, 3 * @as(usize, D) * D, 3 * @as(usize, D) * nb);
+        std.debug.print("[whash] {x}\n", .{x});
+    }
     if (keep_head) g_q4 = true;
     const dec_pe = try upVec(sf, "model.decoder.embed_positions.weight"); // [448][D]
     // all weights now in unified GPU buffers — release the read scratch + fd
