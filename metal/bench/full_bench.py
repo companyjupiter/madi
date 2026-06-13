@@ -4,20 +4,24 @@
 # each file's result is appended to RESULTS jsonl immediately, so a kill/restart
 # skips finished files. Final summary → bench/FULL_BENCH_RESULT.md.
 import os, glob, subprocess, json, statistics, time, sys, fcntl, tempfile
-_lock = open('/tmp/full_bench.lock', 'w')
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # metal/
+# Durable artifact root (gitignored): results/lock/scratch live on the repo disk,
+# NEVER /tmp — a macOS /tmp cleanup once destroyed a full day of bench results.
+RUNS = os.path.join(ROOT, "bench/runs")
+os.makedirs(os.path.join(RUNS, "scratch"), exist_ok=True)
+_lock = open(os.path.join(RUNS, 'full_bench.lock'), 'w')
 try:
     fcntl.flock(_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 except OSError:
     sys.exit('another full_bench.py is running — refusing to race it')
-RTTM_DIR = tempfile.mkdtemp(prefix='fb_rttm_')
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # metal/
+RTTM_DIR = tempfile.mkdtemp(prefix='fb_rttm_', dir=os.path.join(RUNS, "scratch"))
 VOX = os.path.expanduser("~/Downloads/benchmark_samples/voxconverse")
 AUDIO = os.path.expanduser("~/Downloads/benchmark_samples/audio")
 MODEL = os.path.join(ROOT, "assets/model.safetensors")
 BPE = os.path.join(ROOT, "assets/WHISPER_BPE.bin")
 TR = os.path.join(ROOT, "out/transcribe")
 MDEVAL = os.path.join(ROOT, "bench/md-eval.pl")
-RESULTS = os.environ.get("BENCH_RESULTS", "/tmp/full_bench_results.jsonl")
+RESULTS = os.environ.get("BENCH_RESULTS", os.path.join(RUNS, "full_bench_results.jsonl"))
 SUMMARY = os.environ.get("BENCH_SUMMARY", os.path.join(ROOT, "bench/FULL_BENCH_RESULT.md"))
 
 def nspk(r): return len({l.split()[7] for l in open(r) if l.startswith("SPEAKER")})
