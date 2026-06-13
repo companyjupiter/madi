@@ -811,6 +811,12 @@ pub fn main() !void {
     const hallu_guard = !std.mem.eql(u8, std.posix.getenv("HALLU_GUARD") orelse "1", "0");
     const hallu_rms = envF("HALLU_RMS", 0.020);
     const vad_thresh = envF("VAD_THRESH", 0.010);
+    // gate-only AGC: low-gain sources (quiet mic, far speaker; FLEURS masters at
+    // −33 dBFS) were silently dropped by BOTH speech gates (energy RMS and
+    // Silero STFT magnitudes too small → product goes totally silent). Normalize
+    // a scratch copy to a target peak for the gates/detectors ONLY. AGC=0 reverts.
+    const agc_on = !std.mem.eql(u8, std.posix.getenv("AGC") orelse "1", "0");
+    const gate_buf = try alloc.alloc(f32, mel.CHUNK_SAMPLES);
     if (stream) try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{});
     var stdin_buf: [8192]u8 = undefined;
     const stdin_r = std.io.getStdIn().reader();
@@ -904,6 +910,27 @@ pub fn main() !void {
             var vad_thread: ?std.Thread = null;
             var osd_threads: [4]?std.Thread = .{ null, null, null, null };
             var osd_nw_used: usize = 0;
+            // ── gate-only AGC ─────────────────────────────────────────────
+            // Normalize a scratch copy to target peak 0.3 for the speech gates +
+            // trained detectors (energy RMS, Silero, OSD). The encoder keeps the
+            // ORIGINAL samples (level-robust: FLEURS CER 3.99% on raw low-gain).
+            // Normal/loud audio (peak ≥ 0.3) → gain 1.0 → gates see identical
+            // input → bit-exact. cap 32× so true silence stays below the gate.
+            const GATE_PEAK_TARGET: f32 = 0.3;
+            const GATE_GAIN_MAX: f32 = 32.0;
+            var chunk_peak: f32 = 0;
+            for (samples[0..got]) |x| {
+                const a = @abs(x);
+                if (a > chunk_peak) chunk_peak = a;
+            }
+            const gate_gain: f32 = if (agc_on and chunk_peak > 1e-6)
+                @min(GATE_GAIN_MAX, @max(@as(f32, 1.0), GATE_PEAK_TARGET / chunk_peak))
+            else
+                1.0;
+            const gate_samples: []f32 = if (gate_gain == 1.0) samples[0..got] else blk: {
+                for (samples[0..got], 0..) |x, i| gate_buf[i] = x * gate_gain;
+                break :blk gate_buf[0..got];
+            };
             if (osd_model) |*om| {
                 // pyannote OSD on 10 s windows, threaded (≈410 ms each naive;
                 // overlaps the diar embed pool + silero below)
@@ -912,7 +939,7 @@ pub fn main() !void {
                 while (wi * OSD_STEP < got and wi < OSD_NW) : (wi += 1) {
                     const s0 = wi * OSD_STEP;
                     const slen = @min(osd.WIN_SAMPLES, got - s0);
-                    osd_threads[wi % 4] = try std.Thread.spawn(.{}, osdWorker, .{ om, samples[s0 .. s0 + slen], osd_logp[wi * 600 * osd.N_CLASSES ..][0 .. 600 * osd.N_CLASSES], &osd_nf[wi] });
+                    osd_threads[wi % 4] = try std.Thread.spawn(.{}, osdWorker, .{ om, gate_samples[s0 .. s0 + slen], osd_logp[wi * 600 * osd.N_CLASSES ..][0 .. 600 * osd.N_CLASSES], &osd_nf[wi] });
                     if (wi % 4 == 3) { // cap concurrency at 4 OSD threads
                         for (0..4) |q| {
                             if (osd_threads[q]) |t_| {
@@ -929,7 +956,7 @@ pub fn main() !void {
                 // run Silero on its own thread — it overlaps the ResNet diar
                 // embedding pool below (~150 ms each on a 30 s chunk), so the
                 // trained VAD costs ~0 wall time on the gather path
-                vad_thread = try std.Thread.spawn(.{}, vadWorker, .{ vm, samples[0..got], vad_probs, &vad_np });
+                vad_thread = try std.Thread.spawn(.{}, vadWorker, .{ vm, gate_samples, vad_probs, &vad_np });
             }
 
             // diarization: 256-d ResNet34 embedding per 1.5 s window. Non-stream
@@ -1101,7 +1128,7 @@ pub fn main() !void {
         }
         // VAD: skip silent chunks entirely (no mel/encode/decode) — avoids the
         // silence-hallucination junk and saves compute on quiet meeting stretches.
-        const seg_rms = maxWinRms(samples, got); // loudest 1 s window, [-1,1] RMS
+        const seg_rms = maxWinRms(gate_samples, got); // loudest 1 s window, [-1,1] RMS (AGC-normalized)
         if (seg_rms <= vad_thresh or chunk_speech_s < 0.25) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] ({s} — skipped)\n", .{ chunk + 1, n_chunks, t_off, if (seg_rms <= vad_thresh) @as([]const u8, "silence") else "non-speech" });
             if (got < mel.CHUNK_SAMPLES) { reached_end = true; chunk += 1; break :gather; }
