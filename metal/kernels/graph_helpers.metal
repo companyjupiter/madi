@@ -408,3 +408,152 @@ kernel void gemv_q8_bias(
     acc = simd_sum(acc);
     if (tiisg == 0) out_buf[n] = acc + bias[n];
 }
+
+// ── decode-path GEMV epilogue fusions (dispatch reduction) ───────────────
+// Fold the per-output elementwise tail (gelu / residual) into the gemv's
+// thread-0 write while the result is register-hot — removes a separate tiny
+// full-grid kernel launch per layer (the decode is GPU-launch-latency-bound,
+// ~80 kernels/token; gpu-sync is GPU exec, not CPU sync — measured). Output is
+// BIT-IDENTICAL: (acc+bias) is the same f32, gelu input identical, residual is
+// the same x + (acc+bias) add.
+inline float gelu_erf32(float xv) { // EXACT copy of gelu_f32 (Abramowitz-Stegun)
+    float z = xv * 0.7071067811865476f;
+    float az = fabs(z);
+    float sign = (z < 0.0f) ? -1.0f : 1.0f;
+    float t = 1.0f / fma(az, 0.3275911f, 1.0f);
+    float poly = fma(1.061405429f, t, -1.453152027f);
+    poly = fma(poly, t, 1.421413741f);
+    poly = fma(poly, t, -0.284496736f);
+    poly = fma(poly, t, 0.254829592f);
+    poly = poly * t;
+    float ex = exp2(max(-az * az * 1.4426950408889634f, -80.0f));
+    float erf = sign * (1.0f - poly * ex);
+    return 0.5f * xv * (1.0f + erf);
+}
+
+kernel void gemv_q8_bias_gelu(
+    device float* out_buf [[buffer(0)]], device const char* qs [[buffer(1)]],
+    device const half* scales [[buffer(2)]], device const float* x [[buffer(3)]],
+    device const float* bias [[buffer(4)]],
+    constant uint& N [[buffer(5)]], constant uint& K [[buffer(6)]],
+    uint tgid [[threadgroup_position_in_grid]], ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n = tgid * 8 + sgitg;
+    if (n >= N) return;
+    const uint kv = K / 4;
+    device const char4* q4 = (device const char4*)(qs + (ulong)n * K);
+    device const float4* x4 = (device const float4*)x;
+    device const half* srow = scales + (ulong)n * (K / 32);
+    float acc = 0.0f;
+    for (uint p = tiisg; p < kv; p += 32) {
+        const char4 qv = q4[p]; const float4 xv = x4[p]; const float sc = (float)srow[p >> 3];
+        acc += (xv.x * (float)qv.x + xv.y * (float)qv.y + xv.z * (float)qv.z + xv.w * (float)qv.w) * sc;
+    }
+    acc = simd_sum(acc);
+    if (tiisg == 0) out_buf[n] = gelu_erf32(acc + bias[n]);
+}
+
+kernel void gemv_q8_bias_res(
+    device float* out_buf [[buffer(0)]], device const char* qs [[buffer(1)]],
+    device const half* scales [[buffer(2)]], device const float* x [[buffer(3)]],
+    device const float* bias [[buffer(4)]],
+    constant uint& N [[buffer(5)]], constant uint& K [[buffer(6)]],
+    uint tgid [[threadgroup_position_in_grid]], ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n = tgid * 8 + sgitg;
+    if (n >= N) return;
+    const uint kv = K / 4;
+    device const char4* q4 = (device const char4*)(qs + (ulong)n * K);
+    device const float4* x4 = (device const float4*)x;
+    device const half* srow = scales + (ulong)n * (K / 32);
+    float acc = 0.0f;
+    for (uint p = tiisg; p < kv; p += 32) {
+        const char4 qv = q4[p]; const float4 xv = x4[p]; const float sc = (float)srow[p >> 3];
+        acc += (xv.x * (float)qv.x + xv.y * (float)qv.y + xv.z * (float)qv.z + xv.w * (float)qv.w) * sc;
+    }
+    acc = simd_sum(acc);
+    if (tiisg == 0) out_buf[n] = out_buf[n] + acc + bias[n]; // residual fold
+}
+
+// ── fused decoder qkv: gemv + per-section bias + KV-store (5 kernels → 1) ──
+// Self-attn projects xb→[q|k|v] (stacked [3D][D]), then q+=qb, v+=vb (k has no
+// bias), and k,v are stored to the KV cache at pos. Folds gemv + kBias×2 +
+// kStore×2 into one full-grid launch. BIT-IDENTICAL: q=acc+qb, k=acc (cache,
+// no bias), v=acc+vb (cache) — identical to the unfused arithmetic. kAttn reads
+// q from q_out and k,v from the cache, so the k|v stage buffer is never needed.
+kernel void gemv_q8_qkv(
+    device float*        q_out  [[buffer(0)]],  // s.q[0..D] (query + bias)
+    device const char*   qs     [[buffer(1)]],
+    device const half*   scales [[buffer(2)]],
+    device const float*  x      [[buffer(3)]],  // xb
+    device const float*  qb     [[buffer(4)]],  // q bias [D]
+    device const float*  vb     [[buffer(5)]],  // v bias [D]
+    device float*        kc     [[buffer(6)]],  // k cache
+    device float*        vc     [[buffer(7)]],  // v cache
+    device const uint*   pos_ptr[[buffer(8)]],
+    constant uint& D [[buffer(9)]],             // head total dim (= gemv in-dim K)
+    uint tgid [[threadgroup_position_in_grid]], ushort sgitg [[simdgroup_index_in_threadgroup]],
+    ushort tiisg [[thread_index_in_simdgroup]])
+{
+    const uint n = tgid * 8 + sgitg;            // output index in [0, 3D)
+    if (n >= 3 * D) return;
+    const uint kv = D / 4;
+    device const char4*  q4 = (device const char4*)(qs + (ulong)n * D);
+    device const float4* x4 = (device const float4*)x;
+    device const half*   srow = scales + (ulong)n * (D / 32);
+    float acc = 0.0f;
+    for (uint p = tiisg; p < kv; p += 32) {
+        const char4 qv = q4[p]; const float4 xv = x4[p]; const float sc = (float)srow[p >> 3];
+        acc += (xv.x * (float)qv.x + xv.y * (float)qv.y + xv.z * (float)qv.z + xv.w * (float)qv.w) * sc;
+    }
+    acc = simd_sum(acc);
+    if (tiisg != 0) return;
+    const uint pos = pos_ptr[0];
+    if (n < D)          q_out[n] = acc + qb[n];                       // q + bias
+    else if (n < 2 * D) kc[(ulong)pos * D + (n - D)] = acc;           // k → cache (no bias)
+    else                vc[(ulong)pos * D + (n - 2 * D)] = acc + vb[n - 2 * D]; // v + bias → cache
+}
+
+// argmax + confidence (softmax prob of the chosen token) — token output is
+// IDENTICAL to argmax_no_inc; conf[pos] = 1/Σexp(z_i − z_max) is added nearly
+// free (one extra VOCAB pass; logits are 207KB vs the 66MB logit gemv that made
+// them). Suppressed/filtered tokens are already −inf so they don't contribute.
+kernel void argmax_conf(
+    device const float* logits  [[buffer(0)]],
+    device uint*        tokens   [[buffer(1)]],
+    device float*       conf     [[buffer(2)]],
+    device const uint*  pos_ptr  [[buffer(3)]],
+    constant uint& max_len [[buffer(4)]],
+    uint t_id [[thread_position_in_threadgroup]])
+{
+    threadgroup float sv[1024];
+    threadgroup uint  si[1024];
+    float local_max = -INFINITY; uint local_idx = 0;
+    for (uint i = t_id; i < VOCAB; i += 1024) {
+        float v = logits[i];
+        if (v > local_max) { local_max = v; local_idx = i; }
+    }
+    sv[t_id] = local_max; si[t_id] = local_idx;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = 512; s > 0; s >>= 1) {
+        if (t_id < s && sv[t_id + s] > sv[t_id]) { sv[t_id] = sv[t_id + s]; si[t_id] = si[t_id + s]; }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float zmax = sv[0];
+    const uint  amax = si[0];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lsum = 0.0f;
+    for (uint i = t_id; i < VOCAB; i += 1024) lsum += exp(logits[i] - zmax);
+    sv[t_id] = lsum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = 512; s > 0; s >>= 1) {
+        if (t_id < s) sv[t_id] += sv[t_id + s];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    if (t_id == 0) {
+        uint cur = pos_ptr[0];
+        if (cur < max_len) { tokens[cur] = amax; conf[cur] = 1.0f / sv[0]; }
+    }
+}

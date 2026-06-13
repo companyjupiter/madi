@@ -22,14 +22,19 @@ struct EngineProtocolTests {
         // words only count inside the WORD TIMESTAMPS section
         check(d.decode(line: "=== WORD TIMESTAMPS ===") == .wordSectionBegin,
               "word section begin")
-        if case .word(let t0, let t1, let w) = d.decode(line: "[1.20s-1.85s] 안녕하세요") {
-            check(abs(t0 - 1.20) < 1e-6 && abs(t1 - 1.85) < 1e-6 && w == "안녕하세요", "word parse")
+        if case .word(let t0, let t1, let w, let c) = d.decode(line: "[1.20s-1.85s] 안녕하세요") {
+            check(abs(t0 - 1.20) < 1e-6 && abs(t1 - 1.85) < 1e-6 && w == "안녕하세요" && c == 1.0, "word parse (no conf → 1.0)")
         } else { failures += 1; print("FAIL: word not parsed") }
 
         // single-time word [t] (engine sometimes emits onset only)
-        if case .word(let a, let b, let w) = d.decode(line: "[2.00s] hi") {
+        if case .word(let a, let b, let w, _) = d.decode(line: "[2.00s] hi") {
             check(abs(a - 2.0) < 1e-6 && abs(b - 2.0) < 1e-6 && w == "hi", "single-time word")
         } else { failures += 1; print("FAIL: single-time word") }
+
+        // confidence suffix:  word  «conf 0.42»  → text without suffix, conf parsed
+        if case .word(_, _, let w, let c) = d.decode(line: "[3.0s-3.4s] 섹스는  «conf 0.36»") {
+            check(w == "섹스는" && abs(c - 0.36) < 1e-6, "word conf parse: got \"\(w)\" c=\(c)")
+        } else { failures += 1; print("FAIL: word+conf not parsed") }
 
         // a non-word section closes the word context
         _ = d.decode(line: "=== TRANSCRIPTION (31.95s, 16 chunk(s)) ===")

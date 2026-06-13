@@ -31,6 +31,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Audio/Resampler.swift
   "$APP_DIR"/Sovereign/Audio/Segmenter.swift
   "$APP_DIR"/Sovereign/Audio/AudioCapture.swift
+  "$APP_DIR"/Sovereign/Audio/AudioDevices.swift
   "$APP_DIR"/Sovereign/Model/AssetManifest.swift
   "$APP_DIR"/Sovereign/Model/ModelDownloader.swift
   "$APP_DIR"/Sovereign/Transcript/WordMerger.swift
@@ -39,6 +40,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
   "$APP_DIR"/Sovereign/UI/Theme.swift
+  "$APP_DIR"/Sovereign/UI/Theme+Conf.swift
   "$APP_DIR"/Sovereign/UI/ContentView.swift
   "$APP_DIR"/Sovereign/UI/TranscriptView.swift
   "$APP_DIR"/Sovereign/UI/ModelGateView.swift

@@ -1,6 +1,7 @@
 // ContentView.swift — main window: model gate, transcript, record controls.
 
 import SwiftUI
+import CoreAudio
 import UniformTypeIdentifiers
 
 struct ContentView: View {
@@ -26,10 +27,24 @@ struct ContentView: View {
             LevelMeter(level: session.level)
                 .frame(width: Theme.Size.meterW, height: Theme.Size.meterH)
             Spacer()
+            micPicker
             phaseLabel
             exportMenu
         }
         .padding(Theme.Space.controlBar)
+    }
+
+    private var micPicker: some View {
+        Picker("", selection: $session.inputDeviceID) {
+            Label("System Default", systemImage: "mic").tag(AudioDeviceID?.none)
+            ForEach(session.availableInputs) { dev in
+                Text(dev.name).tag(AudioDeviceID?.some(dev.id))
+            }
+        }
+        .labelsHidden()
+        .frame(maxWidth: 180)
+        .disabled(session.phase == .recording) // device binds at record start
+        .help("Input microphone (pick before recording)")
     }
 
     @ViewBuilder private var recordButton: some View {

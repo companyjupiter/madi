@@ -4,14 +4,30 @@
 import Foundation
 
 enum Exporters {
+    /// Markdown: low-confidence words become *italic* (markdown has no color) so
+    /// the SAVED doc still flags exactly the words to double-check — the export
+    /// keeps the live view's confidence signal instead of dropping it.
     static func markdown(_ lines: [Line], names: [Int: String] = [:]) -> String {
         var s = "# Transcript\n\n"
+        s += "> *기울임* 표시된 단어는 인식 신뢰도가 낮습니다 — 검토 권장.\n\n"
         for l in lines {
             let who = names[l.speaker] ?? "Speaker \(l.speaker)"
+            let body = renderWords(l.words)
             let mark = l.overlapSpeakers
                 .map { " ⟨+\(names[$0] ?? "Speaker \($0)") 겹침⟩" }
                 .joined()
-            s += "- **[\(timecode(l.start))] \(who)** \(l.text)\(mark)\n"
+            s += "- **[\(timecode(l.start))] \(who)** \(body)\(mark)\n"
+        }
+        return s
+    }
+
+    /// Join words; wrap below-threshold ones in markdown italics.
+    private static func renderWords(_ words: [Word]) -> String {
+        var s = ""
+        for (i, w) in words.enumerated() {
+            if i > 0, w.text.first.map({ !",.!?…".contains($0) }) ?? true { s += " " }
+            let t = w.text.trimmingCharacters(in: .whitespaces)
+            s += (w.conf < Theme.confThreshold && !t.isEmpty) ? "*\(t)*" : w.text
         }
         return s
     }

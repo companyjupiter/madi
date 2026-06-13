@@ -42,7 +42,23 @@ struct TranscriptView: View {
     }
 
     private func attributed(_ line: Line) -> AttributedString {
-        var s = AttributedString(line.text)
+        var s = AttributedString("")
+        for (i, w) in line.words.enumerated() {
+            // space before, except before glued punctuation
+            if i > 0, w.text.first.map({ !",.!?…".contains($0) }) ?? true {
+                s += AttributedString(" ")
+            }
+            var run = AttributedString(w.text)
+            if w.conf < Theme.confThreshold {
+                // low confidence: amber + underline + slight fade — the user's eye
+                // lands on exactly the words to double-check (validated: real errors
+                // like 섹스→색스, 빛공예→빛공해 fall here).
+                run.foregroundColor = Theme.Colors.lowConf
+                run.underlineStyle = .single
+                run.foregroundColor = Theme.Colors.lowConf.opacity(0.85)
+            }
+            s += run
+        }
         for ov in line.overlapSpeakers {
             var marker = AttributedString("  ⟨+\(name(ov)) 겹침⟩")
             marker.foregroundColor = Theme.Colors.speaker(ov)

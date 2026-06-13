@@ -1,6 +1,7 @@
 // SettingsView.swift — input/diarization/model settings.
 
 import SwiftUI
+import CoreAudio
 
 struct SettingsView: View {
     @Bindable var session: SessionController
@@ -17,6 +18,12 @@ struct SettingsView: View {
 
     private var transcription: some View {
         Form {
+            Picker("Microphone", selection: $session.inputDeviceID) {
+                Text("System Default").tag(AudioDeviceID?.none)
+                ForEach(session.availableInputs) { dev in
+                    Text(dev.name).tag(AudioDeviceID?.some(dev.id))
+                }
+            }
             Toggle("Speaker diarization", isOn: $session.diarize)
             Toggle("Overlapped-speech detection", isOn: $session.osd)
             Picker("Language", selection: $session.languageTokenID) {

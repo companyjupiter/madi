@@ -24,6 +24,8 @@ final class AudioCapture {
     var onSegment: ((Double, URL) -> Void)?
     /// 0…1 input level for the meter.
     var onLevel: ((Float) -> Void)?
+    /// Specific input device (nil = system default).
+    var inputDeviceID: AudioDeviceID?
 
     private let engine = AVAudioEngine()
     private var resampler: Resampler?
@@ -40,6 +42,7 @@ final class AudioCapture {
     // MARK: live mic
 
     func start() throws {
+        if let dev = inputDeviceID { AudioDevices.setInput(dev, on: engine) } // pick the chosen mic
         let input = engine.inputNode
         let hwFormat = input.outputFormat(forBus: 0)
         guard let rs = Resampler(from: hwFormat) else {
