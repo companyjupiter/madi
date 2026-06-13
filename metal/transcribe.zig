@@ -595,7 +595,7 @@ pub fn main() !void {
     const f_emb_ind = try mtl.getFunction("emb_lookup_indirect_q8");
     const f_pe_ind = try mtl.getFunction("pos_embed_add_indirect");
     const f_step = try mtl.getFunction("step_advance");
-    const f_argmax = try mtl.getFunction("argmax_no_inc");
+    const f_argmax = try mtl.getFunction("argmax_conf"); // argmax + per-token confidence
     const f_filt_plain = try mtl.getFunction("logit_filter_indirect"); // no-ts greedy (default; best code-switch fidelity)
     const f_filt_ts = try mtl.getFunction("ts_rules_indirect"); // ts-token decode (collapse-rescue mode)
     const f_suppress = try mtl.getFunction("suppress_list");
@@ -790,6 +790,7 @@ pub fn main() !void {
     const d_tokens = try mtl.allocSlice(u32, MAX_TOK);
     const d_pos = (try mtl.allocSlice(u32, 1)).ptr;
     const d_logits = (try mtl.allocSlice(f32, VOCAB)).ptr;
+    const d_conf = (try mtl.allocSlice(f32, MAX_TOK)).ptr; // per-token softmax confidence (unified)
     for (SEED, 0..) |s, i| d_tokens[i] = s;
 
     const suppress = try readBinU32(bpe_dir(bpe_path), "suppress_tokens.bin");
@@ -1448,7 +1449,7 @@ pub fn main() !void {
                     try kSuppress(f_suppress, d_logits, d_suppress.ptr, n_suppress);
                     try kFilt(if (ts_mode) f_filt_ts else f_filt_plain, d_logits, d_tokens.ptr, d_pos, sample_begin);
                     try kStep(f_step, d_pos); // pos += 1
-                    try kArgmax(f_argmax, d_logits, d_tokens.ptr, d_pos, MAX_TOK); // tokens[pos] = argmax
+                    try kArgmaxConf(f_argmax, d_logits, d_tokens.ptr, d_conf, d_pos, MAX_TOK); // tokens[pos]=argmax, conf[pos]=prob
                 }
                 try mtl.commitCommandBuffer();
                 enc_ns += rec_t.read();
@@ -1476,7 +1477,7 @@ pub fn main() !void {
                 const text = try bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]);
                 try chunk_text.appendSlice(text);
                 const env_off = @min(@as(usize, seek_fr) * 20, senv.len);
-                try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, PL, t_off + pass_off, pass_got, senv[env_off..]);
+                try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, PL, t_off + pass_off, pass_got, senv[env_off..], d_conf);
                 host_ns += ht.read();
             }
             if (!ts_mode) break :seek; // plain mode: single pass, no seek
@@ -2033,7 +2034,7 @@ fn energyEnvelope(s: []const f32, env: []f32) usize {
     return n;
 }
 
-fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, seed_len: u32, t_off: f32, got_samples: usize, env: []const f32) !void {
+fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, seed_len: u32, t_off: f32, got_samples: usize, env: []const f32, conf_buf: [*]const f32) !void {
     const SL: usize = seed_len; // this pass's seed length (prompt + sot/lang/task)
     const toks = try loadBpe(bpe_path);
     const E: usize = ENC_SEQ;
@@ -2194,24 +2195,27 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
 
     // group BPE sub-words into words (space-prefixed token = new word),
     // keeping each word's DTW span [onset, next word's onset) in 1 ms units
-    const WSpan = struct { s0: usize, s1: usize, txt: []u8 };
+    const WSpan = struct { s0: usize, s1: usize, txt: []u8, conf: f32 };
     var words = std.ArrayList(WSpan).init(alloc);
     defer words.deinit();
     var word = std.ArrayList(u8).init(alloc);
     var w_first: usize = 0; // first TEXT-token index of the open word
+    var wconf: f32 = 1.0; // min softmax-confidence over the open word's tokens
     for (0..N) |i| {
         const ti = SL + tpos.items[i];
         const tok_bytes = if (out_tokens[ti] < toks.len) toks[out_tokens[ti]] else "";
         const starts_word = tok_bytes.len > 0 and tok_bytes[0] == ' ';
         if (starts_word and word.items.len > 0) {
-            try words.append(.{ .s0 = @as(usize, ts_frame[w_first]) * 20, .s1 = @as(usize, ts_frame[i]) * 20, .txt = try alloc.dupe(u8, word.items) });
+            try words.append(.{ .s0 = @as(usize, ts_frame[w_first]) * 20, .s1 = @as(usize, ts_frame[i]) * 20, .txt = try alloc.dupe(u8, word.items), .conf = wconf });
             word.clearRetainingCapacity();
+            wconf = 1.0;
         }
         if (word.items.len == 0) w_first = i;
         try word.appendSlice(tok_bytes);
+        wconf = @min(wconf, conf_buf[ti]); // word conf = min over its subword tokens
     }
     if (word.items.len > 0)
-        try words.append(.{ .s0 = @as(usize, ts_frame[w_first]) * 20, .s1 = @as(usize, ts_frame[N]) * 20, .txt = try alloc.dupe(u8, word.items) });
+        try words.append(.{ .s0 = @as(usize, ts_frame[w_first]) * 20, .s1 = @as(usize, ts_frame[N]) * 20, .txt = try alloc.dupe(u8, word.items), .conf = wconf });
 
     // Energy snap (whisper.cpp exp_compute_token_level_timestamps VAD parity):
     // snap word ONSETS to acoustic voice edges (judged against the raw-wave
@@ -2282,11 +2286,16 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
         }
     }
 
+    const conf_on = std.posix.getenv("CONF") != null; // validation dump
     try out.print("\n=== WORD TIMESTAMPS ===\n", .{});
     for (words.items) |w| {
         const ts: f32 = t_off + @as(f32, @floatFromInt(w.s0)) * 0.001;
         const te: f32 = t_off + @as(f32, @floatFromInt(w.s1)) * 0.001;
-        try out.print("  [{d:.2}s-{d:.2}s] {s}\n", .{ ts, te, w.txt });
+        if (conf_on) {
+            try out.print("  [{d:.2}s-{d:.2}s] {s}  «conf {d:.2}»\n", .{ ts, te, w.txt, w.conf });
+        } else {
+            try out.print("  [{d:.2}s-{d:.2}s] {s}\n", .{ ts, te, w.txt });
+        }
         try g_words.append(.{ .t = ts, .txt = w.txt });
     }
 }
@@ -2447,10 +2456,10 @@ fn kStep(f: mtl.Function, pos: [*]u32) !void {
     const s = [_]usize{PS};
     try mtl.dispatch(f, .{ 1, 1, 1 }, .{ 1, 1, 1 }, &p, &s);
 }
-fn kArgmax(f: mtl.Function, logits: [*]f32, toks: [*]u32, pos: [*]u32, max_len: u32) !void {
-    var a0 = logits; var a1 = toks; var a2 = pos; var ml = max_len;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&ml) };
-    const s = [_]usize{ PS, PS, PS, U };
+fn kArgmaxConf(f: mtl.Function, logits: [*]f32, toks: [*]u32, conf: [*]f32, pos: [*]u32, max_len: u32) !void {
+    var a0 = logits; var a1 = toks; var a2 = conf; var a3 = pos; var ml = max_len;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&ml) };
+    const s = [_]usize{ PS, PS, PS, PS, U };
     try mtl.dispatch(f, .{ 1, 1, 1 }, .{ 1024, 1, 1 }, &p, &s);
 }
 fn kFilt(f: mtl.Function, logits: [*]f32, toks: [*]u32, pos: [*]u32, sample_begin: u32) !void {

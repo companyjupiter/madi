@@ -515,3 +515,46 @@ kernel void gemv_q8_qkv(
     else if (n < 2 * D) kc[(ulong)pos * D + (n - D)] = acc;           // k → cache (no bias)
     else                vc[(ulong)pos * D + (n - 2 * D)] = acc + vb[n - 2 * D]; // v + bias → cache
 }
+
+// argmax + confidence (softmax prob of the chosen token) — token output is
+// IDENTICAL to argmax_no_inc; conf[pos] = 1/Σexp(z_i − z_max) is added nearly
+// free (one extra VOCAB pass; logits are 207KB vs the 66MB logit gemv that made
+// them). Suppressed/filtered tokens are already −inf so they don't contribute.
+kernel void argmax_conf(
+    device const float* logits  [[buffer(0)]],
+    device uint*        tokens   [[buffer(1)]],
+    device float*       conf     [[buffer(2)]],
+    device const uint*  pos_ptr  [[buffer(3)]],
+    constant uint& max_len [[buffer(4)]],
+    uint t_id [[thread_position_in_threadgroup]])
+{
+    threadgroup float sv[1024];
+    threadgroup uint  si[1024];
+    float local_max = -INFINITY; uint local_idx = 0;
+    for (uint i = t_id; i < VOCAB; i += 1024) {
+        float v = logits[i];
+        if (v > local_max) { local_max = v; local_idx = i; }
+    }
+    sv[t_id] = local_max; si[t_id] = local_idx;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = 512; s > 0; s >>= 1) {
+        if (t_id < s && sv[t_id + s] > sv[t_id]) { sv[t_id] = sv[t_id + s]; si[t_id] = si[t_id + s]; }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float zmax = sv[0];
+    const uint  amax = si[0];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    // pass 2: partition function Σ exp(z − zmax)
+    float lsum = 0.0f;
+    for (uint i = t_id; i < VOCAB; i += 1024) lsum += exp(logits[i] - zmax);
+    sv[t_id] = lsum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = 512; s > 0; s >>= 1) {
+        if (t_id < s) sv[t_id] += sv[t_id + s];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    if (t_id == 0) {
+        uint cur = pos_ptr[0];
+        if (cur < max_len) { tokens[cur] = amax; conf[cur] = 1.0f / sv[0]; }
+    }
+}
