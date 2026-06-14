@@ -38,9 +38,13 @@ pub const Kernels = struct {
     gemv_bias_gelu: mtl.Function, // MLP up: gemv+bias+gelu fused (drops kGelu)
     gemv_bias_res: mtl.Function, // MLP down: gemv+bias+residual fused (drops kRes)
     qkv: mtl.Function, // self-attn qkv: gemv+bias×2+store×2 fused (drops 4 kernels)
+    cvt32: mtl.Function, // f32→f16 (batched-decode projection inputs)
+    cvt16: mtl.Function, // f16→f32 (batched-decode projection outputs)
 
     pub fn load() mtl.Error!Kernels {
         return .{
+            .cvt32 = try mtl.getFunction("cvt_f32_f16"),
+            .cvt16 = try mtl.getFunction("cvt_f16_f32"),
             .ln = try mtl.getFunction("layer_norm"),
             .brln = try mtl.getFunction("bias_res_ln"),
             .bias = try mtl.getFunction("bias_add"),
@@ -235,4 +239,89 @@ pub fn decodeBlock(
     // epilogue (drops kGelu + kRes; bit-identical). x += down(gelu(up(xb))).
     try kGemvQ8BiasEpi(K.gemv_bias_gelu, s.mh, s.xb, L.m0w, L.m0b, MLP, D);
     try kGemvQ8BiasEpi(K.gemv_bias_res, x, s.mh, L.m2w, L.m2b, D, MLP);
+}
+
+// ── multi-chunk batched decode (Phase J) ─────────────────────────────────────
+fn kCvt32(K: Kernels, dst: [*]f16, src: [*]f32, n: u32) !void {
+    var a0 = dst; var a1 = src; var nn = n;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn) };
+    const s = [_]usize{ PS, PS, U };
+    try mtl.dispatch(K.cvt32, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+fn kCvt16(K: Kernels, dst: [*]f32, src: [*]f16, n: u32) !void {
+    var a0 = dst; var a1 = src; var nn = n;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn) };
+    const s = [_]usize{ PS, PS, U };
+    try mtl.dispatch(K.cvt16, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+
+/// Per-layer weights pre-dequantized to F16 in [K][N] (matmulF16Batched B-layout)
+/// — done ONCE per decode (amortized over all tokens). qkvw is [D][3D], ow/cqw/
+/// cow are [D][D], m0w is [D][MLP], m2w is [MLP][D].
+pub const WF16 = struct { qkvw: [*]f16, ow: [*]f16, cqw: [*]f16, cow: [*]f16, m0w: [*]f16, m2w: [*]f16 };
+
+/// Batched scratch. xb/ao/mo=[B·D], qkv=[B·3D], mh=[B·MLP], ca_sc=[NH·ENC_SEQ];
+/// in16/out16 are F16 GEMM staging sized [B·MLP].
+pub const BScratch = struct {
+    xb: [*]f32, qkv: [*]f32, ao: [*]f32, mo: [*]f32, mh: [*]f32, ca_sc: [*]f32,
+    in16: [*]f16, out16: [*]f16,
+};
+
+inline fn proj(K: Kernels, s: BScratch, in_f32: [*]f32, w16: [*]f16, out_f32: [*]f32, B: u32, N: u32, Kk: u32) !void {
+    try kCvt32(K, s.in16, in_f32, B * Kk);
+    try mtl.matmulF16Batched(s.in16, w16, s.out16, B, N, Kk);
+    try kCvt16(K, out_f32, s.out16, B * N);
+}
+
+/// One decoder block over B independent token-streams (slots), residual stream
+/// x_b[B][D]. Quality-EQUIVALENT to running decodeBlock per slot (projections via
+/// batched GEMM; attention/KV-store per slot). Cross-attn alignment-score capture
+/// is omitted here (handled in the integration's word-timestamp path). Each slot
+/// has its own self-KV (skc/svc[b]), cross-KV (ckc/cvc[b]), and GPU pos (pos[b]).
+pub fn decodeBlockBatched(
+    K: Kernels, L: Layer, Wf: WF16, B: u32, x_b: [*]f32, s: BScratch,
+    skc: []const [*]f32, svc: []const [*]f32, ckc: []const [*]f16, cvc: []const [*]f16, pos: []const [*]u32,
+) !void {
+    // self-attn LN (batched: rows=B)
+    try kLN(K, x_b, s.xb, L.aln_w, L.aln_b, D, B);
+    // qkv projection (batched GEMM) → [B][3D] = [b][q|k|v]
+    try proj(K, s, s.xb, Wf.qkvw, s.qkv, B, 3 * D, D);
+    var b: u32 = 0;
+    while (b < B) : (b += 1) {
+        const row = s.qkv + @as(usize, b) * 3 * D;
+        try kBias(K, row, L.qb, D, D);             // q += qb
+        try kBias(K, row + 2 * D, L.vb, D, D);     // v += vb
+        try kStore(K, skc[b], row + D, D, pos[b]); // k → cache (no bias)
+        try kStore(K, svc[b], row + 2 * D, D, pos[b]); // v → cache
+        try kAttn(K, s.ao + @as(usize, b) * D, row, skc[b], svc[b], pos[b]);
+    }
+    // out proj + residual + cross-LN (per slot)
+    try proj(K, s, s.ao, Wf.ow, s.mo, B, D, D);
+    b = 0;
+    while (b < B) : (b += 1) {
+        const o = @as(usize, b) * D;
+        try kBRLN(K, x_b + o, s.mo + o, L.ob, s.xb + o, L.caln_w, L.caln_b, D);
+    }
+    // cross-Q (batched) + bias (contiguous → batched) → cross-attn per slot
+    try proj(K, s, s.xb, Wf.cqw, s.ao, B, D, D); // reuse s.ao as cross-Q out
+    try kBias(K, s.ao, L.cqb, B * D, D);
+    b = 0;
+    while (b < B) : (b += 1) {
+        const o = @as(usize, b) * D;
+        try kCA(K, s.mo + o, s.ao + o, ckc[b], cvc[b], ENC_SEQ, s.ca_sc, 0); // cross-attn → s.mo[b]
+    }
+    // cross-out proj + residual + mlp-LN
+    try proj(K, s, s.mo, Wf.cow, s.ao, B, D, D); // cross-out into s.ao
+    b = 0;
+    while (b < B) : (b += 1) {
+        const o = @as(usize, b) * D;
+        try kBRLN(K, x_b + o, s.ao + o, L.cob, s.xb + o, L.mln_w, L.mln_b, D);
+    }
+    // MLP: up (+bias+gelu, batched) → down (+bias, batched) → residual per slot
+    try proj(K, s, s.xb, Wf.m0w, s.mh, B, MLP, D);
+    try kBias(K, s.mh, L.m0b, B * MLP, MLP);
+    try kGelu(K, s.mh, B * MLP);
+    try proj(K, s, s.mh, Wf.m2w, s.mo, B, D, MLP);
+    try kBias(K, s.mo, L.m2b, B * D, D);
+    try kRes(K, x_b, s.mo, B * D); // x += down
 }
