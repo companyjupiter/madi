@@ -22,6 +22,8 @@ enum EngineEvent: Equatable {
     case speakerFix(SpeakerLabel)     // SPKFIX
     case speakerOverlap(SpeakerLabel) // SPKOV
     case flushEnd
+    case progressTotal(Int)           // file mode: total 30s chunks to process
+    case progressChunk(Int)           // file mode: chunk K just finished
     case other(String)                // unrecognized line (perf/log) — kept for diagnostics
 }
 
@@ -42,6 +44,14 @@ enum EngineProtocol {
 
             if line.hasPrefix("[stream] ready") { return .ready }
             if line == "<<FLUSH_END>>" { return .flushEnd }
+
+            // file-mode progress: "[8] audio: … → N chunk(s) …" / "[perf] chunk K: …"
+            if line.hasPrefix("[8] audio:"), let arrow = line.range(of: "→ ") {
+                if let n = Int(line[arrow.upperBound...].prefix(while: \.isNumber)) { return .progressTotal(n) }
+            }
+            if line.hasPrefix("[perf] chunk ") {
+                if let k = Int(line.dropFirst("[perf] chunk ".count).prefix(while: \.isNumber)) { return .progressChunk(k) }
+            }
 
             if line.hasPrefix("=== WORD TIMESTAMPS") {
                 inWords = true

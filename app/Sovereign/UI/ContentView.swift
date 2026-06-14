@@ -36,27 +36,62 @@ struct ContentView: View {
     // MARK: transcript pane (left, flexible)
 
     private var transcriptPane: some View {
-        ZStack {
-            if session.transcript.lines.isEmpty {
-                emptyState
-            } else {
-                TranscriptView(lines: session.transcript.lines, names: session.speakerNames)
+        VStack(spacing: 0) {
+            if case .processing = session.phase { progressBanner }
+            ZStack {
+                if session.transcript.lines.isEmpty {
+                    emptyState
+                } else {
+                    TranscriptView(lines: session.transcript.lines, names: session.speakerNames)
+                }
+                if dropTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Theme.Colors.accent, style: StrokeStyle(lineWidth: 2, dash: [8]))
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.Colors.accent.opacity(0.06)))
+                        .overlay(Label("드롭하여 전사", systemImage: "tray.and.arrow.down")
+                            .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.accent))
+                        .padding(8).allowsHitTesting(false)
+                }
             }
-            if dropTargeted {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Theme.Colors.accent, style: StrokeStyle(lineWidth: 2, dash: [8]))
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.Colors.accent.opacity(0.06)))
-                    .overlay(Label("드롭하여 전사", systemImage: "tray.and.arrow.down")
-                        .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.accent))
-                    .padding(8).allowsHitTesting(false)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // determinate file-transcription progress: filename + chunk bar (driven by
+    // the engine's "→ N chunk(s)" + per-chunk "[perf]" lines)
+    private var progressBanner: some View {
+        let done = session.chunksDone, total = session.chunksTotal
+        let frac = total > 0 ? Double(done) / Double(total) : 0
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("전사 중 — \(session.fileName)").font(Theme.Fonts.body).lineLimit(1)
+                Spacer()
+                if total > 0 {
+                    Text("\(done)/\(total) 청크 · \(Int(frac * 100))%")
+                        .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+                }
+            }
+            if total > 0 {
+                ProgressView(value: frac).tint(Theme.Colors.accent)
+            } else {
+                ProgressView(value: 0).tint(Theme.Colors.accent)   // model loading / first chunk
+                    .opacity(0.4)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .background(Theme.Colors.accent.opacity(0.07))
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            if isBusy {
+            if case .processing = session.phase {
+                Image(systemName: "waveform.badge.magnifyingglass")
+                    .font(.system(size: 40)).foregroundStyle(Theme.Colors.accent.opacity(0.5))
+                Text("전사 결과가 곧 여기에 표시됩니다…")
+                    .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
+            } else if isBusy {
                 ProgressView()
                 Text(phaseText).font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
             } else {
