@@ -19,6 +19,11 @@ final class SessionController: EngineProcessDelegate {
     var level: Float = 0
     let transcript = TranscriptStore()
 
+    // file-mode progress (nil when not transcribing a file)
+    private(set) var fileName: String = ""
+    private(set) var chunksDone = 0
+    private(set) var chunksTotal = 0
+
     var diarize = true
     var inputDeviceID: AudioDeviceID?          // nil = system default mic
     var availableInputs: [AudioInputDevice] { AudioDevices.inputs() }
@@ -77,6 +82,8 @@ final class SessionController: EngineProcessDelegate {
         guard phase == .idle || phase == .done || isError else { return }
         guard AssetManifest.modelIsValid() else { phase = .error("model not ready"); return }
         transcript.reset()
+        fileName = url.lastPathComponent
+        chunksDone = 0; chunksTotal = 0
         phase = .processing
 
         var cfg = makeConfig()
@@ -105,7 +112,11 @@ final class SessionController: EngineProcessDelegate {
     }
 
     func engine(didEmit event: EngineEvent) {
-        transcript.ingest(event)
+        switch event {
+        case .progressTotal(let n): chunksTotal = n
+        case .progressChunk(let k): chunksDone = max(chunksDone, k)
+        default: transcript.ingest(event)
+        }
     }
 
     func engineDidFlush() { finalizeOnce() }
