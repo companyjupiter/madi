@@ -27,7 +27,7 @@ struct ContentView: View {
             sidePanel
         }
         .dropDestination(for: URL.self) { urls, _ in
-            guard canDrop, let url = urls.first(where: isAudioFile) else { return false }
+            guard canDrop, let url = urls.first(where: isMediaFile) else { return false }
             session.transcribeFile(url)
             return true
         } isTargeted: { dropTargeted = $0 }
@@ -91,6 +91,11 @@ struct ContentView: View {
                     .font(.system(size: 40)).foregroundStyle(Theme.Colors.accent.opacity(0.5))
                 Text("전사 결과가 곧 여기에 표시됩니다…")
                     .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
+            } else if case .error(let msg) = session.phase {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 40)).foregroundStyle(.orange)
+                Text(msg).font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center).padding(.horizontal, 32)
             } else if isBusy {
                 ProgressView()
                 Text(phaseText).font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
@@ -200,7 +205,7 @@ struct ContentView: View {
             Image(systemName: "tray.and.arrow.down")
                 .font(.system(size: 26))
                 .foregroundStyle(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary)
-            Text("오디오 파일\n드래그 앤 드롭")
+            Text("오디오·영상 파일\n드래그 앤 드롭")
                 .multilineTextAlignment(.center)
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
             Button("파일 선택…") { chooseFile() }
@@ -231,15 +236,18 @@ struct ContentView: View {
     private var isBusy: Bool {
         switch session.phase { case .idle, .done, .error: return false; default: return true }
     }
-    private func isAudioFile(_ url: URL) -> Bool {
-        ["wav", "m4a", "mp3", "aiff", "aif", "caf", "aac", "flac", "mp4", "mov"]
-            .contains(url.pathExtension.lowercased())
+    // accept anything the system recognizes as audio or audiovisual media (104+
+    // types) — not a hardcoded extension list. Unknown extensions are let through
+    // and AudioDecode surfaces a clear error if they can't actually be decoded.
+    private func isMediaFile(_ url: URL) -> Bool {
+        guard let t = UTType(filenameExtension: url.pathExtension.lowercased()) else { return true }
+        return t.conforms(to: .audio) || t.conforms(to: .audiovisualContent) || t.conforms(to: .movie)
     }
     private func chooseFile() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.audio, .movie]
+        panel.allowedContentTypes = [.audio, .audiovisualContent, .movie]
         if panel.runModal() == .OK, let url = panel.url { session.transcribeFile(url) }
     }
     private func export(_ type: UTType, _ writer: @escaping (URL) throws -> Void) {

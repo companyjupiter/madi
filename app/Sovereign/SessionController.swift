@@ -92,7 +92,10 @@ final class SessionController: EngineProcessDelegate {
             let wav: URL
             do { wav = try AudioDecode.toWav16k(url) }
             catch {
-                Task { @MainActor in self.phase = .error("오디오 디코드 실패: \(error.localizedDescription)") }
+                let name = url.lastPathComponent
+                Task { @MainActor in
+                    self.phase = .error("'\(name)' 을(를) 열 수 없습니다 — 지원하지 않는 형식이거나 손상된 파일입니다.")
+                }
                 return
             }
             Task { @MainActor in self.runFileEngine(wav) }
