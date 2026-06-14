@@ -19,6 +19,8 @@ struct TranscriptView: View {
                 }
                 .padding(Theme.Space.window)
             }
+            // mouse-drag selection + ⌘C copy across the whole transcript
+            .textSelection(.enabled)
             .onChange(of: lines.count) { _, _ in
                 if let last = lines.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
