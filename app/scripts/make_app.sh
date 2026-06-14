@@ -71,15 +71,29 @@ for f in "${ASSETS[@]}"; do
   fi
 done
 
+# ── 2b. optional: bundle the model INSIDE the .app (self-contained DMG) ──────
+# Must happen BEFORE signing so the 867 MB model is sealed by the bundle
+# signature. AssetManifest.modelURL then prefers this copy → no download.
+MODEL_Q8="$ROOT/metal/bench/runs/model.q8.safetensors"
+if [ "${BUNDLE_MODEL:-0}" = "1" ]; then
+  if [ -f "$MODEL_Q8" ]; then
+    echo "[2b] bundling model into app ($(du -h "$MODEL_Q8" | cut -f1)) — self-contained"
+    cp "$MODEL_Q8" "$BUNDLE/Contents/Resources/model.q8.safetensors"
+  else
+    echo "[2b] ❌ BUNDLE_MODEL=1 but model missing ($MODEL_Q8) — run bench/quantize_q8.py"; exit 1
+  fi
+fi
+
 # ── 3. ad-hoc sign for local development ────────────────────────────────────
 echo "[3/4] ad-hoc codesign (local dev; Developer ID via sign_notarize.sh)"
 codesign --force --sign - "$BUNDLE/Contents/MacOS/transcribe"
 codesign --force --sign - --entitlements "$APP_DIR/Sovereign/Sovereign.entitlements" "$BUNDLE"
 
 # ── 4. optional: seed the model so first run skips the (placeholder) download ─
-# model name must match AssetManifest.model.name (the Q8 build)
-MODEL_Q8="$ROOT/metal/bench/runs/model.q8.safetensors"
-if [ "${SEED_MODEL:-0}" = "1" ]; then
+# model name must match AssetManifest.model.name (the Q8 build). MODEL_Q8 set above.
+if [ "${BUNDLE_MODEL:-0}" = "1" ]; then
+  echo "[4/4] (model bundled in-app; no App Support seed needed)"
+elif [ "${SEED_MODEL:-0}" = "1" ]; then
   SUP="$HOME/Library/Application Support/Sovereign"
   mkdir -p "$SUP"
   if [ -f "$MODEL_Q8" ]; then
