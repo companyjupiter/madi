@@ -1,6 +1,22 @@
 # Multi-chunk batched decode — design & staged plan
 
-## STATUS (locked — next session resumes here)
+## STATUS (J COMPLETE — integration refuted on speed, primitives kept)
+
+**Outcome:** the full integration was built and is **correct** (quality-equivalent
+transcript, end-to-end), but the **speedup is refuted**: batched is 22% *slower*
+at nb=2 and only ~7% faster at nb=8 (525 vs 492 tok/s; crossover ~nb=5-6). The
+recon's 6–9× projection headroom does NOT carry to the whole decode because
+**attention stays per-slot (B-loop, un-batched)** and the F32↔F16 conversions +
+cross-KV setup overhead cancel the projection gain. Per the "default-ON only if
+it's good" rule, the integration was **reverted** (`transcribe.zig` clean). The
+real lever is a **batched attention kernel** (remove the per-slot B-loop) —
+significant Metal work, deferred. **Kept** (merged): `decodeBlockBatched` +
+`cvt_f32_f16` (`decoder.zig`) and the primitive/loop tests — a verified
+foundation for a future batched-attention effort. See PERF_LOG `J`.
+
+---
+
+## (historical) Original staged plan
 
 **Done + verified (merged):** recon (PR #35, decode is occupancy-bound 5.8× off
 ceiling; batched GEMM 6–9×), spec (#36), quality-equivalence correction (#37),
