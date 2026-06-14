@@ -11,7 +11,7 @@ import CoreAudio
 @MainActor
 final class SessionController: EngineProcessDelegate {
     enum Phase: Equatable {
-        case idle, engineStarting, ready, recording, flushing, done
+        case idle, engineStarting, ready, recording, processing, flushing, done
         case error(String)
     }
 
@@ -28,6 +28,20 @@ final class SessionController: EngineProcessDelegate {
 
     private var engine: EngineProcess?
     private let capture = AudioCapture()
+    private var pendingFileURL: URL?           // set when a dropped file awaits the engine
+
+    private var isError: Bool { if case .error = phase { return true }; return false }
+
+    private func makeConfig() -> EngineProcess.Config {
+        EngineProcess.Config(
+            binaryURL: Bundle.main.bundleURL
+                .appendingPathComponent("Contents/MacOS/transcribe"),
+            modelURL: AssetManifest.modelURL,
+            bpeURL: AssetManifest.bundledBPE,
+            assetsDir: AssetManifest.bundledAssetsDir,
+            diarize: diarize, osd: osd,
+            languageTokenID: languageTokenID, maxSpeakers: 8, voiceprintsDir: nil)
+    }
 
     // MARK: session lifecycle
 
@@ -37,17 +51,9 @@ final class SessionController: EngineProcessDelegate {
         }
         transcript.reset()
         phase = .engineStarting
+        pendingFileURL = nil
 
-        let cfg = EngineProcess.Config(
-            binaryURL: Bundle.main.bundleURL
-                .appendingPathComponent("Contents/MacOS/transcribe"),
-            modelURL: AssetManifest.modelURL,
-            bpeURL: AssetManifest.bundledBPE,
-            assetsDir: AssetManifest.bundledAssetsDir,
-            diarize: diarize, osd: osd,
-            languageTokenID: languageTokenID, maxSpeakers: 8, voiceprintsDir: nil)
-
-        let e = EngineProcess(config: cfg)
+        let e = EngineProcess(config: makeConfig())
         e.delegate = self
         engine = e
 
@@ -57,6 +63,24 @@ final class SessionController: EngineProcessDelegate {
         }
         capture.onLevel = { [weak self] lvl in self?.level = lvl }
 
+        do { try e.start() }
+        catch { phase = .error("engine start failed: \(error.localizedDescription)") }
+    }
+
+    /// Drag-&-drop: transcribe an audio FILE through the same resident engine +
+    /// pipeline as the mic (diarization, OSD, confidence, exports all reused).
+    /// The file is fed off the main actor (FileFeeder) so a long file never
+    /// freezes the UI. Ignored while a session is already busy.
+    func transcribeFile(_ url: URL) {
+        guard phase == .idle || phase == .done || isError else { return }
+        guard AssetManifest.modelIsValid() else { phase = .error("model not ready"); return }
+        transcript.reset()
+        phase = .engineStarting
+        pendingFileURL = url
+
+        let e = EngineProcess(config: makeConfig())
+        e.delegate = self
+        engine = e
         do { try e.start() }
         catch { phase = .error("engine start failed: \(error.localizedDescription)") }
     }
@@ -71,9 +95,30 @@ final class SessionController: EngineProcessDelegate {
     // MARK: EngineProcessDelegate
 
     func engineDidBecomeReady() {
-        phase = .ready
-        do { try capture.start(); phase = .recording }
-        catch { phase = .error("mic start failed: \(error.localizedDescription)") }
+        guard let fileURL = pendingFileURL else {
+            // live mic path
+            phase = .ready
+            do { try capture.start(); phase = .recording }
+            catch { phase = .error("mic start failed: \(error.localizedDescription)") }
+            return
+        }
+        // dropped-file path: stream the file's audio off the main actor, then flush
+        pendingFileURL = nil
+        phase = .processing
+        let e = engine
+        let first = capture.firstSegmentSeconds
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sovereign-drop", isDirectory: true)
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try FileFeeder.feed(fileURL, tempDir: tmp, firstSegmentSeconds: first) { offset, segURL in
+                    e?.feed(offset: offset, wav: segURL)
+                }
+                Task { @MainActor in self.phase = .flushing; self.engine?.flush() }
+            } catch {
+                Task { @MainActor in self.phase = .error("file read failed: \(error.localizedDescription)") }
+            }
+        }
     }
 
     func engine(didEmit event: EngineEvent) {
