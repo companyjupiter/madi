@@ -1,5 +1,28 @@
 # Multi-chunk batched decode — design & staged plan
 
+## STATUS (locked — next session resumes here)
+
+**Done + verified (merged):** recon (PR #35, decode is occupancy-bound 5.8× off
+ceiling; batched GEMM 6–9×), spec (#36), quality-equivalence correction (#37),
+implementation recipe (#38), and the **make-or-break primitive proof** (#39,
+`metal/test_batchproj.zig`): `deqW16` (Q8→F16, once) + `matmulF16Batched` over B
+slots is **correct** (CPU-F32 reverse-verify max|Δ|=4.35e-3) and **5.7–7.4×
+cheaper/row at B=8** (deq amortized). Two traps caught: `mul_mm_q8` is slow (use
+`matmulF16Batched`); deq-per-call dominates (amortize once/layer).
+
+**Next entry point:** write `decodeBlockBatched(B)` in `decoder.zig` per the
+recipe below, gated `BATCHDEC`, then a numerical-equivalence test vs running
+`decodeBlock` B times (gate: max|Δ| < 5e-3 per block). The intricate part is
+replicating the **fused `kQkv`** in batched form: after the qkv GEMM, split each
+slot's `[3D]` row into q/k/v, add `qb` to q and `vb` to v (no k bias), store k/v
+to that slot's `skc/svc` at its `pos`, then per-slot `kAttn`. The F32→F16 convert
+needed for the matmul input is a one-line `cvt_f32_f16` kernel (mirror of the
+existing `cvt_f16_f32` in `encoder_ops.metal`). Then: ragged-EOT masking (Stage
+2), per-slot rescue/seek retire-to-sequential (Stage 3), WER/CER A/B (gate).
+
+---
+
+
 **Goal.** Spend the measured occupancy headroom (J-recon: single-token decode runs
 5.8× off the bandwidth ceiling; a batched GEMM is **6–9× cheaper per token** at
 M=8 — `metal/test_specgemm.zig`) **without a draft model**, by decoding a long
