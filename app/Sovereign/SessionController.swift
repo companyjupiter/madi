@@ -86,8 +86,23 @@ final class SessionController: EngineProcessDelegate {
         chunksDone = 0; chunksTotal = 0
         phase = .processing
 
+        // Decode ANY container (m4a/mp3/aac/flac/wav…) to a normalized 16k PCM WAV
+        // off the main actor first — the engine's file reader only accepts PCM WAV.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let wav: URL
+            do { wav = try AudioDecode.toWav16k(url) }
+            catch {
+                Task { @MainActor in self.phase = .error("오디오 디코드 실패: \(error.localizedDescription)") }
+                return
+            }
+            Task { @MainActor in self.runFileEngine(wav) }
+        }
+    }
+
+    private func runFileEngine(_ wav: URL) {
+        guard phase == .processing else { return }   // user may have navigated away
         var cfg = makeConfig()
-        cfg.fileURL = url                  // native FILE mode (fast batched + offline diar)
+        cfg.fileURL = wav                  // native FILE mode (fast batched + offline diar)
         let e = EngineProcess(config: cfg)
         e.delegate = self
         engine = e
