@@ -67,6 +67,27 @@ retire such a slot from the batch and finish it on the existing per-slot path
 3. **No live regression:** live/stream path (B=1) is byte-identical and untouched
    (it never enters the batched path).
 
+## Implementation recipe (worked out — NO new Metal kernels)
+
+The batched step reuses every existing kernel; only the projections move to a
+batched GEMM. Per decode (once, amortized over ~150 tokens): **pre-dequant** each
+Q8 decoder weight to F16 (`deqW16`, the cross-attn path's template). Then a
+`decodeBlockBatched(B)` per token-step:
+
+| op | per-slot today | batched |
+|---|---|---|
+| LN / cross-LN / mlp-LN | `kLN(rows=1)` | `kLN(rows=B)` — already takes `rows`, **free** |
+| qkv / out / cross-q / cross-o / mlp-up / mlp-down | fused Q8 `kGemvQ8*` | `matmulF16Batched(x[B×D], w_f16)` → `[B×N]` (the 6–9× win), then the **standalone** epilogue kernels (`bias_add`, `gelu_f32`, `gpu_residual`, `bias_res_ln`) over the `[B×N]` slab |
+| KV-store (k/v → cache) | fused in `kQkv` | `gpu_kv_store` per slot (B-loop) at each slot's `pos` |
+| self-attn / cross-attn | `kAttn`/`kCA` (NH heads, 1 tok) | B-loop `kAttn`/`kCA` per slot (per-slot KV) |
+| logit | `kLogitGemv` (Q8) | `matmulF16Batched(xb[B×D], tok_emb_f16[D×VOCAB])` → `[B×VOCAB]` (9.5× win) |
+
+`matmulF16Batched(a,b,c,m,n,k)` = `C[m×n]=A[m×k]·B[k×n]`; `deqW16` already emits
+the `[k×n]` F16 layout it wants (cross-attn proves it). Attention stays per-slot
+(cheap, and the projections carry the 86% layer cost + the 9.5× logit win).
+
+Live path (B=1) never enters this — it keeps the proven fused Q8 GEMV kernels.
+
 ## Risks / fallbacks
 
 - The decode kernels are hand-tuned single-token GEMVs; the batched path is a
