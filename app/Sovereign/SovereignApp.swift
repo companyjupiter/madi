@@ -32,6 +32,7 @@ struct SovereignApp: App {
         }
         .windowStyle(.titleBar)
         .windowResizability(.contentMinSize)
+        .defaultSize(width: 1100, height: 720)
 
         Settings { SettingsView(session: session, downloader: downloader) }
     }
