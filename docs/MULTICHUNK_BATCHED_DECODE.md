@@ -7,12 +7,19 @@ file's independent 30 s chunks *together*: at decode step *t*, compute token-*t*
 for all B in-flight chunks in **one batched forward** instead of B sequential
 single-token forwards.
 
-**Why it's safe.** Chunks are fully independent (chunk *i*'s token-*t* never
-depends on chunk *j*). So the batched result is **byte-identical** to sequential
-per-chunk decode by construction — same arithmetic, just packed B rows per GEMM.
-**File-mode only** (live capture has one chunk in flight); exactly the stated
-constraint. Default-ON in file mode when ≥2 chunks are batched; `BATCHDEC=0`
-disables (toggle).
+**Why it's safe — quality-equivalent, NOT bit-identical.** Chunks are fully
+independent (chunk *i*'s token-*t* never depends on chunk *j*), so the batched
+result is *mathematically* the same computation. BUT the speedup comes from a
+**batched GEMM** whose FP arithmetic (accumulation order, F16 vs the per-token
+Q8 GEMV) differs bit-for-bit from the per-slot `kGemvQ8` path — even the verified
+Q8-direct GEMM is only `max|Δ|≈5e-4`, not bit-exact. So a borderline argmax can
+flip and a token can differ. The bar is therefore **quality-equivalence**
+(WER/CER A/B shows no regression), the same standard the engine's existing
+run-to-run GPU nondeterminism already meets — NOT bit-identity. (Bit-identity is
+the right bar for *speculative* decoding, where a verify step makes it exact;
+multi-chunk batching has no verify, so it's quality-equivalent.) **File-mode
+only** (live capture has one chunk in flight). Default-ON in file mode with ≥2
+chunks; `BATCHDEC=0` disables (toggle).
 
 ## Current shape (what we batch over)
 
@@ -50,12 +57,15 @@ retire such a slot from the batch and finish it on the existing per-slot path
 
 ## Verification protocol (career-rigor)
 
-1. **Byte-identity** is the contract: batched vs sequential transcript must be
-   identical on jfk (1 chunk → no batching, unchanged), a 2-chunk file, and a
-   long multi-chunk file (devops_ko). Token-level compare, not just text.
+1. **Quality-equivalence** is the contract (not bit-identity — see above):
+   batched vs sequential must show **no WER/CER regression** on the standard
+   bench (LibriSpeech test-other + FLEURS-ko), the same bar the engine's
+   run-to-run nondeterminism already meets. jfk (1 chunk) takes the per-slot path
+   unchanged.
 2. **Speedup** measured as decode tok/s and end-to-end file wall-clock, batched
    vs `BATCHDEC=0`, same binary.
-3. **No live regression:** live/stream path (B=1) is byte-identical and untouched.
+3. **No live regression:** live/stream path (B=1) is byte-identical and untouched
+   (it never enters the batched path).
 
 ## Risks / fallbacks
 
