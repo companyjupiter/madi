@@ -32,7 +32,6 @@ final class SessionController: EngineProcessDelegate {
 
     private var engine: EngineProcess?
     private let capture = AudioCapture()
-    private var pendingFileURL: URL?           // set when a dropped file awaits the engine
 
     private var isError: Bool { if case .error = phase { return true }; return false }
 
@@ -55,7 +54,6 @@ final class SessionController: EngineProcessDelegate {
         }
         transcript.reset()
         phase = .engineStarting
-        pendingFileURL = nil
 
         let e = EngineProcess(config: makeConfig())
         e.delegate = self
@@ -79,10 +77,11 @@ final class SessionController: EngineProcessDelegate {
         guard phase == .idle || phase == .done || isError else { return }
         guard AssetManifest.modelIsValid() else { phase = .error("model not ready"); return }
         transcript.reset()
-        phase = .engineStarting
-        pendingFileURL = url
+        phase = .processing
 
-        let e = EngineProcess(config: makeConfig())
+        var cfg = makeConfig()
+        cfg.fileURL = url                  // native FILE mode (fast batched + offline diar)
+        let e = EngineProcess(config: cfg)
         e.delegate = self
         engine = e
         do { try e.start() }
@@ -98,48 +97,34 @@ final class SessionController: EngineProcessDelegate {
 
     // MARK: EngineProcessDelegate
 
+    // live mic path only (file mode never emits `[stream] ready`)
     func engineDidBecomeReady() {
-        guard let fileURL = pendingFileURL else {
-            // live mic path
-            phase = .ready
-            do { try capture.start(); phase = .recording }
-            catch { phase = .error("mic start failed: \(error.localizedDescription)") }
-            return
-        }
-        // dropped-file path: stream the file's audio off the main actor, then flush
-        pendingFileURL = nil
-        phase = .processing
-        let e = engine
-        let first = capture.firstSegmentSeconds
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sovereign-drop", isDirectory: true)
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                try FileFeeder.feed(fileURL, tempDir: tmp, firstSegmentSeconds: first) { offset, segURL in
-                    e?.feed(offset: offset, wav: segURL)
-                }
-                Task { @MainActor in self.phase = .flushing; self.engine?.flush() }
-            } catch {
-                Task { @MainActor in self.phase = .error("file read failed: \(error.localizedDescription)") }
-            }
-        }
+        phase = .ready
+        do { try capture.start(); phase = .recording }
+        catch { phase = .error("mic start failed: \(error.localizedDescription)") }
     }
 
     func engine(didEmit event: EngineEvent) {
         transcript.ingest(event)
     }
 
-    func engineDidFlush() {
+    func engineDidFlush() { finalizeOnce() }
+
+    func engine(didTerminate code: Int32) {
+        // file mode exits 0 on its own after <<FLUSH_END>>; finalize if a late
+        // exit beats the FLUSH_END line (finalizeOnce is idempotent).
+        if code == 0 { finalizeOnce(); return }
+        if phase != .done, phase != .flushing {
+            phase = .error("engine exited (\(code))")
+        }
+    }
+
+    private func finalizeOnce() {
+        guard phase != .done else { return }
         transcript.finalize()
         engine?.terminate()
         engine = nil
         phase = .done
-    }
-
-    func engine(didTerminate code: Int32) {
-        if phase != .done, phase != .flushing {
-            phase = .error("engine exited (\(code))")
-        }
     }
 
     // MARK: export
