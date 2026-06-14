@@ -8,6 +8,10 @@ import SwiftUI
 struct TranscriptView: View {
     let lines: [Line]
     let names: [Int: String]
+    var onRename: ((Int, String) -> Void)? = nil   // speaker id → new name
+
+    @State private var editingSpeaker: Int? = nil
+    @State private var draftName: String = ""
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -26,6 +30,16 @@ struct TranscriptView: View {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
+            .alert("화자 이름", isPresented: Binding(
+                get: { editingSpeaker != nil },
+                set: { if !$0 { editingSpeaker = nil } })
+            ) {
+                TextField("이름 (예: 김부장)", text: $draftName)
+                Button("저장") { if let s = editingSpeaker { onRename?(s, draftName) }; editingSpeaker = nil }
+                Button("취소", role: .cancel) { editingSpeaker = nil }
+            } message: {
+                Text("이 화자의 모든 발언과 내보내기에 적용됩니다.")
+            }
         }
     }
 
@@ -34,8 +48,18 @@ struct TranscriptView: View {
             HStack(spacing: Theme.Space.chipGap) {
                 Circle().fill(Theme.Colors.speaker(line.speaker))
                     .frame(width: Theme.Size.speakerDot, height: Theme.Size.speakerDot)
-                Text(name(line.speaker)).font(Theme.Fonts.speaker)
-                    .foregroundStyle(Theme.Colors.speaker(line.speaker))
+                // click the speaker chip to give them a name (applies to all
+                // their lines). A Button (not onTapGesture) so the tap wins over
+                // the transcript's .textSelection.
+                Button {
+                    draftName = names[line.speaker] ?? ""
+                    editingSpeaker = line.speaker
+                } label: {
+                    Text(name(line.speaker)).font(Theme.Fonts.speaker)
+                        .foregroundStyle(Theme.Colors.speaker(line.speaker))
+                }
+                .buttonStyle(.plain)
+                .help("클릭하여 이름 지정")
                 Text(timecode(line.start)).font(Theme.Fonts.timestamp)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }

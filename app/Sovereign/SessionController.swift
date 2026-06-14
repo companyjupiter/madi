@@ -35,6 +35,14 @@ final class SessionController: EngineProcessDelegate {
     }()
     var speakerNames: [Int: String] = [:]
 
+    /// Rename a speaker (applies to all their lines + exports). Empty clears it
+    /// back to "Speaker N". Names are per-transcription (speaker ids don't carry
+    /// across files), so they reset on each new session.
+    func renameSpeaker(_ id: Int, to name: String) {
+        let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty { speakerNames[id] = nil } else { speakerNames[id] = t }
+    }
+
     private var engine: EngineProcess?
     private let capture = AudioCapture()
 
@@ -58,6 +66,7 @@ final class SessionController: EngineProcessDelegate {
             phase = .error("model not ready"); return
         }
         transcript.reset()
+        speakerNames = [:]
         phase = .engineStarting
 
         let e = EngineProcess(config: makeConfig())
@@ -82,6 +91,7 @@ final class SessionController: EngineProcessDelegate {
         guard phase == .idle || phase == .done || isError else { return }
         guard AssetManifest.modelIsValid() else { phase = .error("model not ready"); return }
         transcript.reset()
+        speakerNames = [:]
         fileName = url.lastPathComponent
         chunksDone = 0; chunksTotal = 0
         phase = .processing

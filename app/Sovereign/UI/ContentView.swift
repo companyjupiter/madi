@@ -42,7 +42,8 @@ struct ContentView: View {
                 if session.transcript.lines.isEmpty {
                     emptyState
                 } else {
-                    TranscriptView(lines: session.transcript.lines, names: session.speakerNames)
+                    TranscriptView(lines: session.transcript.lines, names: session.speakerNames,
+                                   onRename: { session.renameSpeaker($0, to: $1) })
                 }
                 if dropTargeted {
                     RoundedRectangle(cornerRadius: 12)
