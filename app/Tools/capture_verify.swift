@@ -26,6 +26,7 @@ struct CaptureVerify {
             case "resample" where args.count == 4: try resample(args[2], args[3])
             case "segment"  where args.count >= 4: try segment(args)
             case "segtest": segtest()
+            case "segtest-asym": segtestAsym()
             case "compare"  where args.count == 4: try compare(args[2], args[3])
             default: usage(); exit(2)
             }
@@ -38,6 +39,7 @@ struct CaptureVerify {
           capture_verify resample <in.wav> <out16k.wav>
           capture_verify segment  <in16k.wav> <outdir> [segSec] [ovlSec]
           capture_verify segtest
+          capture_verify segtest-asym
           capture_verify compare  <a16k.wav> <b16k.wav>
         """)
     }
@@ -110,18 +112,41 @@ struct CaptureVerify {
         assertInvariants(segs, total: total, seg: seg, ovl: ovl, rate: rate, ramp: true, expectSegN: segN, expectOvlN: ovlN)
     }
 
+    /// Same ramp, but with the ASYMMETRIC first window (first=3s, rest=10s). Proves
+    /// the short first segment loses/duplicates/misaligns NOTHING: body-sum, overlap
+    /// continuity, offset drift, and exact ramp reconstruction must all still hold.
+    static func segtestAsym() {
+        let rate = 16000, seg = 10.0, ovl = 3.0, first = 3.0
+        let total = 53 * rate
+        let src = (0..<total).map { Int16($0 % 32768) }
+        var segmenter = Segmenter(sampleRate: rate, segmentSeconds: seg, overlapSeconds: ovl,
+                                  firstSegmentSeconds: first)
+        var segs: [Segmenter.Segment] = []
+        var i = 0
+        while i < total { let n = min(1234, total - i); segs.append(contentsOf: segmenter.push(Array(src[i..<i+n]))); i += n }
+        if let f = segmenter.flush() { segs.append(f) }
+        // first body must be exactly 3s; first text would paint ~7s sooner than seg=10
+        print("  asym: seg0 body=\(segs.first?.bodyCount ?? -1) (expect \(Int(first*Double(rate)))), \(segs.count) segs total")
+        assertInvariants(segs, total: total, seg: seg, ovl: ovl, rate: rate, ramp: true,
+                         expectSegN: Int(seg*Double(rate)), expectOvlN: Int(ovl*Double(rate)), firstSeg: first)
+    }
+
     /// Shared invariant checker: body length, overlap continuity, offset drift,
     /// and (ramp mode) exact-sample reconstruction.
     static func assertInvariants(_ segs: [Segmenter.Segment], total: Int, seg: Double,
                                  ovl: Double, rate: Int, ramp: Bool = false,
-                                 expectSegN: Int = 0, expectOvlN: Int = 0) {
+                                 expectSegN: Int = 0, expectOvlN: Int = 0,
+                                 firstSeg: Double = 0) {
         let segN = Int(seg * Double(rate)), ovlN = Int(ovl * Double(rate))
+        // asymmetric first window: seg 0 body is firstSegN (0 ⇒ symmetric = segN)
+        let firstSegN = firstSeg > 0 ? Int(firstSeg * Double(rate)) : segN
         var fail = 0
         func check(_ c: Bool, _ m: String) { if !c { fail += 1; print("  FAIL: \(m)") } }
 
-        // 1) every non-final segment has body == segN
+        // 1) every non-final segment has its expected body (seg 0 may be short)
         for (k, s) in segs.enumerated() where k < segs.count - 1 {
-            check(s.bodyCount == segN, "seg \(k) body=\(s.bodyCount) != \(segN)")
+            let want = k == 0 ? firstSegN : segN
+            check(s.bodyCount == want, "seg \(k) body=\(s.bodyCount) != \(want)")
         }
         // 2) bodies sum to total (no sample lost/duplicated)
         let bodySum = segs.reduce(0) { $0 + $1.bodyCount }

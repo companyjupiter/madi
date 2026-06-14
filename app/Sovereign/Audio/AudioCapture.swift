@@ -19,6 +19,9 @@ final class AudioCapture {
     /// SEG/OVERLAP mirror the runner defaults; user-tunable in Settings.
     var segmentSeconds: Double = 10 { didSet { segmenter.segmentSeconds = segmentSeconds } }
     var overlapSeconds: Double = 3 { didSet { segmenter.overlapSeconds = overlapSeconds } }
+    /// Short first window so the first transcript paints in ~3 s instead of ~10 s
+    /// (later windows keep the full `segmentSeconds` context — no accuracy loss).
+    var firstSegmentSeconds: Double = 3 { didSet { segmenter.firstSegmentSeconds = firstSegmentSeconds } }
 
     /// (global start offset seconds, segment wav url)
     var onSegment: ((Double, URL) -> Void)?
@@ -101,7 +104,8 @@ final class AudioCapture {
     // MARK: plumbing
 
     private func resetSegmenter() {
-        segmenter = Segmenter(segmentSeconds: segmentSeconds, overlapSeconds: overlapSeconds)
+        segmenter = Segmenter(segmentSeconds: segmentSeconds, overlapSeconds: overlapSeconds,
+                              firstSegmentSeconds: firstSegmentSeconds)
         segIndex = 0
     }
 

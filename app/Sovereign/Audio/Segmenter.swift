@@ -18,20 +18,32 @@ struct Segmenter {
     let sampleRate: Int
     var segmentSeconds: Double
     var overlapSeconds: Double
+    /// ASYMMETRIC FIRST WINDOW: the first segment closes after this many seconds
+    /// (short → fast time-to-first-text), then every later window is the full
+    /// `segmentSeconds` (full Whisper context, no accuracy loss after the first).
+    /// Defaults to `segmentSeconds` (symmetric) when not specified.
+    var firstSegmentSeconds: Double
 
     private var pending: [Int16] = []      // not-yet-emitted samples of the current window
     private var overlapTail: [Int16] = []   // last OVERLAP seconds of the previous window
     private var emittedBody: Int = 0         // total NON-overlap samples emitted (offset clock)
+    private var segmentsEmitted: Int = 0     // how many bodies cut so far (selects window size)
 
     init(sampleRate: Int = Int(WavWriter.sampleRate),
-         segmentSeconds: Double = 10, overlapSeconds: Double = 3) {
+         segmentSeconds: Double = 10, overlapSeconds: Double = 3,
+         firstSegmentSeconds: Double? = nil) {
         self.sampleRate = sampleRate
         self.segmentSeconds = segmentSeconds
         self.overlapSeconds = overlapSeconds
+        self.firstSegmentSeconds = firstSegmentSeconds ?? segmentSeconds
     }
 
     var segSamples: Int { Int(segmentSeconds * Double(sampleRate)) }
+    var firstSegSamples: Int { Int(firstSegmentSeconds * Double(sampleRate)) }
     var overlapSamples: Int { Int(overlapSeconds * Double(sampleRate)) }
+
+    /// Body length the NEXT cut targets: the short first window, then the steady one.
+    private var nextBodyLen: Int { segmentsEmitted == 0 ? firstSegSamples : segSamples }
 
     /// A segment ready to write: its global start offset (seconds) and samples
     /// (overlap tail + body).
@@ -45,7 +57,7 @@ struct Segmenter {
     mutating func push(_ frames: [Int16]) -> [Segment] {
         pending.append(contentsOf: frames)
         var out: [Segment] = []
-        while pending.count >= segSamples { out.append(cut(bodyLen: segSamples)) }
+        while pending.count >= nextBodyLen { out.append(cut(bodyLen: nextBodyLen)) }
         return out
     }
 
@@ -64,6 +76,7 @@ struct Segmenter {
         let seg = Segment(offset: offset, samples: samples, bodyCount: body.count)
         emittedBody += body.count
         overlapTail = Array(body.suffix(overlapSamples))
+        segmentsEmitted += 1
         return seg
     }
 }

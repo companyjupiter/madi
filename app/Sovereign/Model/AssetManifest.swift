@@ -38,7 +38,19 @@ enum AssetManifest {
         return dir
     }
 
-    static var modelURL: URL { supportDir.appendingPathComponent(model.name) }
+    /// A model bundled INSIDE the .app (self-contained DMG build) takes
+    /// precedence: the engine reads it straight from the read-only, code-signed
+    /// bundle — no download, no copy, works fully offline on first launch.
+    /// nil for the hosted-download product build (Resources has no model).
+    static var bundledModelURL: URL? {
+        guard let res = Bundle.main.resourceURL else { return nil }
+        let u = res.appendingPathComponent(model.name)
+        return FileManager.default.fileExists(atPath: u.path) ? u : nil
+    }
+
+    /// Where the engine loads the model from: the bundled copy if present
+    /// (self-contained build), else App Support (download / dev-seed build).
+    static var modelURL: URL { bundledModelURL ?? supportDir.appendingPathComponent(model.name) }
 
     /// Bundled small assets dir (engine cwd for relative loads).
     static var bundledAssetsDir: URL {
