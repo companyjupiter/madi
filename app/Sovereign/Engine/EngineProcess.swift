@@ -37,6 +37,7 @@ final class EngineProcess {
         var languageTokenID: Int?   // nil = auto
         var maxSpeakers = 8
         var voiceprintsDir: URL?
+        var fileURL: URL?           // set ⇒ native FILE mode (batched, fast); nil ⇒ live STREAM
     }
 
     private let config: Config
@@ -47,19 +48,27 @@ final class EngineProcess {
     func start() throws {
         process.executableURL = config.binaryURL
         process.currentDirectoryURL = config.assetsDir   // engine reads some assets by relative path
-        process.arguments = [
-            config.modelURL.path,
-            "/dev/null",                                  // wav arg ignored in STREAM mode
-            config.bpeURL.path,
-        ]
+
         var env = ProcessInfo.processInfo.environment
-        env["STREAM"] = "1"
         env["CONF"] = "1" // emit per-word confidence «conf x.xx» for low-conf highlighting
         env["DIAR"] = config.diarize ? "1" : "0"
         env["OSD"] = config.osd ? "1" : "0"
         env["DIAR_MAXK"] = String(config.maxSpeakers)
         if let lang = config.languageTokenID { env["WHISPER_LANG_ID"] = String(lang) }
-        if let vp = config.voiceprintsDir { env["VOICEPRINTS"] = vp.path }
+
+        if let file = config.fileURL {
+            // native FILE mode: 30s-chunk batched decode + offline diarization —
+            // ~3x faster than feeding the file through the live path, fewer amber
+            // artifacts. APP_FILE makes it emit streaming SPK lines + <<FLUSH_END>>
+            // so this same parser/flow finalizes it.
+            process.arguments = [config.modelURL.path, file.path, config.bpeURL.path]
+            env["APP_FILE"] = "1"
+        } else {
+            // live STREAM mode: model resident, segments fed on stdin
+            process.arguments = [config.modelURL.path, "/dev/null", config.bpeURL.path]
+            env["STREAM"] = "1"
+            if let vp = config.voiceprintsDir { env["VOICEPRINTS"] = vp.path }
+        }
         process.environment = env
 
         process.standardInput = stdinPipe

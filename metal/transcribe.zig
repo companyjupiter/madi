@@ -1738,6 +1738,16 @@ pub fn main() !void {
         }
         try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
         try attributeTranscript(out);
+        // App file mode: re-emit the offline speaker timeline as streaming
+        // `SPK <gt> <id> <dur>` lines so the macOS app's existing parser
+        // attributes each word by time, then signal completion like the stream
+        // path so the app finalizes + enables export. Gated on APP_FILE.
+        if (std.posix.getenv("APP_FILE") != null) {
+            for (g_segs.items) |s| {
+                try out.print("SPK {d:.3} {d} {d:.3}\n", .{ s.a, s.spk, s.b - s.a });
+            }
+            try out.print("<<FLUSH_END>>\n", .{});
+        }
         break :job; // single-file mode runs exactly once
     }
 
@@ -2502,11 +2512,16 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     }
 
     const conf_on = std.posix.getenv("CONF") != null; // validation dump
+    // App file mode: the FIRST word of each chunk has no left context, so its
+    // confidence is a diffuse-prior artifact (e.g. "Right «conf 0.07»"), not real
+    // uncertainty. Omit its conf so the app doesn't paint it amber (absent conf
+    // ⇒ app treats as 1.0). Gated on APP_FILE → CLI/bench output unchanged.
+    const app_file = std.posix.getenv("APP_FILE") != null;
     try out.print("\n=== WORD TIMESTAMPS ===\n", .{});
-    for (words.items) |w| {
+    for (words.items, 0..) |w, i| {
         const ts: f32 = t_off + @as(f32, @floatFromInt(w.s0)) * 0.001;
         const te: f32 = t_off + @as(f32, @floatFromInt(w.s1)) * 0.001;
-        if (conf_on) {
+        if (conf_on and !(app_file and i == 0)) {
             try out.print("  [{d:.2}s-{d:.2}s] {s}  «conf {d:.2}»\n", .{ ts, te, w.txt, w.conf });
         } else {
             try out.print("  [{d:.2}s-{d:.2}s] {s}\n", .{ ts, te, w.txt });
