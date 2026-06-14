@@ -520,3 +520,15 @@ kernel void cvt_f16_f32(
     if (gid >= n) return;
     dst[gid] = (float)src[gid];
 }
+
+// f32 → f16 elementwise copy (multi-chunk batched decode: F32 residual stream →
+// F16 for the batched projection GEMMs (matmulF16Batched takes half activations)).
+kernel void cvt_f32_f16(
+    device half*        dst [[buffer(0)]],
+    device const float* src [[buffer(1)]],
+    constant uint& n [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= n) return;
+    dst[gid] = (half)src[gid];
+}

@@ -10,15 +10,20 @@ slots is **correct** (CPU-F32 reverse-verify max|Δ|=4.35e-3) and **5.7–7.4×
 cheaper/row at B=8** (deq amortized). Two traps caught: `mul_mm_q8` is slow (use
 `matmulF16Batched`); deq-per-call dominates (amortize once/layer).
 
-**Next entry point:** write `decodeBlockBatched(B)` in `decoder.zig` per the
-recipe below, gated `BATCHDEC`, then a numerical-equivalence test vs running
-`decodeBlock` B times (gate: max|Δ| < 5e-3 per block). The intricate part is
-replicating the **fused `kQkv`** in batched form: after the qkv GEMM, split each
-slot's `[3D]` row into q/k/v, add `qb` to q and `vb` to v (no k bias), store k/v
-to that slot's `skc/svc` at its `pos`, then per-slot `kAttn`. The F32→F16 convert
-needed for the matmul input is a one-line `cvt_f32_f16` kernel (mirror of the
-existing `cvt_f16_f32` in `encoder_ops.metal`). Then: ragged-EOT masking (Stage
-2), per-slot rescue/seek retire-to-sequential (Stage 3), WER/CER A/B (gate).
+**`decodeBlockBatched` DONE + verified** (`decoder.zig`, `cvt_f32_f16` added):
+the full block over B slots — fused-`kQkv` replicated in batched form (qkv split /
+qb·vb bias / per-slot KV-store), per-slot self+cross attention, batched-GEMM
+projections + F16 conversions — is quality-equivalent to `decodeBlock`×B at
+**max|Δ|=2.0e-3, rel=4.6e-4** (`test_decblock_batch.zig`, gate <5e-3). Cross-attn
+alignment-score capture is omitted in the block (added in the word-timestamp
+integration). quark atoms: `fn__decodeBlockBatched`, `metal_kernel__cvt_f32_f16`.
+
+**Next entry point — decode-loop integration (`transcribe.zig`):** promote the
+per-slot decode buffers to B-major, deq the layer weights to `WF16` once per
+decode, replace the per-token per-slot `decodeBlock` loop with a `decodeBlockBatched`
+loop over the in-flight slots, then per-slot LN+logit+argmax/EOT. Stages: ragged-
+EOT masking (slots finish at different counts), per-slot rescue/seek retire-to-
+sequential, then the WER/CER A/B gate. `BATCHDEC=0` keeps the proven per-slot path.
 
 ---
 
