@@ -23,7 +23,11 @@ final class SessionController: EngineProcessDelegate {
     var inputDeviceID: AudioDeviceID?          // nil = system default mic
     var availableInputs: [AudioInputDevice] { AudioDevices.inputs() }
     var osd = true
-    var languageTokenID: Int?
+    // restored from the last launch (0 / unset = auto-detect)
+    var languageTokenID: Int? = {
+        let v = UserDefaults.standard.integer(forKey: "languageTokenID")
+        return v > 0 ? v : nil
+    }()
     var speakerNames: [Int: String] = [:]
 
     private var engine: EngineProcess?

@@ -1,4 +1,5 @@
-// ContentView.swift — main window: model gate, transcript, record controls.
+// ContentView.swift — main window: model gate, transcript (left, fills window),
+// and a right control panel (record / language / mic / file drop).
 
 import SwiftUI
 import CoreAudio
@@ -10,20 +11,31 @@ struct ContentView: View {
     @State private var dropTargeted = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             switch downloader.state {
-            case .ready:
-                contentArea
-                Divider()
-                controlBar
-            default:
-                ModelGateView(downloader: downloader)
+            case .ready: mainLayout
+            default: ModelGateView(downloader: downloader)
             }
         }
     }
 
-    // transcript (or empty/processing state) with a file drag-&-drop target
-    private var contentArea: some View {
+    // transcript fills the window; a fixed control panel sits on the right
+    private var mainLayout: some View {
+        HStack(spacing: 0) {
+            transcriptPane
+            Divider()
+            sidePanel
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            guard canDrop, let url = urls.first(where: isAudioFile) else { return false }
+            session.transcribeFile(url)
+            return true
+        } isTargeted: { dropTargeted = $0 }
+    }
+
+    // MARK: transcript pane (left, flexible)
+
+    private var transcriptPane: some View {
         ZStack {
             if session.transcript.lines.isEmpty {
                 emptyState
@@ -36,16 +48,10 @@ struct ContentView: View {
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.Colors.accent.opacity(0.06)))
                     .overlay(Label("드롭하여 전사", systemImage: "tray.and.arrow.down")
                         .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.accent))
-                    .padding(8)
-                    .allowsHitTesting(false)
+                    .padding(8).allowsHitTesting(false)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .dropDestination(for: URL.self) { urls, _ in
-            guard canDrop, let url = urls.first(where: isAudioFile) else { return false }
-            session.transcribeFile(url)
-            return true
-        } isTargeted: { dropTargeted = $0 }
     }
 
     private var emptyState: some View {
@@ -54,106 +60,171 @@ struct ContentView: View {
                 ProgressView()
                 Text(phaseText).font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
             } else {
-                Image(systemName: "waveform.badge.plus")
-                    .font(.system(size: 44)).foregroundStyle(Theme.Colors.textTertiary)
-                Text("오디오 파일을 여기에 드래그 앤 드롭")
+                Image(systemName: "waveform")
+                    .font(.system(size: 46)).foregroundStyle(Theme.Colors.textTertiary)
+                Text("회의를 녹음하거나, 오른쪽에 오디오 파일을 드롭하세요")
                     .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
-                Text("또는 ⏺ Record 로 회의를 실시간 전사")
-                    .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var canDrop: Bool {
-        switch session.phase {
-        case .idle, .done, .error: return true
-        default: return false
-        }
-    }
-    private var isBusy: Bool {
-        switch session.phase {
-        case .idle, .done, .error: return false
-        default: return true
-        }
-    }
-    private func isAudioFile(_ url: URL) -> Bool {
-        ["wav", "m4a", "mp3", "aiff", "aif", "caf", "aac", "flac", "mp4", "mov"]
-            .contains(url.pathExtension.lowercased())
-    }
+    // MARK: right control panel
 
-    private var controlBar: some View {
-        HStack(spacing: 16) {
+    private var sidePanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Sovereign Whisper").font(Theme.Fonts.appTitle)
+
             recordButton
-            LevelMeter(level: session.level)
-                .frame(width: Theme.Size.meterW, height: Theme.Size.meterH)
-            Spacer()
-            micPicker
-            phaseLabel
-            exportMenu
-        }
-        .padding(Theme.Space.controlBar)
-    }
+            if session.phase == .recording {
+                LevelMeter(level: session.level).frame(height: Theme.Size.meterH)
+            }
 
-    private var micPicker: some View {
-        Picker("", selection: $session.inputDeviceID) {
-            Label("System Default", systemImage: "mic").tag(AudioDeviceID?.none)
-            ForEach(session.availableInputs) { dev in
-                Text(dev.name).tag(AudioDeviceID?.some(dev.id))
+            Divider()
+
+            field("언어") { languagePicker }
+            field("마이크") { micPicker }
+            Toggle("화자 분리", isOn: $session.diarize).disabled(isBusy)
+            Toggle("중첩 발화 감지", isOn: $session.osd).disabled(isBusy)
+
+            Divider()
+
+            dropZone
+
+            Spacer()
+
+            HStack {
+                Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+                Spacer()
+                exportMenu
             }
         }
-        .labelsHidden()
-        .frame(maxWidth: 180)
-        .disabled(session.phase == .recording) // device binds at record start
-        .help("Input microphone (pick before recording)")
+        .padding(Theme.Space.window)
+        .frame(width: 280)
+        .background(Theme.Colors.textTertiary.opacity(0.04))
+    }
+
+    @ViewBuilder private func field<V: View>(_ label: String, @ViewBuilder _ control: () -> V) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+            control()
+        }
     }
 
     @ViewBuilder private var recordButton: some View {
         switch session.phase {
         case .recording:
             Button(role: .destructive) { session.stop() } label: {
-                Label("Stop", systemImage: "stop.circle.fill")
+                Label("정지", systemImage: "stop.circle.fill").frame(maxWidth: .infinity)
             }
+            .controlSize(.large).keyboardShortcut("r")
         case .engineStarting, .ready, .processing, .flushing:
-            ProgressView().controlSize(.small)
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity).frame(height: 28)
         default:
             Button { session.start() } label: {
-                Label("Record", systemImage: "record.circle")
+                Label("녹음 시작", systemImage: "record.circle").frame(maxWidth: .infinity)
             }
-            .keyboardShortcut("r")
+            .controlSize(.large).keyboardShortcut("r")
         }
     }
 
-    private var phaseLabel: some View {
-        Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
-    }
-    private var phaseText: String {
-        switch session.phase {
-        case .idle: "Ready"
-        case .engineStarting: "Loading model…"
-        case .ready: "Mic starting…"
-        case .recording: "Recording"
-        case .processing: "Transcribing file…"
-        case .flushing: "Finalizing…"
-        case .done: "Done"
-        case .error(let m): "Error: \(m)"
+    // Prominent language selector — the deterministic fix for "spoke Korean,
+    // got English": auto-detect can misfire on an ambiguous opening; picking
+    // the language locks it. Persisted across launches.
+    private var languagePicker: some View {
+        Picker("", selection: Binding(
+            get: { session.languageTokenID },
+            set: { session.languageTokenID = $0
+                   UserDefaults.standard.set($0 ?? 0, forKey: "languageTokenID") }
+        )) {
+            Text("자동 감지").tag(Int?.none)
+            Text("한국어").tag(Int?.some(WhisperLang.ko))
+            Text("English").tag(Int?.some(WhisperLang.en))
         }
+        .labelsHidden().disabled(isBusy)
+    }
+
+    private var micPicker: some View {
+        Picker("", selection: $session.inputDeviceID) {
+            Text("시스템 기본").tag(AudioDeviceID?.none)
+            ForEach(session.availableInputs) { dev in
+                Text(dev.name).tag(AudioDeviceID?.some(dev.id))
+            }
+        }
+        .labelsHidden().disabled(session.phase == .recording)
+    }
+
+    // Visible drop target + an explicit "Choose File…" button so file input is
+    // discoverable without knowing about drag-&-drop.
+    private var dropZone: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "tray.and.arrow.down")
+                .font(.system(size: 26))
+                .foregroundStyle(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary)
+            Text("오디오 파일\n드래그 앤 드롭")
+                .multilineTextAlignment(.center)
+                .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+            Button("파일 선택…") { chooseFile() }
+                .controlSize(.small).disabled(!canDrop)
+        }
+        .frame(maxWidth: .infinity).frame(height: 128)
+        .background(RoundedRectangle(cornerRadius: 10)
+            .fill(Theme.Colors.accent.opacity(dropTargeted ? 0.10 : 0.04)))
+        .overlay(RoundedRectangle(cornerRadius: 10)
+            .strokeBorder(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary,
+                          style: StrokeStyle(lineWidth: 1.5, dash: [6])))
     }
 
     private var exportMenu: some View {
         Menu {
             Button("Markdown (.md)") { export(.init(filenameExtension: "md")!, session.exportMarkdown) }
             Button("Subtitles (.srt)") { export(.init(filenameExtension: "srt")!, session.exportSRT) }
-        } label: { Label("Export", systemImage: "square.and.arrow.up") }
-        .menuStyle(.borderlessButton)
+        } label: { Label("내보내기", systemImage: "square.and.arrow.up") }
+        .menuStyle(.borderlessButton).fixedSize()
         .disabled(session.transcript.lines.isEmpty)
     }
 
+    // MARK: helpers
+
+    private var canDrop: Bool {
+        switch session.phase { case .idle, .done, .error: return true; default: return false }
+    }
+    private var isBusy: Bool {
+        switch session.phase { case .idle, .done, .error: return false; default: return true }
+    }
+    private func isAudioFile(_ url: URL) -> Bool {
+        ["wav", "m4a", "mp3", "aiff", "aif", "caf", "aac", "flac", "mp4", "mov"]
+            .contains(url.pathExtension.lowercased())
+    }
+    private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.audio, .movie]
+        if panel.runModal() == .OK, let url = panel.url { session.transcribeFile(url) }
+    }
     private func export(_ type: UTType, _ writer: @escaping (URL) throws -> Void) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [type]
         panel.nameFieldStringValue = "transcript"
         if panel.runModal() == .OK, let url = panel.url { try? writer(url) }
+    }
+
+    private var phaseText: String {
+        switch session.phase {
+        case .idle: "준비됨"
+        case .engineStarting: "모델 로딩…"
+        case .ready: "마이크 시작…"
+        case .recording: "녹음 중"
+        case .processing: "파일 전사 중…"
+        case .flushing: "마무리…"
+        case .done: "완료"
+        case .error(let m): "오류: \(m)"
+        }
     }
 }
 
