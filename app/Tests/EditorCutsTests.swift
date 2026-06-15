@@ -102,6 +102,26 @@ struct EditorCutsTests {
             check(m.first?.end == 2.0 && m.first?.kind == "mixed", "merge result wrong: \(m)")
         }
 
+        // ── 10. Chapters: first at 0:00; a long pause past minLen splits ──
+        do {
+            let a = line([("intro", 0, 0.4), ("topic", 0.5, 1.0)])
+            // gap 1.0→30.0 = 29s (>2.5) and 30s past chapter 0 (>20) → new chapter
+            let b = line([("second", 30.0, 30.5), ("part", 30.6, 31.0)], speaker: 1)
+            let ch = EditorCuts.chapters([a, b], gap: 2.5, minLen: 20)
+            check(ch.first?.start == 0, "first chapter must be 0:00, got \(ch.first?.start ?? -1)")
+            check(ch.count == 2, "expected 2 chapters, got \(ch.count)")
+            check(ch.last?.start == 30.0, "second chapter start wrong: \(ch.last?.start ?? -1)")
+            check(!(ch.first?.title.isEmpty ?? true), "chapter title empty")
+        }
+
+        // ── 11. Chapters: a pause too soon (within minLen) does NOT split ──
+        do {
+            let a = line([("a", 0, 0.4)])
+            let b = line([("b", 5.0, 5.4)])   // 4.6s gap but only 5s in (< minLen 20)
+            check(EditorCuts.chapters([a, b], gap: 2.5, minLen: 20).count == 1,
+                  "early pause must not create a chapter")
+        }
+
         if failures == 0 { print("OK: all EditorCuts tests passed") }
         else { print("\(failures) FAILURE(S)"); exit(1) }
     }

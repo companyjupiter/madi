@@ -359,6 +359,7 @@ struct ContentView: View {
             Button("JSON (.json)") { export(.json, session.exportJSON) }
             Divider()
             Button("타이튼 컷 목록 (.csv)") { export(.commaSeparatedText, session.exportCutList) }
+            Button("유튜브 챕터 (.txt)") { export(.plainText, session.exportChapters) }
         } label: { Label("내보내기", systemImage: "square.and.arrow.up") }
         .menuStyle(.borderlessButton).fixedSize()
         .disabled(session.transcript.lines.isEmpty)

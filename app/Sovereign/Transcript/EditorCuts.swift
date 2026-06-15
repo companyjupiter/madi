@@ -91,4 +91,32 @@ enum EditorCuts {
         }
         return out
     }
+
+    // ── N4 auto-chapters ──────────────────────────────────────────────────────
+    struct Chapter: Equatable { var start: Double; var title: String }
+
+    /// Chapter boundaries for long content (YouTube chapters). A new chapter
+    /// starts at a pause longer than `gap`, but only if `minLen` has elapsed
+    /// since the previous chapter (so we don't over-segment). The first chapter
+    /// is pinned to 0:00 (YouTube requires it). Titles are the opening words of
+    /// the boundary line.
+    static func chapters(_ lines: [Line], gap: Double = 2.5, minLen: Double = 20) -> [Chapter] {
+        guard let first = lines.first else { return [] }
+        var out: [Chapter] = [Chapter(start: 0, title: chapterTitle(first))]
+        var lastEnd = first.end
+        for l in lines.dropFirst() {
+            let gapBefore = l.start - lastEnd
+            if gapBefore > gap, l.start - (out.last?.start ?? 0) > minLen {
+                out.append(Chapter(start: l.start, title: chapterTitle(l)))
+            }
+            lastEnd = max(lastEnd, l.end)
+        }
+        return out
+    }
+
+    private static func chapterTitle(_ l: Line) -> String {
+        let words = l.text.split(separator: " ").prefix(7).joined(separator: " ")
+        let t = String(words.prefix(40)).trimmingCharacters(in: .whitespaces)
+        return t.isEmpty ? "챕터" : t
+    }
 }

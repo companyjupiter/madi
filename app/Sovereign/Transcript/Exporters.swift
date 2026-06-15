@@ -81,6 +81,9 @@ enum Exporters {
                 "cuts": tighten.count,
                 "total_seconds": tighten.reduce(0) { $0 + $1.duration },
             ] as [String: Any],
+            "chapters": EditorCuts.chapters(lines).map {
+                ["start": $0.start, "title": $0.title] as [String: Any]
+            },
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
@@ -178,6 +181,19 @@ enum Exporters {
                         c.start, c.end, c.duration, c.kind, csvField(c.label))
         }
         return s
+    }
+
+    /// YouTube chapters: `m:ss Title` (or `h:mm:ss` past an hour), first at 0:00.
+    static func youtubeChapters(_ lines: [Line]) -> String {
+        var s = ""
+        for c in EditorCuts.chapters(lines) { s += "\(ytTime(c.start)) \(c.title)\n" }
+        return s
+    }
+
+    private static func ytTime(_ t: Double) -> String {
+        let h = Int(t) / 3600, m = (Int(t) % 3600) / 60, sec = Int(t) % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec)
+                     : String(format: "%d:%02d", m, sec)
     }
 
     private static func csvField(_ s: String) -> String {
