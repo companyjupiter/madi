@@ -26,7 +26,8 @@ Sovereign/
     ModelDownloader.swift    first-run download + verify
   Transcript/
     TranscriptStore.swift    events → live lines → FLUSH relabel + overlap markers
-    Exporters.swift          .md / .srt
+    EditorCuts.swift         fillers / silences / tighten / chapters / retakes / highlights
+    Exporters.swift          .md / .txt / .srt / .vtt / .json / tighten.csv / chapters.txt
   UI/                        ContentView, TranscriptView, ModelGate, Settings
   Info.plist                 NSMicrophoneUsageDescription, min OS 13, arm64
   Sovereign.entitlements     audio-input (hardened runtime via codesign)
