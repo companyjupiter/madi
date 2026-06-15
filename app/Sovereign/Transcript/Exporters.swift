@@ -69,15 +69,126 @@ enum Exporters {
         return str
     }
 
-    static func srt(_ lines: [Line], names: [Int: String] = [:]) -> String {
+    // ── Caption-spec SRT / VTT ────────────────────────────────────────────────
+    // Editors need subtitle-grade cues, not one giant block per speaker turn. We
+    // re-flow the per-word timestamps into cues that obey broadcast/YouTube norms:
+    //   · ≤ maxCharsPerLine per line, ≤ maxLines lines  (Netflix/BBC ~42×2)
+    //   · reading speed ≤ maxCPS chars/second            (extend short cues)
+    //   · min/max cue duration                           (1.0 s … 7.0 s)
+    //   · break a new cue at a speaker change or a > gapBreak silence
+    //   · never break mid-word; never overlap the next cue
+    struct CaptionSpec {
+        var maxCharsPerLine = 42
+        var maxLines = 2
+        var maxCPS = 17.0
+        var minDur = 1.0
+        var maxDur = 7.0
+        var gapBreak = 1.0       // a silence longer than this starts a fresh cue
+        var speakerLabels: Bool? = nil  // nil → auto (label only when >1 speaker)
+    }
+
+    struct CaptionCue { var start: Double; var end: Double; var lines: [String] }
+
+    /// Re-flow word-level lines into caption-spec cues.
+    static func captionCues(_ lines: [Line], names: [Int: String] = [:], spec: CaptionSpec = .init()) -> [CaptionCue] {
+        let distinct = Set(lines.map { $0.speaker })
+        let label = spec.speakerLabels ?? (distinct.count > 1)
+        var cues: [CaptionCue] = []
+        var prevSpeaker: Int? = nil
+
+        for l in lines {
+            let words = l.words.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+            if words.isEmpty { continue }
+            let prefix = (label && l.speaker != prevSpeaker)
+                ? "\(names[l.speaker] ?? "Speaker \(l.speaker)"): " : ""
+            var pending: [Word] = []
+            var firstCue = true
+
+            func wrapped(_ ws: [Word], _ usePrefix: Bool) -> [String] {
+                wordWrap((usePrefix ? prefix : "") + joinWords(ws), spec.maxCharsPerLine)
+            }
+            func flush() {
+                guard !pending.isEmpty else { return }
+                let ls = wrapped(pending, firstCue)
+                var start = pending.first!.t0
+                var end = pending.last!.t1
+                if end < start { end = start }
+                let chars = ls.reduce(0) { $0 + $1.count }
+                let needed = Double(chars) / spec.maxCPS
+                if end - start < max(spec.minDur, needed) {
+                    end = start + min(max(spec.minDur, needed), spec.maxDur)
+                }
+                if end - start > spec.maxDur { end = start + spec.maxDur }
+                if start < 0 { start = 0 }
+                cues.append(CaptionCue(start: start, end: end, lines: ls))
+                pending.removeAll()
+                firstCue = false
+            }
+
+            for w in words {
+                if let last = pending.last, w.t0 - last.t1 > spec.gapBreak { flush() }
+                if wrapped(pending + [w], firstCue).count > spec.maxLines {
+                    flush()
+                    pending = [w]
+                } else {
+                    pending.append(w)
+                }
+            }
+            flush()
+            prevSpeaker = l.speaker
+        }
+        // No-overlap pass: clamp each cue's end to the next cue's start.
+        for i in 0..<max(0, cues.count - 1) {
+            if cues[i].end > cues[i + 1].start {
+                cues[i].end = max(cues[i].start + 0.04, cues[i + 1].start)
+            }
+        }
+        return cues
+    }
+
+    /// Caption-spec SRT (per-word re-flow). Replaces the old one-block-per-turn SRT.
+    static func srt(_ lines: [Line], names: [Int: String] = [:], spec: CaptionSpec = .init()) -> String {
         var s = ""
-        for (i, l) in lines.enumerated() {
-            let who = names[l.speaker] ?? "Speaker \(l.speaker)"
+        for (i, c) in captionCues(lines, names: names, spec: spec).enumerated() {
             s += "\(i + 1)\n"
-            s += "\(srtTime(l.start)) --> \(srtTime(max(l.end, l.start + 1.2)))\n"
-            s += "\(who): \(l.text)\n\n"
+            s += "\(srtTime(c.start)) --> \(srtTime(c.end))\n"
+            s += c.lines.joined(separator: "\n") + "\n\n"
         }
         return s
+    }
+
+    /// Caption-spec WebVTT (`.` ms separator + `WEBVTT` header).
+    static func vtt(_ lines: [Line], names: [Int: String] = [:], spec: CaptionSpec = .init()) -> String {
+        var s = "WEBVTT\n\n"
+        for (i, c) in captionCues(lines, names: names, spec: spec).enumerated() {
+            s += "\(i + 1)\n"
+            s += "\(vttTime(c.start)) --> \(vttTime(c.end))\n"
+            s += c.lines.joined(separator: "\n") + "\n\n"
+        }
+        return s
+    }
+
+    /// Join words with the engine's spacing rule (no space before punctuation).
+    private static func joinWords(_ words: [Word]) -> String {
+        var s = ""
+        for w in words {
+            if !s.isEmpty, w.text.first.map({ !",.!?…".contains($0) }) ?? true { s += " " }
+            s += w.text.trimmingCharacters(in: .whitespaces)
+        }
+        return s
+    }
+
+    /// Greedy word-wrap at spaces into lines ≤ maxLen (never splits a token).
+    private static func wordWrap(_ text: String, _ maxLen: Int) -> [String] {
+        var out: [String] = []
+        var cur = ""
+        for tok in text.split(separator: " ") {
+            if cur.isEmpty { cur = String(tok) }
+            else if cur.count + 1 + tok.count <= maxLen { cur += " " + tok }
+            else { out.append(cur); cur = String(tok) }
+        }
+        if !cur.isEmpty { out.append(cur) }
+        return out.isEmpty ? [""] : out
     }
 
     private static func timecode(_ t: Double) -> String {
@@ -89,5 +200,11 @@ enum Exporters {
         let h = Int(t) / 3600, m = (Int(t) % 3600) / 60, s = Int(t) % 60
         let ms = Int((t - t.rounded(.down)) * 1000)
         return String(format: "%02d:%02d:%02d,%03d", h, m, s, ms)
+    }
+
+    private static func vttTime(_ t: Double) -> String {
+        let h = Int(t) / 3600, m = (Int(t) % 3600) / 60, s = Int(t) % 60
+        let ms = Int((t - t.rounded(.down)) * 1000)
+        return String(format: "%02d:%02d:%02d.%03d", h, m, s, ms)
     }
 }
