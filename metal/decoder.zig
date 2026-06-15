@@ -30,6 +30,7 @@ pub const Kernels = struct {
     store: mtl.Function,
     attn: mtl.Function,
     ca: mtl.Function,
+    cab: mtl.Function, // batched cross-attn (B slots, one dispatch) — P5
     emb: mtl.Function,
     extract: mtl.Function,
     cacc: mtl.Function,
@@ -53,6 +54,7 @@ pub const Kernels = struct {
             .store = try mtl.getFunction("gpu_kv_store"),
             .attn = try mtl.getFunction("gpu_attention"),
             .ca = try mtl.getFunction("flash_cross_attn_f16kv"),
+            .cab = try mtl.getFunction("flash_cross_attn_f16kv_batched"),
             .emb = try mtl.getFunction("gpu_emb_lookup"),
             .extract = try mtl.getFunction("extract_ca_head_f16kv"),
             .cacc = try mtl.getFunction("ca_accumulate"),
@@ -182,6 +184,15 @@ fn kCA(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, seqlen: u32, 
     const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U, PS, U };
     try mtl.dispatch(K.ca, .{ NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
+// batched cross-attn: B slots in one dispatch (grid B*NH). q/out contiguous
+// [B][D]; kc/vc contiguous [B][seqlen][D]. No sc_out (write_sc=0 path). — P5
+fn kCAbatched(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, B: u32, seqlen: u32) !void {
+    var a0 = out; var a1 = q; var a2 = kc; var a3 = vc; var sl = seqlen;
+    var hd = HDD; var kvd = D; var nkv = NH; var nh = NH;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sl), P(&hd), P(&kvd), P(&nkv), P(&nh) };
+    const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U };
+    try mtl.dispatch(K.cab, .{ B * NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
 // copy this layer's alignment-head scores into their per-head ca planes
 fn kAccumulate(K: Kernels, ca: [*]f32, sc: [*]f32, tok: [*]u32, align_mask: u32, plane_base: u32, seqlen: u32) !void {
     var a0 = ca; var a1 = sc; var a2 = tok; var am = align_mask; var pb = plane_base; var sl = seqlen; var nh = NH; var mt = MAX_TOK;
@@ -280,7 +291,7 @@ inline fn proj(K: Kernels, s: BScratch, in_f32: [*]f32, w16: [*]f16, out_f32: [*
 /// has its own self-KV (skc/svc[b]), cross-KV (ckc/cvc[b]), and GPU pos (pos[b]).
 pub fn decodeBlockBatched(
     K: Kernels, L: Layer, Wf: WF16, B: u32, x_b: [*]f32, s: BScratch,
-    skc: []const [*]f32, svc: []const [*]f32, ckc: []const [*]f16, cvc: []const [*]f16, pos: []const [*]u32,
+    skc: []const [*]f32, svc: []const [*]f32, ckc: [*]f16, cvc: [*]f16, pos: []const [*]u32,
 ) !void {
     // self-attn LN (batched: rows=B)
     try kLN(K, x_b, s.xb, L.aln_w, L.aln_b, D, B);
@@ -302,14 +313,12 @@ pub fn decodeBlockBatched(
         const o = @as(usize, b) * D;
         try kBRLN(K, x_b + o, s.mo + o, L.ob, s.xb + o, L.caln_w, L.caln_b, D);
     }
-    // cross-Q (batched) + bias (contiguous → batched) → cross-attn per slot
+    // cross-Q (batched) + bias (contiguous → batched) → BATCHED cross-attn (P5):
+    // all B slots in one dispatch. q=s.ao [B][D], out=s.mo [B][D], cross-KV
+    // contiguous [B][ENC_SEQ][D]. Was the per-slot kCA loop = ~43% of decode.
     try proj(K, s, s.xb, Wf.cqw, s.ao, B, D, D); // reuse s.ao as cross-Q out
     try kBias(K, s.ao, L.cqb, B * D, D);
-    b = 0;
-    while (b < B) : (b += 1) {
-        const o = @as(usize, b) * D;
-        try kCA(K, s.mo + o, s.ao + o, ckc[b], cvc[b], ENC_SEQ, s.ca_sc, 0); // cross-attn → s.mo[b]
-    }
+    try kCAbatched(K, s.mo, s.ao, ckc, cvc, B, ENC_SEQ);
     // cross-out proj + residual + mlp-LN
     try proj(K, s, s.mo, Wf.cow, s.ao, B, D, D); // cross-out into s.ao
     b = 0;

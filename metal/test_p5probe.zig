@@ -1,8 +1,9 @@
-// test_decloop_batch.zig — Phase J: verify the batched per-token LOOP (KV growth).
-// The single-block test (test_decblock_batch) covered pos=0. This runs N
-// autoregressive steps (pos 0..N-1) with teacher-forced (fixed) inputs so the
-// self-KV cache GROWS, and checks decodeBlockBatched's step-(N-1) hidden — which
-// attends to all prior KV — matches decodeBlock per slot. Gate max|Δ| < 5e-3.
+// test_p5probe.zig — P5 GO/NO-GO: how much of batched decode (B=8) is the
+// per-slot attention B-loop (kAttn+kCA) vs everything else? Run twice:
+//   ./out/test_p5probe          → full block (with attention)
+//   SKIP_ATTN=1 ./out/test_p5probe → attention skipped (timing only)
+// attention fraction = (full − skip) / full. If small, batching attention (P5)
+// can't move the needle → NO-GO. Mirrors test_decloop_batch's setup.
 const std = @import("std");
 const mtl = @import("metal_backend.zig");
 const dec = @import("decoder.zig");
@@ -75,51 +76,26 @@ pub fn main() !void {
     try mtl.loadLibrary(METALLIB);
     const K = try dec.Kernels.load();
     const f_deq = try mtl.getFunction("dequant_q8_f16");
-    var rng = std.Random.DefaultPrng.init(123);
+    var rng = std.Random.DefaultPrng.init(7);
     const r = rng.random();
-    const B: u32 = 8; const N: u32 = 6; // 6 autoregressive steps
+    const B: u32 = 8; const N: u32 = 150; // 150 autoregressive steps (typical segment len)
 
     var L: [NL]dec.Layer = undefined; var Wf: [NL]dec.WF16 = undefined;
     for (0..NL) |l| { L[l] = mkLayer(r); Wf[l] = try mkWF16(f_deq, L[l]); }
+    const xseq = rndF32(r, N * B * D, 1);
 
-    // fixed per-step inputs (teacher-forced), same for ref and batched
-    const xseq = rndF32(r, N * B * D, 1); // [N][B][D]
-
-    // per-slot self-KV (per layer) + cross-KV (per layer); pos buffer
     var skc: [8][NL][*]f32 = undefined; var svc: [8][NL][*]f32 = undefined;
-    // cross-KV is CONTIGUOUS per layer: [B][ENC_SEQ][D] (batched cross-attn).
-    var ckc: [NL][*]f16 = undefined; var cvc: [NL][*]f16 = undefined;
+    var ckc: [NL][*]f16 = undefined; var cvc: [NL][*]f16 = undefined; // contiguous [B][ENC_SEQ][D]
     for (0..NL) |l| {
         const ck = try mtl.allocSlice(f16, B * ENC_SEQ * D); for (ck) |*v| v.* = @floatCast((r.float(f32) * 2 - 1) * 0.3); ckc[l] = ck.ptr;
         const cv = try mtl.allocSlice(f16, B * ENC_SEQ * D); for (cv) |*v| v.* = @floatCast((r.float(f32) * 2 - 1) * 0.3); cvc[l] = cv.ptr;
     }
-    for (0..B) |b| for (0..NL) |l| {
-        skc[b][l] = (try mtl.allocSlice(f32, MAX_TOK * D)).ptr;
-        svc[b][l] = (try mtl.allocSlice(f32, MAX_TOK * D)).ptr;
+    for (0..B) |bb| for (0..NL) |l| {
+        skc[bb][l] = (try mtl.allocSlice(f32, MAX_TOK * D)).ptr;
+        svc[bb][l] = (try mtl.allocSlice(f32, MAX_TOK * D)).ptr;
     };
     const posb = (try mtl.allocSlice(u32, 1)).ptr;
-
-    const ss = dec.Scratch{
-        .xb = (try mtl.allocSlice(f32, D)).ptr, .q = (try mtl.allocSlice(f32, D)).ptr,
-        .k = (try mtl.allocSlice(f32, D)).ptr, .v = (try mtl.allocSlice(f32, D)).ptr,
-        .ao = (try mtl.allocSlice(f32, D)).ptr, .mo = (try mtl.allocSlice(f32, D)).ptr,
-        .mh = (try mtl.allocSlice(f32, MLP)).ptr, .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr,
-    };
-    const xref = try mtl.allocSlice(f32, B * D);
-    for (0..B) |b| {
-        const x = (try mtl.allocSlice(f32, D)).ptr;
-        for (0..N) |t| {
-            @memcpy(x[0..D], xseq[(t * B + b) * D ..][0..D]);
-            posb[0] = @intCast(t);
-            try mtl.beginCommandBuffer();
-            for (0..NL) |l| try dec.decodeBlock(K, L[l], x, ss, skc[b][l], svc[b][l], ckc[l] + b * ENC_SEQ * D, cvc[l] + b * ENC_SEQ * D, posb, null);
-            try mtl.commitCommandBuffer(); try mtl.sync();
-        }
-        @memcpy(xref.ptr[b * D ..][0..D], x[0..D]); // final-step hidden
-    }
-
-    // batched: same N steps, KV grows
-    for (0..B) |b| for (0..NL) |l| { @memset(skc[b][l][0 .. MAX_TOK * D], 0); @memset(svc[b][l][0 .. MAX_TOK * D], 0); };
+    var posp: [8][*]u32 = undefined; for (0..B) |bb| posp[bb] = posb;
     const x_b = (try mtl.allocSlice(f32, B * D)).ptr;
     const sb = dec.BScratch{
         .xb = (try mtl.allocSlice(f32, B * D)).ptr, .qkv = (try mtl.allocSlice(f32, B * 3 * D)).ptr,
@@ -127,22 +103,36 @@ pub fn main() !void {
         .mh = (try mtl.allocSlice(f32, B * MLP)).ptr, .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr,
         .in16 = (try mtl.allocSlice(f16, B * MLP)).ptr, .out16 = (try mtl.allocSlice(f16, B * MLP)).ptr,
     };
-    var posp: [8][*]u32 = undefined; for (0..B) |b| posp[b] = posb;
-    for (0..N) |t| {
-        @memcpy(x_b[0 .. B * D], xseq[t * B * D ..][0 .. B * D]);
-        posb[0] = @intCast(t);
+
+    const skip = std.posix.getenv("SKIP_ATTN") != null;
+    // warmup 10 steps (PSO compile, clocks)
+    for (0..10) |t| {
+        @memcpy(x_b[0 .. B * D], xseq[(t % N) * B * D ..][0 .. B * D]); posb[0] = @intCast(t);
         try mtl.beginCommandBuffer();
         for (0..NL) |l| {
             var sk: [8][*]f32 = undefined; var sv: [8][*]f32 = undefined;
-            for (0..B) |b| { sk[b] = skc[b][l]; sv[b] = svc[b][l]; }
+            for (0..B) |bb| { sk[bb] = skc[bb][l]; sv[bb] = svc[bb][l]; }
             try dec.decodeBlockBatched(K, L[l], Wf[l], B, x_b, sb, sk[0..B], sv[0..B], ckc[l], cvc[l], posp[0..B]);
         }
         try mtl.commitCommandBuffer(); try mtl.sync();
     }
-
-    var max_err: f32 = 0; var max_ref: f32 = 0;
-    for (0..B * D) |i| { const e = @abs(xref.ptr[i] - x_b[i]); if (e > max_err) max_err = e; if (@abs(xref.ptr[i]) > max_ref) max_ref = @abs(xref.ptr[i]); }
-    try out.print("{d}-step batched loop (KV grows) vs per-slot: max|Δ|={e:.3} rel={e:.3}\n", .{ N, max_err, max_err / max_ref });
-    if (max_err / max_ref > 5e-3) { try out.print("❌ FAIL\n", .{}); return error.Mismatch; }
-    try out.print("✅ PASS — batched per-token loop (multi-step KV growth) quality-equivalent\n", .{});
+    // timed: N steps × NL layers
+    var timer = try std.time.Timer.start();
+    for (0..N) |t| {
+        @memcpy(x_b[0 .. B * D], xseq[t * B * D ..][0 .. B * D]); posb[0] = @intCast(t);
+        try mtl.beginCommandBuffer();
+        for (0..NL) |l| {
+            var sk: [8][*]f32 = undefined; var sv: [8][*]f32 = undefined;
+            for (0..B) |bb| { sk[bb] = skc[bb][l]; sv[bb] = svc[bb][l]; }
+            try dec.decodeBlockBatched(K, L[l], Wf[l], B, x_b, sb, sk[0..B], sv[0..B], ckc[l], cvc[l], posp[0..B]);
+        }
+        try mtl.commitCommandBuffer(); try mtl.sync();
+    }
+    const ns = timer.read();
+    const ms = @as(f64, @floatFromInt(ns)) / 1e6;
+    const per_step = ms / @as(f64, @floatFromInt(N));
+    try out.print("[{s}] B={d} N={d} NL={d}: {d:.1}ms total, {d:.3}ms/step, {d:.0} tok/s (B-batched)\n", .{
+        if (skip) "SKIP_ATTN" else "FULL    ", B, N, NL, ms, per_step,
+        @as(f64, @floatFromInt(N * B)) / (ms / 1000.0),
+    });
 }

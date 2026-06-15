@@ -81,12 +81,12 @@ pub fn main() !void {
     const x0 = rndF32(r, B * D, 1);
     const pos0 = (try mtl.allocSlice(u32, 1)).ptr; pos0[0] = 0;
     var skc: [8][*]f32 = undefined; var svc: [8][*]f32 = undefined;
-    var ckc: [8][*]f16 = undefined; var cvc: [8][*]f16 = undefined;
+    // cross-KV CONTIGUOUS [B][ENC_SEQ][D] (batched cross-attn)
+    const ckc = (try mtl.allocSlice(f16, B * ENC_SEQ * D)).ptr; for (ckc[0 .. B * ENC_SEQ * D]) |*v| v.* = @floatCast((r.float(f32) * 2 - 1) * 0.3);
+    const cvc = (try mtl.allocSlice(f16, B * ENC_SEQ * D)).ptr; for (cvc[0 .. B * ENC_SEQ * D]) |*v| v.* = @floatCast((r.float(f32) * 2 - 1) * 0.3);
     for (0..B) |b| {
         skc[b] = (try mtl.allocSlice(f32, MAX_TOK * D)).ptr;
         svc[b] = (try mtl.allocSlice(f32, MAX_TOK * D)).ptr;
-        const ck = try mtl.allocSlice(f16, ENC_SEQ * D); for (ck) |*v| v.* = @floatCast((r.float(f32) * 2 - 1) * 0.3); ckc[b] = ck.ptr;
-        const cv = try mtl.allocSlice(f16, ENC_SEQ * D); for (cv) |*v| v.* = @floatCast((r.float(f32) * 2 - 1) * 0.3); cvc[b] = cv.ptr;
     }
 
     // ── reference: decodeBlock per slot ──
@@ -102,7 +102,7 @@ pub fn main() !void {
         const xb = (try mtl.allocSlice(f32, D)).ptr;
         @memcpy(xb[0..D], x0[b * D .. b * D + D]);
         try mtl.beginCommandBuffer();
-        try dec.decodeBlock(K, L, xb, ss, skc[b], svc[b], ckc[b], cvc[b], pos0, null);
+        try dec.decodeBlock(K, L, xb, ss, skc[b], svc[b], ckc + b * ENC_SEQ * D, cvc + b * ENC_SEQ * D, pos0, null);
         try mtl.commitCommandBuffer(); try mtl.sync();
         @memcpy(xref.ptr[b * D .. b * D + D], xb[0..D]);
         // reset KV so batched run starts identical
@@ -120,7 +120,7 @@ pub fn main() !void {
     };
     var posb: [8][*]u32 = undefined; for (0..B) |b| posb[b] = pos0;
     try mtl.beginCommandBuffer();
-    try dec.decodeBlockBatched(K, L, Wf, B, xb_b, sb, skc[0..B], svc[0..B], ckc[0..B], cvc[0..B], posb[0..B]);
+    try dec.decodeBlockBatched(K, L, Wf, B, xb_b, sb, skc[0..B], svc[0..B], ckc, cvc, posb[0..B]);
     try mtl.commitCommandBuffer(); try mtl.sync();
 
     var max_err: f32 = 0; var max_ref: f32 = 0;
