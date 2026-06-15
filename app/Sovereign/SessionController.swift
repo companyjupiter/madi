@@ -176,6 +176,10 @@ final class SessionController: EngineProcessDelegate {
         try Exporters.srt(transcript.lines, names: speakerNames)
             .write(to: url, atomically: true, encoding: .utf8)
     }
+    func exportVTT(to url: URL) throws {
+        try Exporters.vtt(transcript.lines, names: speakerNames)
+            .write(to: url, atomically: true, encoding: .utf8)
+    }
     func exportText(to url: URL) throws {
         try Exporters.plainText(transcript.lines, names: speakerNames)
             .write(to: url, atomically: true, encoding: .utf8)
