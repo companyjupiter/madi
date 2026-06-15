@@ -30,9 +30,27 @@
 | `gen_theme.py` | tokens.json → `app/Sovereign/UI/Theme.swift` 코드젠 |
 | `sync_tokens.sh` | 토큰 반영 원커맨드 (gen + 앱 재빌드) |
 | `figma/main-recording.svg` | 메인 윈도(녹음 중) — 화자 라인 3종 + 겹침 마커 + 컨트롤바 |
+| `figma/file-editor.svg` | **파일 전사 + 편집자 UI** — 내용/상세 토글, 내용모드 문단, 리뷰 바(상세), **편집 도구 패널**(토글+슬라이더), 타이튼 stat, 내보내기 |
 | `figma/model-gate.svg` | 첫 실행 모델 다운로드 화면 |
 | `figma/settings.svg` | 설정(Transcription 탭) |
 | `figma/components.svg` | **컴포넌트 시트** — 팔레트 스와치(토큰명 라벨), TranscriptLine 해부도, 버튼 상태, 레벨미터 상태 |
+
+### 2026-06 추가된 편집자/리더 컴포넌트 (`file-editor.svg`)
+
+이번 라운드 신규 UI. **모두 기존 시맨틱 토큰 재사용 — 새 토큰 0개.** 디자이너가
+토큰만 바꾸면 이 컴포넌트들도 함께 리스타일된다. 동작·파라미터 정본은
+`docs/EDITOR_FEATURES.md`.
+
+| 컴포넌트 | 쓰는 토큰 | 비고 |
+|---|---|---|
+| 내용/상세 토글 | `color.accent`, `font.status` | 기본=내용(평문). 일반인용 |
+| 리뷰 바 (검토 N개 ▲▼) | `color.lowConf`, `font.status` | **상세 모드에서만** |
+| 편집 도구 패널 (토글+슬라이더) | `color.accent`, `color.text*`, `font.status` | 사이드패널 DisclosureGroup |
+| 타이튼 stat (✂︎ N컷·M초) | `color.accent`, `font.status` | 컷 있을 때만 |
+| 내보내기 신규 항목 (.vtt/.csv/챕터) | 기존 메뉴 스타일 | export 메뉴 |
+
+> **원칙(고정 계약):** 편집자 디테일은 상세 뷰 / 사이드패널 / export에만. **기본
+> 내용(평문) 뷰는 건드리지 않는다.** 리디자인 시 이 격리를 유지할 것.
 
 ## 디자이너 온보딩 (이대로 전달)
 

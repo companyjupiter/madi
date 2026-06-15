@@ -1,0 +1,127 @@
+<svg width="720" height="480" viewBox="0 0 720 480" xmlns="http://www.w3.org/2000/svg" font-family="SF Pro Text, -apple-system, Helvetica">
+  <!-- Screen: file-transcription + editor tools. All values from design/tokens.json.
+       New components added this session (reuse existing tokens — NO new tokens):
+       viewMode toggle, review bar, editor-tools panel, tighten stat, export items. -->
+  <g id="window">
+    <rect id="window-bg" width="720" height="480" rx="10" fill="#ECECEC"/>
+    <g id="titlebar">
+      <rect width="720" height="28" rx="10" fill="#E0E0E0"/>
+      <rect y="14" width="720" height="14" fill="#E0E0E0"/>
+      <circle id="traffic-close" cx="20" cy="14" r="6" fill="#FF5F57"/>
+      <circle id="traffic-min" cx="40" cy="14" r="6" fill="#FEBC2E"/>
+      <circle id="traffic-zoom" cx="60" cy="14" r="6" fill="#28C840"/>
+      <text id="window-title" x="360" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#3C3C43" opacity="0.85">Sovereign Whisper</text>
+    </g>
+
+    <!-- ── LEFT: transcript pane ── -->
+    <g id="transcript-pane">
+      <rect id="transcript-bg" x="0" y="28" width="440" height="452" fill="#FFFFFF"/>
+
+      <!-- viewMode toggle: 내용 / 상세 (default 내용). NEW (PR #64) -->
+      <g id="viewmode-bar">
+        <rect x="0" y="28" width="440" height="30" fill="#FFFFFF"/>
+        <line x1="0" y1="58" x2="440" y2="58" stroke="#3C3C43" stroke-opacity="0.12"/>
+        <g id="segmented">
+          <rect x="320" y="34" width="108" height="18" rx="5" fill="#3C3C43" fill-opacity="0.08"/>
+          <rect id="seg-content-active" x="321" y="35" width="53" height="16" rx="4" fill="#FFFFFF"/>
+          <text x="347" y="46" text-anchor="middle" font-size="10" font-weight="600" fill="#000000">내용</text>
+          <text x="401" y="46" text-anchor="middle" font-size="10" fill="#3C3C43" opacity="0.6">상세</text>
+        </g>
+      </g>
+
+      <!-- 내용 (content) mode: clean speaker-grouped paragraphs, no timecode/amber/markers -->
+      <g id="content-block-1">
+        <text id="speaker-name" x="16" y="84" font-size="10" font-weight="700" fill="#007AFF">김부장</text>
+        <text id="para" x="16" y="104" font-size="13" fill="#000000" opacity="0.85">이번 주 핵심 마일스톤은 로컬 환경에서 구동되는 추론</text>
+        <text x="16" y="122" font-size="13" fill="#000000" opacity="0.85">레이턴시를 극한으로 잡는 거였습니다. 결과부터 말씀드리면</text>
+        <text x="16" y="140" font-size="13" fill="#000000" opacity="0.85">whisper.cpp와 패리티에 도달했습니다.</text>
+      </g>
+      <g id="content-block-2">
+        <text id="speaker-name" x="16" y="176" font-size="10" font-weight="700" fill="#FF9500">이대리</text>
+        <text id="para" x="16" y="196" font-size="13" fill="#000000" opacity="0.85">네, 그러면 다음 스프린트에서는 편집자용 기능 쪽을</text>
+        <text x="16" y="214" font-size="13" fill="#000000" opacity="0.85">우선순위로 잡으면 좋을 것 같습니다.</text>
+      </g>
+
+      <!-- 상세 mode preview: review bar (N2) shown as a comment for the designer -->
+      <g id="review-bar-detailed-only" opacity="0.5">
+        <rect x="0" y="430" width="440" height="26" fill="#FF9F0A" fill-opacity="0.07"/>
+        <line x1="0" y1="430" x2="440" y2="430" stroke="#3C3C43" stroke-opacity="0.12"/>
+        <path id="warn" d="M16 442 l5 9 h-10 z" fill="#FF9F0A"/>
+        <text x="30" y="447" font-size="11" fill="#000000">검토 필요 4개 · 색스</text>
+        <text x="392" y="447" font-size="11" fill="#3C3C43" opacity="0.5">1/4</text>
+        <text x="414" y="447" font-size="12" fill="#3C3C43">▲</text>
+        <text x="428" y="447" font-size="12" fill="#3C3C43">▼</text>
+        <text x="16" y="468" font-size="9" fill="#3C3C43" opacity="0.45">(N2 review bar — 상세 모드에서만 표시)</text>
+      </g>
+    </g>
+
+    <line id="pane-divider" x1="440" y1="28" x2="440" y2="480" stroke="#3C3C43" stroke-opacity="0.15"/>
+
+    <!-- ── RIGHT: control / editor panel (width 280) ── -->
+    <g id="side-panel">
+      <rect x="440" y="28" width="280" height="452" fill="#3C3C43" fill-opacity="0.04"/>
+
+      <!-- language + mic (existing) -->
+      <text x="456" y="50" font-size="10" fill="#3C3C43" opacity="0.6">언어</text>
+      <rect x="456" y="56" width="248" height="22" rx="5" fill="#FFFFFF" stroke="#3C3C43" stroke-opacity="0.15"/>
+      <text x="464" y="71" font-size="11" fill="#000000">한국어</text>
+
+      <!-- drop zone (existing) -->
+      <rect x="456" y="90" width="248" height="40" rx="8" fill="#007AFF" fill-opacity="0.06" stroke="#007AFF" stroke-opacity="0.4" stroke-dasharray="6 4"/>
+      <text x="580" y="114" text-anchor="middle" font-size="11" fill="#007AFF">파일 드래그&amp;드롭</text>
+
+      <!-- 발언권 (speaking stats, existing) -->
+      <line x1="456" y1="146" x2="704" y2="146" stroke="#3C3C43" stroke-opacity="0.1"/>
+      <text x="456" y="164" font-size="10" font-weight="600" fill="#3C3C43">발언권</text>
+      <rect x="456" y="170" width="150" height="8" rx="4" fill="#007AFF"/>
+      <rect x="456" y="182" width="90" height="8" rx="4" fill="#FF9500"/>
+
+      <!-- 편집 도구 panel — NEW (PR #73). Toggles + sliders, bound to EditorSettings -->
+      <g id="editor-tools-panel">
+        <line x1="456" y1="200" x2="704" y2="200" stroke="#3C3C43" stroke-opacity="0.1"/>
+        <text x="456" y="218" font-size="11" font-weight="600" fill="#000000">▾ 편집 도구</text>
+
+        <!-- toggle rows (switch) -->
+        <text x="456" y="238" font-size="10" fill="#3C3C43">필러 컷</text>
+        <rect x="676" y="230" width="28" height="16" rx="8" fill="#007AFF"/>
+        <circle cx="696" cy="238" r="6" fill="#FFFFFF"/>
+
+        <text x="456" y="258" font-size="10" fill="#3C3C43">무음 컷</text>
+        <rect x="676" y="250" width="28" height="16" rx="8" fill="#007AFF"/>
+        <circle cx="696" cy="258" r="6" fill="#FFFFFF"/>
+
+        <!-- slider row: 무음 최소초 -->
+        <text x="456" y="278" font-size="10" fill="#3C3C43" opacity="0.7">무음 최소초</text>
+        <line x1="540" y1="274" x2="676" y2="274" stroke="#3C3C43" stroke-opacity="0.2" stroke-width="3"/>
+        <circle cx="588" cy="274" r="6" fill="#FFFFFF" stroke="#3C3C43" stroke-opacity="0.2"/>
+        <text x="704" y="278" text-anchor="end" font-size="10" fill="#3C3C43" opacity="0.5">0.6</text>
+
+        <text x="456" y="298" font-size="10" fill="#3C3C43">자동 챕터</text>
+        <rect x="676" y="290" width="28" height="16" rx="8" fill="#007AFF"/>
+        <circle cx="696" cy="298" r="6" fill="#FFFFFF"/>
+
+        <!-- slider row: 유사도 -->
+        <text x="456" y="318" font-size="10" fill="#3C3C43" opacity="0.7">유사도</text>
+        <line x1="540" y1="314" x2="676" y2="314" stroke="#3C3C43" stroke-opacity="0.2" stroke-width="3"/>
+        <circle cx="624" cy="314" r="6" fill="#FFFFFF" stroke="#3C3C43" stroke-opacity="0.2"/>
+        <text x="704" y="318" text-anchor="end" font-size="10" fill="#3C3C43" opacity="0.5">0.70</text>
+
+        <text x="456" y="338" font-size="10" fill="#3C3C43">하이라이트</text>
+        <rect x="676" y="330" width="28" height="16" rx="8" fill="#007AFF"/>
+        <circle cx="696" cy="338" r="6" fill="#FFFFFF"/>
+      </g>
+
+      <!-- 타이튼 stat — NEW (PR #68) -->
+      <g id="tighten-stat">
+        <text x="456" y="364" font-size="11" fill="#007AFF">✂︎</text>
+        <text x="472" y="364" font-size="11" fill="#3C3C43">타이튼: 38컷 · 71초 절감 가능</text>
+      </g>
+
+      <!-- export menu — NEW items: .vtt, 타이튼 .csv, 유튜브 챕터 .txt (PR #63/#68/#69) -->
+      <g id="export-menu">
+        <rect x="456" y="440" width="248" height="26" rx="6" fill="#FFFFFF" stroke="#3C3C43" stroke-opacity="0.15"/>
+        <text x="580" y="457" text-anchor="middle" font-size="11" fill="#007AFF">↑ 내보내기  (md · txt · srt · vtt · json · csv · 챕터)</text>
+      </g>
+    </g>
+  </g>
+</svg>
