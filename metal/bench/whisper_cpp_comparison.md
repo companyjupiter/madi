@@ -17,31 +17,41 @@ fast baseline and wins on raw speed.** Our value is elsewhere — see "Takeaways
 ### jfk — 11 s, English
 | metric | Sovereign (ours) | whisper.cpp | winner |
 |---|---|---|---|
-| end-to-end wall (incl load) | 2.49 s | **0.85 s** | whisper.cpp ~2.9× |
+| end-to-end wall (incl load) | 2.49 s | **0.85 s** | whisper.cpp ~2.9× (load-dominated on an 11 s clip) |
 | model load | ~1.5 s (streaming) | **0.20 s** | whisper.cpp |
-| encoder | 634 ms | **540 ms** | whisper.cpp ~1.2× |
+| encoder | 551 ms | 550 ms | tie (re-measured 2026-06-15; was 634 ms) |
+| decode (26 tok, startup-bound) | 420 tok/s | **682 tok/s** | whisper.cpp (too short for steady state — see ko60) |
 | peak RSS | 1.11 GB | 1.09 GB | ~tie |
 | transcript | *identical* | *identical* | tie |
 
-### ko60 — 60 s, Korean
+### ko60 — 60 s, Korean  (RE-MEASURED 2026-06-15, both reproducible n=2)
 | metric | Sovereign (ours) | whisper.cpp | winner |
 |---|---|---|---|
-| encoder / 30 s chunk | ~650 ms | **571 ms** | whisper.cpp ~1.14× |
-| **decode** | **~460 tok/s (640 ms/2ch)** | ~848 ms/2ch | **ours ~1.3×** |
-| steady-state transcription (2 chunks) | **~1940 ms** | ~1990 ms | **ours slightly ahead** |
+| encoder / 30 s chunk | **494 ms** (enc_batch=2) | 540 ms | ours ~1.1× (batched) |
+| encoder / chunk (single, live) | 551 ms | 550 ms | tie |
+| **decode** (full, incl argmax/sample) | ~526 tok/s (557 ms/293 tok) | **~595 tok/s** (437 ms decode + 65 ms sample / 298 tok) | **whisper.cpp ~1.13×** |
+| steady-state transcription (2 chunks, excl load) | **~1587 ms** | ~1596 ms | ~tie (ours <1% ahead) |
+| real-time factor | ~38× | ~38× | tie |
 | peak RSS | 1.19 GB | 1.13 GB | ~tie |
 | transcript (chars) | 1057 | 1065 | ~identical |
 
+> **CORRECTION (2026-06-15):** an earlier revision of this file claimed *decode
+> ~1.3× faster than whisper.cpp*. A fresh reproducible re-measure (same HW, same
+> Q8 model, greedy) shows the **opposite**: whisper.cpp decode is ~1.13× faster
+> (595 vs 526 tok/s, like-for-like incl sampling). The encoder, however, now
+> **edges ahead with enc_batch** (494 vs 540 ms/chunk; tied at batch 1). **Net:
+> end-to-end transcription is a dead heat (~38× RT both, excl one-time load).**
+> The old claim is retracted — likely whisper.cpp's decode got faster since, or
+> the prior whisper.cpp number was mismeasured.
+>
 > **Decode optimization journey** (quark-/profile-guided, all bit-exact):
-> **233 → 460 tok/s (+97%, ~2×)**. Per-kernel GPU profiling kept redirecting the
-> attack to the real bottleneck — the cross-attention kernels, not the projection
-> GEMVs. Wins: parallelize the cross-attn / self-attn output phase (was 64 of 256
-> threads → all 256), then vectorize the QK dots (cache q + half4) in
-> flash_cross_attn and extract_ca_head. After this, **decode is ~1.3× faster than
-> whisper.cpp** and steady-state transcription is **slightly ahead overall** — up
-> from ~1.4× behind at the start. The only remaining gap is the encoder (~14%,
-> dominated by MPS GEMM which is already near-optimal). Load (one-time,
-> pre-meeting) is excluded — it doesn't recur during a live session.
+> 233 → ~526 tok/s. Per-kernel GPU profiling redirected the attack to the real
+> bottleneck — the cross-attention kernels. Wins: parallelize the cross/self-attn
+> output phase (64→256 threads), vectorize QK dots (cache q + half4). This closed
+> a ~1.4× decode gap to ~1.13×. **Next lever (measured, not yet shipped):** the
+> batched cross-attention kernel (PR #52, `flash_cross_attn_f16kv_batched`) makes
+> the *multichunk-batched* decode block 1.27× faster — once integrated into file
+> decode it should flip file-mode decode back ahead. Live (B=1) is unaffected.
 
 ### Diarization — VoxConverse dev (DER, md-eval collar 0.25)
 | metric | Sovereign (ours) | whisper.cpp |
@@ -61,8 +71,12 @@ fast baseline and wins on raw speed.** Our value is elsewhere — see "Takeaways
    Ours is a from-scratch greedy decoder (~237 tok/s) — competitive but not tuned to that level.
 3. **Encoder**: within ~1.2× — our from-scratch Zig+Metal encoder is close.
 
-## Takeaways (honest)
-- **Speed**: whisper.cpp wins (~2.7–2.9× end-to-end). Don't claim otherwise.
+## Takeaways (honest, 2026-06-15 re-measure)
+- **Speed**: a **dead heat on transcription** — steady-state (ko60, excl load) is
+  ~tied (~38× RT both); encoder ours ~1.1× ahead with enc_batch, decode whisper.cpp
+  ~1.13× ahead. The only real whisper.cpp win is **model load** (mmap 0.25 s vs our
+  streaming 1.5 s), which on a short 11 s clip dominates end-to-end (~2.9×) but is a
+  **one-time, pre-meeting cost** in resident/live use. Claim parity, not a win.
 - **Memory / Quality / Timestamps**: parity — RSS ~tied, transcripts identical/near-identical
   (same weights), and both now use DTW word alignment (monotonic).
 - **Where we are differentiated, not faster**:
