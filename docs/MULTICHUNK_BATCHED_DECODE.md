@@ -1,6 +1,46 @@
 # Multi-chunk batched decode — design & staged plan
 
-## STATUS (J COMPLETE — integration refuted on speed, primitives kept)
+## STATUS (2026-06-15 — batched attn DONE, re-integration is the remaining lever)
+
+**The blocker is gone.** The 2026-06 J refutation was because *attention stayed
+per-slot* (43% of batched decode, un-batched). That kernel now exists:
+`flash_cross_attn_f16kv_batched` (PR #52) — decodeBlockBatched is **1.27× faster**
+(cross-attn 1.94×). With it, `test_p5probe` measures **decodeBlockBatched B=8 ≈
+1040 tok/s vs per-slot ~520 = ~2×**. A full-pipeline audit (PROF=1) puts decode at
+**23% of file wall (3.9 s on 7.7 min)**; realizing this ~2× would cut it to ~2 s,
+flipping end-to-end **ahead of whisper.cpp** (15.6 → ~13.7 s vs 14.5 s).
+
+**So the win is PROVEN; only the re-integration plumbing remains.** It's a
+multi-milestone rebuild of the entangled Phase C decode loop — do it focused, all
+behind `BATCHDEC=1` (default off → shipping per-slot path untouched until verified):
+
+- **M1 — batched plain decode (text-equivalence + speed).** B-major decode buffers
+  (`bb_x[B][D]`, `bb_tokens[B][MAX_TOK]`, `bb_logits[B][VOCAB]`, `bb_conf`, `bb_pos[B]`);
+  deq layer weights → `WF16` once/decode; deq `tok_emb`→f16 once for the batched
+  logit (`matmulF16Batched(bb_x16[B×D], tok_emb_f16[D×VOCAB])`); contiguous cross-KV
+  `[B][ENC_SEQ][D]` (the batched kernel's layout). Per-token loop: per-slot
+  embed/pe → `decodeBlockBatched` → per-slot LN/suppress/filt/argmax/step → **ragged
+  EOT** (mask finished slots, shrink active B). Gate: only nb≥2, lang forced, no
+  prompt, plain (no-ts). Verify: BPE text == per-slot path; measure decode tok/s.
+- **M2 — word timestamps (production-complete).** Add `sc_out`+`write_sc` to
+  `flash_cross_attn_f16kv_batched` (per-slot [B][NH][seqlen] alignment scores for
+  the alignment layer); decodeBlockBatched captures alignment for that layer;
+  per-slot `kAccumulate` into per-slot `d_ca`. Then per-slot `wordTimestamps`.
+- **M3 — seek / rescue / collapse: retire-to-sequential.** A slot that early-EOTs
+  (seek), collapses, or trips logprob rescue leaves the batch and finishes on the
+  proven per-slot path. Then the WER/CER A/B gate (LibriSpeech + FLEURS-ko).
+
+**Entanglement notes (why it's a focused build, not a quick edit):** Phase C's
+per-slot loop fuses SOT lang-probe (slot-0 once), the hybrid plain→ts-mode rescue,
+the OpenAI seek re-encode, per-chunk word-DTW alignment (needs `d_ca`), and the
+hallucination guard — all per-slot. M1 sidesteps all but the core loop by falling
+back; M2/M3 fold them back in. **Prerequisites DONE + verified:** decodeBlockBatched
+(PR #41), multi-step KV growth (PR #42), batched cross-attn (PR #52), contiguous
+cross-KV. Speed proven (test_p5probe). Only plumbing + the 3 milestones remain.
+
+---
+
+## (historical) STATUS (J COMPLETE — integration refuted on speed, primitives kept)
 
 **Outcome:** the full integration was built and is **correct** (quality-equivalent
 transcript, end-to-end), but the **speedup is refuted**: batched is 22% *slower*
