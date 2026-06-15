@@ -46,7 +46,7 @@ enum Exporters {
     /// Structured JSON: per-segment speaker/time/text/per-word conf + a speaker
     /// talk-time summary. For programmatic post-processing (the structured
     /// counterpart to the stdout event stream).
-    static func json(_ lines: [Line], names: [Int: String] = [:]) -> String {
+    static func json(_ lines: [Line], names: [Int: String] = [:], settings: EditorSettings = .init()) -> String {
         let segs: [[String: Any]] = lines.map { l in
             [
                 "speaker": l.speaker,
@@ -62,38 +62,40 @@ enum Exporters {
         let speakers: [[String: Any]] = times.sorted { $0.value > $1.value }.map {
             ["speaker": $0.key, "name": names[$0.key] ?? "Speaker \($0.key)", "talk_seconds": $0.value]
         }
-        let fillers = EditorCuts.fillers(lines)
-        let fillerJSON: [[String: Any]] = fillers.map {
-            ["start": $0.start, "end": $0.end, "text": $0.label] as [String: Any]
+        var root: [String: Any] = ["segments": segs, "speakers": speakers]
+        if settings.fillers {
+            let fillers = EditorCuts.fillers(lines)
+            root["fillers"] = fillers.map { ["start": $0.start, "end": $0.end, "text": $0.label] as [String: Any] }
+            root["filler_seconds"] = fillers.reduce(0) { $0 + $1.duration }
         }
-        let silences = EditorCuts.silences(lines)
-        let silenceJSON: [[String: Any]] = silences.map {
-            ["start": $0.start, "end": $0.end] as [String: Any]
+        if settings.silences {
+            let silences = EditorCuts.silences(lines, minGap: settings.silenceMinGap, pad: settings.silencePad)
+            root["silences"] = silences.map { ["start": $0.start, "end": $0.end] as [String: Any] }
+            root["silence_seconds"] = silences.reduce(0) { $0 + $1.duration }
         }
-        let tighten = EditorCuts.tighten(lines)
-        let root: [String: Any] = [
-            "segments": segs, "speakers": speakers,
-            "fillers": fillerJSON,
-            "filler_seconds": fillers.reduce(0) { $0 + $1.duration },
-            "silences": silenceJSON,
-            "silence_seconds": silences.reduce(0) { $0 + $1.duration },
-            "tighten": [
-                "cuts": tighten.count,
-                "total_seconds": tighten.reduce(0) { $0 + $1.duration },
-            ] as [String: Any],
-            "chapters": EditorCuts.chapters(lines).map {
-                ["start": $0.start, "title": $0.title] as [String: Any]
-            },
-            "retakes": EditorCuts.retakes(lines).map {
-                [
-                    "keep_start": $0.keepStart, "keep_text": $0.keepText,
-                    "drops": $0.drops.map { ["start": $0.start, "end": $0.end] as [String: Any] },
-                ] as [String: Any]
-            },
-            "highlights": EditorCuts.highlights(lines).map {
-                ["start": $0.start, "end": $0.end, "text": $0.text, "score": $0.score] as [String: Any]
-            },
-        ]
+        let tighten = EditorCuts.tighten(lines, settings)
+        root["tighten"] = [
+            "cuts": tighten.count,
+            "total_seconds": tighten.reduce(0) { $0 + $1.duration },
+        ] as [String: Any]
+        if settings.chapters {
+            root["chapters"] = EditorCuts.chapters(lines, gap: settings.chapterGap, minLen: settings.chapterMinLen)
+                .map { ["start": $0.start, "title": $0.title] as [String: Any] }
+        }
+        if settings.retakes {
+            root["retakes"] = EditorCuts.retakes(lines, simThreshold: settings.retakeSim, minTokens: settings.retakeMinTokens)
+                .map {
+                    [
+                        "keep_start": $0.keepStart, "keep_text": $0.keepText,
+                        "drops": $0.drops.map { ["start": $0.start, "end": $0.end] as [String: Any] },
+                    ] as [String: Any]
+                }
+        }
+        if settings.highlights {
+            root["highlights"] = EditorCuts.highlights(lines, minWords: settings.hlMinWords,
+                                                       minPause: settings.hlMinPause, minConf: settings.hlMinConf)
+                .map { ["start": $0.start, "end": $0.end, "text": $0.text, "score": $0.score] as [String: Any] }
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
               let str = String(data: data, encoding: .utf8) else { return "{}" }
@@ -180,8 +182,8 @@ enum Exporters {
     /// One-click "tighten" cut-list as CSV — the merged removable ranges
     /// (fillers + silences). Seconds-based so it feeds ffmpeg / Resolve / Premiere
     /// scripts and opens in any spreadsheet. Header documents the totals.
-    static func cutListCSV(_ lines: [Line]) -> String {
-        let cuts = EditorCuts.tighten(lines)
+    static func cutListCSV(_ lines: [Line], settings: EditorSettings = .init()) -> String {
+        let cuts = EditorCuts.tighten(lines, settings)
         let total = cuts.reduce(0) { $0 + $1.duration }
         var s = "# tighten cut-list — \(cuts.count) cuts, \(String(format: "%.1f", total))s removable\n"
         s += "start_sec,end_sec,duration_sec,kind,label\n"
@@ -193,9 +195,11 @@ enum Exporters {
     }
 
     /// YouTube chapters: `m:ss Title` (or `h:mm:ss` past an hour), first at 0:00.
-    static func youtubeChapters(_ lines: [Line]) -> String {
+    static func youtubeChapters(_ lines: [Line], settings: EditorSettings = .init()) -> String {
         var s = ""
-        for c in EditorCuts.chapters(lines) { s += "\(ytTime(c.start)) \(c.title)\n" }
+        for c in EditorCuts.chapters(lines, gap: settings.chapterGap, minLen: settings.chapterMinLen) {
+            s += "\(ytTime(c.start)) \(c.title)\n"
+        }
         return s
     }
 

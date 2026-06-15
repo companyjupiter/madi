@@ -211,8 +211,10 @@ struct ContentView: View {
                 speakingStats
             }
 
-            if !session.transcript.lines.isEmpty, session.tightenStat.cuts > 0 {
-                tightenStatView
+            if !session.transcript.lines.isEmpty {
+                Divider()
+                editorToolsPanel
+                if session.tightenStat.cuts > 0 { tightenStatView }
             }
 
             Spacer()
@@ -226,6 +228,50 @@ struct ContentView: View {
         .padding(Theme.Space.window)
         .frame(width: 280)
         .background(Theme.Colors.textTertiary.opacity(0.04))
+    }
+
+    // 편집 도구: toggle + tune every editor feature. Dense by design — a UI/UX
+    // designer will restyle later. Binds to the persisted session.editorSettings;
+    // exports + the tighten stat react live. Control-panel only — never the
+    // clean 내용 transcript.
+    @State private var editorToolsExpanded = false
+    private var editorToolsPanel: some View {
+        DisclosureGroup("편집 도구", isExpanded: $editorToolsExpanded) {
+            VStack(alignment: .leading, spacing: 5) {
+                Toggle("필러 컷", isOn: $session.editorSettings.fillers)
+                Toggle("무음 컷", isOn: $session.editorSettings.silences)
+                sliderRow("무음 최소초", $session.editorSettings.silenceMinGap, 0.2...3.0)
+                Divider()
+                Toggle("자동 챕터", isOn: $session.editorSettings.chapters)
+                sliderRow("챕터 휴지초", $session.editorSettings.chapterGap, 1...10)
+                sliderRow("챕터 최소간격", $session.editorSettings.chapterMinLen, 10...120, "%.0f")
+                Divider()
+                Toggle("리테이크", isOn: $session.editorSettings.retakes)
+                sliderRow("유사도", $session.editorSettings.retakeSim, 0.5...0.95, "%.2f")
+                Divider()
+                Toggle("하이라이트", isOn: $session.editorSettings.highlights)
+                sliderRow("최소 신뢰도", $session.editorSettings.hlMinConf, 0.5...0.99, "%.2f")
+                sliderRow("최소 휴지초", $session.editorSettings.hlMinPause, 0.3...3.0)
+            }
+            .font(Theme.Fonts.status)
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .padding(.top, 4)
+        }
+        .font(Theme.Fonts.status)
+        .tint(Theme.Colors.accent)
+    }
+
+    private func sliderRow(_ label: String, _ value: Binding<Double>,
+                           _ range: ClosedRange<Double>, _ fmt: String = "%.1f") -> some View {
+        HStack(spacing: 6) {
+            Text(label).frame(width: 84, alignment: .leading)
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Slider(value: value, in: range)
+            Text(String(format: fmt, value.wrappedValue))
+                .frame(width: 34, alignment: .trailing).monospacedDigit()
+                .foregroundStyle(Theme.Colors.textTertiary)
+        }
     }
 
     // 타이튼 stat: removable filler + silence time. Editor info in the control

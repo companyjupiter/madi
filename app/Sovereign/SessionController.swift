@@ -35,6 +35,10 @@ final class SessionController: EngineProcessDelegate {
     }()
     var speakerNames: [Int: String] = [:]
 
+    /// Editor-feature toggles + thresholds (persisted). The UI binds to this; all
+    /// editor exports/stats read from it.
+    var editorSettings = EditorSettings.load() { didSet { editorSettings.save() } }
+
     /// Rename a speaker (applies to all their lines + exports). Empty clears it
     /// back to "Speaker N". Names are per-transcription (speaker ids don't carry
     /// across files), so they reset on each new session.
@@ -185,20 +189,20 @@ final class SessionController: EngineProcessDelegate {
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportJSON(to url: URL) throws {
-        try Exporters.json(transcript.lines, names: speakerNames)
+        try Exporters.json(transcript.lines, names: speakerNames, settings: editorSettings)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportCutList(to url: URL) throws {
-        try Exporters.cutListCSV(transcript.lines)
+        try Exporters.cutListCSV(transcript.lines, settings: editorSettings)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportChapters(to url: URL) throws {
-        try Exporters.youtubeChapters(transcript.lines)
+        try Exporters.youtubeChapters(transcript.lines, settings: editorSettings)
             .write(to: url, atomically: true, encoding: .utf8)
     }
-    /// (cut count, removable seconds) for the tighten stat — fillers + silences.
+    /// (cut count, removable seconds) for the tighten stat — honors the toggles.
     var tightenStat: (cuts: Int, seconds: Double) {
-        let c = EditorCuts.tighten(transcript.lines)
+        let c = EditorCuts.tighten(transcript.lines, editorSettings)
         return (c.count, c.reduce(0) { $0 + $1.duration })
     }
 }
