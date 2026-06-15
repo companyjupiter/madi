@@ -16,6 +16,34 @@ rendering/exports in `app/Sovereign/Transcript/Exporters.swift`. Unit tests:
 
 ---
 
+## 편집 도구 panel — toggle & tune everything  (PR #73)
+
+A `DisclosureGroup` in the side panel (shown when a transcript exists) exposes
+every editor feature as a toggle + threshold sliders, bound to the **persisted**
+`SessionController.editorSettings` (`EditorSettings`, saved to UserDefaults). The
+tighten stat and all exports (`.json` / tighten `.csv` / chapter `.txt`) react
+live to these.
+
+| Control | Field | Range / default |
+|---|---|---|
+| 필러 컷 | `fillers` | on |
+| 무음 컷 | `silences` | on |
+| 무음 최소초 | `silenceMinGap` | 0.2–3.0 / 0.6 |
+| 자동 챕터 | `chapters` | on |
+| 챕터 휴지초 | `chapterGap` | 1–10 / 2.5 |
+| 챕터 최소간격 | `chapterMinLen` | 10–120 / 20 |
+| 리테이크 | `retakes` | on |
+| 유사도 | `retakeSim` | 0.5–0.95 / 0.7 |
+| 하이라이트 | `highlights` | on |
+| 최소 신뢰도 | `hlMinConf` | 0.5–0.99 / 0.8 |
+| 최소 휴지초 | `hlMinPause` | 0.3–3.0 / 1.0 |
+
+Disabling a feature omits it from the JSON export (and from the tighten cut-list
+for fillers/silences). Dense by design — a UI/UX designer will restyle later. The
+panel lives in the control panel, never in the clean 내용 transcript.
+
+---
+
 ## View modes — 내용 / 상세  (PR #64)
 
 A toggle above the transcript; choice persists via `@AppStorage("transcriptViewMode")`.

@@ -15,6 +15,40 @@ struct CutRange: Equatable {
     var duration: Double { max(0, end - start) }
 }
 
+/// User-adjustable editor-feature toggles + thresholds (persisted). Every editor
+/// analysis reads from here so the UI can tune behavior without code changes.
+struct EditorSettings: Codable, Equatable {
+    // include toggles (which signals are produced / exported)
+    var fillers = true
+    var silences = true
+    var chapters = true
+    var retakes = true
+    var highlights = true
+    // E2 / N3 silence
+    var silenceMinGap = 0.6
+    var silencePad = 0.1
+    // N4 chapters
+    var chapterGap = 2.5
+    var chapterMinLen = 20.0
+    // N1 retakes
+    var retakeSim = 0.7
+    var retakeMinTokens = 3
+    // N5 highlights
+    var hlMinWords = 5
+    var hlMinPause = 1.0
+    var hlMinConf = 0.8
+
+    private static let key = "editorSettings"
+    static func load() -> EditorSettings {
+        guard let d = UserDefaults.standard.data(forKey: key),
+              let s = try? JSONDecoder().decode(EditorSettings.self, from: d) else { return .init() }
+        return s
+    }
+    func save() {
+        if let d = try? JSONEncoder().encode(self) { UserDefaults.standard.set(d, forKey: Self.key) }
+    }
+}
+
 enum EditorCuts {
     /// Unambiguous disfluencies only. Content-ambiguous words (like, you know,
     /// 그, 저, 뭐, 막, 이제, ah) are deliberately EXCLUDED — a false positive here
@@ -75,6 +109,15 @@ enum EditorCuts {
         let all = (fillers(lines) + silences(lines, minGap: minGap, pad: pad))
             .sorted { $0.start < $1.start }
         return merge(all)
+    }
+
+    /// Settings-aware tighten: includes only the enabled kinds, with the
+    /// configured silence thresholds.
+    static func tighten(_ lines: [Line], _ s: EditorSettings) -> [CutRange] {
+        var all: [CutRange] = []
+        if s.fillers { all += fillers(lines) }
+        if s.silences { all += silences(lines, minGap: s.silenceMinGap, pad: s.silencePad) }
+        return merge(all.sorted { $0.start < $1.start })
     }
 
     /// Merge overlapping/touching ranges (input must be sorted by start).
