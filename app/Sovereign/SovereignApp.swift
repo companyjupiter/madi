@@ -18,16 +18,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// App appearance override. System follows macOS; Light/Dark force it.
+enum Appearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+    var id: String { rawValue }
+    var label: String { self == .system ? "시스템" : self == .light ? "라이트" : "다크" }
+    var colorScheme: ColorScheme? { self == .light ? .light : self == .dark ? .dark : nil }
+}
+
 @main
 struct SovereignApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var downloader = ModelDownloader()
     @State private var session = SessionController()
+    @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some Scene {
         WindowGroup("Sovereign Whisper") {
             ContentView(session: session, downloader: downloader)
                 .frame(minWidth: Theme.Size.windowMinW, minHeight: Theme.Size.windowMinH)
+                .preferredColorScheme(appearance.colorScheme)
                 .task { downloader.ensureModel() }
         }
         .windowStyle(.titleBar)

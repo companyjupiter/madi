@@ -15,6 +15,11 @@ OUT = os.path.join(HERE, '..', 'app', 'Sovereign', 'UI', 'Theme.swift')
 t = json.load(open(TOKENS))
 
 def swift_color(tok):
+    # Semantic (adaptive) colors auto-resolve for light/dark mode — used for text
+    # and background tokens so the app is readable in both. Brand/data colors
+    # (accent, speaker palette, etc.) stay as fixed RGB.
+    if 'semantic' in tok:
+        return f'Color(nsColor: .{tok["semantic"]})'
     hexv = tok['value'].lstrip('#')
     r, g, b = (int(hexv[i:i+2], 16) / 255.0 for i in (0, 2, 4))
     a = tok.get('alpha', 1.0)
