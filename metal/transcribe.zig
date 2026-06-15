@@ -383,6 +383,15 @@ var g_zeros: [*]f32 = undefined; // shared zero bias [D]
 // speaker-attributed transcript: words (global time + text) ⨝ speaker segments
 const Word = struct { t: f32, txt: []const u8 };
 const SpkSeg = struct { a: f32, b: f32, spk: i32 };
+// AUDIT: full wall-clock attribution (PROF=1) — [perf] only times GPU, which hid
+// the mel CPU bottleneck. These accumulate every phase for a complete breakdown.
+var g_t_mel: u64 = 0;
+var g_t_conv: u64 = 0;
+var g_t_enc: u64 = 0;
+var g_t_ckv: u64 = 0;
+var g_t_dec: u64 = 0;
+var g_t_dtw: u64 = 0;
+var g_t_diar: u64 = 0;
 var g_words = std.ArrayList(Word).init(alloc);
 var g_segs = std.ArrayList(SpkSeg).init(alloc);
 var g_vad_iv = std.ArrayList([2]f32).init(alloc); // silero speech intervals (global s) — clips diar segments to speech
@@ -1408,7 +1417,9 @@ pub fn main() !void {
         }
 
         // front-end: mel → Conv1D×2 → enc_input (into this chunk's batch slot)
+        var mt = try std.time.Timer.start();
         mel.melSpectrogram(samples, mel_filters, mel_buf);
+        g_t_mel += mt.read();
         var ct = try std.time.Timer.start();
         try mtl.beginCommandBuffer();
         try imIm2col(f_im2col, col1, mel_buf.ptr, mel.N_MELS, mel.N_FRAMES, 1, 1, mel.N_FRAMES);
@@ -1419,7 +1430,9 @@ pub fn main() !void {
         try geluPos(f_geluPos, d_ex + @as(usize, nb) * ENC_SEQ * D, t2, c2b, enc_pe, ENC_SEQ * D, D);
         try mtl.commitCommandBuffer();
         try mtl.sync();
-        slot_conv[nb] = @as(f64, @floatFromInt(ct.read())) / 1e6;
+        const conv_ns_t = ct.read();
+        g_t_conv += conv_ns_t;
+        slot_conv[nb] = @as(f64, @floatFromInt(conv_ns_t)) / 1e6;
         slot_nenv[nb] = energyEnvelope(samples[0..got], slot_env[@as(usize, nb) * ENV_LEN ..][0..ENV_LEN]);
         @memcpy(slot_samp[@as(usize, nb) * mel.CHUNK_SAMPLES ..][0..got], samples[0..got]);
         slot_got[nb] = got;
@@ -1435,7 +1448,9 @@ pub fn main() !void {
         // ── Phase B: ONE batched encoder forward (weights + dequant amortized ×nb)
         var et = try std.time.Timer.start();
         try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, nb);
-        const enc_ms = @as(f64, @floatFromInt(et.read())) / 1e6 / @as(f64, @floatFromInt(nb));
+        const enc_ns_t = et.read();
+        g_t_enc += enc_ns_t;
+        const enc_ms = @as(f64, @floatFromInt(enc_ns_t)) / 1e6 / @as(f64, @floatFromInt(nb));
 
         // ── Phase C: per-slot cross-KV + decode + timestamps (chronological order)
         for (0..nb) |slot| {
@@ -1445,6 +1460,7 @@ pub fn main() !void {
         const cchunk = slot_chunk[slot];
         const cgot = slot_got[slot];
         const eo16 = out_f16 + slot * @as(usize, ENC_SEQ) * D;
+        var ckvt = try std.time.Timer.start();
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
             try deqW16(f_deq, cross_wdq, ckw[l], D, D);
@@ -1455,6 +1471,7 @@ pub fn main() !void {
             try mtl.commitCommandBuffer();
             try mtl.sync();
         }
+        g_t_ckv += ckvt.read();
 
         // reset decode state for this chunk
         for (SEED, 0..) |s, i| { d_tokens[i] = s; out_tokens[i] = s; }
@@ -1703,7 +1720,10 @@ pub fn main() !void {
         break :mode;
         }
 
-        const dec_ms = @as(f64, @floatFromInt(dt2.read() -| host_ns)) / 1e6; // word-DTW/BPE moved inside the loop; keep tok/s comparable
+        const dec_gpu_ns = dt2.read() -| host_ns;
+        g_t_dec += dec_gpu_ns;
+        g_t_dtw += host_ns;
+        const dec_ms = @as(f64, @floatFromInt(dec_gpu_ns)) / 1e6; // word-DTW/BPE moved inside the loop; keep tok/s comparable
         try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms | passes {d}]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_tok_total, dec_ms, @as(f64, @floatFromInt(n_tok_total)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6, total_passes });
         const avg_lp: f32 = if (n_lp > 0) @floatCast(sum_lp / @as(f64, @floatFromInt(n_lp))) else 0;
         evSeg(@intCast(cchunk), t_off, t_off + @as(f32, @floatFromInt(cgot)) / 16000.0, chunk_text.items, @as(f32, @floatFromInt(n_tok_total)) / @as(f32, @floatCast(dec_ms / 1000.0)), @floatCast(enc_ms), @floatCast(dec_ms), total_passes, dropped, avg_lp, fb_reason);
@@ -1736,8 +1756,14 @@ pub fn main() !void {
             try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
             try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
         }
+        var diart = try std.time.Timer.start();
         try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
         try attributeTranscript(out);
+        g_t_diar += diart.read();
+        if (std.posix.getenv("PROF") != null) {
+            const ms = struct { fn f(ns: u64) f64 { return @as(f64, @floatFromInt(ns)) / 1e6; } }.f;
+            try out.print("\n=== PROF (full wall attribution, ms) ===\n  mel {d:.0} | conv {d:.0} | encoder {d:.0} | cross-KV {d:.0} | decode(gpu) {d:.0} | word-DTW+bpe {d:.0} | diar {d:.0}\n  (load + Metal init + output I/O = external wall − above)\n", .{ ms(g_t_mel), ms(g_t_conv), ms(g_t_enc), ms(g_t_ckv), ms(g_t_dec), ms(g_t_dtw), ms(g_t_diar) });
+        }
         // App file mode: re-emit the offline speaker timeline as streaming
         // `SPK <gt> <id> <dur>` lines so the macOS app's existing parser
         // attributes each word by time, then signal completion like the stream
