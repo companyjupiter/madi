@@ -39,6 +39,45 @@ final class SessionController: EngineProcessDelegate {
     /// editor exports/stats read from it.
     var editorSettings = EditorSettings.load() { didSet { editorSettings.save() } }
 
+    // ── auto-save: write a .md when a session finishes (live stop or file done) ──
+    var autoSaveEnabled: Bool = (UserDefaults.standard.object(forKey: "autoSaveEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(autoSaveEnabled, forKey: "autoSaveEnabled") }
+    }
+    var autoSaveFolder: URL = {
+        if let p = UserDefaults.standard.string(forKey: "autoSaveFolder") { return URL(fileURLWithPath: p) }
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser
+    }() {
+        didSet { UserDefaults.standard.set(autoSaveFolder.path, forKey: "autoSaveFolder") }
+    }
+    /// Last auto-saved file (UI confirmation); cleared when a new session starts.
+    private(set) var lastAutoSaved: URL? = nil
+
+    /// Write the transcript as Markdown into the auto-save folder. File-mode names
+    /// after the source file; live recordings get a timestamped "회의" name. Never
+    /// overwrites (appends " 2", " 3"…). Failures are non-fatal (manual export
+    /// still works). Not sandboxed, so a plain path write is enough.
+    private func autoSaveMarkdown() {
+        guard autoSaveEnabled, !transcript.lines.isEmpty else { return }
+        let base: String
+        if fileName.isEmpty {
+            let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HHmm"
+            base = "회의 \(df.string(from: Date()))"
+        } else {
+            base = (fileName as NSString).deletingPathExtension
+        }
+        var url = autoSaveFolder.appendingPathComponent(base).appendingPathExtension("md")
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = autoSaveFolder.appendingPathComponent("\(base) \(n)").appendingPathExtension("md"); n += 1
+        }
+        do {
+            try Exporters.markdown(transcript.lines, names: speakerNames)
+                .write(to: url, atomically: true, encoding: .utf8)
+            lastAutoSaved = url
+        } catch { /* non-fatal — manual export remains available */ }
+    }
+
     /// Rename a speaker (applies to all their lines + exports). Empty clears it
     /// back to "Speaker N". Names are per-transcription (speaker ids don't carry
     /// across files), so they reset on each new session.
@@ -71,6 +110,7 @@ final class SessionController: EngineProcessDelegate {
         }
         transcript.reset()
         speakerNames = [:]
+        lastAutoSaved = nil
         phase = .engineStarting
 
         let e = EngineProcess(config: makeConfig())
@@ -96,6 +136,7 @@ final class SessionController: EngineProcessDelegate {
         guard AssetManifest.modelIsValid() else { phase = .error("model not ready"); return }
         transcript.reset()
         speakerNames = [:]
+        lastAutoSaved = nil
         fileName = url.lastPathComponent
         chunksDone = 0; chunksTotal = 0
         phase = .processing
@@ -181,6 +222,7 @@ final class SessionController: EngineProcessDelegate {
         engine?.terminate()
         engine = nil
         phase = .done
+        autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
     }
 
     // MARK: export
