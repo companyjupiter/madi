@@ -13,6 +13,22 @@ struct ContentView: View {
     // The detailed (timecode + confidence + overlap) view is one tap away.
     @AppStorage("transcriptViewMode") private var contentMode = true
     private var viewMode: TranscriptViewMode { contentMode ? .content : .detailed }
+    // N2 review navigator (상세 mode): step through low-confidence words.
+    @State private var reviewIndex = 0
+    @State private var scrollTarget: UUID? = nil
+    @State private var scrollTick = 0
+
+    /// Low-confidence word occurrences, in transcript order, for the review queue.
+    private var flaggedWords: [(line: UUID, text: String)] {
+        var out: [(UUID, String)] = []
+        for l in session.transcript.lines {
+            for w in l.words where w.conf < Theme.confThreshold {
+                let t = w.text.trimmingCharacters(in: .whitespaces)
+                if !t.isEmpty { out.append((l.id, t)) }
+            }
+        }
+        return out
+    }
 
     var body: some View {
         Group {
@@ -43,13 +59,16 @@ struct ContentView: View {
         VStack(spacing: 0) {
             if case .processing = session.phase { progressBanner }
             if !session.transcript.lines.isEmpty { viewModeBar }
+            if viewMode == .detailed && !flaggedWords.isEmpty { reviewBar }
             ZStack {
                 if session.transcript.lines.isEmpty {
                     emptyState
                 } else {
                     TranscriptView(lines: session.transcript.lines, names: session.speakerNames,
                                    mode: viewMode,
-                                   onRename: { session.renameSpeaker($0, to: $1) })
+                                   onRename: { session.renameSpeaker($0, to: $1) },
+                                   scrollTarget: scrollTarget, scrollTick: scrollTick,
+                                   focusedLine: scrollTarget)
                 }
                 if dropTargeted {
                     RoundedRectangle(cornerRadius: 12)
@@ -78,6 +97,38 @@ struct ContentView: View {
             .help("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시")
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    // N2 review queue (상세 mode only): step through low-confidence words so the
+    // reviewer doesn't have to scan a long transcript for the amber ones.
+    private var reviewBar: some View {
+        let flagged = flaggedWords
+        let idx = min(reviewIndex, max(0, flagged.count - 1))
+        func jump(_ d: Int) {
+            guard !flagged.isEmpty else { return }
+            reviewIndex = ((idx + d) % flagged.count + flagged.count) % flagged.count
+            scrollTarget = flagged[reviewIndex].line
+            scrollTick += 1
+        }
+        return HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Theme.Colors.lowConf)
+            Text("검토 필요 \(flagged.count)개").font(Theme.Fonts.status)
+            if !flagged.isEmpty {
+                Text("· \(flagged[idx].text)").font(Theme.Fonts.status)
+                    .foregroundStyle(Theme.Colors.textSecondary).lineLimit(1)
+                Spacer()
+                Text("\(idx + 1)/\(flagged.count)").font(Theme.Fonts.status)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                Button { jump(-1) } label: { Image(systemName: "chevron.up") }
+                    .buttonStyle(.plain).help("이전 검토 단어")
+                Button { jump(1) } label: { Image(systemName: "chevron.down") }
+                    .buttonStyle(.plain).help("다음 검토 단어")
+            } else { Spacer() }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 7)
+        .background(Theme.Colors.lowConf.opacity(0.07))
         .overlay(alignment: .bottom) { Divider() }
     }
 

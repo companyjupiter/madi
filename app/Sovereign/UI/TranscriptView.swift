@@ -18,6 +18,11 @@ struct TranscriptView: View {
     let names: [Int: String]
     var mode: TranscriptViewMode = .detailed
     var onRename: ((Int, String) -> Void)? = nil   // speaker id → new name
+    // Review navigator: bump `scrollTick` to scroll the line `scrollTarget` into
+    // view (centered). Used by the 상세-mode low-confidence review queue.
+    var scrollTarget: UUID? = nil
+    var scrollTick: Int = 0
+    var focusedLine: UUID? = nil   // line to briefly emphasize after a jump
 
     @State private var editingSpeaker: Int? = nil
     @State private var draftName: String = ""
@@ -59,6 +64,11 @@ struct TranscriptView: View {
             .onChange(of: lines.count) { _, _ in
                 if let last = lines.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
+            .onChange(of: scrollTick) { _, _ in
+                if let t = scrollTarget {
+                    withAnimation { proxy.scrollTo(t, anchor: .center) }
                 }
             }
             .alert("화자 이름", isPresented: Binding(
@@ -115,6 +125,11 @@ struct TranscriptView: View {
             }
             Text(attributed(line)).font(Theme.Fonts.body)
         }
+        .padding(.horizontal, 6).padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(focusedLine == line.id ? Theme.Colors.lowConf.opacity(0.14) : .clear)
+        )
     }
 
     private func attributed(_ line: Line) -> AttributedString {
