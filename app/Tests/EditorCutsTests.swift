@@ -81,6 +81,27 @@ struct EditorCutsTests {
             check(EditorCuts.silences([l]).isEmpty, "overlap must not produce a silence cut")
         }
 
+        // ── 8. Tighten: fillers + silences merged, sorted, non-overlapping ──
+        do {
+            // "uh"(0–0.3) filler, then 0.3→2.0 silence (1.7s gap). The filler end
+            // (0.3) touches the silence start (0.3+0.1 pad=0.4) — not overlapping,
+            // so 2 cuts; verify sorted + each well-formed.
+            let l = line([("uh", 0, 0.3), ("ok", 2.0, 2.4), ("um", 2.4, 2.7)])
+            let cuts = EditorCuts.tighten([l], minGap: 0.6, pad: 0.1)
+            check(cuts.count >= 2, "tighten should find filler + silence, got \(cuts.count)")
+            for i in 1..<cuts.count { check(cuts[i].start >= cuts[i - 1].start, "tighten not sorted") }
+            for i in 1..<cuts.count { check(cuts[i].start >= cuts[i - 1].end - 1e-9, "tighten overlaps at \(i)") }
+        }
+
+        // ── 9. Merge fuses overlapping ranges into one (mixed kind) ──
+        do {
+            let r = [CutRange(start: 0, end: 1.0, kind: "filler", label: "uh"),
+                     CutRange(start: 0.8, end: 2.0, kind: "silence", label: "")]
+            let m = EditorCuts.merge(r)
+            check(m.count == 1, "overlapping ranges must merge, got \(m.count)")
+            check(m.first?.end == 2.0 && m.first?.kind == "mixed", "merge result wrong: \(m)")
+        }
+
         if failures == 0 { print("OK: all EditorCuts tests passed") }
         else { print("\(failures) FAILURE(S)"); exit(1) }
     }

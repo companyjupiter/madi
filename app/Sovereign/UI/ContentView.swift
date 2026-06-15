@@ -211,6 +211,10 @@ struct ContentView: View {
                 speakingStats
             }
 
+            if !session.transcript.lines.isEmpty, session.tightenStat.cuts > 0 {
+                tightenStatView
+            }
+
             Spacer()
 
             HStack {
@@ -222,6 +226,20 @@ struct ContentView: View {
         .padding(Theme.Space.window)
         .frame(width: 280)
         .background(Theme.Colors.textTertiary.opacity(0.04))
+    }
+
+    // 타이튼 stat: removable filler + silence time. Editor info in the control
+    // panel — never touches the clean transcript. Exports via the menu's CSV.
+    private var tightenStatView: some View {
+        let s = session.tightenStat
+        return HStack(spacing: 6) {
+            Image(systemName: "scissors").font(Theme.Fonts.status)
+                .foregroundStyle(Theme.Colors.accent)
+            Text("타이튼: \(s.cuts)컷 · \(String(format: "%.0f", s.seconds))초 절감 가능")
+                .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+            Spacer()
+        }
+        .help("필러 + 무음 컷 목록을 내보내기 메뉴의 ‘타이튼 컷 목록 (.csv)’로 저장")
     }
 
     // 발언권 분석: per-speaker talk time from the diarized lines (who talked how
@@ -339,6 +357,8 @@ struct ContentView: View {
             Button("Subtitles (.vtt)") { export(.init(filenameExtension: "vtt")!, session.exportVTT) }
             Button("Plain text (.txt)") { export(.plainText, session.exportText) }
             Button("JSON (.json)") { export(.json, session.exportJSON) }
+            Divider()
+            Button("타이튼 컷 목록 (.csv)") { export(.commaSeparatedText, session.exportCutList) }
         } label: { Label("내보내기", systemImage: "square.and.arrow.up") }
         .menuStyle(.borderlessButton).fixedSize()
         .disabled(session.transcript.lines.isEmpty)

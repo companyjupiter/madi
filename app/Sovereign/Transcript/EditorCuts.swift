@@ -67,4 +67,28 @@ enum EditorCuts {
         }
         return out
     }
+
+    /// One-click "tighten": fillers + silences merged into a sorted,
+    /// non-overlapping list of removable ranges (the N3 headline). Adjacent or
+    /// overlapping cuts fuse; a fused range of mixed kinds is labelled "mixed".
+    static func tighten(_ lines: [Line], minGap: Double = 0.6, pad: Double = 0.1) -> [CutRange] {
+        let all = (fillers(lines) + silences(lines, minGap: minGap, pad: pad))
+            .sorted { $0.start < $1.start }
+        return merge(all)
+    }
+
+    /// Merge overlapping/touching ranges (input must be sorted by start).
+    static func merge(_ ranges: [CutRange]) -> [CutRange] {
+        var out: [CutRange] = []
+        for r in ranges {
+            if var last = out.last, r.start <= last.end {
+                last.end = max(last.end, r.end)
+                if last.kind != r.kind { last.kind = "mixed"; last.label = "" }
+                out[out.count - 1] = last
+            } else {
+                out.append(r)
+            }
+        }
+        return out
+    }
 }
