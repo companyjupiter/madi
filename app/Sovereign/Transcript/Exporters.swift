@@ -90,6 +90,9 @@ enum Exporters {
                     "drops": $0.drops.map { ["start": $0.start, "end": $0.end] as [String: Any] },
                 ] as [String: Any]
             },
+            "highlights": EditorCuts.highlights(lines).map {
+                ["start": $0.start, "end": $0.end, "text": $0.text, "score": $0.score] as [String: Any]
+            },
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
