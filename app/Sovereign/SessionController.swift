@@ -35,6 +35,14 @@ final class SessionController: EngineProcessDelegate {
     }()
     var speakerNames: [Int: String] = [:]
 
+    /// Live segment window (s) — the live FELT-latency knob. Text lands when a
+    /// window closes, so a shorter window = snappier live text but less Whisper
+    /// context (more boundary error). Default 10 = current accuracy (no
+    /// regression); applied at the next record start. Persisted.
+    var liveWindowSeconds: Double = (UserDefaults.standard.object(forKey: "liveWindowSeconds") as? Double) ?? 10 {
+        didSet { UserDefaults.standard.set(liveWindowSeconds, forKey: "liveWindowSeconds") }
+    }
+
     /// Editor-feature toggles + thresholds (persisted). The UI binds to this; all
     /// editor exports/stats read from it.
     var editorSettings = EditorSettings.load() { didSet { editorSettings.save() } }
@@ -118,6 +126,10 @@ final class SessionController: EngineProcessDelegate {
         engine = e
 
         capture.inputDeviceID = inputDeviceID  // bind chosen mic before start
+        // live FELT-latency knob — applied before the segmenter resets in capture.start()
+        capture.segmentSeconds = liveWindowSeconds
+        capture.firstSegmentSeconds = min(3, liveWindowSeconds)
+        capture.overlapSeconds = min(3, max(1, liveWindowSeconds * 0.3))
         capture.onSegment = { [weak self] offset, url in
             self?.engine?.feed(offset: offset, wav: url)
         }
