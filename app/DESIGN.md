@@ -122,8 +122,8 @@ PCM을 같은 세그먼터에 흘려 동일 코드패스로 처리.
 
 ## 4. 모델 다운로더 (첫 실행)
 
-DMG에는 **소형 자산만** 번들(앱 ~30MB). `model.safetensors`(1.5GB)는 첫 구동 시
-다운로드:
+DMG에는 **소형 자산만** 번들(앱 ~30MB). `model.q8.safetensors`(Q8 ~830MB, F16 대비
+1.86× 작음)는 첫 구동 시 다운로드:
 
 1. 앱 시작 → `~/Library/Application Support/Sovereign/model.safetensors` 존재+해시
    확인.

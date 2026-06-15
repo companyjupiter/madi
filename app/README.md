@@ -8,8 +8,8 @@ for the full architecture; this README is the build/run quickstart.
 
 The app **spawns** `metal/out/transcribe` (STREAM mode) as a child process and
 talks to it over stdin/stdout — it never links the engine. Native
-`AVAudioEngine` replaces the old `ffmpeg` mic capture. The 1.5 GB model is
-downloaded on first run; small assets ship in the bundle.
+`AVAudioEngine` replaces the old `ffmpeg` mic capture. The ~830 MB Q8 model
+(1.86× smaller than F16) is downloaded on first run; small assets ship in the bundle.
 
 ```
 Sovereign/

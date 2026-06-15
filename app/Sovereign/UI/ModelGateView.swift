@@ -22,7 +22,7 @@ struct ModelGateView: View {
                         Text("Downloading model (\(Int(p * 100))%)")
                     }
                     .frame(width: Theme.Size.gateProgressW)
-                    Text("~1.5 GB · one time").font(Theme.Fonts.status)
+                    Text("~\(ByteCountFormatter.string(fromByteCount: AssetManifest.model.sizeBytes, countStyle: .file)) · one time").font(Theme.Fonts.status)
                         .foregroundStyle(Theme.Colors.textSecondary)
                     Button("Cancel") { downloader.cancel() }
                 }
