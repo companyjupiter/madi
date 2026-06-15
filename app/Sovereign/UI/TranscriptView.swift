@@ -5,20 +5,51 @@
 
 import SwiftUI
 
+/// How the transcript is rendered.
+/// `.content` — clean meeting-minutes reading: speaker-grouped paragraphs, no
+///   timecodes / no confidence highlight / no overlap markers. The default for
+///   general users who just want the content. `.detailed` — the review/editor
+///   view: per-turn rows with timecode, amber low-confidence words, overlap
+///   markers. Editor features never intrude on the clean reading view.
+enum TranscriptViewMode { case content, detailed }
+
 struct TranscriptView: View {
     let lines: [Line]
     let names: [Int: String]
+    var mode: TranscriptViewMode = .detailed
     var onRename: ((Int, String) -> Void)? = nil   // speaker id → new name
 
     @State private var editingSpeaker: Int? = nil
     @State private var draftName: String = ""
 
+    /// Consecutive same-speaker lines collapsed into one reading paragraph.
+    /// The block id is its last line's id so live auto-scroll (which targets
+    /// `lines.last.id`) still lands on the newest block.
+    private struct SpeakerBlock: Identifiable { let id: UUID; let speaker: Int; let text: String }
+    private var blocks: [SpeakerBlock] {
+        var out: [SpeakerBlock] = []
+        var i = 0
+        while i < lines.count {
+            let sp = lines[i].speaker
+            var j = i
+            var parts: [String] = []
+            while j < lines.count && lines[j].speaker == sp { parts.append(lines[j].text); j += 1 }
+            out.append(SpeakerBlock(id: lines[j - 1].id, speaker: sp,
+                                    text: parts.joined(separator: " ")))
+            i = j
+        }
+        return out
+    }
+    private var multiSpeaker: Bool { Set(lines.map { $0.speaker }).count > 1 }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Theme.Space.lineGap) {
-                    ForEach(lines) { line in
-                        row(line).id(line.id)
+                    if mode == .content {
+                        ForEach(blocks) { b in contentBlock(b).id(b.id) }
+                    } else {
+                        ForEach(lines) { line in row(line).id(line.id) }
                     }
                 }
                 .padding(Theme.Space.window)
@@ -40,6 +71,25 @@ struct TranscriptView: View {
             } message: {
                 Text("이 화자의 모든 발언과 내보내기에 적용됩니다.")
             }
+        }
+    }
+
+    /// Clean reading block: just speaker name (only when >1 speaker) + content.
+    /// No timecode, no amber, no overlap markers — pure meeting content.
+    private func contentBlock(_ b: SpeakerBlock) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.lineInner) {
+            if multiSpeaker {
+                Button {
+                    draftName = names[b.speaker] ?? ""
+                    editingSpeaker = b.speaker
+                } label: {
+                    Text(name(b.speaker)).font(Theme.Fonts.speaker)
+                        .foregroundStyle(Theme.Colors.speaker(b.speaker))
+                }
+                .buttonStyle(.plain)
+                .help("클릭하여 이름 지정")
+            }
+            Text(b.text).font(Theme.Fonts.body)
         }
     }
 

@@ -9,6 +9,10 @@ struct ContentView: View {
     @Bindable var session: SessionController
     @Bindable var downloader: ModelDownloader
     @State private var dropTargeted = false
+    // Default to the clean reading view — general users just want the content.
+    // The detailed (timecode + confidence + overlap) view is one tap away.
+    @AppStorage("transcriptViewMode") private var contentMode = true
+    private var viewMode: TranscriptViewMode { contentMode ? .content : .detailed }
 
     var body: some View {
         Group {
@@ -38,11 +42,13 @@ struct ContentView: View {
     private var transcriptPane: some View {
         VStack(spacing: 0) {
             if case .processing = session.phase { progressBanner }
+            if !session.transcript.lines.isEmpty { viewModeBar }
             ZStack {
                 if session.transcript.lines.isEmpty {
                     emptyState
                 } else {
                     TranscriptView(lines: session.transcript.lines, names: session.speakerNames,
+                                   mode: viewMode,
                                    onRename: { session.renameSpeaker($0, to: $1) })
                 }
                 if dropTargeted {
@@ -56,6 +62,23 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    // 내용/상세 toggle — keeps the clean reading view (default) free of the
+    // editor/review detail. Persisted across launches via @AppStorage.
+    private var viewModeBar: some View {
+        HStack {
+            Spacer()
+            Picker("", selection: $contentMode) {
+                Text("내용").tag(true)
+                Text("상세").tag(false)
+            }
+            .pickerStyle(.segmented)
+            .fixedSize()
+            .help("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시")
+        }
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     // determinate file-transcription progress: filename + chunk bar (driven by
