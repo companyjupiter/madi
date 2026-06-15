@@ -220,6 +220,8 @@ struct ContentView: View {
 
             Spacer()
 
+            autoSaveRow
+
             HStack {
                 Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
                 Spacer()
@@ -273,6 +275,54 @@ struct ContentView: View {
                 .frame(width: 34, alignment: .trailing).monospacedDigit()
                 .foregroundStyle(Theme.Colors.textTertiary)
         }
+    }
+
+    // 자동 저장: 회의/전사가 끝나면 .md 를 선택한 폴더에 자동 저장. 경로는 변경 가능.
+    private var autoSaveRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: $session.autoSaveEnabled) {
+                Text("완료 시 .md 자동저장").font(Theme.Fonts.status)
+            }
+            .toggleStyle(.switch).controlSize(.mini)
+            if session.autoSaveEnabled {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder").font(Theme.Fonts.status)
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                    Text(session.autoSaveFolder.lastPathComponent)
+                        .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button("변경") { chooseAutoSaveFolder() }
+                        .font(Theme.Fonts.status).buttonStyle(.plain)
+                        .foregroundStyle(Theme.Colors.accent)
+                }
+                .help(session.autoSaveFolder.path)
+                if let saved = session.lastAutoSaved {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill").font(Theme.Fonts.status)
+                            .foregroundStyle(Theme.Colors.accent)
+                        Button(saved.lastPathComponent) {
+                            NSWorkspace.shared.activateFileViewerSelecting([saved])
+                        }
+                        .font(Theme.Fonts.status).buttonStyle(.plain)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .lineLimit(1).truncationMode(.middle)
+                        .help("Finder에서 보기")
+                    }
+                }
+            }
+        }
+    }
+
+    private func chooseAutoSaveFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = session.autoSaveFolder
+        panel.prompt = "선택"
+        panel.message = "전사 완료 시 .md 를 저장할 폴더"
+        if panel.runModal() == .OK, let url = panel.url { session.autoSaveFolder = url }
     }
 
     // 타이튼 stat: removable filler + silence time. Editor info in the control
