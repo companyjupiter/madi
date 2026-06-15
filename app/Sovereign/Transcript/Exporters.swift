@@ -66,10 +66,16 @@ enum Exporters {
         let fillerJSON: [[String: Any]] = fillers.map {
             ["start": $0.start, "end": $0.end, "text": $0.label] as [String: Any]
         }
+        let silences = EditorCuts.silences(lines)
+        let silenceJSON: [[String: Any]] = silences.map {
+            ["start": $0.start, "end": $0.end] as [String: Any]
+        }
         let root: [String: Any] = [
             "segments": segs, "speakers": speakers,
             "fillers": fillerJSON,
             "filler_seconds": fillers.reduce(0) { $0 + $1.duration },
+            "silences": silenceJSON,
+            "silence_seconds": silences.reduce(0) { $0 + $1.duration },
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),

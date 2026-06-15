@@ -47,4 +47,24 @@ enum EditorCuts {
         }
         return out
     }
+
+    /// Dead-air gaps between words longer than `minGap`, as removable cut ranges.
+    /// `pad` is left on each side so the surrounding speech isn't clipped — the
+    /// cut spans only the interior silence. Words are time-sorted across all
+    /// lines; overlapping words (negative gap) are skipped.
+    static func silences(_ lines: [Line], minGap: Double = 0.6, pad: Double = 0.1) -> [CutRange] {
+        let ws = lines.flatMap { $0.words }.sorted { $0.t0 < $1.t0 }
+        var out: [CutRange] = []
+        var i = 1
+        while i < ws.count {
+            let gap = ws[i].t0 - ws[i - 1].t1
+            if gap > minGap {
+                let s = ws[i - 1].t1 + pad
+                let e = ws[i].t0 - pad
+                if e > s { out.append(CutRange(start: s, end: e, kind: "silence", label: "")) }
+            }
+            i += 1
+        }
+        return out
+    }
 }
