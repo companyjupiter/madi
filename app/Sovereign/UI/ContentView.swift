@@ -200,6 +200,7 @@ struct ContentView: View {
 
             field("언어") { languagePicker }
             field("마이크") { micPicker }
+            field("실시간 반응") { liveSpeedPicker }
             Toggle("화자 분리", isOn: $session.diarize).disabled(isBusy)
             Toggle("중첩 발화 감지", isOn: $session.osd).disabled(isBusy)
 
@@ -431,6 +432,19 @@ struct ContentView: View {
             Text("English").tag(Int?.some(WhisperLang.en))
         }
         .labelsHidden().disabled(isBusy)
+    }
+
+    // 실시간 반응 속도: shorter window = snappier live text, less Whisper context.
+    // Default 정확(10s) keeps current accuracy; can't change mid-session.
+    private var liveSpeedPicker: some View {
+        Picker("", selection: $session.liveWindowSeconds) {
+            Text("빠름").tag(5.0)
+            Text("보통").tag(7.0)
+            Text("정확").tag(10.0)
+        }
+        .pickerStyle(.segmented).labelsHidden()
+        .disabled(session.phase == .recording || session.phase == .paused)
+        .help("빠름=텍스트가 더 자주 뜸(체감↑), 정확=Whisper 컨텍스트 길어 품질↑. 녹음 시작 시 적용.")
     }
 
     private var micPicker: some View {
