@@ -48,10 +48,28 @@ fast baseline and wins on raw speed.** Our value is elsewhere — see "Takeaways
 > 233 → ~526 tok/s. Per-kernel GPU profiling redirected the attack to the real
 > bottleneck — the cross-attention kernels. Wins: parallelize the cross/self-attn
 > output phase (64→256 threads), vectorize QK dots (cache q + half4). This closed
-> a ~1.4× decode gap to ~1.13×. **Next lever (measured, not yet shipped):** the
-> batched cross-attention kernel (PR #52, `flash_cross_attn_f16kv_batched`) makes
-> the *multichunk-batched* decode block 1.27× faster — once integrated into file
-> decode it should flip file-mode decode back ahead. Live (B=1) is unaffected.
+> a ~1.4× decode gap to ~1.13×.
+>
+> **Multichunk batched decode (BATCHDEC, measured 2026-06-15, M1 in-engine).**
+> The batched cross-attn kernel (PR #52) enabled an in-engine batched multichunk
+> decode (gated `BATCHDEC=1`, shadow). Measured head-to-head on devops_ko, **same
+> binary, same run** (batched runs alongside per-slot):
+>
+> | batch | batched tok/s | per-slot tok/s | verdict |
+> |---|---|---|---|
+> | B=4 (default `ENC_BATCH=4`) | ~530 | ~520 | **tied** (+2%) |
+> | B=8 (`ENC_BATCH=8`) | **~660** | ~500 | **1.34×** |
+>
+> Text-equivalence re-confirmed (B=4 batched `529 tok` == per-slot 149+144+113+123
+> = 529, exact; BPE text identical). **At B=8 our decode passes whisper.cpp's 595
+> tok/s (660 > 595) — ahead on decode as well as encoder.** BUT realizing it
+> end-to-end is **marginal**: decode is 23% of file wall (3.9 s); B=8 cuts it to
+> ~2.95 s (−0.95 s) → 15.6 → ~14.6 s **vs whisper.cpp 14.5 s = dead heat**. The
+> residual gap is **model load (CPU dequant, not I/O — mmap refuted, see PERF_LOG
+> LOAD-mmap)**, which batched decode doesn't touch. **Production integration (word
+> timestamps via batched alignment capture + rescue/seek retire-to-sequential)
+> deferred** — high regression risk on the transcript path for a ~tied headline.
+> Live (B=1) never enters the batched path.
 
 ### Diarization — VoxConverse dev (DER, md-eval collar 0.25)
 | metric | Sovereign (ours) | whisper.cpp |

@@ -1,6 +1,38 @@
 # Multi-chunk batched decode — design & staged plan
 
-## STATUS (2026-06-15 — batched attn DONE, re-integration is the remaining lever)
+## STATUS (2026-06-15 — M1 PROVEN, production integration DEFERRED on measured ROI)
+
+**M1 landed + measured; full production replacement (M2/M3) deferred — the
+end-to-end headline is ~tied, not the projected "ahead", so the high-risk
+transcript-path rewrite isn't justified.** In-engine batched multichunk decode
+(`BATCHDEC=1` shadow, PR #59) is **text-equivalent** (devops_ko: batched B=4
+`529 tok` == per-slot 149+144+113+123 = 529 exact; BPE text identical) and
+**faster at B=8** (~660 vs per-slot ~500 tok/s = 1.34×; **passes whisper.cpp's
+595 → ahead on decode**). BUT the measured economics kill the production case:
+
+- **B=4 (the default `ENC_BATCH=4`) is a TIE** (~530 vs ~520 tok/s, +2%). The
+  1.34× only appears at **B=8** (non-default), needing decode-batch decoupled
+  from enc-batch or `ENC_BATCH=8`.
+- **End-to-end stays ~tied even at B=8:** decode is 23% of file wall (3.9 s) →
+  ~2.95 s (−0.95 s) → 15.6 → ~14.6 s **vs whisper.cpp 14.5 s = dead heat.** The
+  residual gap is **model load (CPU dequant, NOT I/O — mmap refuted, PERF_LOG
+  LOAD-mmap)**, which batched decode doesn't touch.
+- The earlier "2× → 13.7 s, ahead" projection used the **pure `test_p5probe` 2×**;
+  the realistic **in-pipeline** number is **1.34× at B=8 only → tied**.
+
+**So: the decode-speed win is PROVEN and documented (defensible standalone claim:
+decode ahead of whisper.cpp at B=8, text-equivalent). M2 (word-timestamp batched
+alignment capture) + M3 (rescue/seek retire-to-sequential + WER A/B gate) — the
+production rewrite that would replace the per-slot transcript path — are DEFERRED:
+they carry real regression risk on word-ts/rescue/seek for a headline that stays
+~tied.** If revisited, the prerequisite is making B=8 the natural batch (decouple
+decode-batch from enc-batch) AND a separate attack on the load-dequant gap;
+otherwise the end-to-end ceiling is parity, not overtake. The original staged
+M1/M2/M3 plan + entanglement notes below remain accurate for that future effort.
+
+---
+
+## (historical) STATUS (2026-06-15 — batched attn DONE, re-integration is the remaining lever)
 
 **The blocker is gone.** The 2026-06 J refutation was because *attention stayed
 per-slot* (43% of batched decode, un-batched). That kernel now exists:
