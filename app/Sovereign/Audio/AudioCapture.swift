@@ -65,8 +65,16 @@ final class AudioCapture {
         try engine.start()
     }
 
+    /// Pause/resume: keep the AVAudioEngine running (mic warm, instant resume)
+    /// but drop captured buffers while paused — the paused span is simply absent
+    /// from the segmenter timeline, so the recording skips the break.
+    private var paused = false
+    func pause() { paused = true }
+    func resume() { paused = false }
+
     /// Finish the current partial window (final tail) and stop.
     func stop() {
+        paused = false
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         if let seg = segmenter.flush() { write(seg) }
@@ -110,6 +118,7 @@ final class AudioCapture {
     }
 
     private func consume(_ samples: [Int16], level: Float) {
+        if paused { onLevel?(0); return }   // drop audio + drop the meter while paused
         onLevel?(level)
         for seg in segmenter.push(samples) { write(seg) }
     }

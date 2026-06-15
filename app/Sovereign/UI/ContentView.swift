@@ -191,8 +191,9 @@ struct ContentView: View {
             Text("Sovereign Whisper").font(Theme.Fonts.appTitle)
 
             recordButton
-            if session.phase == .recording {
+            if session.phase == .recording || session.phase == .paused {
                 LevelMeter(level: session.level).frame(height: Theme.Size.meterH)
+                    .opacity(session.phase == .paused ? 0.4 : 1)
             }
 
             Divider()
@@ -331,10 +332,27 @@ struct ContentView: View {
     @ViewBuilder private var recordButton: some View {
         switch session.phase {
         case .recording:
-            Button(role: .destructive) { session.stop() } label: {
-                Label("정지", systemImage: "stop.circle.fill").frame(maxWidth: .infinity)
+            HStack(spacing: 8) {
+                Button { session.pauseRecording() } label: {
+                    Label("일시정지", systemImage: "pause.circle.fill").frame(maxWidth: .infinity)
+                }
+                .controlSize(.large).keyboardShortcut("p")
+                Button(role: .destructive) { session.stop() } label: {
+                    Label("정지", systemImage: "stop.circle.fill").frame(maxWidth: .infinity)
+                }
+                .controlSize(.large).keyboardShortcut("r")
             }
-            .controlSize(.large).keyboardShortcut("r")
+        case .paused:
+            HStack(spacing: 8) {
+                Button { session.resumeRecording() } label: {
+                    Label("재개", systemImage: "record.circle.fill").frame(maxWidth: .infinity)
+                }
+                .controlSize(.large).keyboardShortcut("p").tint(Theme.Colors.recording)
+                Button(role: .destructive) { session.stop() } label: {
+                    Label("정지", systemImage: "stop.circle.fill").frame(maxWidth: .infinity)
+                }
+                .controlSize(.large).keyboardShortcut("r")
+            }
         case .engineStarting, .ready, .processing, .flushing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -446,6 +464,7 @@ struct ContentView: View {
         case .engineStarting: "모델 로딩…"
         case .ready: "마이크 시작…"
         case .recording: "녹음 중"
+        case .paused: "일시정지"
         case .processing: "파일 전사 중…"
         case .flushing: "마무리…"
         case .done: "완료"
