@@ -84,6 +84,12 @@ enum Exporters {
             "chapters": EditorCuts.chapters(lines).map {
                 ["start": $0.start, "title": $0.title] as [String: Any]
             },
+            "retakes": EditorCuts.retakes(lines).map {
+                [
+                    "keep_start": $0.keepStart, "keep_text": $0.keepText,
+                    "drops": $0.drops.map { ["start": $0.start, "end": $0.end] as [String: Any] },
+                ] as [String: Any]
+            },
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
