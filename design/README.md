@@ -33,7 +33,7 @@
 | `figma/file-editor.svg` | **파일 전사 + 편집자 UI** — 내용/상세 토글, 내용모드 문단, 리뷰 바(상세), **편집 도구 패널**(토글+슬라이더), 타이튼 stat, 내보내기 |
 | `figma/model-gate.svg` | 첫 실행 모델 다운로드 화면 |
 | `figma/settings.svg` | 설정(Transcription 탭) |
-| `figma/components.svg` | **컴포넌트 시트** — 팔레트 스와치(토큰명 라벨), TranscriptLine 해부도, 버튼 상태, 레벨미터 상태 |
+| `figma/components.svg` | **컴포넌트 시트** — 팔레트 스와치(토큰명 라벨), TranscriptLine 해부도, 버튼 상태, 레벨미터 상태 + **편집자 컴포넌트 해부도**(viewMode 토글·Toggle on/off·Slider·Disclosure·리뷰 바·jump 하이라이트·타이튼 stat·확장 export, 각 상태별+토큰라벨) |
 
 ### 2026-06 추가된 편집자/리더 컴포넌트 (`file-editor.svg`)
 
