@@ -262,6 +262,8 @@ struct ContentView: View {
         Menu {
             Button("Markdown (.md)") { export(.init(filenameExtension: "md")!, session.exportMarkdown) }
             Button("Subtitles (.srt)") { export(.init(filenameExtension: "srt")!, session.exportSRT) }
+            Button("Plain text (.txt)") { export(.plainText, session.exportText) }
+            Button("JSON (.json)") { export(.json, session.exportJSON) }
         } label: { Label("내보내기", systemImage: "square.and.arrow.up") }
         .menuStyle(.borderlessButton).fixedSize()
         .disabled(session.transcript.lines.isEmpty)
