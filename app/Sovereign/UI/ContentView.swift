@@ -68,7 +68,8 @@ struct ContentView: View {
                                    mode: viewMode,
                                    onRename: { session.renameSpeaker($0, to: $1) },
                                    scrollTarget: scrollTarget, scrollTick: scrollTick,
-                                   focusedLine: scrollTarget)
+                                   focusedLine: scrollTarget,
+                                   interim: session.livePartial)
                 }
                 if dropTargeted {
                     RoundedRectangle(cornerRadius: 12)
@@ -201,6 +202,7 @@ struct ContentView: View {
             field("언어") { languagePicker }
             field("마이크") { micPicker }
             field("실시간 반응") { liveSpeedPicker }
+            livePreviewToggle
             Toggle("화자 분리", isOn: $session.diarize).disabled(isBusy)
             Toggle("중첩 발화 감지", isOn: $session.osd).disabled(isBusy)
 
@@ -445,6 +447,17 @@ struct ContentView: View {
         .pickerStyle(.segmented).labelsHidden()
         .disabled(session.phase == .recording || session.phase == .paused)
         .help("빠름=텍스트가 더 자주 뜸(체감↑), 정확=Whisper 컨텍스트 길어 품질↑. 녹음 시작 시 적용.")
+    }
+
+    // 스트리밍 프리뷰: 채워지는 중인 윈도를 ~1.5초마다 미리 디코드해 회색 "진행 중"
+    // 텍스트로 표시 (정확도 손해 0 — 확정 전사는 그대로). 별도 모델 1개 추가 상주.
+    private var livePreviewToggle: some View {
+        Toggle(isOn: $session.livePreviewEnabled) {
+            Text("실시간 프리뷰").font(Theme.Fonts.status)
+        }
+        .toggleStyle(.switch).controlSize(.mini)
+        .disabled(session.phase == .recording || session.phase == .paused)
+        .help("켜면 윈도가 닫히기 전에도 회색 중간 텍스트가 즉시 표시됩니다(정확도 무손해). 메모리에 모델 1개 추가(~830MB).")
     }
 
     private var micPicker: some View {

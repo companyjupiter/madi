@@ -27,6 +27,7 @@ mkdir -p "$OUT"
 SRCS=(
   "$APP_DIR"/Sovereign/Engine/EngineProtocol.swift
   "$APP_DIR"/Sovereign/Engine/EngineProcess.swift
+  "$APP_DIR"/Sovereign/Engine/PreviewEngine.swift
   "$APP_DIR"/Sovereign/Audio/WavWriter.swift
   "$APP_DIR"/Sovereign/Audio/Resampler.swift
   "$APP_DIR"/Sovereign/Audio/Segmenter.swift
