@@ -19,10 +19,15 @@ final class PreviewEngine: EngineProcessDelegate {
     private var queued: URL?       // a preview that arrived before the engine was ready
     private var building = ""      // words of the preview currently streaming in
 
-    func start(config base: EngineProcess.Config) {
+    /// `lang` FORCES the preview language (token id). Critical: previews decode
+    /// tiny ~1.5s clips where Whisper auto-detect misfires (often to English), so
+    /// the caller passes the main engine's selected/detected language. Idempotent
+    /// (no-op if already started).
+    func start(config base: EngineProcess.Config, lang: Int?) {
         guard engine == nil else { return }
         var c = base
         c.diarize = false; c.osd = false; c.voiceprintsDir = nil; c.fileURL = nil
+        if let l = lang { c.languageTokenID = l }
         let e = EngineProcess(config: c)
         e.delegate = self
         engine = e

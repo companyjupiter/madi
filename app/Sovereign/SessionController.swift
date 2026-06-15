@@ -145,12 +145,16 @@ final class SessionController: EngineProcessDelegate {
         }
         capture.onLevel = { [weak self] lvl in self?.level = lvl }
 
-        // streaming preview (interim text before a window closes)
+        // streaming preview (interim text before a window closes). The preview
+        // engine MUST run with a forced language — it decodes tiny ~1.5s clips
+        // where auto-detect misfires (→ English). If the user picked a language,
+        // start now; if auto, wait for the main engine's [lang] detection (see
+        // .languageDetected below) so previews match the committed transcript.
         livePartial = ""
         if livePreviewEnabled {
             preview.onText = { [weak self] t in self?.livePartial = t }
             capture.onPreview = { [weak self] url in self?.preview.feed(wav: url) }
-            preview.start(config: makeConfig())
+            if let lang = languageTokenID { preview.start(config: makeConfig(), lang: lang) }
         } else {
             capture.onPreview = nil
         }
@@ -234,6 +238,10 @@ final class SessionController: EngineProcessDelegate {
         case .progressTotal(let n): chunksTotal = n
         case .progressChunk(let k): chunksDone = max(chunksDone, k)
         case .wordSectionBegin: livePartial = ""; transcript.ingest(event)  // committed → drop interim
+        case .languageDetected(let tok):
+            // auto-detect locked → start the preview engine in THAT language
+            // (no-op if already started / preview off)
+            if livePreviewEnabled { preview.start(config: makeConfig(), lang: tok) }
         default: transcript.ingest(event)
         }
     }
