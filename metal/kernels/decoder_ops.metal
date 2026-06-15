@@ -324,6 +324,80 @@ kernel void flash_cross_attn_f16kv(
         out_buf[h * hdd + od] = (s_part[od] + s_part[64 + od]) + (s_part[128 + od] + s_part[192 + od]);
 }
 
+// ── BATCHED cross-attention (P5): B slots in ONE dispatch ───────────────────
+// Multi-chunk batched decode runs B in-flight chunks; each attends to its OWN
+// cross-KV. The per-slot kCA loop launches B low-occupancy dispatches (NH=20
+// threadgroups each) — measured ~43% of batched-decode time, 6.8x off the KV
+// bandwidth ceiling = occupancy-bound. This fills the GPU: grid = B*NH thread-
+// groups, tgid → (slot b, head h). q/out contiguous [B][D]; kc/vc contiguous
+// [B][seqlen][kvd]. No sc_out (batched path uses write_sc=0).
+kernel void flash_cross_attn_f16kv_batched(
+    device float*       out_buf [[buffer(0)]],   // [B][nh*hdd]
+    device const float* q_buf   [[buffer(1)]],   // [B][nh*hdd]
+    device const half*  kc      [[buffer(2)]],   // [B][seqlen][kvd]
+    device const half*  vc      [[buffer(3)]],   // [B][seqlen][kvd]
+    constant uint& seqlen [[buffer(4)]],
+    constant uint& hdd    [[buffer(5)]],
+    constant uint& kvd    [[buffer(6)]],
+    constant uint& nkv    [[buffer(7)]],
+    constant uint& nh     [[buffer(8)]],
+    uint tgid [[threadgroup_position_in_grid]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    threadgroup float scores[1504];
+    threadgroup float s8[8];
+    threadgroup float s_part[256];
+    threadgroup float s_qh[64];
+    const uint b = tgid / nh;
+    const uint h = tgid % nh;
+    const uint kvh = (h * nkv) / nh;
+    const uint D = nh * hdd;
+    const float rsq = rsqrt((float)hdd);
+    const float LOG2E = 1.4426950408889634f;
+    device const float* qb  = q_buf   + (ulong)b * D;
+    device float*       ob  = out_buf + (ulong)b * D;
+    device const half*  kcb = kc + (ulong)b * seqlen * kvd;
+    device const half*  vcb = vc + (ulong)b * seqlen * kvd;
+
+    for (uint d = ltid; d < hdd; d += 256) s_qh[d] = qb[h * hdd + d];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    threadgroup const float4* q4 = (threadgroup const float4*)s_qh;
+    const uint d4n = hdd >> 2;
+    for (uint t = ltid; t < seqlen; t += 256) {
+        device const half4* k4 = (device const half4*)(kcb + (ulong)t * kvd + kvh * hdd);
+        float sum = 0.0f;
+        for (uint i = 0; i < d4n; i++) {
+            const half4 kv = k4[i];
+            const float4 qv = q4[i];
+            sum += qv.x*(float)kv.x + qv.y*(float)kv.y + qv.z*(float)kv.z + qv.w*(float)kv.w;
+        }
+        scores[t] = sum * rsq;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lmax = -INFINITY;
+    for (uint t = ltid; t < seqlen; t += 256) lmax = max(lmax, scores[t]);
+    float mx = block_max(s8, lmax, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lsum = 0.0f;
+    for (uint t = ltid; t < seqlen; t += 256) { float e = exp2((scores[t]-mx)*LOG2E); scores[t]=e; lsum+=e; }
+    float ssum = block_sum(s8, lsum, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float inv = 1.0f / ssum;
+    for (uint t = ltid; t < seqlen; t += 256) scores[t] *= inv;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    const uint od = ltid & 63;
+    const uint op = ltid >> 6;
+    const uint t0 = (op * seqlen) / 4;
+    const uint t1 = ((op + 1) * seqlen) / 4;
+    float psum = 0.0f;
+    for (uint t = t0; t < t1; t++)
+        psum += scores[t] * (float)vcb[(ulong)t * kvd + kvh * hdd + od];
+    s_part[op * 64 + od] = psum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (op == 0)
+        ob[h * hdd + od] = (s_part[od] + s_part[64+od]) + (s_part[128+od] + s_part[192+od]);
+}
+
 kernel void extract_ca_head_f16kv(
     device const float* q       [[buffer(0)]],
     device const half*  kc      [[buffer(1)]],
