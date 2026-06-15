@@ -26,7 +26,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| `tokens.json` | **단일 진실 원천** — 색(화자 팔레트 8 + 시맨틱), 폰트 6, 간격, 크기, 라운드. 현재 앱 UI에서 추출한 실값 |
+| `tokens.json` | **단일 진실 원천** — 색(화자 팔레트 8 + 시맨틱), 폰트 6, 간격, 크기, 라운드. 텍스트/배경 색은 `"semantic":"labelColor"` 등으로 **다크모드 자동적응**(NSColor), 브랜드/데이터 색은 고정 RGB. 외관은 시스템/라이트/다크 선택(설정) |
 | `gen_theme.py` | tokens.json → `app/Sovereign/UI/Theme.swift` 코드젠 |
 | `sync_tokens.sh` | 토큰 반영 원커맨드 (gen + 앱 재빌드) |
 | `figma/main-recording.svg` | 메인 윈도(녹음 중) — 화자 라인 3종 + 겹침 마커 + 컨트롤바 |

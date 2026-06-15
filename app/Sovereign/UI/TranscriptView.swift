@@ -60,7 +60,7 @@ struct TranscriptView: View {
                     if !interim.isEmpty {
                         Text(interim)
                             .font(Theme.Fonts.body)
-                            .foregroundStyle(Theme.Colors.textTertiary)
+                            .foregroundStyle(Theme.Colors.textSecondary)  // adaptive — readable on light & dark
                             .italic()
                             .id("interim")
                     }

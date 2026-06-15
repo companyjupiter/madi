@@ -6,6 +6,7 @@ import CoreAudio
 struct SettingsView: View {
     @Bindable var session: SessionController
     @Bindable var downloader: ModelDownloader
+    @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some View {
         TabView {
@@ -18,6 +19,10 @@ struct SettingsView: View {
 
     private var transcription: some View {
         Form {
+            Picker("외관 (Appearance)", selection: $appearance) {
+                ForEach(Appearance.allCases) { a in Text(a.label).tag(a) }
+            }
+            .pickerStyle(.segmented)
             Picker("Microphone", selection: $session.inputDeviceID) {
                 Text("System Default").tag(AudioDeviceID?.none)
                 ForEach(session.availableInputs) { dev in
