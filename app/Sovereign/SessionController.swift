@@ -188,4 +188,13 @@ final class SessionController: EngineProcessDelegate {
         try Exporters.json(transcript.lines, names: speakerNames)
             .write(to: url, atomically: true, encoding: .utf8)
     }
+    func exportCutList(to url: URL) throws {
+        try Exporters.cutListCSV(transcript.lines)
+            .write(to: url, atomically: true, encoding: .utf8)
+    }
+    /// (cut count, removable seconds) for the tighten stat — fillers + silences.
+    var tightenStat: (cuts: Int, seconds: Double) {
+        let c = EditorCuts.tighten(transcript.lines)
+        return (c.count, c.reduce(0) { $0 + $1.duration })
+    }
 }

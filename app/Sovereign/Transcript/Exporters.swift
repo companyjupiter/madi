@@ -70,12 +70,17 @@ enum Exporters {
         let silenceJSON: [[String: Any]] = silences.map {
             ["start": $0.start, "end": $0.end] as [String: Any]
         }
+        let tighten = EditorCuts.tighten(lines)
         let root: [String: Any] = [
             "segments": segs, "speakers": speakers,
             "fillers": fillerJSON,
             "filler_seconds": fillers.reduce(0) { $0 + $1.duration },
             "silences": silenceJSON,
             "silence_seconds": silences.reduce(0) { $0 + $1.duration },
+            "tighten": [
+                "cuts": tighten.count,
+                "total_seconds": tighten.reduce(0) { $0 + $1.duration },
+            ] as [String: Any],
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
@@ -158,6 +163,25 @@ enum Exporters {
             }
         }
         return cues
+    }
+
+    /// One-click "tighten" cut-list as CSV — the merged removable ranges
+    /// (fillers + silences). Seconds-based so it feeds ffmpeg / Resolve / Premiere
+    /// scripts and opens in any spreadsheet. Header documents the totals.
+    static func cutListCSV(_ lines: [Line]) -> String {
+        let cuts = EditorCuts.tighten(lines)
+        let total = cuts.reduce(0) { $0 + $1.duration }
+        var s = "# tighten cut-list — \(cuts.count) cuts, \(String(format: "%.1f", total))s removable\n"
+        s += "start_sec,end_sec,duration_sec,kind,label\n"
+        for c in cuts {
+            s += String(format: "%.3f,%.3f,%.3f,%@,%@\n",
+                        c.start, c.end, c.duration, c.kind, csvField(c.label))
+        }
+        return s
+    }
+
+    private static func csvField(_ s: String) -> String {
+        (s.contains(",") || s.contains("\"")) ? "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\"" : s
     }
 
     /// Caption-spec SRT (per-word re-flow). Replaces the old one-block-per-turn SRT.
