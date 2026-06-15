@@ -58,18 +58,21 @@ fast baseline and wins on raw speed.** Our value is elsewhere — see "Takeaways
 > | batch | batched tok/s | per-slot tok/s | verdict |
 > |---|---|---|---|
 > | B=4 (default `ENC_BATCH=4`) | ~530 | ~520 | **tied** (+2%) |
-> | B=8 (`ENC_BATCH=8`) | **~660** | ~500 | **1.34×** |
+> | B=8, 2 uniform batches (7.7 min) | ~660 | ~500 | 1.34× (cherry-picked) |
+> | **B=8, 15 batches at scale (62 min)** | **~592** (480–686) | ~513 | **~1.15×** |
 >
 > Text-equivalence re-confirmed (B=4 batched `529 tok` == per-slot 149+144+113+123
-> = 529, exact; BPE text identical). **At B=8 our decode passes whisper.cpp's 595
-> tok/s (660 > 595) — ahead on decode as well as encoder.** BUT realizing it
-> end-to-end is **marginal**: decode is 23% of file wall (3.9 s); B=8 cuts it to
-> ~2.95 s (−0.95 s) → 15.6 → ~14.6 s **vs whisper.cpp 14.5 s = dead heat**. The
-> residual gap is **model load (CPU dequant, not I/O — mmap refuted, see PERF_LOG
-> LOAD-mmap)**, which batched decode doesn't touch. **Production integration (word
-> timestamps via batched alignment capture + rescue/seek retire-to-sequential)
-> deferred** — high regression risk on the transcript path for a ~tied headline.
-> Live (B=1) never enters the batched path.
+> = 529, exact; BPE text identical). **CORRECTION (de-risk measure on a 62 min /
+> 124-chunk file):** the initial 1.34× was two *uniform* batches; **across 15 real
+> batches the average is ~1.15×**, because **ragged EOT** (8 slots finishing at
+> very different token counts — e.g. 10 tok vs 149 tok in one batch — run until the
+> longest) erodes batching efficiency on real content. **End-to-end on long files
+> (62 min production wall 113 s = 33× RT):** encoder is **50%** of wall, decode
+> 23%; B=8 saves ~4.8 s = **~4.3%** end-to-end (2 hr → ~10 s, same ~4%). **Net: a
+> ~4% polish, not the projected overtake.** Production integration (word timestamps
+> via batched alignment capture + rescue/seek retire-to-sequential) **deferred** —
+> ~4% for a high-risk transcript-path rewrite isn't justified; the editor win is
+> the absolute (33× RT, local, private, word-ts). Live (B=1) never batches.
 
 ### Diarization — VoxConverse dev (DER, md-eval collar 0.25)
 | metric | Sovereign (ours) | whisper.cpp |
