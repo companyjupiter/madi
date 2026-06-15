@@ -107,7 +107,7 @@ const PS = @sizeOf(usize);
 const U = @sizeOf(u32);
 const Ff = @sizeOf(f32);
 
-fn kLN(K: Kernels, x: [*]f32, y: [*]f32, g: [*]f32, b: [*]f32, d: u32, rows: u32) !void {
+pub fn kLN(K: Kernels, x: [*]f32, y: [*]f32, g: [*]f32, b: [*]f32, d: u32, rows: u32) !void {
     var a0 = x; var a1 = y; var a2 = g; var a3 = b; var nd = d; var ne = EPS;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&nd), P(&ne) };
     const s = [_]usize{ PS, PS, PS, PS, U, Ff };
@@ -253,13 +253,13 @@ pub fn decodeBlock(
 }
 
 // ── multi-chunk batched decode (Phase J) ─────────────────────────────────────
-fn kCvt32(K: Kernels, dst: [*]f16, src: [*]f32, n: u32) !void {
+pub fn kCvt32(K: Kernels, dst: [*]f16, src: [*]f32, n: u32) !void {
     var a0 = dst; var a1 = src; var nn = n;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn) };
     const s = [_]usize{ PS, PS, U };
     try mtl.dispatch(K.cvt32, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-fn kCvt16(K: Kernels, dst: [*]f32, src: [*]f16, n: u32) !void {
+pub fn kCvt16(K: Kernels, dst: [*]f32, src: [*]f16, n: u32) !void {
     var a0 = dst; var a1 = src; var nn = n;
     const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&nn) };
     const s = [_]usize{ PS, PS, U };

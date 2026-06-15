@@ -966,6 +966,68 @@ pub fn main() !void {
     const d_ca = try mtl.allocSlice(f32, NALIGN * MAX_TOK * ENC_SEQ);
     @memset(d_ca, 0);
 
+    // ── BATCHDEC (P5 multichunk decode) — M1 shadow: gated BATCHDEC=1 (default
+    // off). Decodes the encoder batch's nb chunks BATCHED, alongside the per-slot
+    // path (which still produces the real output), to verify text-equivalence +
+    // measure decode speed in-engine. Productionized (replace + word-ts) in M2/M3.
+    const batchdec = std.posix.getenv("BATCHDEC") != null;
+    const MAXB: usize = 8;
+    var bb_x: [*]f32 = undefined;
+    var bb_x16: [*]f16 = undefined;
+    var bb_l16: [*]f16 = undefined;
+    var bb_tokens: []u32 = &.{};
+    var bb_logits: [*]f32 = undefined;
+    var bb_pos: [*]u32 = undefined;
+    var bb_skc: [MAXB][dec.NL][*]f32 = undefined;
+    var bb_svc: [MAXB][dec.NL][*]f32 = undefined;
+    var bb_ckc: [dec.NL][*]f16 = undefined;
+    var bb_cvc: [dec.NL][*]f16 = undefined;
+    var bb_wf: [dec.NL]dec.WF16 = undefined;
+    var bb_temb: [*]f16 = undefined;
+    var bb_scr: dec.BScratch = undefined;
+    if (batchdec) {
+        bb_x = (try mtl.allocSlice(f32, MAXB * D)).ptr;
+        bb_x16 = (try mtl.allocSlice(f16, MAXB * D)).ptr;
+        bb_l16 = (try mtl.allocSlice(f16, MAXB * VOCAB)).ptr;
+        bb_tokens = try mtl.allocSlice(u32, MAXB * MAX_TOK);
+        bb_logits = (try mtl.allocSlice(f32, MAXB * VOCAB)).ptr;
+        bb_pos = (try mtl.allocSlice(u32, 1)).ptr; // shared (all slots lockstep)
+        for (0..MAXB) |b| for (0..dec.NL) |l| {
+            bb_skc[b][l] = (try mtl.allocSlice(f32, MAX_TOK * D)).ptr;
+            bb_svc[b][l] = (try mtl.allocSlice(f32, MAX_TOK * D)).ptr;
+        };
+        for (0..dec.NL) |l| {
+            bb_ckc[l] = (try mtl.allocSlice(f16, MAXB * ENC_SEQ * D)).ptr;
+            bb_cvc[l] = (try mtl.allocSlice(f16, MAXB * ENC_SEQ * D)).ptr;
+            bb_wf[l] = .{
+                .qkvw = (try mtl.allocSlice(f16, 3 * @as(usize, D) * D)).ptr, .ow = (try mtl.allocSlice(f16, @as(usize, D) * D)).ptr,
+                .cqw = (try mtl.allocSlice(f16, @as(usize, D) * D)).ptr, .cow = (try mtl.allocSlice(f16, @as(usize, D) * D)).ptr,
+                .m0w = (try mtl.allocSlice(f16, @as(usize, D) * MLP)).ptr, .m2w = (try mtl.allocSlice(f16, @as(usize, MLP) * D)).ptr,
+            };
+        }
+        bb_temb = (try mtl.allocSlice(f16, @as(usize, D) * VOCAB)).ptr;
+        bb_scr = .{
+            .xb = (try mtl.allocSlice(f32, MAXB * D)).ptr, .qkv = (try mtl.allocSlice(f32, MAXB * 3 * D)).ptr,
+            .ao = (try mtl.allocSlice(f32, MAXB * D)).ptr, .mo = (try mtl.allocSlice(f32, MAXB * D)).ptr,
+            .mh = (try mtl.allocSlice(f32, MAXB * MLP)).ptr, .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr,
+            .in16 = (try mtl.allocSlice(f16, MAXB * MLP)).ptr, .out16 = (try mtl.allocSlice(f16, MAXB * MLP)).ptr,
+        };
+        // static-weight deq → WF16 + tok_emb f16, ONCE (amortized over all tokens)
+        const q8 = struct { fn w(x: dec.Q8w) enc.Q8 { return .{ .qs = x.qs, .scales = x.scales }; } }.w;
+        try mtl.beginCommandBuffer();
+        for (0..dec.NL) |l| {
+            try deqW16(f_deq, bb_wf[l].qkvw, q8(dlayers[l].qkvw), 3 * D, D);
+            try deqW16(f_deq, bb_wf[l].ow, q8(dlayers[l].ow), D, D);
+            try deqW16(f_deq, bb_wf[l].cqw, q8(dlayers[l].cqw), D, D);
+            try deqW16(f_deq, bb_wf[l].cow, q8(dlayers[l].cow), D, D);
+            try deqW16(f_deq, bb_wf[l].m0w, q8(dlayers[l].m0w), MLP, D);
+            try deqW16(f_deq, bb_wf[l].m2w, q8(dlayers[l].m2w), D, MLP);
+        }
+        try deqW16(f_deq, bb_temb, q8(tok_emb), VOCAB, D); // [VOCAB][D] → [D][VOCAB] f16
+        try mtl.commitCommandBuffer();
+        try mtl.sync();
+    }
+
     // ── resident buffers + state (allocated ONCE; reused across stream jobs) ──
     const samples = try alloc.alloc(f32, mel.CHUNK_SAMPLES);
     // per-slot 1 ms-hop energy envelope (word-boundary snapping) — `samples`
@@ -1451,6 +1513,105 @@ pub fn main() !void {
         const enc_ns_t = et.read();
         g_t_enc += enc_ns_t;
         const enc_ms = @as(f64, @floatFromInt(enc_ns_t)) / 1e6 / @as(f64, @floatFromInt(nb));
+
+        // ── BATCHDEC M1 shadow: decode all nb chunks BATCHED (verify text + speed)
+        // alongside the per-slot path. Plain no-ts; lang must be known. Gated off.
+        if (batchdec and lang_tok != 0 and nb >= 1) {
+            const B: u32 = @intCast(nb);
+            var sht = try std.time.Timer.start();
+            // cross-KV → contiguous [B][ENC_SEQ][D] per layer (per-slot enc_out)
+            for (0..B) |b| {
+                const eo16b = out_f16 + b * @as(usize, ENC_SEQ) * D;
+                try mtl.beginCommandBuffer();
+                for (0..dec.NL) |l| {
+                    try deqW16(f_deq, cross_wdq, ckw[l], D, D);
+                    try mtl.matmulF16Batched(eo16b, cross_wdq, bb_ckc[l] + b * @as(usize, ENC_SEQ) * D, ENC_SEQ, D, D);
+                    try deqW16(f_deq, cross_wdq, cvw[l], D, D);
+                    try mtl.matmulF16Batched(eo16b, cross_wdq, bb_cvc[l] + b * @as(usize, ENC_SEQ) * D, ENC_SEQ, D, D);
+                    try biasAdd16(f_bias16, bb_cvc[l] + b * @as(usize, ENC_SEQ) * D, cvb[l], ENC_SEQ * D, D);
+                }
+                try mtl.commitCommandBuffer();
+                try mtl.sync();
+            }
+            // seed: sot|lang|task|notimestamps per slot; zero self-KV
+            const PLb: u32 = 4;
+            for (0..B) |b| {
+                const t = bb_tokens.ptr + b * MAX_TOK;
+                t[0] = SEED[0]; t[1] = lang_tok; t[2] = task_tok; t[3] = 50364;
+                for (0..dec.NL) |l| { @memset(bb_skc[b][l][0 .. MAX_TOK * D], 0); @memset(bb_svc[b][l][0 .. MAX_TOK * D], 0); }
+            }
+            var sk: [8][*]f32 = undefined;
+            var sv: [8][*]f32 = undefined;
+            var pp: [8][*]u32 = undefined;
+            for (0..B) |b| pp[b] = bb_pos;
+            // seed phase: fill KV for positions 0..PLb-2 (no prediction)
+            bb_pos[0] = 0;
+            for (0..PLb - 1) |_| {
+                try mtl.beginCommandBuffer();
+                for (0..B) |b| {
+                    try kEmbInd(f_emb_ind, bb_x + b * @as(usize, D), tok_emb.qs, tok_emb.scales, bb_tokens.ptr + b * MAX_TOK, bb_pos);
+                    try kPeInd(f_pe_ind, bb_x + b * @as(usize, D), dec_pe, bb_pos);
+                }
+                for (0..dec.NL) |l| {
+                    for (0..B) |b| { sk[b] = bb_skc[b][l]; sv[b] = bb_svc[b][l]; }
+                    try dec.decodeBlockBatched(Kd, dlayers[l], bb_wf[l], B, bb_x, bb_scr, sk[0..B], sv[0..B], bb_ckc[l], bb_cvc[l], pp[0..B]);
+                }
+                try kStep(f_step, bb_pos);
+                try mtl.commitCommandBuffer();
+                try mtl.sync();
+            }
+            // predict loop (DBATCH/cb for fair speed; ragged EOT per slot)
+            bb_pos[0] = PLb - 1;
+            var bb_done = [_]bool{false} ** 8;
+            var bb_ntext = [_]u32{0} ** 8;
+            const bb_maxgen: u32 = MAX_TOK - PLb - 1;
+            var gen: u32 = 0;
+            var bb_total: u32 = 0;
+            while (gen < bb_maxgen) {
+                const this_b: u32 = @min(@as(u32, 8), bb_maxgen - gen);
+                try mtl.beginCommandBuffer();
+                for (0..this_b) |_| {
+                    for (0..B) |b| {
+                        try kEmbInd(f_emb_ind, bb_x + b * @as(usize, D), tok_emb.qs, tok_emb.scales, bb_tokens.ptr + b * MAX_TOK, bb_pos);
+                        try kPeInd(f_pe_ind, bb_x + b * @as(usize, D), dec_pe, bb_pos);
+                    }
+                    for (0..dec.NL) |l| {
+                        for (0..B) |b| { sk[b] = bb_skc[b][l]; sv[b] = bb_svc[b][l]; }
+                        try dec.decodeBlockBatched(Kd, dlayers[l], bb_wf[l], B, bb_x, bb_scr, sk[0..B], sv[0..B], bb_ckc[l], bb_cvc[l], pp[0..B]);
+                    }
+                    try dec.kLN(Kd, bb_x, bb_scr.xb, dln_w, dln_b, D, B);
+                    try dec.kCvt32(Kd, bb_x16, bb_scr.xb, B * D);
+                    try mtl.matmulF16Batched(bb_x16, bb_temb, bb_l16, B, VOCAB, D);
+                    try dec.kCvt16(Kd, bb_logits, bb_l16, B * VOCAB);
+                    for (0..B) |b| {
+                        try kSuppress(f_suppress, bb_logits + b * @as(usize, VOCAB), d_suppress.ptr, n_suppress);
+                        try kFilt(f_filt_plain, bb_logits + b * @as(usize, VOCAB), bb_tokens.ptr + b * MAX_TOK, bb_pos, PLb);
+                    }
+                    try kStep(f_step, bb_pos);
+                    for (0..B) |b| try kArgmaxConf(f_argmax, bb_logits + b * @as(usize, VOCAB), bb_tokens.ptr + b * MAX_TOK, d_conf, bb_pos, MAX_TOK);
+                }
+                try mtl.commitCommandBuffer();
+                try mtl.sync();
+                // EOT scan over the this_b new tokens (indices PLb+gen .. +this_b)
+                var all_done = true;
+                for (0..this_b) |j| {
+                    const idx = PLb + gen + @as(u32, @intCast(j));
+                    for (0..B) |b| {
+                        if (bb_done[b]) continue;
+                        if (bb_tokens[b * MAX_TOK + idx] == EOT) bb_done[b] = true else { bb_ntext[b] += 1; bb_total += 1; }
+                    }
+                }
+                for (0..B) |b| { if (!bb_done[b]) all_done = false; }
+                gen += this_b;
+                if (all_done) break;
+            }
+            const sh_ms = @as(f64, @floatFromInt(sht.read())) / 1e6;
+            try out.print("[batchdec] B={d}: {d} tok {d:.0}ms ({d:.0} tok/s, incl cross-KV+seed)\n", .{ B, bb_total, sh_ms, @as(f64, @floatFromInt(bb_total)) / (sh_ms / 1000.0) });
+            for (0..B) |b| {
+                const txt = bpeDecode(bpe_path, bb_tokens[b * MAX_TOK + PLb .. b * MAX_TOK + PLb + bb_ntext[b]]) catch "";
+                try out.print("[batchdec] slot {d} ({d}tok): {s}\n", .{ b, bb_ntext[b], txt[0..@min(txt.len, 70)] });
+            }
+        }
 
         // ── Phase C: per-slot cross-KV + decode + timestamps (chronological order)
         for (0..nb) |slot| {
