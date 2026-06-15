@@ -24,6 +24,7 @@ enum EngineEvent: Equatable {
     case flushEnd
     case progressTotal(Int)           // file mode: total 30s chunks to process
     case progressChunk(Int)           // file mode: chunk K just finished
+    case languageDetected(Int)        // auto-detect locked a language token id
     case other(String)                // unrecognized line (perf/log) — kept for diagnostics
 }
 
@@ -51,6 +52,11 @@ enum EngineProtocol {
             }
             if line.hasPrefix("[perf] chunk ") {
                 if let k = Int(line.dropFirst("[perf] chunk ".count).prefix(while: \.isNumber)) { return .progressChunk(k) }
+            }
+            // "[lang] detected token 50264 (en=50259 ko=50264)" — auto-detect lock
+            if line.hasPrefix("[lang] detected token "),
+               let tok = Int(line.dropFirst("[lang] detected token ".count).prefix(while: \.isNumber)) {
+                return .languageDetected(tok)
             }
 
             if line.hasPrefix("=== WORD TIMESTAMPS") {
