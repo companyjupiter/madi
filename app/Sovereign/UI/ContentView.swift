@@ -132,6 +132,11 @@ struct ContentView: View {
 
             dropZone
 
+            if !session.transcript.lines.isEmpty {
+                Divider()
+                speakingStats
+            }
+
             Spacer()
 
             HStack {
@@ -144,6 +149,39 @@ struct ContentView: View {
         .frame(width: 280)
         .background(Theme.Colors.textTertiary.opacity(0.04))
     }
+
+    // 발언권 분석: per-speaker talk time from the diarized lines (who talked how
+    // much). Σ(line end − start) per speaker → colored share bars.
+    private var speakingStats: some View {
+        var times: [Int: Double] = [:]
+        for l in session.transcript.lines { times[l.speaker, default: 0] += max(0, l.end - l.start) }
+        let total = max(0.001, times.values.reduce(0, +))
+        let sorted = times.sorted { $0.value > $1.value }
+        return VStack(alignment: .leading, spacing: 7) {
+            Text("발언 시간").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+            ForEach(sorted, id: \.key) { entry in
+                let frac = entry.value / total
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        Circle().fill(Theme.Colors.speaker(entry.key)).frame(width: 7, height: 7)
+                        Text(session.speakerNames[entry.key] ?? "Speaker \(entry.key)")
+                            .font(Theme.Fonts.status).lineLimit(1)
+                        Spacer()
+                        Text("\(mmss(entry.value)) · \(Int((frac * 100).rounded()))%")
+                            .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Theme.Colors.speaker(entry.key).opacity(0.18))
+                            Capsule().fill(Theme.Colors.speaker(entry.key))
+                                .frame(width: geo.size.width * frac)
+                        }
+                    }.frame(height: 4)
+                }
+            }
+        }
+    }
+    private func mmss(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
 
     @ViewBuilder private func field<V: View>(_ label: String, @ViewBuilder _ control: () -> V) -> some View {
         VStack(alignment: .leading, spacing: 3) {
