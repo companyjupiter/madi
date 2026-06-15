@@ -157,6 +157,32 @@ enum EditorCuts {
         return cs.isEmpty ? 0 : cs.reduce(0, +) / Double(cs.count)
     }
 
+    // ── N5 highlight candidates (speculative) ─────────────────────────────────
+    struct Highlight: Equatable { var start: Double; var end: Double; var text: String; var score: Double }
+
+    /// Speculative "moments worth clipping" surface. The original idea keyed on
+    /// loudness, but per-word RMS isn't in the app model — so this uses available
+    /// proxies for emphasis: a line PRECEDED BY A PAUSE (≥ minPause: the speaker
+    /// set up a point), delivered CLEARLY (avg conf ≥ minConf), and SUBSTANTIAL
+    /// (≥ minWords). All three gate; score = pauseBefore × avgConf, sorted desc.
+    /// Heuristic candidates for review, NOT guaranteed highlights.
+    static func highlights(_ lines: [Line], minWords: Int = 5, minPause: Double = 1.0,
+                           minConf: Double = 0.8) -> [Highlight] {
+        var out: [Highlight] = []
+        var prevEnd: Double? = nil
+        for l in lines {
+            defer { prevEnd = max(prevEnd ?? l.end, l.end) }
+            guard l.words.count >= minWords else { continue }
+            let conf = avgConf(l)
+            guard conf >= minConf else { continue }
+            let pause = prevEnd.map { l.start - $0 } ?? 0
+            guard pause >= minPause else { continue }
+            out.append(Highlight(start: l.start, end: l.end,
+                                 text: String(l.text.prefix(60)), score: pause * conf))
+        }
+        return out.sorted { $0.score > $1.score }
+    }
+
     private static func jaccard(_ a: Line, _ b: Line) -> Double {
         let sa = Set(a.words.map { normalize($0.text) }.filter { !$0.isEmpty })
         let sb = Set(b.words.map { normalize($0.text) }.filter { !$0.isEmpty })

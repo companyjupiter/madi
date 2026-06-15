@@ -147,6 +147,41 @@ struct EditorCutsTests {
             check(EditorCuts.retakes([s1, s2]).isEmpty, "too-short lines must not be a retake")
         }
 
+        // ── 14. Highlight: pause-preceded + confident + substantial line surfaces ──
+        do {
+            func conf(_ toks: [(String, Double, Double)], _ c: Double, sp: Int = 0) -> Line {
+                var ws = toks.map { Word(t0: $0.1, t1: $0.2, text: $0.0) }
+                for i in ws.indices { ws[i].conf = c }
+                return Line(speaker: sp, start: ws.first!.t0, end: ws.last!.t1, words: ws)
+            }
+            // line A ends at 1.0; line B starts at 3.0 (2.0s pause), 6 words, conf .95 → highlight
+            let a = conf([("ok", 0, 0.5), ("so", 0.5, 1.0)], 0.9)
+            let b = conf([("this", 3.0, 3.3), ("is", 3.3, 3.5), ("the", 3.5, 3.7),
+                          ("key", 3.7, 4.0), ("point", 4.0, 4.4), ("today", 4.4, 4.9)], 0.95)
+            let hi = EditorCuts.highlights([a, b], minWords: 5, minPause: 1.0, minConf: 0.8)
+            check(hi.count == 1, "expected 1 highlight, got \(hi.count)")
+            check(hi.first?.start == 3.0, "highlight should be the pause-preceded line")
+            check((hi.first?.score ?? 0) > 0, "highlight score should be positive")
+        }
+
+        // ── 15. Highlight: no pause, low conf, or too-short → no candidate ──
+        do {
+            func conf(_ toks: [(String, Double, Double)], _ c: Double) -> Line {
+                var ws = toks.map { Word(t0: $0.1, t1: $0.2, text: $0.0) }
+                for i in ws.indices { ws[i].conf = c }
+                return Line(speaker: 0, start: ws.first!.t0, end: ws.last!.t1, words: ws)
+            }
+            // back-to-back (no pause), confident, long → no highlight (no setup pause)
+            let a = conf([("one", 0, 0.5), ("two", 0.5, 1.0)], 0.9)
+            let b = conf([("a", 1.0, 1.3), ("b", 1.3, 1.6), ("c", 1.6, 1.9),
+                          ("d", 1.9, 2.2), ("e", 2.2, 2.5)], 0.95)
+            check(EditorCuts.highlights([a, b]).isEmpty, "no-pause line must not be a highlight")
+            // pause + long but LOW conf → no highlight
+            let c = conf([("x", 5.0, 5.3), ("y", 5.3, 5.6), ("z", 5.6, 5.9),
+                          ("w", 5.9, 6.2), ("v", 6.2, 6.5)], 0.4)
+            check(EditorCuts.highlights([a, c]).isEmpty, "low-conf line must not be a highlight")
+        }
+
         if failures == 0 { print("OK: all EditorCuts tests passed") }
         else { print("\(failures) FAILURE(S)"); exit(1) }
     }
