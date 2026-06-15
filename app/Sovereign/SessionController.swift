@@ -192,6 +192,10 @@ final class SessionController: EngineProcessDelegate {
         try Exporters.cutListCSV(transcript.lines)
             .write(to: url, atomically: true, encoding: .utf8)
     }
+    func exportChapters(to url: URL) throws {
+        try Exporters.youtubeChapters(transcript.lines)
+            .write(to: url, atomically: true, encoding: .utf8)
+    }
     /// (cut count, removable seconds) for the tighten stat — fillers + silences.
     var tightenStat: (cuts: Int, seconds: Double) {
         let c = EditorCuts.tighten(transcript.lines)
