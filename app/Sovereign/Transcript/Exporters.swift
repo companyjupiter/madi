@@ -62,7 +62,15 @@ enum Exporters {
         let speakers: [[String: Any]] = times.sorted { $0.value > $1.value }.map {
             ["speaker": $0.key, "name": names[$0.key] ?? "Speaker \($0.key)", "talk_seconds": $0.value]
         }
-        let root: [String: Any] = ["segments": segs, "speakers": speakers]
+        let fillers = EditorCuts.fillers(lines)
+        let fillerJSON: [[String: Any]] = fillers.map {
+            ["start": $0.start, "end": $0.end, "text": $0.label] as [String: Any]
+        }
+        let root: [String: Any] = [
+            "segments": segs, "speakers": speakers,
+            "fillers": fillerJSON,
+            "filler_seconds": fillers.reduce(0) { $0 + $1.duration },
+        ]
         guard let data = try? JSONSerialization.data(withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
               let str = String(data: data, encoding: .utf8) else { return "{}" }
