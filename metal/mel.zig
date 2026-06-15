@@ -27,22 +27,47 @@ pub fn hannWindow(buf: *[N_FFT]f32) void {
 }
 
 /// Naive 400-pt DFT (matches the reference exactly; f64 accumulation).
-/// Writes bins 0..N_FFT/2+1 of the windowed real input.
-pub fn rfft(input: *const [N_FFT]f32, window: *const [N_FFT]f32, re_out: []f32, im_out: []f32) void {
-    const N = N_FFT;
-    const bins = N / 2 + 1; // 201
-    for (0..bins) |k| {
-        var sum_re: f64 = 0.0;
-        var sum_im: f64 = 0.0;
-        const af = -2.0 * PI * @as(f64, @floatFromInt(k)) / @as(f64, @floatFromInt(N));
-        for (0..N) |n| {
-            const val = @as(f64, @floatCast(input[n] * window[n]));
+const BINS: usize = N_FFT / 2 + 1; // 201
+
+/// Precomputed DFT twiddle factors + Hann window, built ONCE. The old per-frame
+/// rfft recomputed @cos/@sin ~482M times PER 30 s chunk (a naive O(N²) DFT) —
+/// the single biggest file-mode cost (~1.3 s/chunk, dominating wall; cf. mel
+/// time 3.6 ms in whisper.cpp). Now it's a table lookup. Bit-identical: f64
+/// cos/sin (= the old @cos(angle)), f64 accumulation, same f32 window.
+const TwTable = struct {
+    cos: [BINS * N_FFT]f64 = undefined,
+    sin: [BINS * N_FFT]f64 = undefined,
+    window: [N_FFT]f32 = undefined,
+};
+var g_tw: TwTable = .{};
+var g_tw_ready: bool = false;
+fn ensureTwiddles() void {
+    if (g_tw_ready) return;
+    hannWindow(&g_tw.window);
+    for (0..BINS) |k| {
+        const af = -2.0 * PI * @as(f64, @floatFromInt(k)) / @as(f64, @floatFromInt(N_FFT));
+        for (0..N_FFT) |n| {
             const angle = af * @as(f64, @floatFromInt(n));
-            sum_re += val * @cos(angle);
-            sum_im += val * @sin(angle);
+            g_tw.cos[k * N_FFT + n] = @cos(angle);
+            g_tw.sin[k * N_FFT + n] = @sin(angle);
         }
-        re_out[k] = @floatCast(sum_re);
-        im_out[k] = @floatCast(sum_im);
+    }
+    g_tw_ready = true;
+}
+
+/// rfft of an already-windowed real frame via the twiddle table → bins 0..N/2.
+fn rfftTw(windowed: *const [N_FFT]f32, re_out: []f32, im_out: []f32) void {
+    for (0..BINS) |k| {
+        var sr: f64 = 0.0;
+        var si: f64 = 0.0;
+        const base = k * N_FFT;
+        for (0..N_FFT) |n| {
+            const v = @as(f64, @floatCast(windowed[n]));
+            sr += v * g_tw.cos[base + n];
+            si += v * g_tw.sin[base + n];
+        }
+        re_out[k] = @floatCast(sr);
+        im_out[k] = @floatCast(si);
     }
 }
 
@@ -71,42 +96,64 @@ pub fn melSpectrogramRaw(
     std.debug.assert(samples.len >= CHUNK_SAMPLES);
     std.debug.assert(mel.len >= N_MELS * N_FRAMES);
 
-    var window: [N_FFT]f32 = undefined;
-    hannWindow(&window);
+    ensureTwiddles();
 
-    var frame_buf: [N_FFT]f32 = undefined;
-    var re_out: [N_FFT]f32 = undefined;
-    var im_out: [N_FFT]f32 = undefined;
-    var power: [FFT_BINS]f32 = undefined;
-    const padding = N_FFT / 2; // 200, center=True reflect padding
-
-    for (0..N_FRAMES) |f| {
-        const start_idx = f * HOP_LENGTH;
-        // Reflect-padded frame extraction.
-        for (0..N_FFT) |t| {
-            const si = @as(isize, @intCast(start_idx + t)) - @as(isize, @intCast(padding));
-            var ri: usize = 0;
-            if (si < 0) {
-                ri = @intCast(-si);
-            } else if (si >= CHUNK_SAMPLES) {
-                ri = @intCast(2 * @as(isize, @intCast(CHUNK_SAMPLES)) - 2 - si);
-            } else {
-                ri = @intCast(si);
+    // The frame loop is embarrassingly parallel — each frame extracts its own
+    // window, rfft's it, and writes its OWN mel column [*][f] (no overlap). Fan
+    // it across cores: combined with the twiddle table this is the file-mode win.
+    const FrameJob = struct {
+        samples: []const f32,
+        mel_filters: []const f32,
+        mel: []f32,
+        lo: usize,
+        hi: usize,
+        fn run(j: @This()) void {
+            var frame_buf: [N_FFT]f32 = undefined;
+            var re_out: [N_FFT]f32 = undefined;
+            var im_out: [N_FFT]f32 = undefined;
+            var power: [FFT_BINS]f32 = undefined;
+            const padding = N_FFT / 2; // center=True reflect padding
+            for (j.lo..j.hi) |f| {
+                const start_idx = f * HOP_LENGTH;
+                for (0..N_FFT) |t| {
+                    const si = @as(isize, @intCast(start_idx + t)) - @as(isize, @intCast(padding));
+                    var ri: usize = 0;
+                    if (si < 0) {
+                        ri = @intCast(-si);
+                    } else if (si >= CHUNK_SAMPLES) {
+                        ri = @intCast(2 * @as(isize, @intCast(CHUNK_SAMPLES)) - 2 - si);
+                    } else {
+                        ri = @intCast(si);
+                    }
+                    frame_buf[t] = j.samples[ri] * g_tw.window[t]; // window applied here
+                }
+                rfftTw(&frame_buf, &re_out, &im_out);
+                for (0..FFT_BINS) |k| power[k] = re_out[k] * re_out[k] + im_out[k] * im_out[k];
+                for (0..N_MELS) |m| {
+                    var sum: f32 = 0.0;
+                    for (0..FFT_BINS) |k| sum += power[k] * j.mel_filters[m * MEL_FILTER_STRIDE + k];
+                    j.mel[m * N_FRAMES + f] = sum;
+                }
             }
-            frame_buf[t] = samples[ri];
         }
-        rfft(&frame_buf, &window, &re_out, &im_out);
-        for (0..FFT_BINS) |k| {
-            power[k] = re_out[k] * re_out[k] + im_out[k] * im_out[k];
-        }
-        for (0..N_MELS) |m| {
-            var sum: f32 = 0.0;
-            for (0..FFT_BINS) |k| {
-                sum += power[k] * mel_filters[m * MEL_FILTER_STRIDE + k];
-            }
-            mel[m * N_FRAMES + f] = sum;
+    };
+    const nthreads: usize = @min(@as(usize, 8), @max(@as(usize, 1), std.Thread.getCpuCount() catch 1));
+    const per = (N_FRAMES + nthreads - 1) / nthreads;
+    var threads: [8]std.Thread = undefined;
+    var nt: usize = 0;
+    var ti: usize = 0;
+    while (ti < nthreads) : (ti += 1) {
+        const lo = ti * per;
+        if (lo >= N_FRAMES) break;
+        const job = FrameJob{ .samples = samples, .mel_filters = mel_filters, .mel = mel, .lo = lo, .hi = @min(lo + per, N_FRAMES) };
+        if (std.Thread.spawn(.{}, FrameJob.run, .{job})) |th| {
+            threads[nt] = th;
+            nt += 1;
+        } else |_| {
+            job.run(); // spawn failed → run this range inline
         }
     }
+    for (threads[0..nt]) |th| th.join();
 
     // Whisper normalization: log10(max(mel,1e-10)), clip to (max-8), (.+4)/4.
     var mel_max: f32 = -1e30;
