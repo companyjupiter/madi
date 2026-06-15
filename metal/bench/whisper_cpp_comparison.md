@@ -63,7 +63,27 @@ fast baseline and wins on raw speed.** Our value is elsewhere — see "Takeaways
 > The fair comparison for our diarizer is **pyannote 3.1** (the tool whisper.cpp
 > users bolt on), whose VoxConverse SOTA ~11.2% we already beat (9.67%).
 
-## Why whisper.cpp is faster
+### devops_ko — 462 s (7.7 min), Korean — full-file END-TO-END (2026-06-15)
+The 60 s table sums GPU [perf] components; the true wall on a long file exposed a
+hidden CPU bottleneck. Measured end-to-end wall (warm, n=3):
+
+| | Sovereign (ours) | whisper.cpp |
+|---|---|---|
+| **before mel fix** | 33.0 s | 14.5 s |
+| **after mel fix** | **~16 s** | 14.5 s |
+
+> **Root-cause story (the [perf] number lied):** ours 33 s but [perf] (encoder
+> 7.9 s + decode 3.9 s) summed to ~12.5 s — ~20 s was *outside* [perf]. Tracing
+> `[enc]` showed a +7.3 s gap per 4-chunk batch while the encoder forward was only
+> 2 s → the rest was the **mel spectrogram**. `mel.zig`'s `rfft` was a naive O(N²)
+> DFT recomputing `@cos`/`@sin` ~482M times **per 30 s chunk** (~1.3 s/chunk;
+> whisper.cpp's mel is 3.6 ms). Fix: precompute twiddle factors (f64 table, once)
+> + multithread the independent frame loop → **wall 33 → ~16 s (~2×), bit-identical
+> output** (jfk unchanged, deterministic). **Encode and decode were tied all along;
+> the entire end-to-end gap was the mel front-end.** Now neck-and-neck with
+> whisper.cpp; the residual (~1.5 s) is model load (mmap vs streaming, one-time).
+
+## Why whisper.cpp WAS faster (mostly closed 2026-06-15)
 1. **Load**: ggml mmap (~0.2 s) vs our pread *streaming* loader (~1.5 s). Our loader
    deliberately trades load time for low steady-state RSS. **In live/resident mode
    this cost is paid once**, so it disappears for streaming meeting use.
