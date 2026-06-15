@@ -1,8 +1,9 @@
 // AssetManifest.swift — what the app downloads on first run and where it lives.
 //
 // Small assets (pyannote/silero/resnet/bpe/mel/conv/pos_emb/tokenizer) ship
-// INSIDE the bundle (Resources/assets-small). Only the 1.5 GB model.safetensors
+// INSIDE the bundle (Resources/assets-small). Only the ~830 MB Q8 model.safetensors
 // is fetched on first run into Application Support, verified by SHA-256.
+// (Q8 is 1.86x smaller than F16 — the old "1.5 GB" figure was the F16 model.)
 //
 // TODO(hosting): fill in `url` + `sha256` once the model is hosted (R2/S3/CDN)
 // and pin the version. Bumping the model = ship a new app build with new hashes.
@@ -58,7 +59,7 @@ enum AssetManifest {
     }
     static var bundledBPE: URL { bundledAssetsDir.appendingPathComponent("WHISPER_BPE.bin") }
 
-    /// Fast launch check: exists + exact size (hashing 1.5 GB at every launch
+    /// Fast launch check: exists + exact size (hashing ~830 MB at every launch
     /// would cost seconds; the full SHA-256 runs once, right after download).
     static func modelIsValid() -> Bool {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: modelURL.path),
