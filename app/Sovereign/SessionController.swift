@@ -11,7 +11,7 @@ import CoreAudio
 @MainActor
 final class SessionController: EngineProcessDelegate {
     enum Phase: Equatable {
-        case idle, engineStarting, ready, recording, processing, flushing, done
+        case idle, engineStarting, ready, recording, paused, processing, flushing, done
         case error(String)
     }
 
@@ -127,8 +127,21 @@ final class SessionController: EngineProcessDelegate {
         catch { phase = .error("engine start failed: \(error.localizedDescription)") }
     }
 
-    func stop() {
+    /// Pause live capture — the mic stays warm; the paused span is dropped so the
+    /// recording skips the break. No engine flush (the session continues).
+    func pauseRecording() {
         guard phase == .recording else { return }
+        capture.pause()
+        phase = .paused
+    }
+    func resumeRecording() {
+        guard phase == .paused else { return }
+        capture.resume()
+        phase = .recording
+    }
+
+    func stop() {
+        guard phase == .recording || phase == .paused else { return }
         phase = .flushing
         capture.stop()          // flush final tail segment(s) into the engine
         engine?.flush()         // → SPKFIX/SPKOV → <<FLUSH_END>>
