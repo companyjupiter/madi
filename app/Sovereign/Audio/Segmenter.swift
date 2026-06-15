@@ -61,6 +61,15 @@ struct Segmenter {
         return out
     }
 
+    /// The in-progress (not-yet-closed) window — overlap context + pending body.
+    /// Same audio the NEXT segment will hold; decoding it gives a live preview
+    /// before the window closes. `pendingCount` lets the caller throttle previews.
+    var pendingCount: Int { pending.count }
+    func previewWindow() -> (offset: Double, samples: [Int16]) {
+        let offset = max(0, Double(emittedBody - overlapTail.count) / Double(sampleRate))
+        return (offset, overlapTail + pending)
+    }
+
     /// Flush the final partial window (called once at stop). Returns nil if empty.
     mutating func flush() -> Segment? {
         guard !pending.isEmpty else { return nil }

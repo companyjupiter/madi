@@ -43,6 +43,16 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(liveWindowSeconds, forKey: "liveWindowSeconds") }
     }
 
+    /// Streaming preview: a 2nd engine decodes the in-progress window every ~1.5s
+    /// for instant interim text — NO accuracy cost (committed text is unchanged).
+    /// Costs a 2nd resident model (~830 MB) only while recording. Persisted.
+    var livePreviewEnabled: Bool = (UserDefaults.standard.object(forKey: "livePreviewEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(livePreviewEnabled, forKey: "livePreviewEnabled") }
+    }
+    /// Interim "진행 중" text (cleared when the window's committed words land).
+    private(set) var livePartial: String = ""
+    private let preview = PreviewEngine()
+
     /// Editor-feature toggles + thresholds (persisted). The UI binds to this; all
     /// editor exports/stats read from it.
     var editorSettings = EditorSettings.load() { didSet { editorSettings.save() } }
@@ -135,6 +145,16 @@ final class SessionController: EngineProcessDelegate {
         }
         capture.onLevel = { [weak self] lvl in self?.level = lvl }
 
+        // streaming preview (interim text before a window closes)
+        livePartial = ""
+        if livePreviewEnabled {
+            preview.onText = { [weak self] t in self?.livePartial = t }
+            capture.onPreview = { [weak self] url in self?.preview.feed(wav: url) }
+            preview.start(config: makeConfig())
+        } else {
+            capture.onPreview = nil
+        }
+
         do { try e.start() }
         catch { phase = .error("engine start failed: \(error.localizedDescription)") }
     }
@@ -213,6 +233,7 @@ final class SessionController: EngineProcessDelegate {
         switch event {
         case .progressTotal(let n): chunksTotal = n
         case .progressChunk(let k): chunksDone = max(chunksDone, k)
+        case .wordSectionBegin: livePartial = ""; transcript.ingest(event)  // committed → drop interim
         default: transcript.ingest(event)
         }
     }
@@ -224,6 +245,7 @@ final class SessionController: EngineProcessDelegate {
         // exit beats the FLUSH_END line (finalizeOnce is idempotent).
         if code == 0 { finalizeOnce(); return }
         if phase != .done, phase != .flushing {
+            preview.stop(); livePartial = ""
             phase = .error("engine exited (\(code))")
         }
     }
@@ -233,6 +255,7 @@ final class SessionController: EngineProcessDelegate {
         transcript.finalize()
         engine?.terminate()
         engine = nil
+        preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
         phase = .done
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
     }

@@ -25,6 +25,11 @@ final class AudioCapture {
 
     /// (global start offset seconds, segment wav url)
     var onSegment: ((Double, URL) -> Void)?
+    /// Streaming preview: the in-progress window written to a wav, emitted every
+    /// ~previewSeconds of new audio so a separate engine can decode interim text
+    /// before the window closes. nil = previews off.
+    var onPreview: ((URL) -> Void)?
+    var previewSeconds: Double = 1.5
     /// 0…1 input level for the meter.
     var onLevel: ((Float) -> Void)?
     /// Specific input device (nil = system default).
@@ -117,10 +122,31 @@ final class AudioCapture {
         segIndex = 0
     }
 
+    private var samplesSincePreview = 0
     private func consume(_ samples: [Int16], level: Float) {
         if paused { onLevel?(0); return }   // drop audio + drop the meter while paused
         onLevel?(level)
-        for seg in segmenter.push(samples) { write(seg) }
+        for seg in segmenter.push(samples) { write(seg); samplesSincePreview = 0 }
+        // streaming preview: every previewSeconds of new audio, hand the in-progress
+        // window to the preview engine (only if there's enough pending to be useful).
+        if onPreview != nil {
+            samplesSincePreview += samples.count
+            let interval = Int(previewSeconds * Double(WavWriter.sampleRate))
+            if samplesSincePreview >= interval, segmenter.pendingCount > interval / 2 {
+                samplesSincePreview = 0
+                let pw = segmenter.previewWindow()
+                writePreview(pw.samples)
+            }
+        }
+    }
+
+    private var previewSlot = 0
+    private func writePreview(_ samples: [Int16]) {
+        // rotate a few files so the engine never reads one mid-overwrite
+        previewSlot = (previewSlot + 1) % 3
+        let url = tempDir.appendingPathComponent("preview-\(previewSlot).wav")
+        do { try WavWriter.write(samples: samples, to: url); onPreview?(url) }
+        catch { /* preview is best-effort */ }
     }
 
     private func write(_ seg: Segmenter.Segment) {

@@ -23,6 +23,7 @@ struct TranscriptView: View {
     var scrollTarget: UUID? = nil
     var scrollTick: Int = 0
     var focusedLine: UUID? = nil   // line to briefly emphasize after a jump
+    var interim: String = ""       // live streaming-preview text (gray "진행 중")
 
     @State private var editingSpeaker: Int? = nil
     @State private var draftName: String = ""
@@ -56,6 +57,13 @@ struct TranscriptView: View {
                     } else {
                         ForEach(lines) { line in row(line).id(line.id) }
                     }
+                    if !interim.isEmpty {
+                        Text(interim)
+                            .font(Theme.Fonts.body)
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                            .italic()
+                            .id("interim")
+                    }
                 }
                 .padding(Theme.Space.window)
             }
@@ -70,6 +78,9 @@ struct TranscriptView: View {
                 if let t = scrollTarget {
                     withAnimation { proxy.scrollTo(t, anchor: .center) }
                 }
+            }
+            .onChange(of: interim) { _, v in
+                if !v.isEmpty { proxy.scrollTo("interim", anchor: .bottom) }
             }
             .alert("화자 이름", isPresented: Binding(
                 get: { editingSpeaker != nil },
