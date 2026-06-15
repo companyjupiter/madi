@@ -119,4 +119,48 @@ enum EditorCuts {
         let t = String(words.prefix(40)).trimmingCharacters(in: .whitespaces)
         return t.isEmpty ? "챕터" : t
     }
+
+    // ── N1 retake detection ───────────────────────────────────────────────────
+    struct RetakeGroup: Equatable { var keepStart: Double; var keepText: String; var drops: [CutRange] }
+
+    /// Adjacent near-duplicate takes (a creator redoing a line). A run of
+    /// consecutive lines whose word-set Jaccard ≥ `simThreshold` is a retake
+    /// group; we suggest keeping the highest-confidence take and dropping the
+    /// rest (as removable "retake" ranges). Conservative: both lines must have
+    /// ≥ `minTokens` words, so short back-channels ("네", "yeah") don't match.
+    /// A *suggestion* — the creator confirms; not auto-applied.
+    static func retakes(_ lines: [Line], simThreshold: Double = 0.7, minTokens: Int = 3) -> [RetakeGroup] {
+        var out: [RetakeGroup] = []
+        var i = 0
+        while i < lines.count {
+            var j = i
+            while j + 1 < lines.count,
+                  lines[j].words.count >= minTokens, lines[j + 1].words.count >= minTokens,
+                  jaccard(lines[j], lines[j + 1]) >= simThreshold { j += 1 }
+            if j > i {
+                let run = Array(lines[i...j])
+                let keep = run.max(by: { avgConf($0) < avgConf($1) })!
+                let drops = run.filter { $0.id != keep.id }.map {
+                    CutRange(start: $0.start, end: $0.end, kind: "retake",
+                             label: String($0.text.prefix(40)))
+                }
+                out.append(RetakeGroup(keepStart: keep.start,
+                                       keepText: String(keep.text.prefix(40)), drops: drops))
+                i = j + 1
+            } else { i += 1 }
+        }
+        return out
+    }
+
+    private static func avgConf(_ l: Line) -> Double {
+        let cs = l.words.map(\.conf)
+        return cs.isEmpty ? 0 : cs.reduce(0, +) / Double(cs.count)
+    }
+
+    private static func jaccard(_ a: Line, _ b: Line) -> Double {
+        let sa = Set(a.words.map { normalize($0.text) }.filter { !$0.isEmpty })
+        let sb = Set(b.words.map { normalize($0.text) }.filter { !$0.isEmpty })
+        if sa.isEmpty || sb.isEmpty { return 0 }
+        return Double(sa.intersection(sb).count) / Double(sa.union(sb).count)
+    }
 }

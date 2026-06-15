@@ -122,6 +122,31 @@ struct EditorCutsTests {
                   "early pause must not create a chapter")
         }
 
+        // ── 12. Retake: two near-identical takes → keep higher-conf, drop other ──
+        do {
+            var w1 = [Word(t0: 0, t1: 0.4, text: "let's"), Word(t0: 0.4, t1: 0.8, text: "start"),
+                      Word(t0: 0.8, t1: 1.2, text: "the"), Word(t0: 1.2, t1: 1.6, text: "intro")]
+            for i in w1.indices { w1[i].conf = 0.55 }            // weaker take
+            var w2 = [Word(t0: 3, t1: 3.4, text: "let's"), Word(t0: 3.4, t1: 3.8, text: "start"),
+                      Word(t0: 3.8, t1: 4.2, text: "the"), Word(t0: 4.2, t1: 4.6, text: "intro")]
+            for i in w2.indices { w2[i].conf = 0.95 }            // stronger take → keep
+            let a = Line(speaker: 0, start: 0, end: 1.6, words: w1)
+            let b = Line(speaker: 0, start: 3, end: 4.6, words: w2)
+            let rt = EditorCuts.retakes([a, b], simThreshold: 0.7, minTokens: 3)
+            check(rt.count == 1, "expected 1 retake group, got \(rt.count)")
+            check(rt.first?.keepStart == 3, "should keep the higher-conf (later) take")
+            check(rt.first?.drops.first?.start == 0, "should drop the weaker take at 0")
+        }
+
+        // ── 13. Retake: dissimilar lines, and too-short lines, not grouped ──
+        do {
+            let a = line([("the", 0, 0.4), ("weather", 0.4, 0.9), ("today", 0.9, 1.4)])
+            let b = line([("stock", 3, 3.4), ("market", 3.4, 3.9), ("news", 3.9, 4.4)])
+            check(EditorCuts.retakes([a, b]).isEmpty, "dissimilar lines must not be a retake")
+            let s1 = line([("네", 0, 0.3)]); let s2 = line([("네", 1, 1.3)])
+            check(EditorCuts.retakes([s1, s2]).isEmpty, "too-short lines must not be a retake")
+        }
+
         if failures == 0 { print("OK: all EditorCuts tests passed") }
         else { print("\(failures) FAILURE(S)"); exit(1) }
     }
