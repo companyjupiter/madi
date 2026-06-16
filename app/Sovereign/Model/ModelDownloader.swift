@@ -57,21 +57,39 @@ extension ModelDownloader: URLSessionDownloadDelegate {
 
     nonisolated func urlSession(_ s: URLSession, downloadTask: URLSessionDownloadTask,
                                didFinishDownloadingTo location: URL) {
-        // move first (temp file is deleted when this returns), then verify
-        let dest = AssetManifest.modelURL
+        let dest = AssetManifest.downloadedModelURL
+        let staging = dest.deletingLastPathComponent()
+            .appendingPathComponent(".\(dest.lastPathComponent).download")
         do {
-            try? FileManager.default.removeItem(at: dest)
-            try FileManager.default.moveItem(at: location, to: dest)
+            try? FileManager.default.removeItem(at: staging)
+            try FileManager.default.moveItem(at: location, to: staging)
         } catch {
             Task { @MainActor in self.state = .failed("move failed: \(error.localizedDescription)") }
             return
         }
         Task { @MainActor in
             self.state = .verifying
-            // full digest check (slow, once) — launch-time uses the fast size check
-            let ok = await Task.detached { AssetManifest.modelHashMatches() }.value
-            self.state = ok ? .ready
-                : .failed("SHA-256 mismatch — re-download")
+            let ok = await Task.detached {
+                AssetManifest.modelFileIsValid(
+                    at: staging,
+                    expectedSize: AssetManifest.model.sizeBytes,
+                    expectedSHA256: AssetManifest.model.sha256
+                )
+            }.value
+            if ok {
+                do {
+                    try? FileManager.default.removeItem(at: dest)
+                    try FileManager.default.moveItem(at: staging, to: dest)
+                    self.state = .ready
+                } catch {
+                    try? FileManager.default.removeItem(at: staging)
+                    self.state = .failed("install failed: \(error.localizedDescription)")
+                }
+            } else {
+                try? FileManager.default.removeItem(at: staging)
+                if !AssetManifest.modelIsValid() { try? FileManager.default.removeItem(at: dest) }
+                self.state = .failed("SHA-256 mismatch — re-download")
+            }
         }
     }
 

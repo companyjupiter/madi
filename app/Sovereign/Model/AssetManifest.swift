@@ -52,6 +52,7 @@ enum AssetManifest {
     /// Where the engine loads the model from: the bundled copy if present
     /// (self-contained build), else App Support (download / dev-seed build).
     static var modelURL: URL { bundledModelURL ?? supportDir.appendingPathComponent(model.name) }
+    static var downloadedModelURL: URL { supportDir.appendingPathComponent(model.name) }
 
     /// Bundled small assets dir (engine cwd for relative loads).
     static var bundledAssetsDir: URL {
@@ -59,29 +60,31 @@ enum AssetManifest {
     }
     static var bundledBPE: URL { bundledAssetsDir.appendingPathComponent("WHISPER_BPE.bin") }
 
-    /// Fast launch check: exists + exact size (hashing ~830 MB at every launch
-    /// would cost seconds; the full SHA-256 runs once, right after download).
+    /// Trust check: the model must match both size and SHA-256. App Support is
+    /// user-writable, so size-only validation can accept same-size tampering.
     static func modelIsValid() -> Bool {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: modelURL.path),
-              let size = attrs[.size] as? Int64 else {
-            // attributesOfItem on a symlink describes the LINK; resolve for dev seeds
-            if let resolved = try? FileManager.default.destinationOfSymbolicLink(atPath: modelURL.path),
-               let a2 = try? FileManager.default.attributesOfItem(atPath: resolved),
-               let s2 = a2[.size] as? Int64 { return s2 == model.sizeBytes }
-            return false
-        }
-        if size == model.sizeBytes { return true }
-        // symlinked dev seed: size is the link length — resolve and re-check
-        if let resolved = try? FileManager.default.destinationOfSymbolicLink(atPath: modelURL.path),
-           let a2 = try? FileManager.default.attributesOfItem(atPath: resolved),
-           let s2 = a2[.size] as? Int64 { return s2 == model.sizeBytes }
-        return false
+        modelFileIsValid(at: modelURL, expectedSize: model.sizeBytes, expectedSHA256: model.sha256)
     }
 
     /// Full integrity check — call after a download completes.
-    static func modelHashMatches() -> Bool {
-        guard let digest = try? sha256(of: modelURL) else { return false }
+    static func modelHashMatches(at url: URL = modelURL) -> Bool {
+        guard let digest = try? sha256(of: url) else { return false }
         return digest == model.sha256
+    }
+
+    static func modelFileIsValid(at url: URL, expectedSize: Int64, expectedSHA256: String) -> Bool {
+        // Release builds should not trust symlinked model paths: the target can
+        // be swapped without changing the link entry the app originally checked.
+        guard (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) == nil else {
+            return false
+        }
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int64,
+              size == expectedSize,
+              let digest = try? sha256(of: url) else {
+            return false
+        }
+        return digest == expectedSHA256
     }
 
     static func sha256(of url: URL) throws -> String {
