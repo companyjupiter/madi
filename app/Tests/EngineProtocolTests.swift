@@ -51,9 +51,9 @@ struct EngineProtocolTests {
 
         check(d.decode(line: "<<FLUSH_END>>") == .flushEnd, "flush end")
 
-        // perf/log noise → other
-        check(d.decode(line: "[perf] chunk 1: ...") == .other("[perf] chunk 1: ..."),
-              "perf line is other")
+        // file-mode progress surfaces chunk completion
+        check(d.decode(line: "[perf] chunk 1: ...") == .progressChunk(1),
+              "perf chunk line is progress")
 
         if failures == 0 { print("✅ EngineProtocol: all checks passed") }
         else { print("❌ \(failures) failure(s)"); exit(1) }

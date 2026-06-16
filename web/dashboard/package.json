@@ -9,6 +9,7 @@
     "predev": "npm run sync:fixtures",
     "prebuild": "npm run sync:fixtures",
     "dev": "vite",
+    "lint": "tsc -b --pretty false",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
