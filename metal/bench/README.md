@@ -31,6 +31,12 @@ python3 -m venv /tmp/diarvenv && /tmp/diarvenv/bin/pip install numpy scikit-lear
 /tmp/diarvenv/bin/python bench/mel_k.py
 ```
 
+## Asset regeneration integrity
+`bench/gen_diar_assets.sh` pins its direct Python build dependencies and verifies
+the downloaded wespeaker ONNX, pyannote archive, and extracted pyannote ONNX with
+SHA-256 before generating assets. Update those hashes in the script only after
+manually reviewing the upstream artifact change.
+
 ## Results (AMI ES2004a, collar 0.25s)
 | approach | DER |
 |---|---|
