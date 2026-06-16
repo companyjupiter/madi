@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  source-lint:
+    name: Source lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r script; do
+            bash -n "$script"
+          done < <(git ls-files '*.sh')
+
+      - name: Validate Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          import pathlib
+          import subprocess
+
+          for path in subprocess.check_output(["git", "ls-files", "*.py"], text=True).splitlines():
+              ast.parse(pathlib.Path(path).read_text(), filename=path)
+          PY
+
+  dashboard:
+    name: Dashboard lint and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/dashboard
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint dashboard
+        run: npm run lint
+
+      - name: Build dashboard
+        run: npm run build
+
+  swift-tests:
+    name: Swift standalone tests
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Engine protocol parser
+        working-directory: app
+        run: |
+          swiftc -parse-as-library \
+            Sovereign/Engine/EngineProtocol.swift \
+            Tests/EngineProtocolTests.swift \
+            -o /tmp/engine-protocol-tests
+          /tmp/engine-protocol-tests
+
+      - name: Event contract fixtures
+        working-directory: app
+        run: |
+          swiftc -parse-as-library \
+            Sovereign/Engine/EngineEvents.swift \
+            Tests/EventContractTests.swift \
+            -o /tmp/event-contract-tests
+          /tmp/event-contract-tests
+
+      - name: Word merger
+        working-directory: app
+        run: |
+          swiftc -parse-as-library \
+            Sovereign/Transcript/WordMerger.swift \
+            Tests/WordMergerStub.swift \
+            Tests/WordMergerTests.swift \
+            -o /tmp/word-merger-tests
+          /tmp/word-merger-tests
