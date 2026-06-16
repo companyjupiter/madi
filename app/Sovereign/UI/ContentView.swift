@@ -13,6 +13,8 @@ struct ContentView: View {
     // The detailed (timecode + confidence + overlap) view is one tap away.
     @AppStorage("transcriptViewMode") private var contentMode = true
     private var viewMode: TranscriptViewMode { contentMode ? .content : .detailed }
+    // Transcript text size (pt) — readable default, A−/A+ in the bar. Persisted.
+    @AppStorage("transcriptFontSize") private var fontSize = 18.0
     // N2 review navigator (상세 mode): step through low-confidence words.
     @State private var reviewIndex = 0
     @State private var scrollTarget: UUID? = nil
@@ -69,7 +71,8 @@ struct ContentView: View {
                                    onRename: { session.renameSpeaker($0, to: $1) },
                                    scrollTarget: scrollTarget, scrollTick: scrollTick,
                                    focusedLine: scrollTarget,
-                                   interim: session.livePartial)
+                                   interim: session.livePartial,
+                                   fontSize: fontSize)
                 }
                 if dropTargeted {
                     RoundedRectangle(cornerRadius: 12)
@@ -87,7 +90,14 @@ struct ContentView: View {
     // 내용/상세 toggle — keeps the clean reading view (default) free of the
     // editor/review detail. Persisted across launches via @AppStorage.
     private var viewModeBar: some View {
-        HStack {
+        HStack(spacing: 10) {
+            // text-size: A− / current pt / A+
+            Button { fontSize = max(12, fontSize - 2) } label: { Text("A").font(.system(size: 11)) }
+                .buttonStyle(.plain).help("글자 작게")
+            Text("\(Int(fontSize))").font(Theme.Fonts.status)
+                .foregroundStyle(Theme.Colors.textTertiary).monospacedDigit()
+            Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
+                .buttonStyle(.plain).help("글자 크게")
             Spacer()
             Picker("", selection: $contentMode) {
                 Text("내용").tag(true)
