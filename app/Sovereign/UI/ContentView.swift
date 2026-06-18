@@ -199,7 +199,13 @@ struct ContentView: View {
 
     private var sidePanel: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Sovereign Whisper").font(Theme.Fonts.appTitle)
+            HStack {
+                Text("Sovereign Whisper").font(Theme.Fonts.appTitle)
+                Spacer()
+                SettingsLink { Image(systemName: "gearshape") }
+                    .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
+                    .help("설정 (⌘,)")
+            }
 
             recordButton
             if session.phase == .recording || session.phase == .paused {
@@ -207,14 +213,7 @@ struct ContentView: View {
                     .opacity(session.phase == .paused ? 0.4 : 1)
             }
 
-            Divider()
-
             field("언어") { languagePicker }
-            field("마이크") { micPicker }
-            field("실시간 반응") { liveSpeedPicker }
-            livePreviewToggle
-            Toggle("화자 분리", isOn: $session.diarize).disabled(isBusy)
-            Toggle("중첩 발화 감지", isOn: $session.osd).disabled(isBusy)
 
             Divider()
 
@@ -225,15 +224,10 @@ struct ContentView: View {
                 speakingStats
             }
 
-            if !session.transcript.lines.isEmpty {
-                Divider()
-                editorToolsPanel
-                if session.tightenStat.cuts > 0 { tightenStatView }
-            }
-
             Spacer()
 
-            autoSaveRow
+            if !session.transcript.lines.isEmpty, session.tightenStat.cuts > 0 { tightenStatView }
+            if let saved = session.lastAutoSaved { savedStatus(saved) }
 
             HStack {
                 Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
@@ -246,96 +240,16 @@ struct ContentView: View {
         .background(Theme.Colors.textTertiary.opacity(0.04))
     }
 
-    // 편집 도구: toggle + tune every editor feature. Dense by design — a UI/UX
-    // designer will restyle later. Binds to the persisted session.editorSettings;
-    // exports + the tighten stat react live. Control-panel only — never the
-    // clean 내용 transcript.
-    @State private var editorToolsExpanded = false
-    private var editorToolsPanel: some View {
-        DisclosureGroup("편집 도구", isExpanded: $editorToolsExpanded) {
-            VStack(alignment: .leading, spacing: 5) {
-                Toggle("필러 컷", isOn: $session.editorSettings.fillers)
-                Toggle("무음 컷", isOn: $session.editorSettings.silences)
-                sliderRow("무음 최소초", $session.editorSettings.silenceMinGap, 0.2...3.0)
-                Divider()
-                Toggle("자동 챕터", isOn: $session.editorSettings.chapters)
-                sliderRow("챕터 휴지초", $session.editorSettings.chapterGap, 1...10)
-                sliderRow("챕터 최소간격", $session.editorSettings.chapterMinLen, 10...120, "%.0f")
-                Divider()
-                Toggle("리테이크", isOn: $session.editorSettings.retakes)
-                sliderRow("유사도", $session.editorSettings.retakeSim, 0.5...0.95, "%.2f")
-                Divider()
-                Toggle("하이라이트", isOn: $session.editorSettings.highlights)
-                sliderRow("최소 신뢰도", $session.editorSettings.hlMinConf, 0.5...0.99, "%.2f")
-                sliderRow("최소 휴지초", $session.editorSettings.hlMinPause, 0.3...3.0)
-            }
-            .font(Theme.Fonts.status)
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-            .padding(.top, 4)
-        }
-        .font(Theme.Fonts.status)
-        .tint(Theme.Colors.accent)
-    }
-
-    private func sliderRow(_ label: String, _ value: Binding<Double>,
-                           _ range: ClosedRange<Double>, _ fmt: String = "%.1f") -> some View {
+    // saved-confirmation only — the auto-save folder config lives in Settings.
+    private func savedStatus(_ url: URL) -> some View {
         HStack(spacing: 6) {
-            Text(label).frame(width: 84, alignment: .leading)
+            Image(systemName: "checkmark.circle.fill").font(Theme.Fonts.status)
+                .foregroundStyle(Theme.Colors.accent)
+            Button(url.lastPathComponent) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                .font(Theme.Fonts.status).buttonStyle(.plain)
                 .foregroundStyle(Theme.Colors.textSecondary)
-            Slider(value: value, in: range)
-            Text(String(format: fmt, value.wrappedValue))
-                .frame(width: 34, alignment: .trailing).monospacedDigit()
-                .foregroundStyle(Theme.Colors.textTertiary)
+                .lineLimit(1).truncationMode(.middle).help("Finder에서 보기")
         }
-    }
-
-    // 자동 저장: 회의/전사가 끝나면 .md 를 선택한 폴더에 자동 저장. 경로는 변경 가능.
-    private var autoSaveRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Toggle(isOn: $session.autoSaveEnabled) {
-                Text("완료 시 .md 자동저장").font(Theme.Fonts.status)
-            }
-            .toggleStyle(.switch).controlSize(.mini)
-            if session.autoSaveEnabled {
-                HStack(spacing: 6) {
-                    Image(systemName: "folder").font(Theme.Fonts.status)
-                        .foregroundStyle(Theme.Colors.textTertiary)
-                    Text(session.autoSaveFolder.lastPathComponent)
-                        .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
-                        .lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Button("변경") { chooseAutoSaveFolder() }
-                        .font(Theme.Fonts.status).buttonStyle(.plain)
-                        .foregroundStyle(Theme.Colors.accent)
-                }
-                .help(session.autoSaveFolder.path)
-                if let saved = session.lastAutoSaved {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.circle.fill").font(Theme.Fonts.status)
-                            .foregroundStyle(Theme.Colors.accent)
-                        Button(saved.lastPathComponent) {
-                            NSWorkspace.shared.activateFileViewerSelecting([saved])
-                        }
-                        .font(Theme.Fonts.status).buttonStyle(.plain)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                        .lineLimit(1).truncationMode(.middle)
-                        .help("Finder에서 보기")
-                    }
-                }
-            }
-        }
-    }
-
-    private func chooseAutoSaveFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = session.autoSaveFolder
-        panel.prompt = "선택"
-        panel.message = "전사 완료 시 .md 를 저장할 폴더"
-        if panel.runModal() == .OK, let url = panel.url { session.autoSaveFolder = url }
     }
 
     // 타이튼 stat: removable filler + silence time. Editor info in the control
@@ -444,40 +358,6 @@ struct ContentView: View {
             Text("English").tag(Int?.some(WhisperLang.en))
         }
         .labelsHidden().disabled(isBusy)
-    }
-
-    // 실시간 반응 속도: shorter window = snappier live text, less Whisper context.
-    // Default 정확(10s) keeps current accuracy; can't change mid-session.
-    private var liveSpeedPicker: some View {
-        Picker("", selection: $session.liveWindowSeconds) {
-            Text("빠름").tag(5.0)
-            Text("보통").tag(7.0)
-            Text("정확").tag(10.0)
-        }
-        .pickerStyle(.segmented).labelsHidden()
-        .disabled(session.phase == .recording || session.phase == .paused)
-        .help("빠름=텍스트가 더 자주 뜸(체감↑), 정확=Whisper 컨텍스트 길어 품질↑. 녹음 시작 시 적용.")
-    }
-
-    // 스트리밍 프리뷰: 채워지는 중인 윈도를 ~1.5초마다 미리 디코드해 회색 "진행 중"
-    // 텍스트로 표시 (정확도 손해 0 — 확정 전사는 그대로). 별도 모델 1개 추가 상주.
-    private var livePreviewToggle: some View {
-        Toggle(isOn: $session.livePreviewEnabled) {
-            Text("실시간 프리뷰").font(Theme.Fonts.status)
-        }
-        .toggleStyle(.switch).controlSize(.mini)
-        .disabled(session.phase == .recording || session.phase == .paused)
-        .help("켜면 윈도가 닫히기 전에도 회색 중간 텍스트가 즉시 표시됩니다(정확도 무손해). 메모리에 모델 1개 추가(~830MB).")
-    }
-
-    private var micPicker: some View {
-        Picker("", selection: $session.inputDeviceID) {
-            Text("시스템 기본").tag(AudioDeviceID?.none)
-            ForEach(session.availableInputs) { dev in
-                Text(dev.name).tag(AudioDeviceID?.some(dev.id))
-            }
-        }
-        .labelsHidden().disabled(session.phase == .recording)
     }
 
     // Visible drop target + an explicit "Choose File…" button so file input is
