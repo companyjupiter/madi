@@ -65,7 +65,7 @@ segments; they arrive slower than translation completes).
   streaming-preview 2nd Whisper (~0.8 GB) → up to ~5 GB. Fine on 16 GB; on 8 GB,
   recommend translate XOR preview. Surface the cost in the toggle's help.
 
-## Packaging decision (open — needs a call)
+## Packaging decision — LOCKED: optional download (NOT bundled)
 The DNA3 model is **2.6 GB**. Options:
 1. **Bundle in the DMG** → DMG ~3.4 GB. Simplest, fully offline, but heavy to send.
 2. **Optional download on first enable** (like the original Whisper-model design):

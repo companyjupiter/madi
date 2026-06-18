@@ -31,6 +31,7 @@ struct SovereignApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var downloader = ModelDownloader()
     @State private var session = SessionController()
+    @State private var translateDownloader = TranslateModelDownloader()
     @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some Scene {
@@ -44,6 +45,6 @@ struct SovereignApp: App {
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1100, height: 720)
 
-        Settings { SettingsView(session: session, downloader: downloader) }
+        Settings { SettingsView(session: session, downloader: downloader, translateDownloader: translateDownloader) }
     }
 }
