@@ -31,6 +31,26 @@ enum AssetManifest {
         sizeBytes: 867_485_320
     )
 
+    /// Live-translation model — DNA3.0-4B (Qwen3.5 base + Korean tuning), Q4_K_M
+    /// GGUF (~2.6 GB). DELIBERATELY NOT bundled in the app/DMG: it would ~quadruple
+    /// the download, and translation is opt-in. Fetched on demand into App Support
+    /// via a button (TranslateModelDownloader) the first time the user enables it.
+    /// TODO(hosting): url is a placeholder until the CDN bucket exists.
+    static let translateModel = RemoteAsset(
+        name: "DNA3.0-4B.i1-Q4_K_M.gguf",
+        url: URL(string: "https://CHANGE-ME.example/sovereign/DNA3.0-4B.i1-Q4_K_M.gguf")!,
+        sha256: "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8",
+        sizeBytes: 2_783_447_424
+    )
+    /// Always App Support (never bundled). The 1.1 MB engine binary IS bundled.
+    static var translateModelURL: URL { supportDir.appendingPathComponent(translateModel.name) }
+    /// Fast presence gate (size-only, like the main model launch gate).
+    static func translateModelIsValid() -> Bool {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: translateModelURL.path),
+              let size = attrs[.size] as? Int64 else { return false }
+        return size == translateModel.sizeBytes
+    }
+
     /// App Support root: ~/Library/Application Support/Sovereign/
     static var supportDir: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

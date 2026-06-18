@@ -8,16 +8,50 @@ import AppKit
 struct SettingsView: View {
     @Bindable var session: SessionController
     @Bindable var downloader: ModelDownloader
+    @Bindable var translateDownloader: TranslateModelDownloader
     @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some View {
         TabView {
             recording.tabItem { Label("녹음", systemImage: "mic") }
             editor.tabItem { Label("편집·저장", systemImage: "scissors") }
+            translate.tabItem { Label("번역", systemImage: "character.bubble") }
             model.tabItem { Label("모델", systemImage: "shippingbox") }
         }
         .frame(width: 460, height: 380)
         .padding()
+    }
+
+    // MARK: 번역 — on-device translation model (DNA3.0-4B, downloaded on demand)
+    private var translate: some View {
+        Form {
+            Section("번역 모델 (DNA3.0-4B · ~2.6 GB)") {
+                LabeledContent("상태") {
+                    switch translateDownloader.state {
+                    case .ready: Label("설치됨", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    case .verifying: Label("검증 중…", systemImage: "checkmark.shield")
+                    case .downloading(let p): Text("다운로드 \(Int(p * 100))%")
+                    case .failed(let m): Label(m, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    case .idle: Text("미설치")
+                    }
+                }
+                if case .downloading(let p) = translateDownloader.state {
+                    ProgressView(value: p)
+                    Button("취소") { translateDownloader.cancel() }
+                } else if case .ready = translateDownloader.state {
+                    Button("Finder에서 보기") {
+                        NSWorkspace.shared.activateFileViewerSelecting([AssetManifest.translateModelURL])
+                    }
+                } else {
+                    Button("번역 모델 다운로드") { translateDownloader.startDownload() }
+                        .buttonStyle(.borderedProminent)
+                }
+                Text("로컬 온디바이스 번역(KO·ZH·JA·EN)용. 앱에 동봉되지 않고 켤 때 받습니다 — 메모리 약 3 GB 추가.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { translateDownloader.refresh() }
     }
 
     // MARK: 녹음 — capture + live behavior + appearance
