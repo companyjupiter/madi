@@ -19,8 +19,8 @@ import Foundation
 
 @MainActor
 final class TranslateEngine {
-    /// (lineID, translated text) for a completed turn, in FIFO order.
-    var onResult: ((UUID, String) -> Void)?
+    /// (lineID, target language name, translated text) per completed turn, FIFO.
+    var onResult: ((UUID, String, String) -> Void)?
 
     private let process = Process()
     private let stdinPipe = Pipe()
@@ -28,10 +28,11 @@ final class TranslateEngine {
     private let ioQueue = DispatchQueue(label: "sovereign.translate.io")
     private var lineBuffer = Data()
 
+    private struct Turn { let id: UUID; let lang: String; let source: String; let prompt: String; var retries: Int }
     private var ready = false
     private var current = ""           // reply text accumulating for the in-flight turn
-    private var inflight: [UUID] = []  // FIFO line ids awaiting a result
-    private var queued: [(UUID, String)] = []  // prompts sent before READY
+    private var inflight: [Turn] = []  // FIFO turns awaiting a result
+    private var queued: [Turn] = []    // turns enqueued before READY
 
     func start(engine: URL, model: URL) -> Bool {
         process.executableURL = engine
@@ -58,19 +59,23 @@ final class TranslateEngine {
         ready = false; current = ""; inflight.removeAll(); queued.removeAll()
     }
 
-    /// Queue a translation of `text` into `target` (English language name, e.g.
-    /// "Korean") for `id`. Result arrives via onResult, FIFO.
-    func translate(_ text: String, into target: String, id: UUID) {
+    /// Queue a translation of `text` into each of `targets` (English language
+    /// names, e.g. ["Japanese","English","Chinese"]) for `id`. Results arrive via
+    /// onResult per (id, lang), FIFO — the engine serializes the turns.
+    func translate(_ text: String, into targets: [String], id: UUID) {
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !oneLine.isEmpty else { return }
-        let prompt = "Translate the following into \(target). Reply with only the translation, no notes or quotes: \(oneLine)"
-        if ready { send(id, prompt) } else { queued.append((id, prompt)) }
+        for target in targets {
+            let prompt = "Translate the following into \(target). Reply with only the translation, no notes or quotes: \(oneLine)"
+            let turn = Turn(id: id, lang: target, source: oneLine, prompt: prompt, retries: 2)
+            if ready { send(turn) } else { queued.append(turn) }
+        }
     }
 
-    private func send(_ id: UUID, _ prompt: String) {
-        inflight.append(id)
-        write(prompt + "\n")
+    private func send(_ turn: Turn) {
+        inflight.append(turn)
+        write(turn.prompt + "\n")
     }
 
     private func write(_ s: String) {
@@ -97,16 +102,28 @@ final class TranslateEngine {
         if s == "READY" {
             ready = true
             let q = queued; queued.removeAll()
-            for (id, p) in q { send(id, p) }
+            for turn in q { send(turn) }
             return
         }
         if s.hasPrefix("[perf] generation") {           // turn complete
             let t = current.trimmingCharacters(in: .whitespacesAndNewlines)
             current = ""
-            if !inflight.isEmpty {
-                let id = inflight.removeFirst()
-                if !t.isEmpty { onResult?(id, t) }
+            guard !inflight.isEmpty else { return }
+            let turn = inflight.removeFirst()
+            // Failure mode: the 4B sometimes echoes the source verbatim instead of
+            // translating (a cross-turn sampling-state effect — see LIVE_TRANSLATE
+            // P4). Normalize-compare; retry, then SUPPRESS (don't show the source
+            // masquerading as a translation) rather than emit an echo.
+            func norm(_ x: String) -> String {
+                x.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n.。!?！？\"'"))
             }
+            if !t.isEmpty, norm(t) == norm(turn.source) {
+                if turn.retries > 0 {
+                    send(Turn(id: turn.id, lang: turn.lang, source: turn.source, prompt: turn.prompt, retries: turn.retries - 1))
+                }
+                return   // retry pending, or suppress the echo
+            }
+            if !t.isEmpty { onResult?(turn.id, turn.lang, t) }
             return
         }
         // control / banner / debug lines → ignore (token[…] = the SOV_DEBUG dump,

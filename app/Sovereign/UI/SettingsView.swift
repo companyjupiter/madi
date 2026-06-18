@@ -49,22 +49,19 @@ struct SettingsView: View {
                 Text("로컬 온디바이스 번역(KO·ZH·JA·EN)용. 앱에 동봉되지 않고 켤 때 받습니다 — 메모리 약 3 GB 추가.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("실시간 번역") {
-                Picker("번역 대상", selection: Binding(
-                    get: { session.translateTarget ?? "off" },
-                    set: { session.translateTarget = ($0 == "off") ? nil : $0 })
-                ) {
-                    Text("끄기").tag("off")
-                    Text("한국어").tag("Korean")
-                    Text("中文").tag("Chinese")
-                    Text("日本語").tag("Japanese")
-                    Text("English").tag("English")
+            Section("실시간 번역 (다중 대상)") {
+                ForEach([("Korean","한국어"), ("English","English"), ("Japanese","日本語"), ("Chinese","中文")], id: \.0) { code, label in
+                    Toggle(label, isOn: Binding(
+                        get: { session.translateTargets.contains(code) },
+                        set: { on in if on { session.translateTargets.insert(code) } else { session.translateTargets.remove(code) } })
+                    )
+                    .disabled(!AssetManifest.translateAvailable)
                 }
-                .disabled(!AssetManifest.translateAvailable)
                 if !AssetManifest.translateAvailable {
                     Text("번역 모델을 먼저 다운로드하세요.").font(.caption).foregroundStyle(.secondary)
                 } else {
-                    Text("확정된 각 줄을 선택 언어로 번역해 원문 아래에 표시합니다.").font(.caption).foregroundStyle(.secondary)
+                    Text("선택한 모든 언어로 각 줄을 동시 번역해 원문 아래 표시합니다(원문 언어는 자동 제외).")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

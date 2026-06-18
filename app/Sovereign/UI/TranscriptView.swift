@@ -114,17 +114,31 @@ struct TranscriptView: View {
                 .help("클릭하여 이름 지정")
             }
             Text(b.text).font(bodyFont)
-            if let tr = blockTranslation(b) {
-                Text(tr).font(.system(size: fontSize * 0.92))
-                    .foregroundStyle(Theme.Colors.accent).opacity(0.85)
+            ForEach(blockTranslations(b), id: \.0) { lang, text in
+                translationLine(lang, text)
             }
         }
     }
 
-    /// Translation for a content block = the joined translations of its lines.
-    private func blockTranslation(_ b: SpeakerBlock) -> String? {
-        let parts = lines.filter { b.lineIDs.contains($0.id) }.compactMap { $0.translation }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    /// Per-language translations for a content block = each line's translations[lang]
+    /// joined across the block's lines, sorted by language tag.
+    private func blockTranslations(_ b: SpeakerBlock) -> [(String, String)] {
+        let blockLines = lines.filter { b.lineIDs.contains($0.id) }
+        var byLang: [String: [String]] = [:]
+        for l in blockLines { for (lang, t) in l.translations { byLang[lang, default: []].append(t) } }
+        return byLang.keys.sorted().map { ($0, byLang[$0]!.joined(separator: " ")) }
+    }
+
+    /// One translation line: a short language tag + the translated text, accent-muted.
+    private func translationLine(_ lang: String, _ text: String) -> some View {
+        let tag = ["Korean": "한", "English": "EN", "Japanese": "日", "Chinese": "中"][lang] ?? lang
+        return HStack(alignment: .top, spacing: 6) {
+            Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
+                .foregroundStyle(Theme.Colors.accent).opacity(0.7)
+                .frame(width: fontSize * 1.4, alignment: .leading)
+            Text(text).font(.system(size: fontSize * 0.92))
+                .foregroundStyle(Theme.Colors.accent).opacity(0.85)
+        }
     }
 
     private func row(_ line: Line) -> some View {
@@ -148,9 +162,8 @@ struct TranscriptView: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             Text(attributed(line)).font(bodyFont)
-            if let tr = line.translation {
-                Text(tr).font(.system(size: fontSize * 0.92))
-                    .foregroundStyle(Theme.Colors.accent).opacity(0.85)
+            ForEach(line.translations.keys.sorted(), id: \.self) { lang in
+                translationLine(lang, line.translations[lang]!)
             }
         }
         .padding(.horizontal, 6).padding(.vertical, 4)

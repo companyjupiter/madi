@@ -92,3 +92,19 @@ The engine binary itself (1.1 MB) bundles trivially in `Contents/MacOS/`.
 - **P2**: lazy lifecycle + RAM-aware (translate XOR preview on low RAM), persistence.
 - **P3**: model download+verify flow (packaging option 2), export includes translation.
 - **P4**: KO↔ZH/JA quality A/B; optional 9B upgrade path (DNA3.0-9B.gguf also on disk).
+
+## Multi-target (KO→JA/EN/中, EN→KO/JA/中) + echo finding
+
+Each committed segment is translated into a SET of target languages at once (UI:
+multi-select; source language auto-excluded). Perf: 3 targets ≈ ~4.5s GPU/segment
+→ ~45% duty at the 10s window (recovers in pauses); use 보통/정확 (빠름 5s × 3 can
+backlog). Translation shown per-language under each line (한/EN/日/中 tag).
+
+**Echo finding (P4):** the 4B occasionally outputs the SOURCE verbatim instead of
+translating — reproducible for a 3rd heterogeneous target (e.g. CH after JA,EN),
+and the same KO→CH alone/repeated is correct + varies per run → a cross-turn
+SAMPLING-state effect, not prompt/order-of-text. Mitigation shipped: TranslateEngine
+detects output==source (normalized), retries up to 2×, then SUPPRESSES (never shows
+the source masquerading as a translation). Real fix is engine-side (sovereignLLM):
+greedy/temp-0 decode for translation, or reset the sampler RNG / KV per turn, or
+use DNA3.0-9B. To verify in P4 quality A/B.
