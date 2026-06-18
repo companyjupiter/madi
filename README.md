@@ -7,6 +7,9 @@ auto-detection**, long-audio chunking, and a **near-real-time live meeting mode*
 Metal/MSL + Apple system frameworks (Metal, MPS, Accelerate) — **no
 Python/PyTorch/onnxruntime at runtime**. Korean guide: [README_KR.md](README_KR.md).
 
+Cross-platform support for Windows, macOS, and Linux is now a product target;
+see [docs/CROSS_PLATFORM.md](docs/CROSS_PLATFORM.md) for the migration plan.
+
 > Highlights: peak RSS **1.1 GB** (Q8 + streaming loader), decode **~188 tok/s**,
 > diarization **9.67% DER** on VoxConverse dev (beats pyannote 3.1 SOTA ~11.2%).
 > Full status: [`metal/STATUS.md`](metal/STATUS.md).

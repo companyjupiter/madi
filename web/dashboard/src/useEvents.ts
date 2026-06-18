@@ -17,6 +17,17 @@ export type SourceMode = 'instant' | 'replay' | 'live'
 // the live bridge (web/bridge/server.mjs) streams the same event contract via SSE
 const BRIDGE = 'http://127.0.0.1:5274/events'
 
+function bridgeUrl() {
+  const u = new URL(BRIDGE)
+  const qs = new URLSearchParams(window.location.search)
+  const token = qs.get('bridgeToken') || window.localStorage.getItem('sovereignBridgeToken')
+  if (token) {
+    window.localStorage.setItem('sovereignBridgeToken', token)
+    u.searchParams.set('token', token)
+  }
+  return u.toString()
+}
+
 export function useEvents(fixture: string, mode: SourceMode = 'instant') {
   const [state, setState] = useState<SessionState>(emptySession)
   const [loading, setLoading] = useState(true)
@@ -30,7 +41,7 @@ export function useEvents(fixture: string, mode: SourceMode = 'instant') {
     if (mode === 'live') {
       // live: connect to the bridge SSE; it runs the engine and streams events
       setLoading(false)
-      const es = new EventSource(BRIDGE)
+      const es = new EventSource(bridgeUrl())
       es.onmessage = (m) => {
         try { const e = JSON.parse(m.data) as EngineEvent; setState((s) => reduce(s, e)) } catch { /* keepalive */ }
       }
