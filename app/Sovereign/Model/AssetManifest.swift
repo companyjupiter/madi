@@ -51,6 +51,17 @@ enum AssetManifest {
         return size == translateModel.sizeBytes
     }
 
+    /// The bundled translate engine binary (DNA3.0-4B Metal, ~1.1 MB, self-contained
+    /// — embedded metallib). Copied into Contents/MacOS/translate-engine at build
+    /// time (make_app.sh 2c). nil if this build didn't bundle it.
+    static var translateEngineURL: URL? {
+        let u = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/translate-engine")
+        return FileManager.default.fileExists(atPath: u.path) ? u : nil
+    }
+    /// Translation is available only when BOTH the engine (bundled) and the model
+    /// (downloaded) are present.
+    static var translateAvailable: Bool { translateEngineURL != nil && translateModelIsValid() }
+
     /// App Support root: ~/Library/Application Support/Sovereign/
     static var supportDir: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

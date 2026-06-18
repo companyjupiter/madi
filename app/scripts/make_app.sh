@@ -89,9 +89,25 @@ if [ "${BUNDLE_MODEL:-0}" = "1" ]; then
   fi
 fi
 
+# ── 2c. translate engine binary (DNA3.0-4B Metal) — ~1.1 MB, self-contained
+# (embedded metallib, system frameworks only). ALWAYS bundled when present (tiny);
+# the 2.6 GB translate MODEL is downloaded on demand, NOT bundled. Override path
+# with TRANSLATE_ENGINE; skipped (translation unavailable) if absent so the base
+# build never breaks.
+TRANSLATE_ENGINE="${TRANSLATE_ENGINE:-$ROOT/../sovereignLLM/out/metal-dna3-4b-q4km/sovereign-metal-dna3-4b-q4km}"
+BUNDLED_TRANSLATE=0
+if [ -x "$TRANSLATE_ENGINE" ]; then
+  echo "[2c] bundling translate engine ($(du -h "$TRANSLATE_ENGINE" | cut -f1))"
+  cp "$TRANSLATE_ENGINE" "$BUNDLE/Contents/MacOS/translate-engine"
+  BUNDLED_TRANSLATE=1
+else
+  echo "[2c] (translate engine not found at $TRANSLATE_ENGINE — translation off; set TRANSLATE_ENGINE)"
+fi
+
 # ── 3. ad-hoc sign for local development ────────────────────────────────────
 echo "[3/4] ad-hoc codesign (local dev; Developer ID via sign_notarize.sh)"
 codesign --force --sign - "$BUNDLE/Contents/MacOS/transcribe"
+[ "$BUNDLED_TRANSLATE" = "1" ] && codesign --force --sign - "$BUNDLE/Contents/MacOS/translate-engine"
 codesign --force --sign - --entitlements "$APP_DIR/Sovereign/Sovereign.entitlements" "$BUNDLE"
 
 # ── 4. optional: seed the model so first run skips the (placeholder) download ─
