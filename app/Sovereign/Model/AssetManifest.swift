@@ -35,10 +35,12 @@ enum AssetManifest {
     /// GGUF (~2.6 GB). DELIBERATELY NOT bundled in the app/DMG: it would ~quadruple
     /// the download, and translation is opt-in. Fetched on demand into App Support
     /// via a button (TranslateModelDownloader) the first time the user enables it.
-    /// TODO(hosting): url is a placeholder until the CDN bucket exists.
+    /// Hosted on Hugging Face (mradermacher's i1/imatrix GGUF quant of dnotitia/DNA3.0-4B).
+    /// `resolve/main` is the stable direct-download endpoint (302 → HF xet CDN). Verified
+    /// against this exact file: x-linked-size 2,783,447,424 + sha256 a00a837a… == local.
     static let translateModel = RemoteAsset(
         name: "DNA3.0-4B.i1-Q4_K_M.gguf",
-        url: URL(string: "https://CHANGE-ME.example/sovereign/DNA3.0-4B.i1-Q4_K_M.gguf")!,
+        url: URL(string: "https://huggingface.co/mradermacher/DNA3.0-4B-i1-GGUF/resolve/main/DNA3.0-4B.i1-Q4_K_M.gguf")!,
         sha256: "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8",
         sizeBytes: 2_783_447_424
     )
