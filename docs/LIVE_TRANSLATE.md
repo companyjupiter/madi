@@ -86,7 +86,7 @@ The engine binary itself (1.1 MB) bundles trivially in `Contents/MacOS/`.
   philosophy (no cloud translate API).
 
 ## Build phases
-- **P1**: TranslateEngine.swift (spawn + prompt + parse), Line.translation field,
+- **P1 (DONE)**: TranslateEngine.swift (spawn + prompt + parse), Line.translation field,
   target picker, render under each line. Engine+model from a configured path
   (dev: the sovereignLLM paths; ship: bundled binary + downloaded model).
 - **P2**: lazy lifecycle + RAM-aware (translate XOR preview on low RAM), persistence.
