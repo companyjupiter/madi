@@ -24,6 +24,8 @@ struct TranscriptView: View {
     var scrollTick: Int = 0
     var focusedLine: UUID? = nil   // line to briefly emphasize after a jump
     var interim: String = ""       // live streaming-preview text (gray "진행 중")
+    var fontSize: CGFloat = 13     // transcript body text size (user-adjustable)
+    private var bodyFont: Font { .system(size: fontSize) }
 
     @State private var editingSpeaker: Int? = nil
     @State private var draftName: String = ""
@@ -59,7 +61,7 @@ struct TranscriptView: View {
                     }
                     if !interim.isEmpty {
                         Text(interim)
-                            .font(Theme.Fonts.body)
+                            .font(bodyFont)
                             .foregroundStyle(Theme.Colors.textSecondary)  // adaptive — readable on light & dark
                             .italic()
                             .id("interim")
@@ -110,7 +112,7 @@ struct TranscriptView: View {
                 .buttonStyle(.plain)
                 .help("클릭하여 이름 지정")
             }
-            Text(b.text).font(Theme.Fonts.body)
+            Text(b.text).font(bodyFont)
         }
     }
 
@@ -134,7 +136,7 @@ struct TranscriptView: View {
                 Text(timecode(line.start)).font(Theme.Fonts.timestamp)
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
-            Text(attributed(line)).font(Theme.Fonts.body)
+            Text(attributed(line)).font(bodyFont)
         }
         .padding(.horizontal, 6).padding(.vertical, 4)
         .background(
