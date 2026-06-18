@@ -64,8 +64,16 @@ src/
 the **▶ 라이브** button in the top bar:
 
 ```sh
-node web/bridge/server.mjs           # → http://127.0.0.1:5274/events
+npm run dev                          # dashboard → http://127.0.0.1:5273
+node web/bridge/server.mjs           # prints a one-time bridge token URL
 ```
+
+The bridge only accepts requests from the dashboard origin
+(`http://127.0.0.1:5273` / `http://localhost:5273` by default), requires the
+printed token, and only serves wav files under `metal/` unless
+`SOV_BRIDGE_WAV_ROOTS` is set. Open the dashboard as
+`http://127.0.0.1:5273?bridgeToken=<printed-token>`; `useEvents.ts` persists the
+token in `localStorage` for the next live run.
 
 The dashboard's `useEvents.ts` opens an `EventSource` to the bridge; the reducer
 and panels are unchanged from fixture mode — the live feed and a fixture replay
@@ -73,6 +81,14 @@ push the identical contract. Streaming `partial` events render an **● 인식 �
 in-progress line in the transcript that the final `seg` supersedes. No mic
 needed: the bridge streams a file through the same STREAM code path live capture
 uses.
+
+Bridge hardening knobs:
+
+```sh
+SOV_BRIDGE_TOKEN=...                  # stable token instead of a random per-run token
+SOV_BRIDGE_ORIGINS=http://127.0.0.1:5273
+SOV_BRIDGE_WAV_ROOTS="/path/a:/path/b" # path.delimiter-separated roots on macOS/Linux
+```
 
 **Known gap:** stream mode emits the transcript + partials + per-segment metrics
 live, but not the `diar`/`spk_seg` events (those are file-mode `diarizeEmb`; live

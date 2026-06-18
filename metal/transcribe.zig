@@ -1197,6 +1197,19 @@ pub fn main() !void {
             cur_path = std.mem.trim(u8, trimmed[sp + 1 ..], " \t\r");
         }
 
+        var checked_stream_path: ?[]u8 = null;
+        if (stream) {
+            checked_stream_path = validateStreamWavPath(alloc, cur_path) catch |e| {
+                std.debug.print("[skip] rejected stream path '{s}': {s}\n", .{ cur_path, @errorName(e) });
+                try out.print("=== TRANSCRIPTION (0.00s, 0 chunk(s)) ===\n", .{});
+                evEnd("seg_end");
+                try out.print("<<SEG_END>>\n", .{});
+                continue :job;
+            };
+            cur_path = checked_stream_path.?;
+        }
+        defer if (checked_stream_path) |p| alloc.free(p);
+
         const wav = try std.fs.cwd().readFileAlloc(alloc, cur_path, 2 * 1024 * 1024 * 1024);
         defer alloc.free(wav);
         const total = mel.wavTotalSamples(wav);
@@ -1968,6 +1981,24 @@ fn envU(name: [:0]const u8, dflt: usize) usize {
 fn envF(name: [:0]const u8, dflt: f32) f32 {
     if (std.posix.getenv(name)) |s| return std.fmt.parseFloat(f32, s) catch dflt;
     return dflt;
+}
+fn pathUnderRoot(path: []const u8, root: []const u8) bool {
+    if (std.mem.eql(u8, path, root)) return true;
+    return path.len > root.len and std.mem.startsWith(u8, path, root) and std.fs.path.isSep(path[root.len]);
+}
+fn validateStreamWavPath(a: std.mem.Allocator, input_path: []const u8) ![]u8 {
+    if (input_path.len == 0 or !std.mem.endsWith(u8, input_path, ".wav")) return error.InvalidStreamPath;
+    const resolved = try std.fs.cwd().realpathAlloc(a, input_path);
+    errdefer a.free(resolved);
+    const roots = std.posix.getenv("STREAM_WAV_ROOTS") orelse std.posix.getenv("TMPDIR") orelse "/tmp";
+    var it = std.mem.splitScalar(u8, roots, std.fs.path.delimiter);
+    while (it.next()) |root| {
+        if (root.len == 0) continue;
+        const resolved_root = std.fs.cwd().realpathAlloc(a, root) catch continue;
+        defer a.free(resolved_root);
+        if (pathUnderRoot(resolved, resolved_root)) return resolved;
+    }
+    return error.StreamPathOutsideAllowedRoots;
 }
 fn d2(a: []const f32, b: []const f32) f32 {
     var s: f32 = 0;
