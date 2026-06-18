@@ -11,7 +11,11 @@ import AVFoundation
 
 enum AudioDecode {
     static let maxInputBytes: Int64 = 2 * 1024 * 1024 * 1024
-    static let maxDecodedSeconds = 2 * 60 * 60
+    // 4 h, not 2 h: the product targets ~2 h meetings, which routinely overrun
+    // (2:00:05 etc.). 4 h keeps comfortable headroom while still bounding decode
+    // (4 h @ 16 kHz = 230 M samples ≈ 460 MB PCM); the 2 GiB input cap is the real
+    // decompression-bomb guard.
+    static let maxDecodedSeconds = 4 * 60 * 60
     private static let maxDecodedSamples = maxDecodedSeconds * Int(WavWriter.sampleRate)
 
     static func validateImportBounds(inputBytes: Int64?,
