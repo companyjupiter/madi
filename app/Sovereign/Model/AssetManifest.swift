@@ -44,9 +44,11 @@ enum AssetManifest {
     )
     /// Always App Support (never bundled). The 1.1 MB engine binary IS bundled.
     static var translateModelURL: URL { supportDir.appendingPathComponent(translateModel.name) }
-    /// Fast presence gate (size-only, like the main model launch gate).
+    /// Fast presence gate (size-only, symlinks resolved for the dev-seed path —
+    /// like the main model launch gate).
     static func translateModelIsValid() -> Bool {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: translateModelURL.path),
+        let resolved = translateModelURL.resolvingSymlinksInPath()
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path),
               let size = attrs[.size] as? Int64 else { return false }
         return size == translateModel.sizeBytes
     }
