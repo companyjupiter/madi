@@ -53,6 +53,46 @@ final class SessionController: EngineProcessDelegate {
     private(set) var livePartial: String = ""
     private let preview = PreviewEngine()
 
+    /// Live translation target — the English language NAME used in the prompt
+    /// ("Korean"/"Chinese"/"Japanese"/"English"), or nil = off. Persisted. Only
+    /// active when AssetManifest.translateAvailable (engine bundled + model present).
+    var translateTarget: String? = UserDefaults.standard.string(forKey: "translateTarget") {
+        didSet {
+            UserDefaults.standard.set(translateTarget, forKey: "translateTarget")
+            if translateTarget == nil { translate?.stop(); translate = nil }
+        }
+    }
+    private var translate: TranslateEngine?
+    private var translatedIDs: Set<UUID> = []
+
+    /// Start the translate engine on demand (target set + assets present).
+    private func ensureTranslateEngine() -> TranslateEngine? {
+        guard translateTarget != nil,
+              let eng = AssetManifest.translateEngineURL,
+              AssetManifest.translateModelIsValid() else { return nil }
+        if translate == nil {
+            let t = TranslateEngine()
+            t.onResult = { [weak self] id, text in self?.transcript.setTranslation(id, text) }
+            _ = t.start(engine: eng, model: AssetManifest.translateModelURL)
+            translate = t
+        }
+        return translate
+    }
+
+    /// Translate every stable line (all but the last, which may still grow) that
+    /// hasn't been translated yet. `includingLast` at finalize. FIFO via the engine.
+    private func translateStableLines(includingLast: Bool = false) {
+        guard let target = translateTarget, let t = ensureTranslateEngine() else { return }
+        let lines = transcript.lines
+        let upTo = includingLast ? lines.count : max(0, lines.count - 1)
+        for i in 0..<upTo {
+            let line = lines[i]
+            if translatedIDs.contains(line.id) { continue }
+            translatedIDs.insert(line.id)
+            t.translate(line.text, into: target, id: line.id)
+        }
+    }
+
     /// Editor-feature toggles + thresholds (persisted). The UI binds to this; all
     /// editor exports/stats read from it.
     var editorSettings = EditorSettings.load() { didSet { editorSettings.save() } }
@@ -130,6 +170,7 @@ final class SessionController: EngineProcessDelegate {
         transcript.reset()
         speakerNames = [:]
         lastAutoSaved = nil
+        translatedIDs.removeAll()
         phase = .engineStarting
 
         let e = EngineProcess(config: makeConfig())
@@ -174,6 +215,7 @@ final class SessionController: EngineProcessDelegate {
         transcript.reset()
         speakerNames = [:]
         lastAutoSaved = nil
+        translatedIDs.removeAll()
         fileName = url.lastPathComponent
         chunksDone = 0; chunksTotal = 0
         phase = .processing
@@ -238,7 +280,9 @@ final class SessionController: EngineProcessDelegate {
         switch event {
         case .progressTotal(let n): chunksTotal = n
         case .progressChunk(let k): chunksDone = max(chunksDone, k)
-        case .wordSectionBegin: livePartial = ""; transcript.ingest(event)  // committed → drop interim
+        case .wordSectionBegin:
+            livePartial = ""; transcript.ingest(event)  // committed → drop interim
+            translateStableLines()                       // translate now-stable prior lines
         case .languageDetected(let tok):
             // auto-detect locked → start the preview engine in THAT language
             // (no-op if already started / preview off)
@@ -266,6 +310,7 @@ final class SessionController: EngineProcessDelegate {
         engine = nil
         preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
         phase = .done
+        translateStableLines(includingLast: true)  // translate the final line(s) too
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
     }
 

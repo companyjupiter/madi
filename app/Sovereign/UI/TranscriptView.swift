@@ -33,7 +33,7 @@ struct TranscriptView: View {
     /// Consecutive same-speaker lines collapsed into one reading paragraph.
     /// The block id is its last line's id so live auto-scroll (which targets
     /// `lines.last.id`) still lands on the newest block.
-    private struct SpeakerBlock: Identifiable { let id: UUID; let speaker: Int; let text: String }
+    private struct SpeakerBlock: Identifiable { let id: UUID; let speaker: Int; let text: String; let lineIDs: [UUID] }
     private var blocks: [SpeakerBlock] {
         var out: [SpeakerBlock] = []
         var i = 0
@@ -41,9 +41,10 @@ struct TranscriptView: View {
             let sp = lines[i].speaker
             var j = i
             var parts: [String] = []
-            while j < lines.count && lines[j].speaker == sp { parts.append(lines[j].text); j += 1 }
+            var ids: [UUID] = []
+            while j < lines.count && lines[j].speaker == sp { parts.append(lines[j].text); ids.append(lines[j].id); j += 1 }
             out.append(SpeakerBlock(id: lines[j - 1].id, speaker: sp,
-                                    text: parts.joined(separator: " ")))
+                                    text: parts.joined(separator: " "), lineIDs: ids))
             i = j
         }
         return out
@@ -113,7 +114,17 @@ struct TranscriptView: View {
                 .help("클릭하여 이름 지정")
             }
             Text(b.text).font(bodyFont)
+            if let tr = blockTranslation(b) {
+                Text(tr).font(.system(size: fontSize * 0.92))
+                    .foregroundStyle(Theme.Colors.accent).opacity(0.85)
+            }
         }
+    }
+
+    /// Translation for a content block = the joined translations of its lines.
+    private func blockTranslation(_ b: SpeakerBlock) -> String? {
+        let parts = lines.filter { b.lineIDs.contains($0.id) }.compactMap { $0.translation }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     private func row(_ line: Line) -> some View {
@@ -137,6 +148,10 @@ struct TranscriptView: View {
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
             Text(attributed(line)).font(bodyFont)
+            if let tr = line.translation {
+                Text(tr).font(.system(size: fontSize * 0.92))
+                    .foregroundStyle(Theme.Colors.accent).opacity(0.85)
+            }
         }
         .padding(.horizontal, 6).padding(.vertical, 4)
         .background(
