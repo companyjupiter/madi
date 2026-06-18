@@ -100,7 +100,7 @@ multi-select; source language auto-excluded). Perf: 3 targets ≈ ~4.5s GPU/segm
 → ~45% duty at the 10s window (recovers in pauses); use 보통/정확 (빠름 5s × 3 can
 backlog). Translation shown per-language under each line (한/EN/日/中 tag).
 
-**Echo finding (P4):** the 4B occasionally outputs the SOURCE verbatim instead of
+**Echo finding (P4) — RESOLVED at the engine:** the 4B occasionally outputs the SOURCE verbatim instead of
 translating — reproducible for a 3rd heterogeneous target (e.g. CH after JA,EN),
 and the same KO→CH alone/repeated is correct + varies per run → a cross-turn
 SAMPLING-state effect, not prompt/order-of-text. Mitigation shipped: TranslateEngine
@@ -108,3 +108,14 @@ detects output==source (normalized), retries up to 2×, then SUPPRESSES (never s
 the source masquerading as a translation). Real fix is engine-side (sovereignLLM):
 greedy/temp-0 decode for translation, or reset the sampler RNG / KV per turn, or
 use DNA3.0-9B. To verify in P4 quality A/B.
+
+### Echo root cause RESOLVED (engine fix)
+
+Diagnosed: the engine decodes GREEDY (deterministic) and resets attention KV
+(pos=0) per turn, but NOT the **GDN/SSM recurrent state** (d_ssm_state/d_conv_state)
+— a separate cache. So each turn was conditioned on the prior turn's recurrent
+history → identical prompts gave different output, and KO→中 (after KO→JA/EN)
+echoed the source. Fix (sovereignLLM `apps/metal-dna3-4b-q4km`,
+`fn__resetGDNState`): zero ssm+conv state + ssm_pos=0 at each turn. Verified:
+KO→中 ×3 now byte-identical; JA→EN→CH all translate; app multi-target 3/3 clean.
+The app-side retry+suppress guard stays as harmless defense-in-depth.
