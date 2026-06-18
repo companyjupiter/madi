@@ -25,6 +25,7 @@ fi
 echo "[1/4] swiftc release build"
 mkdir -p "$OUT"
 SRCS=(
+  "$APP_DIR"/Sovereign/Engine/EnginePathPolicy.swift
   "$APP_DIR"/Sovereign/Engine/EngineProtocol.swift
   "$APP_DIR"/Sovereign/Engine/EngineProcess.swift
   "$APP_DIR"/Sovereign/Engine/PreviewEngine.swift

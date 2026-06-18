@@ -117,7 +117,8 @@ final class SessionController: EngineProcessDelegate {
             bpeURL: AssetManifest.bundledBPE,
             assetsDir: AssetManifest.bundledAssetsDir,
             diarize: diarize, osd: osd,
-            languageTokenID: languageTokenID, maxSpeakers: 8, voiceprintsDir: nil)
+            languageTokenID: languageTokenID, maxSpeakers: 8, voiceprintsDir: nil,
+            streamWavRoots: [capture.segmentDirectory])
     }
 
     // MARK: session lifecycle

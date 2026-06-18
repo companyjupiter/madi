@@ -37,6 +37,7 @@ final class EngineProcess {
         var languageTokenID: Int?   // nil = auto
         var maxSpeakers = 8
         var voiceprintsDir: URL?
+        var streamWavRoots: [URL] = []
         var fileURL: URL?           // set ⇒ native FILE mode (batched, fast); nil ⇒ live STREAM
     }
 
@@ -67,6 +68,9 @@ final class EngineProcess {
             // live STREAM mode: model resident, segments fed on stdin
             process.arguments = [config.modelURL.path, "/dev/null", config.bpeURL.path]
             env["STREAM"] = "1"
+            if !config.streamWavRoots.isEmpty {
+                env["STREAM_WAV_ROOTS"] = EnginePathPolicy.pathList(config.streamWavRoots)
+            }
             if let vp = config.voiceprintsDir { env["VOICEPRINTS"] = vp.path }
         }
         process.environment = env
@@ -91,6 +95,10 @@ final class EngineProcess {
 
     /// Feed one segment job. `offset` = global start seconds, `wav` = closed segment file.
     func feed(offset: Double, wav: URL) {
+        guard EnginePathPolicy.streamWavIsAllowed(wav, roots: config.streamWavRoots) else {
+            NSLog("blocked engine wav outside allowed stream roots: \(wav.path)")
+            return
+        }
         write(String(format: "%.3f %@\n", offset, wav.path))
     }
 

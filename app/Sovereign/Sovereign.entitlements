@@ -7,7 +7,9 @@
 
   <!-- NOT sandboxed: Developer ID DMG distribution; we spawn the engine binary
        and read/write temp segment files. (Mac App Store would require
-       App Sandbox + a redesign, see DESIGN.md section 9.)
+       App Sandbox + a redesign, see DESIGN.md section 9.) Until then,
+       EnginePathPolicy constrains live STREAM wav jobs to app-owned temp roots
+       and passes the same roots to the engine via STREAM_WAV_ROOTS.
        Hardened Runtime is enabled via the codesign runtime option, not here.
        The engine child process is a separate Mach-O signed with the same
        Developer ID + runtime; no JIT entitlement is needed unless a future

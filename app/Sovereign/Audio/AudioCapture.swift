@@ -40,6 +40,7 @@ final class AudioCapture {
     private var segmenter = Segmenter()
     private var segIndex = 0
     private let tempDir: URL
+    var segmentDirectory: URL { tempDir }
 
     init() {
         tempDir = FileManager.default.temporaryDirectory
