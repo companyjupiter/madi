@@ -29,7 +29,7 @@ struct Line: Identifiable {
     var end: Double
     var words: [Word]                 // per-word, so the view can flag low-confidence words
     var overlapSpeakers: [Int] = []   // from SPKOV, rendered as interruption markers
-    var translation: String? = nil    // live translation (TranslateEngine), shown under the line
+    var translations: [String: String] = [:]   // targetLang → text (multi-target live translation)
     /// Plain joined text (for export / SRT / Markdown).
     var text: String {
         var s = ""
@@ -55,10 +55,10 @@ final class TranscriptStore {
     /// without it a monologue renders as one giant line).
     private let lineBreakGap = 1.5
 
-    /// Attach a translation to a line by id (from TranslateEngine, async).
-    func setTranslation(_ id: UUID, _ text: String) {
+    /// Attach a per-language translation to a line by id (from TranslateEngine, async).
+    func setTranslation(_ id: UUID, lang: String, _ text: String) {
         guard let i = lines.firstIndex(where: { $0.id == id }) else { return }
-        lines[i].translation = text
+        lines[i].translations[lang] = text
     }
 
     func reset() {

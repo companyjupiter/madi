@@ -53,26 +53,34 @@ final class SessionController: EngineProcessDelegate {
     private(set) var livePartial: String = ""
     private let preview = PreviewEngine()
 
-    /// Live translation target — the English language NAME used in the prompt
-    /// ("Korean"/"Chinese"/"Japanese"/"English"), or nil = off. Persisted. Only
-    /// active when AssetManifest.translateAvailable (engine bundled + model present).
-    var translateTarget: String? = UserDefaults.standard.string(forKey: "translateTarget") {
+    /// Live translation TARGETS — a set of English language NAMES
+    /// ("Korean"/"Chinese"/"Japanese"/"English"); empty = off. Each committed
+    /// segment is translated into all targets at once (multi-target). Persisted.
+    /// Only active when AssetManifest.translateAvailable (engine bundled + model).
+    var translateTargets: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "translateTargets") ?? []) {
         didSet {
-            UserDefaults.standard.set(translateTarget, forKey: "translateTarget")
-            if translateTarget == nil { translate?.stop(); translate = nil }
+            UserDefaults.standard.set(Array(translateTargets), forKey: "translateTargets")
+            if translateTargets.isEmpty { translate?.stop(); translate = nil }
         }
     }
     private var translate: TranslateEngine?
     private var translatedIDs: Set<UUID> = []
 
-    /// Start the translate engine on demand (target set + assets present).
+    /// English language name of the detected/selected source, to skip translating
+    /// a segment into its own language (50264=ko, 50259=en; others via the
+    /// engine's [lang] detection if added later).
+    private var sourceLangName: String? {
+        switch languageTokenID { case 50264: return "Korean"; case 50259: return "English"; default: return nil }
+    }
+
+    /// Start the translate engine on demand (targets set + assets present).
     private func ensureTranslateEngine() -> TranslateEngine? {
-        guard translateTarget != nil,
+        guard !translateTargets.isEmpty,
               let eng = AssetManifest.translateEngineURL,
               AssetManifest.translateModelIsValid() else { return nil }
         if translate == nil {
             let t = TranslateEngine()
-            t.onResult = { [weak self] id, text in self?.transcript.setTranslation(id, text) }
+            t.onResult = { [weak self] id, lang, text in self?.transcript.setTranslation(id, lang: lang, text) }
             _ = t.start(engine: eng, model: AssetManifest.translateModelURL)
             translate = t
         }
@@ -80,16 +88,19 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// Translate every stable line (all but the last, which may still grow) that
-    /// hasn't been translated yet. `includingLast` at finalize. FIFO via the engine.
+    /// hasn't been translated yet, into all targets (minus the source language).
+    /// `includingLast` at finalize. FIFO via the engine.
     private func translateStableLines(includingLast: Bool = false) {
-        guard let target = translateTarget, let t = ensureTranslateEngine() else { return }
+        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
+        let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
+        guard !targets.isEmpty else { return }
         let lines = transcript.lines
         let upTo = includingLast ? lines.count : max(0, lines.count - 1)
         for i in 0..<upTo {
             let line = lines[i]
             if translatedIDs.contains(line.id) { continue }
             translatedIDs.insert(line.id)
-            t.translate(line.text, into: target, id: line.id)
+            t.translate(line.text, into: targets, id: line.id)
         }
     }
 
