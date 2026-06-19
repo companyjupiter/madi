@@ -43,6 +43,13 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(liveWindowSeconds, forKey: "liveWindowSeconds") }
     }
 
+    /// 2개 이상으로 번역할 때는 반응속도와 무관하게 "정확"(10초) 윈도를 강제한다.
+    /// 짧은 윈도는 원문 경계 오류가 많은데, 그 오류가 모든 대상 언어 번역으로
+    /// 전파되므로 — 다중 번역에서는 가장 긴 문맥의 원문 품질이 우선이다. UI도 이
+    /// 규칙을 노출(2개+ 선택 시 반응속도 picker를 잠그고 "정확"으로 표시).
+    var multiTranslateForcesAccurate: Bool { translateTargets.count >= 2 }
+    var effectiveWindowSeconds: Double { multiTranslateForcesAccurate ? 10 : liveWindowSeconds }
+
     /// Streaming preview: a 2nd engine decodes the in-progress window every ~1.5s
     /// for instant interim text — NO accuracy cost (committed text is unchanged).
     /// Costs a 2nd resident model (~830 MB) only while recording. Persisted.
@@ -190,9 +197,10 @@ final class SessionController: EngineProcessDelegate {
 
         capture.inputDeviceID = inputDeviceID  // bind chosen mic before start
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
-        capture.segmentSeconds = liveWindowSeconds
-        capture.firstSegmentSeconds = min(3, liveWindowSeconds)
-        capture.overlapSeconds = min(3, max(1, liveWindowSeconds * 0.3))
+        let win = effectiveWindowSeconds   // 2개+ 번역 시 정확(10초) 강제
+        capture.segmentSeconds = win
+        capture.firstSegmentSeconds = min(3, win)
+        capture.overlapSeconds = min(3, max(1, win * 0.3))
         capture.onSegment = { [weak self] offset, url in
             self?.engine?.feed(offset: offset, wav: url)
         }

@@ -90,12 +90,21 @@ struct SettingsView: View {
                 Toggle("중첩 발화 감지", isOn: $session.osd)
             }
             Section("실시간") {
-                Picker("반응 속도", selection: $session.liveWindowSeconds) {
+                Picker("반응 속도", selection: Binding(
+                    // 강제 중에는 "정확"으로 표시(저장된 선호값은 안 건드림); 평소엔 실제 값.
+                    get: { session.effectiveWindowSeconds },
+                    set: { session.liveWindowSeconds = $0 })
+                ) {
                     Text("빠름 (5초)").tag(5.0)
                     Text("보통 (7초)").tag(7.0)
                     Text("정확 (10초)").tag(10.0)
                 }
                 .help("빠름=텍스트가 더 자주 뜸(체감↑), 정확=문맥 길어 품질↑")
+                .disabled(session.multiTranslateForcesAccurate)   // 2개+ 번역 → 정확 고정
+                if session.multiTranslateForcesAccurate {
+                    Text("번역 대상 2개 이상 → ‘정확(10초)’ 고정. 원문 경계 오류가 모든 번역으로 전파되지 않도록 가장 긴 문맥을 씁니다.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Toggle("실시간 프리뷰", isOn: $session.livePreviewEnabled)
                     .help("윈도가 닫히기 전 회색 중간 텍스트 표시(정확도 무손해, 메모리 +~830MB)")
             }
