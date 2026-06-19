@@ -44,6 +44,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/TranscriptStore.swift
   "$APP_DIR"/Sovereign/Transcript/EditorCuts.swift
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift
+  "$APP_DIR"/Sovereign/Transcript/Retrieval.swift
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
   "$APP_DIR"/Sovereign/UI/Theme.swift
