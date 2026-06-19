@@ -32,6 +32,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Engine/TranslateEngine.swift
   "$APP_DIR"/Sovereign/Engine/SummaryEngine.swift
   "$APP_DIR"/Sovereign/Audio/WavWriter.swift
+  "$APP_DIR"/Sovereign/Audio/SystemAudioCapture.swift
   "$APP_DIR"/Sovereign/Audio/Resampler.swift
   "$APP_DIR"/Sovereign/Audio/Segmenter.swift
   "$APP_DIR"/Sovereign/Audio/AudioCapture.swift

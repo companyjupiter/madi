@@ -73,11 +73,21 @@ struct SettingsView: View {
     private var recording: some View {
         Form {
             Section("입력") {
-                Picker("마이크", selection: $session.inputDeviceID) {
-                    Text("시스템 기본").tag(AudioDeviceID?.none)
-                    ForEach(session.availableInputs) { dev in
-                        Text(dev.name).tag(AudioDeviceID?.some(dev.id))
+                Picker("음원", selection: $session.audioSource) {
+                    ForEach(AudioSource.allCases) { s in Text(s.label).tag(s) }
+                }
+                .help("시스템 오디오 = Teams·Slack·Zoom·YouTube 등 Mac에서 재생되는 소리. 마이크+시스템 = 온라인 회의(내 목소리 + 상대). 첫 사용 시 화면 기록 권한 필요.")
+                if session.audioSource != .system {
+                    Picker("마이크", selection: $session.inputDeviceID) {
+                        Text("시스템 기본").tag(AudioDeviceID?.none)
+                        ForEach(session.availableInputs) { dev in
+                            Text(dev.name).tag(AudioDeviceID?.some(dev.id))
+                        }
                     }
+                }
+                if session.audioSource != .mic {
+                    Text("시스템 오디오는 첫 녹음 시 ‘화면 기록’ 권한을 요청합니다 (오디오 전용, 화면은 저장 안 함).")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Picker("언어", selection: $session.languageTokenID) {
                     Text("자동 감지").tag(Int?.none)
