@@ -21,6 +21,7 @@ enum EngineEvent: Equatable {
     case speaker(SpeakerLabel)        // SPK
     case speakerFix(SpeakerLabel)     // SPKFIX
     case speakerOverlap(SpeakerLabel) // SPKOV
+    case speakerName(id: Int, name: String)  // SPKNAME — matched an enrolled voiceprint
     case flushEnd
     case progressTotal(Int)           // file mode: total 30s chunks to process
     case progressChunk(Int)           // file mode: chunk K just finished
@@ -66,6 +67,15 @@ enum EngineProtocol {
             if line.hasPrefix("=== ") {           // any other section closes words
                 inWords = false
                 return .other(line)
+            }
+
+            // "SPKNAME <id> <name>" — a session speaker matched an enrolled voiceprint
+            if line.hasPrefix("SPKNAME ") {
+                let rest = line.dropFirst("SPKNAME ".count)
+                if let sp = rest.firstIndex(of: " "), let id = Int(rest[..<sp]) {
+                    let name = rest[rest.index(after: sp)...].trimmingCharacters(in: .whitespaces)
+                    if !name.isEmpty { return .speakerName(id: id, name: name) }
+                }
             }
 
             if let lbl = EngineProtocol.parseSpeaker(line, tag: "SPKFIX") { return .speakerFix(lbl) }
