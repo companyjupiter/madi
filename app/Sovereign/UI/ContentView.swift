@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var reviewIndex = 0
     @State private var scrollTarget: UUID? = nil
     @State private var scrollTick = 0
+    @State private var showSummary = false   // on-device meeting summary sheet
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
     private var flaggedWords: [(line: UUID, text: String)] {
@@ -53,6 +54,51 @@ struct ContentView: View {
             session.transcribeFile(url)
             return true
         } isTargeted: { dropTargeted = $0 }
+        .sheet(isPresented: $showSummary) { summarySheet }
+    }
+
+    // On-device meeting intelligence — summary + action items from the local LLM.
+    // The transcript never leaves the Mac (the product moat vs cloud meeting tools).
+    private var summarySheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles").foregroundStyle(Theme.Colors.accent)
+                Text("회의 요약").font(Theme.Fonts.appTitle)
+                Text("온디바이스").font(Theme.Fonts.status)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                Spacer()
+                Button("닫기") { showSummary = false }
+            }
+            Divider().overlay(Theme.Colors.separator)
+            if session.summarizing {
+                VStack(spacing: 10) {
+                    ProgressView()
+                    Text("로컬 LLM이 요약을 생성하는 중…")
+                        .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
+                    Text("전사 내용은 이 Mac을 떠나지 않습니다.")
+                        .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let text = session.meetingSummary {
+                ScrollView {
+                    Text(text).font(.system(size: max(13, fontSize - 2)))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                HStack {
+                    Button { copy(text) } label: { Label("복사", systemImage: "doc.on.doc") }
+                    Button { session.summarize() } label: { Label("다시 생성", systemImage: "arrow.clockwise") }
+                    Spacer()
+                    Button("내보내기…") { export(.init(filenameExtension: "md")!) { try text.write(to: $0, atomically: true, encoding: .utf8) } }
+                }.font(Theme.Fonts.status)
+            }
+        }
+        .padding(Theme.Space.window)
+        .frame(width: 520, height: 460)
+    }
+
+    private func copy(_ s: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(s, forType: .string)
     }
 
     // MARK: transcript pane (left, flexible)
@@ -104,6 +150,15 @@ struct ContentView: View {
                 .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
                 .help("전사 내용을 지우고 새 회의를 시작합니다")
                 Divider().frame(height: 14)
+                // on-device meeting summary + action items (local LLM)
+                if AssetManifest.translateAvailable {
+                    Button { session.summarize(); showSummary = true } label: {
+                        Label("요약", systemImage: "sparkles").font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(Theme.Colors.accent)
+                    .help("로컬 LLM으로 회의 요약·액션아이템 생성 (기기 밖으로 안 나감)")
+                    Divider().frame(height: 14)
+                }
             }
             // text-size: A− / current pt / A+
             Button { fontSize = max(12, fontSize - 2) } label: { Text("A").font(.system(size: 11)) }
