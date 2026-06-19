@@ -28,7 +28,11 @@ def swift_color(tok):
 def swift_font(tok):
     w = {'regular': '.regular', 'medium': '.medium', 'semibold': '.semibold',
          'bold': '.bold'}[tok.get('weight', 'regular')]
-    f = f'Font.system(size: {tok["size"]}, weight: {w})'
+    # design: rounded gives the friendly, human feel for titles/labels; serif and
+    # monospaced are also available. Body text stays default for readability.
+    d = {'rounded': ', design: .rounded', 'serif': ', design: .serif',
+         'monospaced': ', design: .monospaced'}.get(tok.get('design'), '')
+    f = f'Font.system(size: {tok["size"]}, weight: {w}{d})'
     if tok.get('italic'):
         f += '.italic()'
     return f

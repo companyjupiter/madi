@@ -45,9 +45,9 @@ struct ContentView: View {
     private var mainLayout: some View {
         HStack(spacing: 0) {
             transcriptPane
-            Divider()
             sidePanel
         }
+        .background(Theme.Colors.surfaceSunken)
         .dropDestination(for: URL.self) { urls, _ in
             guard canDrop, let url = urls.first(where: isMediaFile) else { return false }
             session.transcribeFile(url)
@@ -171,12 +171,11 @@ struct ContentView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 16) {
             if case .processing = session.phase {
-                Image(systemName: "waveform.badge.magnifyingglass")
-                    .font(.system(size: 40)).foregroundStyle(Theme.Colors.accent.opacity(0.5))
+                haloIcon("waveform.badge.magnifyingglass")
                 Text("전사 결과가 곧 여기에 표시됩니다…")
-                    .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
+                    .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
             } else if case .error(let msg) = session.phase {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 40)).foregroundStyle(.orange)
@@ -184,47 +183,66 @@ struct ContentView: View {
                     .multilineTextAlignment(.center).padding(.horizontal, 32)
             } else if isBusy {
                 ProgressView()
-                Text(phaseText).font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
+                Text(phaseText).font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
             } else {
-                Image(systemName: "waveform")
-                    .font(.system(size: 46)).foregroundStyle(Theme.Colors.textTertiary)
-                Text("회의를 녹음하거나, 오른쪽에 오디오 파일을 드롭하세요")
-                    .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
+                haloIcon("waveform")
+                VStack(spacing: 6) {
+                    Text("기록할 준비가 되었어요")
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("‘녹음 시작’을 누르거나, 오디오·영상 파일을 끌어다 놓으세요.")
+                        .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
+    }
+
+    // soft accent halo behind a glyph — warm, calm focal point for empty/idle states
+    private func haloIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 38, weight: .light))
+            .foregroundStyle(Theme.Colors.accent)
+            .frame(width: 88, height: 88)
+            .background(Circle().fill(Theme.Colors.accent.opacity(0.10)))
     }
 
     // MARK: right control panel
 
     private var sidePanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("Sovereign Whisper").font(Theme.Fonts.appTitle)
+        VStack(alignment: .leading, spacing: Theme.Space.panelGap) {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.accent)
+                Text("Sovereign").font(Theme.Fonts.appTitle)
+                Text("Whisper").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.textTertiary)
                 Spacer()
-                SettingsLink { Image(systemName: "gearshape") }
+                SettingsLink { Image(systemName: "gearshape").font(.system(size: 14)) }
                     .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
                     .help("설정 (⌘,)")
             }
 
-            recordButton
-            if session.phase == .recording || session.phase == .paused {
-                LevelMeter(level: session.level).frame(height: Theme.Size.meterH)
-                    .opacity(session.phase == .paused ? 0.4 : 1)
+            VStack(alignment: .leading, spacing: 10) {
+                recordButton
+                if session.phase == .recording || session.phase == .paused {
+                    LevelMeter(level: session.level).frame(height: Theme.Size.meterH)
+                        .opacity(session.phase == .paused ? 0.4 : 1)
+                }
             }
 
             field("언어") { languagePicker }
 
-            Divider()
-
             dropZone
 
             if !session.transcript.lines.isEmpty {
-                Divider()
+                Divider().overlay(Theme.Colors.separator)
                 speakingStats
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
             if !session.transcript.lines.isEmpty, session.tightenStat.cuts > 0 { tightenStatView }
             if let saved = session.lastAutoSaved { savedStatus(saved) }
@@ -236,8 +254,15 @@ struct ContentView: View {
             }
         }
         .padding(Theme.Space.window)
-        .frame(width: 280)
-        .background(Theme.Colors.textTertiary.opacity(0.04))
+        .frame(width: Theme.Size.sidePanelW)
+        .background(
+            Theme.Colors.surface
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel).strokeBorder(Theme.Colors.separator, lineWidth: 1))
+                .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 2)
+        )
+        .padding(.vertical, 12)
+        .padding(.trailing, 12)
     }
 
     // saved-confirmation only — the auto-save folder config lives in Settings.
@@ -274,7 +299,7 @@ struct ContentView: View {
         let total = max(0.001, times.values.reduce(0, +))
         let sorted = times.sorted { $0.value > $1.value }
         return VStack(alignment: .leading, spacing: 7) {
-            Text("발언 시간").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+            Text("발언 시간").font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
             ForEach(sorted, id: \.key) { entry in
                 let frac = entry.value / total
                 VStack(alignment: .leading, spacing: 2) {
@@ -300,8 +325,8 @@ struct ContentView: View {
     private func mmss(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
 
     @ViewBuilder private func field<V: View>(_ label: String, @ViewBuilder _ control: () -> V) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label).font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
             control()
         }
     }
@@ -311,12 +336,13 @@ struct ContentView: View {
         case .recording:
             HStack(spacing: 8) {
                 Button { session.pauseRecording() } label: {
-                    Label("일시정지", systemImage: "pause.circle.fill").frame(maxWidth: .infinity)
+                    Label("일시정지", systemImage: "pause.fill").frame(maxWidth: .infinity)
                 }
-                .controlSize(.large).keyboardShortcut("p")
+                .buttonStyle(.bordered).controlSize(.large).keyboardShortcut("p")
                 Button(role: .destructive) { session.stop() } label: {
-                    Label("정지", systemImage: "stop.circle.fill").frame(maxWidth: .infinity)
+                    Label("정지", systemImage: "stop.fill").frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent).tint(Theme.Colors.recording)
                 .controlSize(.large).keyboardShortcut("r")
             }
         case .paused:
@@ -324,22 +350,25 @@ struct ContentView: View {
                 Button { session.resumeRecording() } label: {
                     Label("재개", systemImage: "record.circle.fill").frame(maxWidth: .infinity)
                 }
-                .controlSize(.large).keyboardShortcut("p").tint(Theme.Colors.recording)
+                .buttonStyle(.borderedProminent).controlSize(.large).keyboardShortcut("p").tint(Theme.Colors.recording)
                 Button(role: .destructive) { session.stop() } label: {
-                    Label("정지", systemImage: "stop.circle.fill").frame(maxWidth: .infinity)
+                    Label("정지", systemImage: "stop.fill").frame(maxWidth: .infinity)
                 }
-                .controlSize(.large).keyboardShortcut("r")
+                .buttonStyle(.bordered).controlSize(.large).keyboardShortcut("r")
             }
         case .engineStarting, .ready, .processing, .flushing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
             }
-            .frame(maxWidth: .infinity).frame(height: 28)
+            .frame(maxWidth: .infinity).frame(height: 36)
         default:
             Button { session.start() } label: {
-                Label("녹음 시작", systemImage: "record.circle").frame(maxWidth: .infinity)
+                Label("녹음 시작", systemImage: "record.circle.fill")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .frame(maxWidth: .infinity).frame(height: 8)
             }
+            .buttonStyle(.borderedProminent).tint(Theme.Colors.accent)
             .controlSize(.large).keyboardShortcut("r")
         }
     }
@@ -365,7 +394,7 @@ struct ContentView: View {
     private var dropZone: some View {
         VStack(spacing: 8) {
             Image(systemName: "tray.and.arrow.down")
-                .font(.system(size: 26))
+                .font(.system(size: 24))
                 .foregroundStyle(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary)
             Text("오디오·영상 파일\n드래그 앤 드롭")
                 .multilineTextAlignment(.center)
@@ -373,11 +402,11 @@ struct ContentView: View {
             Button("파일 선택…") { chooseFile() }
                 .controlSize(.small).disabled(!canDrop)
         }
-        .frame(maxWidth: .infinity).frame(height: 128)
-        .background(RoundedRectangle(cornerRadius: 10)
-            .fill(Theme.Colors.accent.opacity(dropTargeted ? 0.10 : 0.04)))
-        .overlay(RoundedRectangle(cornerRadius: 10)
-            .strokeBorder(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary,
+        .frame(maxWidth: .infinity).frame(height: 124)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.dropZone)
+            .fill(Theme.Colors.accent.opacity(dropTargeted ? 0.12 : 0.05)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.dropZone)
+            .strokeBorder(dropTargeted ? Theme.Colors.accent : Theme.Colors.separator,
                           style: StrokeStyle(lineWidth: 1.5, dash: [6])))
     }
 
