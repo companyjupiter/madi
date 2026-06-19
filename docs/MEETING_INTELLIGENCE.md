@@ -60,4 +60,13 @@ dumps `<dir>/.last/spk<id>.vec`). Wired the app side, fully on-device:
 
 ## Roadmap (the moat, deepened)
 - 9B model A/B for summary/translation quality.
-- Map-reduce summarization for very long meetings (beyond one context window).
+- 9B model A/B (already listed above).
+
+## Shipped — long-meeting map-reduce
+The engine context is ~1024 tokens and **silently truncates** past it (so a long
+meeting would lose its tail). `SummaryEngine` now map-reduces: the transcript is
+split into ~800-char chunks, each condensed (preserving names/decisions/to-dos),
+then folded again until one fits → the final [요약]/[액션]/[결정] (or 화자별) format.
+Recursive (handles 2-hr meetings), with a round cap as a non-convergence guard.
+Short meetings still take the single-request path. CLI-verified the condense step
+preserves per-speaker actions.

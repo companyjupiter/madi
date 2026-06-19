@@ -34,6 +34,15 @@ final class SummaryEngine {
     private var inflightTag: String?               // tag of the request awaiting its reply
     private var queue: [(tag: String, prompt: String)] = []   // FIFO (incl. pre-READY)
 
+    // map-reduce for long meetings: the engine context is ~1024 tokens and silently
+    // truncates past it, so a long transcript is split into char-budgeted chunks,
+    // each condensed ("fold"), then folded again until one fits → final format.
+    private let chunkChars = 800
+    private var foldFinalTag = "summary"           // "summary" | "speakers"
+    private var foldRemaining = 0
+    private var foldAcc: [String] = []
+    private var foldRound = 0                       // safety cap against a non-converging fold
+
     func start(engine: URL, model: URL) -> Bool {
         process.executableURL = engine
         process.arguments = [model.path]
@@ -62,26 +71,79 @@ final class SummaryEngine {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Summarize a speaker-attributed transcript ("화자: 발언" lines). The model is
-    /// asked to reply in the transcript's own language.
-    func summarize(lines: [String]) {
-        let t = transcriptOneLine(lines)
-        guard !t.isEmpty else { onResult?("summary", nil); return }
-        enqueue("summary",
-            "다음 회의록을 요약하세요. 회의록과 같은 언어로 답하세요. "
-            + "형식: [요약] 핵심을 2-4문장. [액션] 각 줄 '- 담당자: 할 일'(없으면 생략). "
-            + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(t)")
-    }
+    /// Summarize a speaker-attributed transcript ("화자: 발언" lines), map-reducing
+    /// over chunks so arbitrarily long meetings fit the engine's context.
+    func summarize(lines: [String]) { beginFold(lines, finalTag: "summary") }
 
     /// Per-speaker breakdown: each speaker's key point + the actions they own.
     /// Leverages persistent speaker identity (voiceprints) — "who is on the hook".
-    func summarizeBySpeaker(lines: [String]) {
-        let t = transcriptOneLine(lines)
-        guard !t.isEmpty else { onResult?("speakers", nil); return }
-        enqueue("speakers",
-            "다음 회의록을 화자별로 정리하세요. 회의록과 같은 언어로. "
-            + "각 화자마다 '■ 이름: 핵심 발언 1문장. 맡은 일: - 할 일'(맡은 일 없으면 그 부분 생략). "
-            + "다른 말 없이 이 형식만. 회의록: \(t)")
+    func summarizeBySpeaker(lines: [String]) { beginFold(lines, finalTag: "speakers") }
+
+    // The final-format prompt (single fitting text → the user-facing output).
+    private func finalPrompt(_ tag: String, _ t: String) -> String {
+        switch tag {
+        case "speakers":
+            return "다음 회의록을 화자별로 정리하세요. 회의록과 같은 언어로. "
+                + "각 화자마다 '■ 이름: 핵심 발언 1문장. 맡은 일: - 할 일'(맡은 일 없으면 그 부분 생략). "
+                + "다른 말 없이 이 형식만. 회의록: \(t)"
+        default:
+            return "다음 회의록을 요약하세요. 회의록과 같은 언어로 답하세요. "
+                + "형식: [요약] 핵심을 2-4문장. [액션] 각 줄 '- 담당자: 할 일'(없으면 생략). "
+                + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(t)"
+        }
+    }
+    // Intermediate "condense" prompt — preserve names, decisions, and to-dos.
+    private func condensePrompt(_ t: String) -> String {
+        "다음 회의 내용을 화자(이름)·핵심·결정·할 일을 보존하며 간결히 요약하세요. "
+            + "회의록과 같은 언어로, 군더더기 없이. 내용: \(t)"
+    }
+
+    private func beginFold(_ lines: [String], finalTag: String) {
+        let full = transcriptOneLine(lines)
+        guard !full.isEmpty else { onResult?(finalTag, nil); return }
+        foldFinalTag = finalTag
+        foldRound = 0
+        runFoldRound(splitToBudget(lines))   // round 0 inputs = transcript chunks
+    }
+
+    /// Group whole "화자: 발언" lines so each chunk's joined length ≤ chunkChars
+    /// (a single over-budget line still becomes its own chunk).
+    private func splitToBudget(_ lines: [String]) -> [String] {
+        var out: [String] = []; var cur = ""
+        for l in lines {
+            let merged = cur.isEmpty ? l : cur + " / " + l
+            if merged.count > chunkChars, !cur.isEmpty { out.append(cur); cur = l }
+            else { cur = merged }
+        }
+        if !cur.isEmpty { out.append(cur) }
+        return out
+    }
+
+    /// Group already-condensed texts so each batch's joined length ≤ chunkChars.
+    private func batchToBudget(_ texts: [String]) -> [[String]] {
+        var out: [[String]] = []; var cur: [String] = []; var len = 0
+        for t in texts {
+            if len + t.count + 3 > chunkChars, !cur.isEmpty { out.append(cur); cur = [t]; len = t.count }
+            else { cur.append(t); len += t.count + 3 }
+        }
+        if !cur.isEmpty { out.append(cur) }
+        return out
+    }
+
+    /// One fold round: if the inputs fit one request → emit the final format;
+    /// else condense each batch ("fold") and recurse on the results.
+    private func runFoldRound(_ texts: [String]) {
+        foldRound += 1
+        let batches = batchToBudget(texts)
+        // fits one request, or the fold isn't converging (cap) → emit final format,
+        // truncating to the budget so the last request never overflows the context.
+        if batches.count <= 1 || foldRound > 4 {
+            let joined = (batches.first ?? texts).joined(separator: " ")
+            enqueue(foldFinalTag, finalPrompt(foldFinalTag, String(joined.prefix(chunkChars))))
+            return
+        }
+        foldRemaining = batches.count; foldAcc = []
+        for b in batches { enqueue("fold", condensePrompt(b.joined(separator: " "))) }
     }
 
     /// Answer a question grounded ONLY in the transcript (no outside knowledge);
@@ -135,6 +197,13 @@ final class SummaryEngine {
             current = ""
             guard let tag = inflightTag else { return }
             inflightTag = nil
+            if tag == "fold" {                       // map-reduce intermediate — not user-facing
+                if !out.isEmpty { foldAcc.append(out) }
+                foldRemaining -= 1
+                if foldRemaining <= 0 { runFoldRound(foldAcc) }
+                drain()
+                return
+            }
             onResult?(tag, out.isEmpty ? nil : out)
             drain()
             return
