@@ -25,10 +25,29 @@ struct TranscriptView: View {
     var focusedLine: UUID? = nil   // line to briefly emphasize after a jump
     var interim: String = ""       // live streaming-preview text (gray "진행 중")
     var fontSize: CGFloat = 13     // transcript body text size (user-adjustable)
+    // #2 inline editing of committed lines (live or post). onEdit commits the new
+    // text; lockedLineID is the in-progress last line during recording (not yet
+    // safe to edit). onRequestDetailed flips content→detailed so the edit gesture
+    // works from the reading view too.
+    var onEdit: ((UUID, String) -> Void)? = nil
+    var lockedLineID: UUID? = nil
+    var onRequestDetailed: (() -> Void)? = nil
     private var bodyFont: Font { .system(size: fontSize) }
 
     @State private var editingSpeaker: Int? = nil
     @State private var draftName: String = ""
+    @State private var editingLine: UUID? = nil
+    @State private var editDraft: String = ""
+
+    private func canEdit(_ line: Line) -> Bool { onEdit != nil && line.id != lockedLineID }
+    private func beginEdit(_ line: Line) {
+        guard canEdit(line) else { return }
+        editDraft = line.text; editingLine = line.id
+    }
+    private func commitEdit() {
+        if let id = editingLine { onEdit?(id, editDraft) }
+        editingLine = nil
+    }
 
     /// Consecutive same-speaker lines collapsed into one reading paragraph.
     /// The block id is its last line's id so live auto-scroll (which targets
@@ -113,7 +132,10 @@ struct TranscriptView: View {
                 .buttonStyle(.plain)
                 .help("클릭하여 이름 지정")
             }
+            // double-click in the reading view flips to 상세 so the per-line edit
+            // gesture is available (editing is line-granular; blocks join lines).
             Text(b.text).font(bodyFont)
+                .onTapGesture(count: 2) { if onEdit != nil { onRequestDetailed?() } }
             ForEach(blockTranslations(b), id: \.0) { lang, text in
                 translationLine(lang, text)
             }
@@ -160,8 +182,30 @@ struct TranscriptView: View {
                 .help("클릭하여 이름 지정")
                 Text(timecode(line.start)).font(Theme.Fonts.timestamp)
                     .foregroundStyle(Theme.Colors.textTertiary)
+                if line.isEdited {
+                    Text("편집됨").font(Theme.Fonts.timestamp).foregroundStyle(Theme.Colors.accent)
+                }
+                if canEdit(line) {
+                    Spacer()
+                    Button { beginEdit(line) } label: {
+                        Image(systemName: "pencil").font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(Theme.Colors.textTertiary)
+                    .help("이 문장 편집")
+                }
             }
-            Text(attributed(line)).font(bodyFont)
+            if editingLine == line.id {
+                TextField("문장 편집", text: $editDraft, axis: .vertical)
+                    .font(bodyFont).textFieldStyle(.plain)
+                    .onSubmit { commitEdit() }
+                HStack(spacing: 8) {
+                    Button("저장") { commitEdit() }.controlSize(.small).keyboardShortcut(.return)
+                    Button("취소") { editingLine = nil }.controlSize(.small).keyboardShortcut(.cancelAction)
+                }
+            } else {
+                Text(attributed(line)).font(bodyFont)
+                    .onTapGesture(count: 2) { beginEdit(line) }
+            }
             ForEach(line.translations.keys.sorted(), id: \.self) { lang in
                 translationLine(lang, line.translations[lang]!)
             }

@@ -11,7 +11,7 @@ import CoreAudio
 @MainActor
 final class SessionController: EngineProcessDelegate {
     enum Phase: Equatable {
-        case idle, engineStarting, ready, recording, paused, processing, flushing, done
+        case idle, countingDown(Int), engineStarting, ready, recording, paused, processing, flushing, done
         case error(String)
     }
 
@@ -180,6 +180,53 @@ final class SessionController: EngineProcessDelegate {
     }
 
     // MARK: session lifecycle
+
+    private var countdownTask: Task<Void, Never>?
+
+    /// #4 — a brief 3·2·1 countdown before the mic opens, so the user can get
+    /// ready; recording starts the instant it hits 0. Cancellable mid-count.
+    func startCountdown(from n: Int = 3) {
+        guard phase == .idle || phase == .done || isError else { return }
+        guard AssetManifest.modelIsValid() else { phase = .error("model not ready"); return }
+        countdownTask?.cancel()
+        countdownTask = Task { @MainActor in
+            for k in stride(from: n, through: 1, by: -1) {
+                phase = .countingDown(k)
+                try? await Task.sleep(nanoseconds: 750_000_000)
+                if Task.isCancelled { return }
+            }
+            start()
+        }
+    }
+    func cancelCountdown() {
+        countdownTask?.cancel(); countdownTask = nil
+        phase = .idle
+    }
+
+    /// #3 — clear the current transcript and return to idle WITHOUT the
+    /// stop→start dance. Only when not actively capturing.
+    func reset() {
+        guard phase == .done || phase == .idle || isError else { return }
+        countdownTask?.cancel(); countdownTask = nil
+        transcript.reset()
+        speakerNames = [:]
+        lastAutoSaved = nil
+        translatedIDs.removeAll()
+        fileName = ""; chunksDone = 0; chunksTotal = 0
+        livePartial = ""
+        phase = .idle
+    }
+
+    /// #2 — commit an inline edit to a (committed) line and, if live translation
+    /// is on, re-translate the edited text so the translation tracks the edit.
+    func editLine(_ id: UUID, to newText: String) {
+        transcript.editLine(id, newText)
+        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
+        let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
+        guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == id }) else { return }
+        translatedIDs.insert(id)
+        t.translate(line.text, into: targets, id: id)
+    }
 
     func start() {
         guard AssetManifest.modelIsValid() else {

@@ -23,15 +23,18 @@ struct Word: Identifiable {
 }
 
 struct Line: Identifiable {
-    let id = UUID()
+    // Identity is the FIRST word's id — stable across the per-word live rebuild
+    // (a fresh UUID() each rebuild would orphan async translations + user edits).
+    var id: UUID
     var speaker: Int
     var start: Double
     var end: Double
     var words: [Word]                 // per-word, so the view can flag low-confidence words
     var overlapSpeakers: [Int] = []   // from SPKOV, rendered as interruption markers
     var translations: [String: String] = [:]   // targetLang → text (multi-target live translation)
-    /// Plain joined text (for export / SRT / Markdown).
-    var text: String {
+    var editedText: String? = nil     // user edit (live or post); overrides the joined words
+    /// Words joined with the engine's spacing convention.
+    var joinedText: String {
         var s = ""
         for w in words {
             if !s.isEmpty, w.text.first.map({ !",.!?…".contains($0) }) ?? true { s += " " }
@@ -39,6 +42,9 @@ struct Line: Identifiable {
         }
         return s
     }
+    /// Display / export text — the user's edit if present, else the joined words.
+    var text: String { editedText ?? joinedText }
+    var isEdited: Bool { editedText != nil }
 }
 
 @Observable
@@ -55,16 +61,39 @@ final class TranscriptStore {
     /// without it a monologue renders as one giant line).
     private let lineBreakGap = 1.5
 
+    // Overlays keyed by stable line id (= first word id). Survive the per-word
+    // live rebuild and the FLUSH regroup, so an async translation that arrives
+    // seconds later — or a user edit made mid-recording — still lands.
+    private var translationsByLine: [UUID: [String: String]] = [:]
+    private var editsByLine: [UUID: String] = [:]
+
     /// Attach a per-language translation to a line by id (from TranslateEngine, async).
     func setTranslation(_ id: UUID, lang: String, _ text: String) {
-        guard let i = lines.firstIndex(where: { $0.id == id }) else { return }
-        lines[i].translations[lang] = text
+        translationsByLine[id, default: [:]][lang] = text
+        if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].translations[lang] = text }
+    }
+
+    /// Replace a line's text (inline editing, live or post). Keyed by the stable
+    /// line id so the edit persists through subsequent live rebuilds.
+    func editLine(_ id: UUID, _ newText: String) {
+        let t = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        editsByLine[id] = t
+        if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].editedText = t }
     }
 
     func reset() {
         lines.removeAll()
         merger = WordMerger()
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
+        translationsByLine.removeAll(); editsByLine.removeAll()
+    }
+
+    /// Re-apply id-keyed overlays after any (re)grouping.
+    private func applyOverlays() {
+        for i in lines.indices {
+            if let tr = translationsByLine[lines[i].id] { lines[i].translations = tr }
+            if let e = editsByLine[lines[i].id] { lines[i].editedText = e }
+        }
     }
 
     func ingest(_ event: EngineEvent) {
@@ -87,6 +116,7 @@ final class TranscriptStore {
         merger.finish()
         let labels = spkFix.isEmpty ? spk : spkFix
         lines = group(words: merger.committed, labels: labels)
+        applyOverlays()
         for i in lines.indices {
             let l = lines[i]
             var seen = Set<Int>()
@@ -102,6 +132,7 @@ final class TranscriptStore {
 
     private func rebuildLive() {
         lines = group(words: merger.displayWords, labels: spk)
+        applyOverlays()
     }
 
     /// Group consecutive same-speaker words into lines, breaking on long pauses.
@@ -128,7 +159,8 @@ final class TranscriptStore {
                 last.words.append(w)
                 out[out.count - 1] = last
             } else {
-                out.append(Line(speaker: sp, start: w.t0, end: w.t1, words: [w]))
+                // id = first word's id → stable across rebuilds (see Line.id note)
+                out.append(Line(id: w.id, speaker: sp, start: w.t0, end: w.t1, words: [w]))
             }
         }
         return out

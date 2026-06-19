@@ -72,7 +72,10 @@ struct ContentView: View {
                                    scrollTarget: scrollTarget, scrollTick: scrollTick,
                                    focusedLine: scrollTarget,
                                    interim: session.livePartial,
-                                   fontSize: fontSize)
+                                   fontSize: fontSize,
+                                   onEdit: { session.editLine($0, to: $1) },
+                                   lockedLineID: isRecordingLike ? session.transcript.lines.last?.id : nil,
+                                   onRequestDetailed: { contentMode = false })
                 }
                 if dropTargeted {
                     RoundedRectangle(cornerRadius: 12)
@@ -82,6 +85,7 @@ struct ContentView: View {
                             .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.accent))
                         .padding(8).allowsHitTesting(false)
                 }
+                if case .countingDown(let n) = session.phase { countdownOverlay(n) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -91,6 +95,16 @@ struct ContentView: View {
     // editor/review detail. Persisted across launches via @AppStorage.
     private var viewModeBar: some View {
         HStack(spacing: 10) {
+            // #3 — new session: clear the transcript without the stop→start dance.
+            // Only when not actively capturing (idle / done / error).
+            if !isBusy {
+                Button { session.reset() } label: {
+                    Label("초기화", systemImage: "arrow.counterclockwise").font(.system(size: 11))
+                }
+                .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
+                .help("전사 내용을 지우고 새 회의를 시작합니다")
+                Divider().frame(height: 14)
+            }
             // text-size: A− / current pt / A+
             Button { fontSize = max(12, fontSize - 2) } label: { Text("A").font(.system(size: 11)) }
                 .buttonStyle(.plain).help("글자 작게")
@@ -198,6 +212,26 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
+    }
+
+    // #4 — full-pane countdown: a big, calm number that ticks 3·2·1 before the
+    // mic opens. Dimmed scrim so it reads as a moment of "getting ready".
+    private func countdownOverlay(_ n: Int) -> some View {
+        ZStack {
+            Theme.Colors.surfaceSunken.opacity(0.86)
+            VStack(spacing: 14) {
+                Text("\(n)")
+                    .font(.system(size: 96, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.Colors.accent)
+                    .contentTransition(.numericText(countsDown: true))
+                    .id(n)
+                    .transition(.scale.combined(with: .opacity))
+                Text("곧 녹음을 시작합니다…")
+                    .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
+            }
+        }
+        .animation(.snappy, value: n)
+        .transition(.opacity)
     }
 
     // soft accent halo behind a glyph — warm, calm focal point for empty/idle states
@@ -356,6 +390,13 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered).controlSize(.large).keyboardShortcut("r")
             }
+        case .countingDown(let n):
+            Button { session.cancelCountdown() } label: {
+                Label("시작까지 \(n)… (취소)", systemImage: "xmark.circle")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .frame(maxWidth: .infinity).frame(height: 8)
+            }
+            .buttonStyle(.bordered).controlSize(.large).keyboardShortcut(.cancelAction)
         case .engineStarting, .ready, .processing, .flushing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -363,7 +404,7 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity).frame(height: 36)
         default:
-            Button { session.start() } label: {
+            Button { session.startCountdown() } label: {
                 Label("녹음 시작", systemImage: "record.circle.fill")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .frame(maxWidth: .infinity).frame(height: 8)
@@ -433,6 +474,13 @@ struct ContentView: View {
     private var isBusy: Bool {
         switch session.phase { case .idle, .done, .error: return false; default: return true }
     }
+    private var isCountingDown: Bool {
+        if case .countingDown = session.phase { return true }; return false
+    }
+    // recording or paused → the last line is still in progress (don't edit it yet)
+    private var isRecordingLike: Bool {
+        session.phase == .recording || session.phase == .paused
+    }
     // accept anything the system recognizes as audio or audiovisual media (104+
     // types) — not a hardcoded extension list. Unknown extensions are let through
     // and AudioDecode surfaces a clear error if they can't actually be decoded.
@@ -457,6 +505,7 @@ struct ContentView: View {
     private var phaseText: String {
         switch session.phase {
         case .idle: "준비됨"
+        case .countingDown(let n): "\(n)초 후 시작…"
         case .engineStarting: "모델 로딩…"
         case .ready: "마이크 시작…"
         case .recording: "녹음 중"
