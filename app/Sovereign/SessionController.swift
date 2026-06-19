@@ -78,38 +78,71 @@ final class SessionController: EngineProcessDelegate {
     private var summaryEngine: SummaryEngine?
     private(set) var meetingSummary: String? = nil
     private(set) var summarizing = false
+    // transcript Q&A — "ask the meeting" (grounded in the transcript, on-device)
+    private(set) var qaAnswer: String? = nil
+    private(set) var qaAsking = false
 
-    /// Generate a structured [요약]/[액션]/[결정] from the diarized transcript,
-    /// fully on-device. Frees the translate engine first (one 2.6 GB model resident
-    /// at a time). Only when a transcript exists and capture isn't running.
+    private var attributedLines: [String] {
+        transcript.lines.map { "\(speakerNames[$0.speaker] ?? "화자\($0.speaker)"): \($0.text)" }
+    }
+
+    /// Spawn the DNA3 engine for meeting intelligence (summary + Q&A), kept resident
+    /// so follow-up questions don't reload the 2.6 GB model. Frees the translate
+    /// engine first (one model resident at a time; summary/Q&A are post-session).
+    private func ensureSummaryEngine() -> SummaryEngine? {
+        guard let eng = AssetManifest.translateEngineURL, AssetManifest.translateModelIsValid() else { return nil }
+        if summaryEngine == nil {
+            translate?.stop(); translate = nil
+            let s = SummaryEngine()
+            s.onResult = { [weak self] tag, text in
+                guard let self else { return }
+                switch tag {
+                case "summary":
+                    self.summarizing = false
+                    self.meetingSummary = text ?? "요약 생성에 실패했습니다. 다시 시도하세요."
+                    if let text, self.autoSaveEnabled, let url = self.lastAutoSaved {
+                        try? Exporters.markdown(self.transcript.lines, names: self.speakerNames, summary: text)
+                            .write(to: url, atomically: true, encoding: .utf8)
+                    }
+                case "qa":
+                    self.qaAsking = false
+                    self.qaAnswer = text ?? "답변 생성에 실패했습니다."
+                default: break
+                }
+            }
+            guard s.start(engine: eng, model: AssetManifest.translateModelURL) else { return nil }
+            summaryEngine = s
+        }
+        return summaryEngine
+    }
+
+    /// Structured [요약]/[액션]/[결정] from the diarized transcript, on-device.
     func summarize() {
         guard !transcript.lines.isEmpty else { return }
         switch phase { case .recording, .paused, .countingDown: return; default: break }
-        guard let eng = AssetManifest.translateEngineURL, AssetManifest.translateModelIsValid() else {
+        guard let s = ensureSummaryEngine() else {
             meetingSummary = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
         }
-        translate?.stop(); translate = nil       // free the translate model first
-        summaryEngine?.stop()
-        summarizing = true
-        meetingSummary = nil
-        let s = SummaryEngine()
-        s.onResult = { [weak self] text in
-            guard let self else { return }
-            self.summarizing = false
-            self.meetingSummary = text ?? "요약 생성에 실패했습니다. 다시 시도하세요."
-            self.summaryEngine?.stop(); self.summaryEngine = nil
+        summarizing = true; meetingSummary = nil
+        s.summarize(lines: attributedLines)
+    }
+
+    /// "Ask the meeting" — answer grounded only in the transcript, on-device.
+    func askTranscript(_ question: String) {
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty, !transcript.lines.isEmpty else { return }
+        switch phase { case .recording, .paused, .countingDown: return; default: break }
+        guard let s = ensureSummaryEngine() else {
+            qaAnswer = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
         }
-        guard s.start(engine: eng, model: AssetManifest.translateModelURL) else {
-            summarizing = false; meetingSummary = "요약 엔진을 시작하지 못했습니다."; return
-        }
-        summaryEngine = s
-        let lines = transcript.lines.map { l in "\(speakerNames[l.speaker] ?? "화자\(l.speaker)"): \(l.text)" }
-        s.summarize(lines: lines)
+        qaAsking = true; qaAnswer = nil
+        s.ask(q, lines: attributedLines)
     }
 
     private func clearSummary() {
         summaryEngine?.stop(); summaryEngine = nil
         meetingSummary = nil; summarizing = false
+        qaAnswer = nil; qaAsking = false
     }
 
     /// English language name of the detected/selected source, to skip translating
@@ -425,7 +458,7 @@ final class SessionController: EngineProcessDelegate {
     // MARK: export
 
     func exportMarkdown(to url: URL) throws {
-        try Exporters.markdown(transcript.lines, names: speakerNames)
+        try Exporters.markdown(transcript.lines, names: speakerNames, summary: meetingSummary)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportSRT(to url: URL) throws {

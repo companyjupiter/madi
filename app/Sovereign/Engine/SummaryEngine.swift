@@ -18,8 +18,10 @@ import Foundation
 
 @MainActor
 final class SummaryEngine {
-    /// The finished summary text (multi-line, structured). nil arg = failed/empty.
-    var onResult: ((String?) -> Void)?
+    /// (tag, reply). tag routes the caller (e.g. "summary" / "qa"); reply is the
+    /// finished multi-line text, or nil on empty/failure. The engine stays resident
+    /// so follow-up questions don't reload the 2.6 GB model.
+    var onResult: ((String, String?) -> Void)?
 
     private let process = Process()
     private let stdinPipe = Pipe()
@@ -28,9 +30,9 @@ final class SummaryEngine {
     private var lineBuffer = Data()
 
     private var ready = false
-    private var current = ""           // reply lines accumulating (newline-joined)
-    private var inflight = false       // a summarize request is awaiting its reply
-    private var queuedPrompt: String?  // request issued before READY
+    private var current = ""                       // reply lines accumulating (newline-joined)
+    private var inflightTag: String?               // tag of the request awaiting its reply
+    private var queue: [(tag: String, prompt: String)] = []   // FIFO (incl. pre-READY)
 
     func start(engine: URL, model: URL) -> Bool {
         process.executableURL = engine
@@ -52,26 +54,43 @@ final class SummaryEngine {
     func stop() {
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
         if process.isRunning { process.terminate() }
-        ready = false; current = ""; inflight = false; queuedPrompt = nil
+        ready = false; current = ""; inflightTag = nil; queue.removeAll()
     }
 
-    /// Summarize a speaker-attributed transcript. `lines` are "화자: 발언" strings;
-    /// joined with " / " into one chat turn. The model is asked to reply in the
-    /// transcript's own language (so English meetings get English summaries).
-    func summarize(lines: [String]) {
-        let oneLine = lines.joined(separator: " / ")
-            .replacingOccurrences(of: "\n", with: " ")
+    private func transcriptOneLine(_ lines: [String]) -> String {
+        lines.joined(separator: " / ").replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !oneLine.isEmpty else { onResult?(nil); return }
-        let prompt =
+    }
+
+    /// Summarize a speaker-attributed transcript ("화자: 발언" lines). The model is
+    /// asked to reply in the transcript's own language.
+    func summarize(lines: [String]) {
+        let t = transcriptOneLine(lines)
+        guard !t.isEmpty else { onResult?("summary", nil); return }
+        enqueue("summary",
             "다음 회의록을 요약하세요. 회의록과 같은 언어로 답하세요. "
             + "형식: [요약] 핵심을 2-4문장. [액션] 각 줄 '- 담당자: 할 일'(없으면 생략). "
-            + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(oneLine)"
-        if ready { send(prompt) } else { queuedPrompt = prompt }
+            + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(t)")
     }
 
-    private func send(_ prompt: String) {
-        inflight = true
+    /// Answer a question grounded ONLY in the transcript (no outside knowledge);
+    /// says it's not in the transcript rather than hallucinating.
+    func ask(_ question: String, lines: [String]) {
+        let t = transcriptOneLine(lines)
+        let q = question.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, !q.isEmpty else { onResult?("qa", nil); return }
+        enqueue("qa",
+            "다음 회의록만 근거로 질문에 답하세요. 회의록과 같은 언어로, 간결하게. "
+            + "회의록에 답이 없으면 '회의록에 해당 내용이 없습니다'라고만 답하세요. "
+            + "질문: \(q) 회의록: \(t)")
+    }
+
+    private func enqueue(_ tag: String, _ prompt: String) {
+        if ready, inflightTag == nil { send(tag, prompt) } else { queue.append((tag, prompt)) }
+    }
+
+    private func send(_ tag: String, _ prompt: String) {
+        inflightTag = tag
         current = ""
         write(prompt + "\n")
     }
@@ -97,15 +116,16 @@ final class SummaryEngine {
         while s.hasPrefix(">") { s = String(s.dropFirst()).trimmingCharacters(in: .whitespaces) }
         if s == "READY" {
             ready = true
-            if let p = queuedPrompt { queuedPrompt = nil; send(p) }
+            drain()
             return
         }
         if s.hasPrefix("[perf] generation") {           // reply complete
             let out = current.trimmingCharacters(in: .whitespacesAndNewlines)
             current = ""
-            guard inflight else { return }
-            inflight = false
-            onResult?(out.isEmpty ? nil : out)
+            guard let tag = inflightTag else { return }
+            inflightTag = nil
+            onResult?(tag, out.isEmpty ? nil : out)
+            drain()
             return
         }
         if s.isEmpty || s.hasPrefix("[chat]") || s.hasPrefix("[perf]")
@@ -115,5 +135,12 @@ final class SummaryEngine {
         }
         // reply text — preserve line structure ([요약]/[액션]/bullets) with newlines
         current += current.isEmpty ? s : "\n" + s
+    }
+
+    /// Send the next queued request if idle.
+    private func drain() {
+        guard ready, inflightTag == nil, !queue.isEmpty else { return }
+        let next = queue.removeFirst()
+        send(next.tag, next.prompt)
     }
 }
