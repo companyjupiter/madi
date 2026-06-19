@@ -21,6 +21,7 @@ let package = Package(
                 "Transcript/TranscriptStore.swift",
                 "Transcript/WordMerger.swift",
                 "Transcript/EditorCuts.swift",
+                "Transcript/Retrieval.swift",
                 "Engine/EngineProtocol.swift",
             ]
         ),

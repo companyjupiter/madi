@@ -146,16 +146,20 @@ final class SummaryEngine {
         for b in batches { enqueue("fold", condensePrompt(b.joined(separator: " "))) }
     }
 
-    /// Answer a question grounded ONLY in the transcript (no outside knowledge);
-    /// says it's not in the transcript rather than hallucinating.
+    /// Answer a question grounded ONLY in the transcript. For long meetings the
+    /// full transcript exceeds the context, so the most question-relevant lines are
+    /// retrieved (lexical, on-device) and fed instead of the (truncated) whole —
+    /// grounded in REAL excerpts, not a clipped head. Says it's not in the
+    /// transcript rather than hallucinating.
     func ask(_ question: String, lines: [String]) {
-        let t = transcriptOneLine(lines)
         let q = question.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
-        guard !t.isEmpty, !q.isEmpty else { onResult?("qa", nil); return }
+        guard !q.isEmpty else { onResult?("qa", nil); return }
+        let t = transcriptOneLine(Retrieval.relevantLines(q, lines, budget: chunkChars))
+        guard !t.isEmpty else { onResult?("qa", nil); return }   // no relevant excerpt
         enqueue("qa",
-            "다음 회의록만 근거로 질문에 답하세요. 회의록과 같은 언어로, 간결하게. "
-            + "회의록에 답이 없으면 '회의록에 해당 내용이 없습니다'라고만 답하세요. "
-            + "질문: \(q) 회의록: \(t)")
+            "다음 회의록 발췌만 근거로 질문에 답하세요. 회의록과 같은 언어로, 간결하게. "
+            + "발췌에 답이 없으면 '회의록에 해당 내용이 없습니다'라고만 답하세요. "
+            + "질문: \(q) 발췌: \(t)")
     }
 
     private func enqueue(_ tag: String, _ prompt: String) {
