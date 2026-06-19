@@ -78,6 +78,9 @@ final class SessionController: EngineProcessDelegate {
     private var summaryEngine: SummaryEngine?
     private(set) var meetingSummary: String? = nil
     private(set) var summarizing = false
+    // speaker-aware breakdown (who said what / who owns which action)
+    private(set) var speakerSummary: String? = nil
+    private(set) var speakerSummarizing = false
     // transcript Q&A — "ask the meeting" (grounded in the transcript, on-device)
     private(set) var qaAnswer: String? = nil
     private(set) var qaAsking = false
@@ -104,6 +107,9 @@ final class SessionController: EngineProcessDelegate {
                         try? Exporters.markdown(self.transcript.lines, names: self.speakerNames, summary: text)
                             .write(to: url, atomically: true, encoding: .utf8)
                     }
+                case "speakers":
+                    self.speakerSummarizing = false
+                    self.speakerSummary = text ?? "화자별 요약 생성에 실패했습니다."
                 case "qa":
                     self.qaAsking = false
                     self.qaAnswer = text ?? "답변 생성에 실패했습니다."
@@ -127,6 +133,17 @@ final class SessionController: EngineProcessDelegate {
         s.summarize(lines: attributedLines)
     }
 
+    /// Per-speaker breakdown (who said what / who owns which action), on-device.
+    func summarizeBySpeaker() {
+        guard !transcript.lines.isEmpty else { return }
+        switch phase { case .recording, .paused, .countingDown: return; default: break }
+        guard let s = ensureSummaryEngine() else {
+            speakerSummary = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
+        }
+        speakerSummarizing = true; speakerSummary = nil
+        s.summarizeBySpeaker(lines: attributedLines)
+    }
+
     /// "Ask the meeting" — answer grounded only in the transcript, on-device.
     func askTranscript(_ question: String) {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -142,6 +159,7 @@ final class SessionController: EngineProcessDelegate {
     private func clearSummary() {
         summaryEngine?.stop(); summaryEngine = nil
         meetingSummary = nil; summarizing = false
+        speakerSummary = nil; speakerSummarizing = false
         qaAnswer = nil; qaAsking = false
     }
 

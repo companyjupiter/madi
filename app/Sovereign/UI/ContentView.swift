@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var scrollTarget: UUID? = nil
     @State private var scrollTick = 0
     @State private var showSummary = false   // on-device meeting summary sheet
+    @State private var summaryBySpeaker = false  // 전체 vs 화자별 breakdown
     @State private var qaInput = ""          // "ask the meeting" question
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
@@ -70,16 +71,26 @@ struct ContentView: View {
                 Spacer()
                 Button("닫기") { showSummary = false }
             }
+            Picker("", selection: $summaryBySpeaker) {
+                Text("전체").tag(false)
+                Text("화자별").tag(true)
+            }
+            .pickerStyle(.segmented).fixedSize()
+            .onChange(of: summaryBySpeaker) { _, on in
+                if on, session.speakerSummary == nil, !session.speakerSummarizing { session.summarizeBySpeaker() }
+            }
             Divider().overlay(Theme.Colors.separator)
-            if session.summarizing {
+            let busy = summaryBySpeaker ? session.speakerSummarizing : session.summarizing
+            let text = summaryBySpeaker ? session.speakerSummary : session.meetingSummary
+            if busy {
                 VStack(spacing: 10) {
                     ProgressView()
-                    Text("로컬 LLM이 요약을 생성하는 중…")
+                    Text("로컬 LLM이 \(summaryBySpeaker ? "화자별 요약" : "요약")을 생성하는 중…")
                         .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
                     Text("전사 내용은 이 Mac을 떠나지 않습니다.")
                         .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let text = session.meetingSummary {
+            } else if let text {
                 ScrollView {
                     Text(text).font(.system(size: max(13, fontSize - 2)))
                         .textSelection(.enabled)
@@ -87,7 +98,9 @@ struct ContentView: View {
                 }
                 HStack {
                     Button { copy(text) } label: { Label("복사", systemImage: "doc.on.doc") }
-                    Button { session.summarize() } label: { Label("다시 생성", systemImage: "arrow.clockwise") }
+                    Button { summaryBySpeaker ? session.summarizeBySpeaker() : session.summarize() } label: {
+                        Label("다시 생성", systemImage: "arrow.clockwise")
+                    }
                     Spacer()
                     Button("내보내기…") { export(.init(filenameExtension: "md")!) { try text.write(to: $0, atomically: true, encoding: .utf8) } }
                 }.font(Theme.Fonts.status)
@@ -95,7 +108,7 @@ struct ContentView: View {
             qaBlock
         }
         .padding(Theme.Space.window)
-        .frame(width: 520, height: 520)
+        .frame(width: 520, height: 540)
     }
 
     // "회의록한테 물어보기" — Q&A grounded in the transcript, on-device.
