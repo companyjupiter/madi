@@ -226,12 +226,38 @@ final class SessionController: EngineProcessDelegate {
         } catch { /* non-fatal — manual export remains available */ }
     }
 
+    /// Persistent per-speaker voiceprints. When you name a speaker, their centroid
+    /// (dumped by the engine to <dir>/.last/spk<id>.vec at session end) is enrolled
+    /// as <name>.vec; the next live session loads it and auto-labels that voice —
+    /// "김부장" recognized across meetings, fully on-device. (live/stream only)
+    let voiceprintsDir: URL = {
+        let base = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser)
+            .appendingPathComponent("Sovereign/voiceprints", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }()
+
     /// Rename a speaker (applies to all their lines + exports). Empty clears it
-    /// back to "Speaker N". Names are per-transcription (speaker ids don't carry
-    /// across files), so they reset on each new session.
+    /// back to "Speaker N". Naming also ENROLLS the voiceprint so the voice is
+    /// recognized in future sessions (if the engine dumped this session's centroid).
     func renameSpeaker(_ id: Int, to name: String) {
         let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.isEmpty { speakerNames[id] = nil } else { speakerNames[id] = t }
+        if t.isEmpty { speakerNames[id] = nil; return }
+        speakerNames[id] = t
+        enrollVoiceprint(speaker: id, name: t)
+    }
+
+    /// Copy this session's speaker centroid (.last/spk<id>.vec) to <name>.vec so the
+    /// next live session recognizes the voice. No-op if no centroid was dumped
+    /// (e.g. file-mode transcription, or the speaker never stabilized).
+    private func enrollVoiceprint(speaker id: Int, name: String) {
+        let safe = name.replacingOccurrences(of: "/", with: "_")
+        let src = voiceprintsDir.appendingPathComponent(".last/spk\(id).vec")
+        let dst = voiceprintsDir.appendingPathComponent("\(safe).vec")
+        guard FileManager.default.fileExists(atPath: src.path) else { return }
+        try? FileManager.default.removeItem(at: dst)
+        try? FileManager.default.copyItem(at: src, to: dst)
     }
 
     private var engine: EngineProcess?
@@ -247,7 +273,7 @@ final class SessionController: EngineProcessDelegate {
             bpeURL: AssetManifest.bundledBPE,
             assetsDir: AssetManifest.bundledAssetsDir,
             diarize: diarize, osd: osd,
-            languageTokenID: languageTokenID, maxSpeakers: 8, voiceprintsDir: nil,
+            languageTokenID: languageTokenID, maxSpeakers: 8, voiceprintsDir: voiceprintsDir,
             streamWavRoots: [capture.segmentDirectory])
     }
 
@@ -428,6 +454,10 @@ final class SessionController: EngineProcessDelegate {
             // auto-detect locked → start the preview engine in THAT language
             // (no-op if already started / preview off)
             if livePreviewEnabled { preview.start(config: makeConfig(), lang: tok) }
+        case .speakerName(let id, let name):
+            // a live speaker matched an enrolled voiceprint → auto-label (the user
+            // can still override). Cross-session speaker re-identification.
+            speakerNames[id] = name
         default: transcript.ingest(event)
         }
     }

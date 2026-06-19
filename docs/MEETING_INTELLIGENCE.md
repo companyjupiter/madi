@@ -46,8 +46,18 @@ Reply is in the transcript's own language (Korean meeting → Korean; English �
   CLI-verified). The engine is now resident across summary + follow-up questions
   (no 2.6 GB reload per question), tag-routed (summary/qa).
 
+## Shipped — cross-session speaker re-identification
+The engine already had a voiceprint hook (`VOICEPRINTS=<dir>` of `<name>.vec`,
+loaded live; on a centroid match it emits `SPKNAME <id> <name>`; at session end it
+dumps `<dir>/.last/spk<id>.vec`). Wired the app side, fully on-device:
+- `makeConfig` passes a persistent `voiceprintsDir` (App Support/Sovereign/voiceprints).
+- **Enroll:** `renameSpeaker(id, name)` copies this session's `.last/spk<id>.vec`
+  → `<name>.vec`. Name a speaker once.
+- **Recognize:** next live session loads it; the engine emits `SPKNAME` on match →
+  `EngineEvent.speakerName` → auto-labels that voice (user can still override).
+- So "김부장" is recognized across meetings — and feeds speaker-aware summaries.
+  (live/stream only; file-mode has no centroid dump.)
+
 ## Roadmap (the moat, deepened)
-- Speaker re-identification across sessions (engine `voiceprintsDir` hook) →
-  speaker-aware summaries that persist who-said-what across meetings.
 - 9B model A/B for summary/translation quality.
 - Map-reduce summarization for very long meetings (beyond one context window).
