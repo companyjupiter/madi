@@ -101,6 +101,7 @@ struct ContentView: View {
                     Button { summaryBySpeaker ? session.summarizeBySpeaker() : session.summarize() } label: {
                         Label("다시 생성", systemImage: "arrow.clockwise")
                     }
+                    Button { exportDeck() } label: { Label("슬라이드(HTML)", systemImage: "rectangle.on.rectangle.angled") }
                     Spacer()
                     Button("내보내기…") { export(.init(filenameExtension: "md")!) { try text.write(to: $0, atomically: true, encoding: .utf8) } }
                 }.font(Theme.Fonts.status)
@@ -143,6 +144,12 @@ struct ContentView: View {
     private func copy(_ s: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(s, forType: .string)
+    }
+    // save the summary as a presentation HTML deck, then reveal it in Finder
+    private func exportDeck() {
+        if let url = session.exportSummaryDeck() {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
     }
 
     // MARK: transcript pane (left, flexible)

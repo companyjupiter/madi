@@ -70,3 +70,12 @@ then folded again until one fits → the final [요약]/[액션]/[결정] (or �
 Recursive (handles 2-hr meetings), with a round cap as a non-convergence guard.
 Short meetings still take the single-request path. CLI-verified the condense step
 preserves per-speaker actions.
+
+## Shipped — presentation HTML deck export
+The summary exports as a self-contained, PPT-style **`summary-<date>-<n>.html`**
+(into the auto-save folder): a title slide + one slide per [요약]/[액션]/[결정]
+section (+ a 화자별 slide if generated). Inline CSS (Warm Focus palette, dark-mode
+aware, Korean font stack), scroll-snap slides, arrow-key nav, print-to-PDF — zero
+external assets, opens in any browser offline. `SummaryDeck` is pure + unit-tested
+(parse → slides, HTML-escaping, filename). Button: 요약 시트의 "슬라이드(HTML)".
+

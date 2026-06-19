@@ -509,6 +509,21 @@ final class SessionController: EngineProcessDelegate {
         try Exporters.markdown(transcript.lines, names: speakerNames, summary: meetingSummary)
             .write(to: url, atomically: true, encoding: .utf8)
     }
+
+    /// Render the meeting summary as a self-contained, presentation-style HTML deck
+    /// and save it as summary-<date>-<n>.html in the auto-save folder. Returns the
+    /// saved URL (nil if there's no summary yet or the write failed).
+    func exportSummaryDeck() -> URL? {
+        guard let summary = meetingSummary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        let title = fileName.isEmpty ? "회의 요약" : (fileName as NSString).deletingPathExtension
+        let df = DateFormatter(); df.dateFormat = "yyyy년 M월 d일"
+        let html = SummaryDeck.html(summary: summary, speakerSummary: speakerSummary,
+                                    title: title, dateText: df.string(from: Date()))
+        let url = autoSaveFolder.appendingPathComponent(SummaryDeck.filename(in: autoSaveFolder, date: Date()))
+        do { try html.write(to: url, atomically: true, encoding: .utf8); return url }
+        catch { return nil }
+    }
     func exportSRT(to url: URL) throws {
         try Exporters.srt(transcript.lines, names: speakerNames)
             .write(to: url, atomically: true, encoding: .utf8)
