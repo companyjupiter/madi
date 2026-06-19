@@ -7,8 +7,12 @@ enum Exporters {
     /// Markdown: low-confidence words become *italic* (markdown has no color) so
     /// the SAVED doc still flags exactly the words to double-check — the export
     /// keeps the live view's confidence signal instead of dropping it.
-    static func markdown(_ lines: [Line], names: [Int: String] = [:]) -> String {
+    static func markdown(_ lines: [Line], names: [Int: String] = [:], summary: String? = nil) -> String {
         var s = "# Transcript\n\n"
+        // On-device meeting summary first, so the .md opens with the gist + actions.
+        if let summary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            s += "## 회의 요약\n\n\(summary)\n\n---\n\n"
+        }
         s += "> *기울임* 표시된 단어는 인식 신뢰도가 낮습니다 — 검토 권장.\n\n"
         for l in lines {
             let who = names[l.speaker] ?? "Speaker \(l.speaker)"

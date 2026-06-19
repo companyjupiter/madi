@@ -38,9 +38,16 @@ Reply is in the transcript's own language (Korean meeting → Korean; English �
   call-graph: `ContentView.viewModeBar → SessionController.summarize →
   SummaryEngine.summarize`, all reachable from `@main`.
 
+## Shipped since v1
+- **Summary folded into the auto-saved `.md`** — when generated, the saved file is
+  rewritten to open with a `## 회의 요약` section; manual `.md` export includes it too.
+- **Transcript Q&A** ("회의록에 물어보기") — `SummaryEngine.ask` answers grounded
+  ONLY in the transcript (says "회의록에 해당 내용이 없습니다" rather than hallucinating;
+  CLI-verified). The engine is now resident across summary + follow-up questions
+  (no 2.6 GB reload per question), tag-routed (summary/qa).
+
 ## Roadmap (the moat, deepened)
-- Append the summary to the auto-saved `.md`.
-- Transcript Q&A ("무엇을 결정했지?") over the local transcript.
 - Speaker re-identification across sessions (engine `voiceprintsDir` hook) →
   speaker-aware summaries that persist who-said-what across meetings.
 - 9B model A/B for summary/translation quality.
+- Map-reduce summarization for very long meetings (beyond one context window).

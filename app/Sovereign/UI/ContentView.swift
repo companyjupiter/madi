@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var scrollTarget: UUID? = nil
     @State private var scrollTick = 0
     @State private var showSummary = false   // on-device meeting summary sheet
+    @State private var qaInput = ""          // "ask the meeting" question
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
     private var flaggedWords: [(line: UUID, text: String)] {
@@ -91,9 +92,39 @@ struct ContentView: View {
                     Button("내보내기…") { export(.init(filenameExtension: "md")!) { try text.write(to: $0, atomically: true, encoding: .utf8) } }
                 }.font(Theme.Fonts.status)
             }
+            qaBlock
         }
         .padding(Theme.Space.window)
-        .frame(width: 520, height: 460)
+        .frame(width: 520, height: 520)
+    }
+
+    // "회의록한테 물어보기" — Q&A grounded in the transcript, on-device.
+    private var qaBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider().overlay(Theme.Colors.separator)
+            Text("회의록에 물어보기").font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
+            HStack(spacing: 6) {
+                TextField("예: 무엇을 결정했나요? / 김부장이 맡은 일은?", text: $qaInput)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { ask() }
+                Button { ask() } label: { Image(systemName: "paperplane.fill") }
+                    .disabled(qaInput.trimmingCharacters(in: .whitespaces).isEmpty || session.qaAsking)
+            }
+            if session.qaAsking {
+                HStack(spacing: 6) { ProgressView().controlSize(.small); Text("로컬 LLM이 답하는 중…").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary) }
+            } else if let a = session.qaAnswer {
+                Text(a).font(.system(size: max(12, fontSize - 3)))
+                    .foregroundStyle(Theme.Colors.textPrimary).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: Theme.Radius.card).fill(Theme.Colors.accent.opacity(0.06)))
+            }
+        }
+    }
+    private func ask() {
+        let q = qaInput.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return }
+        session.askTranscript(q)
     }
 
     private func copy(_ s: String) {
