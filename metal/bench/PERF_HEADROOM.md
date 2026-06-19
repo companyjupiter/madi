@@ -51,3 +51,27 @@ bandwidth lever was already refuted. The single time-boxed candidate is an
 occupancy-oriented rewrite of `m4_flash_enc` (fewer threadgroup barriers / larger
 tiles). Everything else (conv, norms, decoder) is already negligible. Logged here
 rather than chased blind, per the autonomous-pursuit policy.
+
+## Micro-bench counter-verification (2026-06-19, collapse-immune harnesses)
+The full-engine `SOV_METAL_PROFILE` collapses decode (above), so per-kernel A/B
+uses the project's micro-harnesses (`test_m4`, `test_p5probe`, `test_decoder`) —
+isolated, controllable dims, old-vs-new in one binary. Findings **revise** the map:
+
+- **Decoder bottleneck is NOT attention.** `test_p5probe` B=8: FULL vs `SKIP_ATTN=1`
+  are equal within noise (median ~6.8 ms/step both; first run is thermal). Skipping
+  self+cross attention does **not** speed the decoder block → the cost is the
+  **GEMVs** (logit projection 1280×~51865/token + the per-layer Q8 q/k/v/out/FFN
+  GEMVs), which are weight-bandwidth bound. The earlier "decoder cross-attn" target
+  is **refuted**. Real decoder lever (if any) = the logit/Q8 GEMVs.
+- **Encoder `m4_flash_enc` is already 1.25× over the old kernel** (`test_m4`:
+  old 4.80 ms → m4 3.86 ms, max|Δ|=6e-5, bit-exact-class). `m4_gemm` is at the MPS
+  ceiling (MPS 3.79 ms vs M4 3.45 ms, 1.10×). Little custom-kernel headroom left.
+- **Caveat — micro-bench variance ±~30%** on this thermally-throttling machine
+  (FULL runs measured 9.1/6.8/6.9 ms). Only wins >~1.3× clear the noise floor;
+  smaller deltas are `ledger_v8` NOISE, not WIN. Any claimed win needs n≥5 + a
+  warm-up discard, or it isn't real.
+
+**Net:** the obvious kernels (encoder flash, decoder attention) are refuted as free
+headroom. The one un-refuted lever is the **decoder logit/Q8 GEMV bandwidth** —
+a from-scratch GEMV-kernel effort (or int4 weights, cf. task #20), high-risk and
+noise-limited to verify. Not chased blind; flagged for an explicit go/no-go.
