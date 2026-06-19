@@ -27,6 +27,11 @@ final class SessionController: EngineProcessDelegate {
     var diarize = true
     var inputDeviceID: AudioDeviceID?          // nil = system default mic
     var availableInputs: [AudioInputDevice] { AudioDevices.inputs() }
+    /// Capture source: 마이크 / 시스템 오디오(Teams·Slack·YouTube) / 마이크+시스템.
+    /// Persisted; applied at the next record start.
+    var audioSource: AudioSource = AudioSource(rawValue: UserDefaults.standard.string(forKey: "audioSource") ?? "mic") ?? .mic {
+        didSet { UserDefaults.standard.set(audioSource.rawValue, forKey: "audioSource") }
+    }
     var osd = true
     // restored from the last launch (0 / unset = auto-detect)
     var languageTokenID: Int? = {
@@ -361,6 +366,12 @@ final class SessionController: EngineProcessDelegate {
         engine = e
 
         capture.inputDeviceID = inputDeviceID  // bind chosen mic before start
+        capture.source = audioSource           // mic / system / both
+        capture.onError = { [weak self] msg in
+            guard let self else { return }
+            // surface a system-audio failure without killing a running mic+system mix
+            if self.audioSource == .system { self.phase = .error(msg) }
+        }
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
         let win = effectiveWindowSeconds   // 2개+ 번역 시 정확(10초) 강제
         capture.segmentSeconds = win

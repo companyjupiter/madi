@@ -14,6 +14,14 @@
 
 import AVFoundation
 
+/// Where the audio comes from. `system` = ScreenCaptureKit (Teams/Slack/YouTube);
+/// `both` = mic + system mixed (online meeting: you + remote participants).
+enum AudioSource: String, CaseIterable, Identifiable {
+    case mic, system, both
+    var id: String { rawValue }
+    var label: String { self == .mic ? "마이크" : self == .system ? "시스템 오디오" : "마이크+시스템" }
+}
+
 @MainActor
 final class AudioCapture {
     /// SEG/OVERLAP mirror the runner defaults; user-tunable in Settings.
@@ -34,7 +42,12 @@ final class AudioCapture {
     var onLevel: ((Float) -> Void)?
     /// Specific input device (nil = system default).
     var inputDeviceID: AudioDeviceID?
+    /// Audio source: mic / system / both. Set before start().
+    var source: AudioSource = .mic
+    /// Surfaced when system-audio capture fails (e.g. Screen-Recording denied).
+    var onError: ((String) -> Void)?
 
+    private var sysCapture: SystemAudioCapture?
     private let engine = AVAudioEngine()
     private var resampler: Resampler?
     private var segmenter = Segmenter()
@@ -51,24 +64,58 @@ final class AudioCapture {
     // MARK: live mic
 
     func start() throws {
-        if let dev = inputDeviceID { AudioDevices.setInput(dev, on: engine) } // pick the chosen mic
-        let input = engine.inputNode
-        let hwFormat = input.outputFormat(forBus: 0)
-        guard let rs = Resampler(from: hwFormat) else {
-            throw NSError(domain: "AudioCapture", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "resampler init failed"])
-        }
-        resampler = rs
         resetSegmenter()
+        micPending.removeAll(); sysPending.removeAll()
 
-        input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self, rs] buf, _ in
-            let samples = rs.convert(buf)
-            guard !samples.isEmpty else { return }
-            let level = AudioCapture.rmsLevel(samples)
-            Task { @MainActor in self?.consume(samples, level: level) }
+        if source != .system {   // mic or both
+            if let dev = inputDeviceID { AudioDevices.setInput(dev, on: engine) }
+            let input = engine.inputNode
+            let hwFormat = input.outputFormat(forBus: 0)
+            guard let rs = Resampler(from: hwFormat) else {
+                throw NSError(domain: "AudioCapture", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "resampler init failed"])
+            }
+            resampler = rs
+            input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self, rs] buf, _ in
+                let samples = rs.convert(buf)
+                guard !samples.isEmpty else { return }
+                let level = AudioCapture.rmsLevel(samples)
+                Task { @MainActor in self?.ingest(samples, level: level, mic: true) }
+            }
+            engine.prepare()
+            try engine.start()
         }
-        engine.prepare()
-        try engine.start()
+
+        if source != .mic {      // system or both
+            let sc = SystemAudioCapture()
+            sc.onSamples = { [weak self] s, lvl in self?.ingest(s, level: lvl, mic: false) }
+            sc.onError = { [weak self] msg in self?.onError?(msg) }
+            sysCapture = sc
+            Task { [weak self] in
+                do { try await sc.start() }
+                catch { self?.onError?("시스템 오디오를 시작할 수 없습니다 — 화면 기록 권한을 허용하세요. (\(error.localizedDescription))") }
+            }
+        }
+    }
+
+    /// Route a source's samples: single-source → straight to the segmenter; `both`
+    /// → time-aligned mix (sum the overlapping prefix; a stalled source counts as
+    /// silence so an absent/silent side never blocks the other).
+    private var micPending: [Int16] = []
+    private var sysPending: [Int16] = []
+    private func ingest(_ samples: [Int16], level: Float, mic: Bool) {
+        guard source == .both else { consume(samples, level: level); return }
+        if paused { onLevel?(0); micPending.removeAll(); sysPending.removeAll(); return }
+        if mic { micPending.append(contentsOf: samples) } else { sysPending.append(contentsOf: samples) }
+        let stall = WavWriter.sampleRate * 2   // 2 s: a side with no counterpart → flush solo
+        if micPending.count > stall, sysPending.isEmpty { let m = micPending; micPending.removeAll(); consume(m, level: AudioCapture.rmsLevel(m)); return }
+        if sysPending.count > stall, micPending.isEmpty { let s = sysPending; sysPending.removeAll(); consume(s, level: AudioCapture.rmsLevel(s)); return }
+        let n = min(micPending.count, sysPending.count)
+        guard n > 0 else { return }
+        var mixed = [Int16](); mixed.reserveCapacity(n)
+        for i in 0..<n { mixed.append(Int16(max(-32768, min(32767, Int(micPending[i]) + Int(sysPending[i]))))) }
+        micPending.removeFirst(n); sysPending.removeFirst(n)
+        consume(mixed, level: AudioCapture.rmsLevel(mixed))
     }
 
     /// Pause/resume: keep the AVAudioEngine running (mic warm, instant resume)
@@ -81,8 +128,14 @@ final class AudioCapture {
     /// Finish the current partial window (final tail) and stop.
     func stop() {
         paused = false
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        if source != .system { engine.inputNode.removeTap(onBus: 0); engine.stop() }
+        sysCapture?.stop(); sysCapture = nil
+        // mix tail: flush whatever remains (the other side counts as silence)
+        if source == .both {
+            let tail = micPending.count >= sysPending.count ? micPending : sysPending
+            if !tail.isEmpty { consume(tail, level: 0) }
+            micPending.removeAll(); sysPending.removeAll()
+        }
         if let seg = segmenter.flush() { write(seg) }
     }
 
