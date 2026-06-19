@@ -62,12 +62,22 @@ final class TranslateEngine {
     /// Queue a translation of `text` into each of `targets` (English language
     /// names, e.g. ["Japanese","English","Chinese"]) for `id`. Results arrive via
     /// onResult per (id, lang), FIFO — the engine serializes the turns.
+    // A one-word anchor in the TARGET language. DNA3.0-4B is Korean-centric and,
+    // for longer Korean inputs, would "translate" KO→JA by just rephrasing in
+    // Korean (verified via the engine CLI: 日 returned 한국어). A single in-target
+    // example ("Hello => <anchor>") locks the model onto the target script and
+    // fixes it, with no echo and no regression for 中/EN. (Quality lever beyond
+    // this = the 9B model — deferred A/B.)
+    private static let anchor: [String: String] =
+        ["Korean": "안녕하세요", "English": "Hello", "Japanese": "こんにちは", "Chinese": "你好"]
+
     func translate(_ text: String, into targets: [String], id: UUID) {
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !oneLine.isEmpty else { return }
         for target in targets {
-            let prompt = "Translate the following into \(target). Reply with only the translation, no notes or quotes: \(oneLine)"
+            let a = Self.anchor[target] ?? "Hello"
+            let prompt = "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — Hello => \(a) . Now: \(oneLine) =>"
             let turn = Turn(id: id, lang: target, source: oneLine, prompt: prompt, retries: 2)
             if ready { send(turn) } else { queued.append(turn) }
         }
