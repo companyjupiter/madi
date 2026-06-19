@@ -73,6 +73,17 @@ final class SummaryEngine {
             + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(t)")
     }
 
+    /// Per-speaker breakdown: each speaker's key point + the actions they own.
+    /// Leverages persistent speaker identity (voiceprints) — "who is on the hook".
+    func summarizeBySpeaker(lines: [String]) {
+        let t = transcriptOneLine(lines)
+        guard !t.isEmpty else { onResult?("speakers", nil); return }
+        enqueue("speakers",
+            "다음 회의록을 화자별로 정리하세요. 회의록과 같은 언어로. "
+            + "각 화자마다 '■ 이름: 핵심 발언 1문장. 맡은 일: - 할 일'(맡은 일 없으면 그 부분 생략). "
+            + "다른 말 없이 이 형식만. 회의록: \(t)")
+    }
+
     /// Answer a question grounded ONLY in the transcript (no outside knowledge);
     /// says it's not in the transcript rather than hallucinating.
     func ask(_ question: String, lines: [String]) {
