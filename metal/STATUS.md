@@ -13,13 +13,18 @@ lives in `PERF_LOG.md`; diarization study in `bench/*.md`. Re-measured 2026-06-0
 | silence → no output / no spurious speakers | ✅ |
 | diar embedding vs onnxruntime | ✅ cosine 1.000000 |
 
-## Performance (jfk, M4 Pro)
-| metric | baseline | now |
-|---|---|---|
-| conv front-end | ~95 ms | ~21 ms |
-| encoder / chunk | 1390 ms | ~653 ms |
-| decode | 134 tok/s | ~188 tok/s |
-| **peak RSS** | 4.78 GB | **1.11 GB** |
+## Performance (jfk, M4 Pro) — remeasured 2026-06-19, current build
+| metric | baseline | prev doc | now (measured) |
+|---|---|---|---|
+| conv front-end | ~95 ms | ~21 ms | **~15 ms** |
+| encoder / chunk | 1390 ms | ~653 ms | **~568 ms** (1 chunk) · **~501 ms for a 4-chunk batch ≈125 ms/chunk** |
+| decode | 134 tok/s | ~188 tok/s | **~402 tok/s** (jfk, 26 tok) · **~485–496 tok/s** steady (long chunks, 3-min conv) |
+| **peak RSS** | 4.78 GB | 1.11 GB | **1.05 GB** (jfk) · 1.26 GB (3-min, batch-4 encode resident) |
+
+> The ~188 tok/s figure predated persistent on-GPU decode + the batched-attention
+> kernel; current decode is **2.1–2.6× faster** (jfk ~402, longer chunks ~490 tok/s).
+> Method: `DIAR=0 ./out/transcribe model.q8.safetensors <wav> assets/WHISPER_BPE.bin`,
+> reading the engine's own `[perf]` line; jfk 3-run stable (402.4/401.4/402.7).
 
 RSS journey: 4.78 → 3.40 (Q8-1) → 3.13 (Q8-2) → 2.54 (Q8-3) → 1.02 (pread loader)
 → 1.11 (+ ResNet34 diar). ⚠️ A diar arena/threads leak briefly pushed this to
