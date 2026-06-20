@@ -256,7 +256,7 @@ final class SessionController: EngineProcessDelegate {
     let voiceprintsDir: URL = {
         let base = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser)
-            .appendingPathComponent("Sovereign/voiceprints", isDirectory: true)
+            .appendingPathComponent("Madiscribe/voiceprints", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }()

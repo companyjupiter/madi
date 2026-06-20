@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make_app.sh — build Sovereign.app entirely with swiftc (no Xcode project).
+# make_app.sh — build Madiscribe.app entirely with swiftc (no Xcode project).
 #
 # Compiles the SwiftUI sources into an arm64 binary, assembles the .app bundle
 # (Info.plist + engine binary + the 7 assets the engine actually opens via
@@ -7,14 +7,14 @@
 # notarization is a separate step (sign_notarize.sh).
 #
 # Usage:
-#   make_app.sh [outdir]          # default ./build → ./build/Sovereign.app
+#   make_app.sh [outdir]          # default ./build → ./build/Madiscribe.app
 #   SEED_MODEL=1 make_app.sh      # also symlink the repo model into App Support
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "$HERE/.." && pwd)"        # app/
 ROOT="$(cd "$APP_DIR/../.." && pwd)"     # repo root (apps/macos → ..)
 OUT="${1:-$APP_DIR/build}"
-BUNDLE="$OUT/Sovereign.app"
+BUNDLE="$OUT/Madiscribe.app"
 
 # ── 0. engine must exist ────────────────────────────────────────────────────
 if [ ! -x "$ROOT/engine/metal/out/transcribe" ]; then
@@ -57,13 +57,13 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/SettingsView.swift
 )
 swiftc -O -parse-as-library -target arm64-apple-macosx14.0 \
-  "${SRCS[@]}" -o "$OUT/Sovereign"
+  "${SRCS[@]}" -o "$OUT/Madiscribe"
 
 # ── 2. assemble bundle ──────────────────────────────────────────────────────
 echo "[2/4] assemble $BUNDLE"
 rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/assets-small"
-cp "$OUT/Sovereign" "$BUNDLE/Contents/MacOS/Sovereign"
+cp "$OUT/Madiscribe" "$BUNDLE/Contents/MacOS/Madiscribe"
 cp "$APP_DIR/Sovereign/Info.plist" "$BUNDLE/Contents/Info.plist"
 cp "$ROOT/engine/metal/out/transcribe" "$BUNDLE/Contents/MacOS/transcribe"
 # engine @embedFile's the metallib; external copy is informational only —

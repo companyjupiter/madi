@@ -1,4 +1,4 @@
-# Sovereign Whisper — macOS app
+# Madiscribe — macOS app
 
 Standalone window app that wraps the bit-validated `metal/` engine into a
 signed, notarized `.dmg` for Apple Silicon (M1+). See [DESIGN.md](DESIGN.md)

@@ -35,7 +35,7 @@ struct SovereignApp: App {
     @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some Scene {
-        WindowGroup("Sovereign Whisper") {
+        WindowGroup("Madiscribe") {
             ContentView(session: session, downloader: downloader)
                 .frame(minWidth: Theme.Size.windowMinW, minHeight: Theme.Size.windowMinH)
                 .preferredColorScheme(appearance.colorScheme)

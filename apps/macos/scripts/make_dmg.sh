@@ -5,7 +5,7 @@ set -euo pipefail
 APP="${1:?usage: make_dmg.sh <path/to/Sovereign.app> [version]}"
 VER="${2:-1.0}"
 OUT="Sovereign-$VER.dmg"
-VOL="Sovereign Whisper"
+VOL="Madiscribe"
 
 rm -f "$OUT"
 if command -v create-dmg >/dev/null 2>&1; then
