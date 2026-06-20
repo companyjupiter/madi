@@ -1,4 +1,4 @@
-# Sovereign Whisper — Apple Silicon (Metal) 한글 사용 가이드
+# Madiscribe — Apple Silicon (Metal) 한글 사용 가이드
 
 Apple Silicon에서 동작하는 자체완결형 Whisper **large-v3-turbo** 음성인식기입니다.
 **워드 타임스탬프**, **화자 분리(diarization, 누가-언제-무엇을)**, **언어 자동감지**,
