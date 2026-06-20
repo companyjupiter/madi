@@ -12,12 +12,12 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "$HERE/.." && pwd)"        # app/
-ROOT="$(cd "$APP_DIR/.." && pwd)"        # repo root
+ROOT="$(cd "$APP_DIR/../.." && pwd)"     # repo root (apps/macos → ..)
 OUT="${1:-$APP_DIR/build}"
 BUNDLE="$OUT/Sovereign.app"
 
 # ── 0. engine must exist ────────────────────────────────────────────────────
-if [ ! -x "$ROOT/metal/out/transcribe" ]; then
+if [ ! -x "$ROOT/engine/metal/out/transcribe" ]; then
   echo "engine missing — building"; "$HERE/build_engine.sh"
 fi
 
@@ -65,17 +65,17 @@ rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/assets-small"
 cp "$OUT/Sovereign" "$BUNDLE/Contents/MacOS/Sovereign"
 cp "$APP_DIR/Sovereign/Info.plist" "$BUNDLE/Contents/Info.plist"
-cp "$ROOT/metal/out/transcribe" "$BUNDLE/Contents/MacOS/transcribe"
+cp "$ROOT/engine/metal/out/transcribe" "$BUNDLE/Contents/MacOS/transcribe"
 # engine @embedFile's the metallib; external copy is informational only —
 # Resources/ so it's sealed by the bundle signature, not treated as code
-cp "$ROOT/metal/whisper.metallib" "$BUNDLE/Contents/Resources/whisper.metallib"
+cp "$ROOT/engine/metal/whisper.metallib" "$BUNDLE/Contents/Resources/whisper.metallib"
 
 # only what the engine opens via bpe_dir(bpe_path) — verified in transcribe.zig
 ASSETS=( WHISPER_BPE.bin mel_filters.bin resnet34_diar.bin kaldi_melbank.bin
          silero_vad.bin pyannote_osd.bin suppress_tokens.bin )
 for f in "${ASSETS[@]}"; do
-  if [ -f "$ROOT/metal/assets/$f" ]; then
-    cp "$ROOT/metal/assets/$f" "$BUNDLE/Contents/Resources/assets-small/$f"
+  if [ -f "$ROOT/engine/metal/assets/$f" ]; then
+    cp "$ROOT/engine/metal/assets/$f" "$BUNDLE/Contents/Resources/assets-small/$f"
   else
     echo "  ⚠ missing asset: $f (engine degrades or fails — check gen_diar_assets.sh)"
   fi
@@ -84,7 +84,7 @@ done
 # ── 2b. optional: bundle the model INSIDE the .app (self-contained DMG) ──────
 # Must happen BEFORE signing so the 867 MB model is sealed by the bundle
 # signature. AssetManifest.modelURL then prefers this copy → no download.
-MODEL_Q8="$ROOT/metal/bench/runs/model.q8.safetensors"
+MODEL_Q8="$ROOT/engine/metal/bench/runs/model.q8.safetensors"
 if [ "${BUNDLE_MODEL:-0}" = "1" ]; then
   if [ -f "$MODEL_Q8" ]; then
     echo "[2b] bundling model into app ($(du -h "$MODEL_Q8" | cut -f1)) — self-contained"

@@ -36,29 +36,30 @@ zig-out/
 *.bin
 *.wav
 *.npz
+*.tar.gz
 
 # ── Model-asset folder: keep only generator scripts + docs ───────
-metal/assets/*
-!metal/assets/gen_assets.py
-!metal/assets/export_enc_weights.py
-!metal/assets/README.md
+engine/metal/assets/*
+!engine/metal/assets/gen_assets.py
+!engine/metal/assets/export_enc_weights.py
+!engine/metal/assets/README.md
 
 # diarization benchmark data (large, not versioned)
-metal/bench/*.wav
-metal/bench/*.rttm
-metal/bench/md-eval.pl
-metal/bench/*.bin
-metal/bench/*.log
-metal/bench/*.onnx
-metal/assets/resnet34_diar.bin
-metal/assets/kaldi_melbank.bin
-metal/bench/__pycache__/
+engine/metal/bench/*.wav
+engine/metal/bench/*.rttm
+engine/metal/bench/md-eval.pl
+engine/metal/bench/*.bin
+engine/metal/bench/*.log
+engine/metal/bench/*.onnx
+engine/metal/assets/resnet34_diar.bin
+engine/metal/assets/kaldi_melbank.bin
+engine/metal/bench/__pycache__/
 
 # macOS app build artifacts
-app/build/
-app/*.xcodeproj/xcuserdata/
-app/DerivedData/
+apps/macos/build/
+apps/macos/*.xcodeproj/xcuserdata/
+apps/macos/DerivedData/
 *.dmg
-metal/bench/wer_runs/
-metal/bench/runs/*
-!metal/bench/runs/README.md
+engine/metal/bench/wer_runs/
+engine/metal/bench/runs/*
+!engine/metal/bench/runs/README.md
