@@ -14,7 +14,7 @@ struct ModelGateView: View {
                 .frame(width: 104, height: 104)
                 .background(Circle().fill(Theme.Colors.accent.opacity(0.10)))
             VStack(spacing: 4) {
-                Text("Madiscribe").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.brandMark)
+                Text("Madi").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.brandMark)
                 Text("기기 안에서 안전하게 회의를 기록합니다")
                     .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
             }

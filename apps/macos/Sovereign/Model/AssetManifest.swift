@@ -66,10 +66,10 @@ enum AssetManifest {
     /// (downloaded) are present.
     static var translateAvailable: Bool { translateEngineURL != nil && translateModelIsValid() }
 
-    /// App Support root: ~/Library/Application Support/Madiscribe/
+    /// App Support root: ~/Library/Application Support/Madi/
     static var supportDir: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = base.appendingPathComponent("Madiscribe", isDirectory: true)
+        let dir = base.appendingPathComponent("Madi", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

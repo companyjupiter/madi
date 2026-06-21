@@ -1,4 +1,4 @@
-# Madiscribe — Apple Silicon (Metal)
+# Madi — Apple Silicon (Metal)
 
 Self-contained Whisper **large-v3-turbo** speech-to-text for Apple Silicon, with
 **word timestamps**, **speaker diarization** (who-said-what), **language
