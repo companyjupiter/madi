@@ -13,7 +13,13 @@ enum Theme {
                 ? NSColor(red: 0.3490, green: 0.7176, blue: 0.9686, alpha: 1.0)   // skyblue (dark)
                 : NSColor(red: 0.3529, green: 0.4039, blue: 0.8471, alpha: 1.0)   // indigo (light)
         })
-        static let brandMark = Color(red: 0.2784, green: 0.6824, blue: 0.9569, opacity: 1.0)  // bright skyblue — Madiscribe wordmark
+        // Madiscribe wordmark: indigo in light mode, bright skyblue in dark mode.
+        static let brandMark = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(red: 0.2784, green: 0.6824, blue: 0.9569, alpha: 1.0)   // bright skyblue (dark)
+                : NSColor(red: 0.3529, green: 0.4039, blue: 0.8471, alpha: 1.0)   // indigo (light)
+        })
         static let recording = Color(red: 0.8980, green: 0.2824, blue: 0.3020, opacity: 1.0)
         static let meterFill = Color(red: 0.2039, green: 0.7804, blue: 0.4824, opacity: 1.0)
         static let meterTrack = Color(nsColor: .quaternaryLabelColor)
