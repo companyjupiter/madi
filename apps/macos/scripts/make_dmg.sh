@@ -2,9 +2,9 @@
 # make_dmg.sh — wrap the signed+notarized app into a DMG and staple the DMG.
 # Uses create-dmg if available (brew install create-dmg), else hdiutil.
 set -euo pipefail
-APP="${1:?usage: make_dmg.sh <path/to/Sovereign.app> [version]}"
+APP="${1:?usage: make_dmg.sh <path/to/Madiscribe.app> [version]}"
 VER="${2:-1.0}"
-OUT="Sovereign-$VER.dmg"
+OUT="Madiscribe-$VER.dmg"
 VOL="Madiscribe"
 
 rm -f "$OUT"
