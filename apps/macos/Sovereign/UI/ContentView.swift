@@ -357,7 +357,7 @@ struct ContentView: View {
                 Image(systemName: "waveform")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.Colors.accent)
-                Text("Madiscribe").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.accent)
+                Text("Madiscribe").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.brandMark)
                 Spacer()
                 SettingsLink { Image(systemName: "gearshape").font(.system(size: 14)) }
                     .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
