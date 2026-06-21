@@ -1,4 +1,4 @@
-# Madiscribe — macOS 제품 설계 (DMG 배포)
+# Madi — macOS 제품 설계 (DMG 배포)
 
 > 목표: 검증된 `metal/` 엔진을 **한 줄도 수정하지 않고** 감싸는 독립 윈도우
 > macOS 앱(M1+)으로 만들어 Developer ID 서명 + 노터라이즈된 `.dmg`로 배포한다.
@@ -219,7 +219,7 @@ xcrun stapler staple "Sovereign.app"
 
 ### 7.4 `make_dmg.sh`
 ```bash
-create-dmg --volname "Madiscribe" \
+create-dmg --volname "Madi" \
   --app-drop-link 480 200 --icon "Sovereign.app" 160 200 \
   "Sovereign-1.0.dmg" "Sovereign.app"   # 또는 hdiutil create
 xcrun stapler staple "Sovereign-1.0.dmg"   # DMG에도 티켓

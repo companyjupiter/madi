@@ -13,7 +13,7 @@ enum Theme {
                 ? NSColor(red: 0.3490, green: 0.7176, blue: 0.9686, alpha: 1.0)   // skyblue (dark)
                 : NSColor(red: 0.3529, green: 0.4039, blue: 0.8471, alpha: 1.0)   // indigo (light)
         })
-        // Madiscribe wordmark: indigo in light mode, bright skyblue in dark mode.
+        // Madi wordmark: indigo in light mode, bright skyblue in dark mode.
         static let brandMark = Color(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return isDark
