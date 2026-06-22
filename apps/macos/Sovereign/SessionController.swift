@@ -40,6 +40,12 @@ final class SessionController: EngineProcessDelegate {
     }()
     var speakerNames: [Int: String] = [:]
 
+    /// Fixed speaker count for diarization (자동/1/2/3/4명 이상). Persisted; maps to
+    /// the engine's DIAR_MAXK upper bound. 자동 and 4+ leave the cap at 8.
+    var speakerCount: SpeakerCount = SpeakerCount(rawValue: UserDefaults.standard.integer(forKey: "fixedSpeakerCount")) ?? .auto {
+        didSet { UserDefaults.standard.set(speakerCount.rawValue, forKey: "fixedSpeakerCount") }
+    }
+
     /// Live segment window (s) — the live FELT-latency knob. Text lands when a
     /// window closes, so a shorter window = snappier live text but less Whisper
     /// context (more boundary error). Default 10 = current accuracy (no
@@ -108,9 +114,9 @@ final class SessionController: EngineProcessDelegate {
                 case "summary":
                     self.summarizing = false
                     self.meetingSummary = text ?? "요약 생성에 실패했습니다. 다시 시도하세요."
-                    if let text, self.autoSaveEnabled, let url = self.lastAutoSaved {
-                        try? Exporters.markdown(self.transcript.lines, names: self.speakerNames, summary: text)
-                            .write(to: url, atomically: true, encoding: .utf8)
+                    // Separate file (transcript stays summary-free) when 요약 is on.
+                    if let text, self.autoSaveEnabled, self.autoSaveSummary {
+                        self.autoSaveSummaryMarkdown(text)
                     }
                 case "speakers":
                     self.speakerSummarizing = false
@@ -214,6 +220,12 @@ final class SessionController: EngineProcessDelegate {
     var autoSaveEnabled: Bool = (UserDefaults.standard.object(forKey: "autoSaveEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(autoSaveEnabled, forKey: "autoSaveEnabled") }
     }
+    /// "A.I 요약" — when on, a session finish also generates the on-device summary
+    /// and saves it as a SEPARATE "<base> 요약.md" (never embedded in the transcript).
+    /// Default off; persisted.
+    var autoSaveSummary: Bool = (UserDefaults.standard.object(forKey: "autoSaveSummary") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(autoSaveSummary, forKey: "autoSaveSummary") }
+    }
     /// Resolved auto-save folder: persisted choice, else Documents, else home.
     /// Static so both `autoSaveFolder` and `workspace` can seed from it without
     /// a self-reference during stored-property init.
@@ -259,6 +271,33 @@ final class SessionController: EngineProcessDelegate {
             lastAutoSaved = url
             workspace.reload()   // surface the new .md in the explorer
         } catch { /* non-fatal — manual export remains available */ }
+    }
+
+    /// Write the AI summary as its OWN file next to the transcript: "<base> 요약.md".
+    /// Base is taken from the just-saved transcript URL so the collision suffix
+    /// matches (e.g. "회의 … 2.md" → "회의 … 2 요약.md", not "회의 … 요약 2.md").
+    private func autoSaveSummaryMarkdown(_ summary: String) {
+        guard autoSaveEnabled, let transcriptURL = lastAutoSaved else { return }
+        let base = transcriptURL.deletingPathExtension().lastPathComponent
+        var url = autoSaveFolder.appendingPathComponent("\(base) 요약").appendingPathExtension("md")
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = autoSaveFolder.appendingPathComponent("\(base) 요약 \(n)").appendingPathExtension("md"); n += 1
+        }
+        let body = "# \(base) — 회의 요약\n\n\(summary)\n"
+        do {
+            try body.write(to: url, atomically: true, encoding: .utf8)
+            workspace.reload()   // surface the new 요약 .md in the explorer
+        } catch { /* non-fatal */ }
+    }
+
+    /// Kick off summary generation at session end for the "A.I 요약" auto-save.
+    /// Silent no-op if the summary model isn't installed (no error UI for a
+    /// background save) — the result lands via the onResult "summary" handler.
+    private func autoSummarizeForSave() {
+        guard !transcript.lines.isEmpty, !summarizing, let s = ensureSummaryEngine() else { return }
+        summarizing = true; meetingSummary = nil
+        s.summarize(lines: attributedLines)
     }
 
     /// Persistent per-speaker voiceprints. When you name a speaker, their centroid
@@ -308,7 +347,7 @@ final class SessionController: EngineProcessDelegate {
             bpeURL: AssetManifest.bundledBPE,
             assetsDir: AssetManifest.bundledAssetsDir,
             diarize: diarize, osd: osd,
-            languageTokenID: languageTokenID, maxSpeakers: 8, voiceprintsDir: voiceprintsDir,
+            languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers, voiceprintsDir: voiceprintsDir,
             streamWavRoots: [capture.segmentDirectory])
     }
 
@@ -538,6 +577,7 @@ final class SessionController: EngineProcessDelegate {
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
+        if autoSaveSummary, autoSaveEnabled { autoSummarizeForSave() }   // 요약본 별개 저장
     }
 
     // MARK: export
@@ -587,7 +627,32 @@ final class SessionController: EngineProcessDelegate {
     }
     /// (cut count, removable seconds) for the tighten stat — honors the toggles.
     var tightenStat: (cuts: Int, seconds: Double) {
+        guard editorSettings.enabled else { return (0, 0) }   // editor off → no cuts
         let c = EditorCuts.tighten(transcript.lines, editorSettings)
         return (c.count, c.reduce(0) { $0 + $1.duration })
+    }
+}
+
+/// Fixed speaker-count choice for diarization. rawValue is persisted; `maxSpeakers`
+/// is the engine DIAR_MAXK upper bound it maps to (자동/4+ → 8, else the exact N).
+enum SpeakerCount: Int, CaseIterable, Identifiable {
+    case auto = 0, one = 1, two = 2, three = 3, fourPlus = 4
+    var id: Int { rawValue }
+    var label: String {
+        switch self {
+        case .auto:     return "자동"
+        case .one:      return "1명"
+        case .two:      return "2명"
+        case .three:    return "3명"
+        case .fourPlus: return "4명 이상"
+        }
+    }
+    var maxSpeakers: Int {
+        switch self {
+        case .auto, .fourPlus: return 8   // no tight cap — let the engine detect
+        case .one:             return 1
+        case .two:             return 2
+        case .three:           return 3
+        }
     }
 }

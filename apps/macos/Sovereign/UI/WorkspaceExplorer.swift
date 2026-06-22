@@ -13,6 +13,11 @@ struct WorkspaceExplorer: View {
     @Bindable var session: SessionController
     @Binding var isVisible: Bool
 
+    // Resizable column width — drag the trailing edge; persisted across launches.
+    @AppStorage("explorerWidth") private var explorerWidth = 260.0
+    @State private var dragStartWidth: Double? = nil
+    private let minWidth = 180.0, maxWidth = 460.0
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -29,15 +34,43 @@ struct WorkspaceExplorer: View {
                 .scrollContentBackground(.hidden)
             }
         }
-        .frame(width: 260)
+        .frame(width: explorerWidth)
         .background(
             Theme.Colors.surface
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel))
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel)
                     .strokeBorder(Theme.Colors.separator, lineWidth: 1))
         )
+        .overlay(alignment: .trailing) { resizeHandle }
         .padding(.vertical, 12)
         .padding(.leading, 12)
+    }
+
+    // A thin hit-zone on the trailing edge: drag to resize, hover shows the
+    // left-right resize cursor. Width is clamped to [min,max] and persisted.
+    private var resizeHandle: some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 10)
+            .contentShape(Rectangle())
+            .overlay(alignment: .center) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Theme.Colors.separator)
+                    .frame(width: 2, height: 26)
+                    .opacity(dragStartWidth == nil ? 0 : 1)
+            }
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture()
+                    .onChanged { v in
+                        let start = dragStartWidth ?? explorerWidth
+                        if dragStartWidth == nil { dragStartWidth = explorerWidth }
+                        explorerWidth = min(maxWidth, max(minWidth, start + v.translation.width))
+                    }
+                    .onEnded { _ in dragStartWidth = nil }
+            )
     }
 
     // MARK: header — workspace name + actions
@@ -115,7 +148,8 @@ struct WorkspaceExplorer: View {
         case "srt", "vtt":    return "captions.bubble"
         case "csv":           return "tablecells"
         case "html":          return "rectangle.on.rectangle.angled"
-        case "wav", "m4a", "mp3": return "waveform"
+        case "wav", "m4a", "mp3", "aac", "flac": return "waveform"
+        case "mp4", "mov", "m4v", "mkv", "webm", "flv", "avi": return "film"
         default:              return "doc"
         }
     }

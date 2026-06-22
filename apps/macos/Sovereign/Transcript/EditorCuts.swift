@@ -18,6 +18,9 @@ struct CutRange: Equatable {
 /// User-adjustable editor-feature toggles + thresholds (persisted). Every editor
 /// analysis reads from here so the UI can tune behavior without code changes.
 struct EditorSettings: Codable, Equatable {
+    // Master gate — the whole editor feature (타이튼/챕터/리테이크/하이라이트) is a
+    // power-user layer, OFF by default so basic users get a clean transcript.
+    var enabled = false
     // include toggles (which signals are produced / exported)
     var fillers = true
     var silences = true
@@ -37,6 +40,29 @@ struct EditorSettings: Codable, Equatable {
     var hlMinWords = 5
     var hlMinPause = 1.0
     var hlMinConf = 0.8
+
+    init() {}
+    /// Upgrade-safe decode: a settings blob saved before `enabled` existed lacks
+    /// that key — decodeIfPresent falls back to each property's default instead of
+    /// throwing keyNotFound (which would wipe ALL of the user's other tunings).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        fillers = try c.decodeIfPresent(Bool.self, forKey: .fillers) ?? true
+        silences = try c.decodeIfPresent(Bool.self, forKey: .silences) ?? true
+        chapters = try c.decodeIfPresent(Bool.self, forKey: .chapters) ?? true
+        retakes = try c.decodeIfPresent(Bool.self, forKey: .retakes) ?? true
+        highlights = try c.decodeIfPresent(Bool.self, forKey: .highlights) ?? true
+        silenceMinGap = try c.decodeIfPresent(Double.self, forKey: .silenceMinGap) ?? 0.6
+        silencePad = try c.decodeIfPresent(Double.self, forKey: .silencePad) ?? 0.1
+        chapterGap = try c.decodeIfPresent(Double.self, forKey: .chapterGap) ?? 2.5
+        chapterMinLen = try c.decodeIfPresent(Double.self, forKey: .chapterMinLen) ?? 20.0
+        retakeSim = try c.decodeIfPresent(Double.self, forKey: .retakeSim) ?? 0.7
+        retakeMinTokens = try c.decodeIfPresent(Int.self, forKey: .retakeMinTokens) ?? 3
+        hlMinWords = try c.decodeIfPresent(Int.self, forKey: .hlMinWords) ?? 5
+        hlMinPause = try c.decodeIfPresent(Double.self, forKey: .hlMinPause) ?? 1.0
+        hlMinConf = try c.decodeIfPresent(Double.self, forKey: .hlMinConf) ?? 0.8
+    }
 
     private static let key = "editorSettings"
     static func load() -> EditorSettings {

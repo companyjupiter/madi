@@ -385,6 +385,16 @@ struct ContentView: View {
 
             field("언어") { languagePicker }
 
+            field("화자 수") { speakerCountPicker }
+
+            Toggle(isOn: $session.autoSaveSummary) {
+                Label("A.I 요약", systemImage: "sparkles")
+                    .font(Theme.Fonts.status)
+            }
+            .toggleStyle(.checkbox)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .help("완료 시 회의 요약을 전사문과 별개의 ‘요약.md’ 파일로 저장합니다 (요약 모델 필요)")
+
             dropZone
 
             if !session.transcript.lines.isEmpty {
@@ -546,6 +556,17 @@ struct ContentView: View {
         .labelsHidden().disabled(isBusy)
     }
 
+    // 화자 수 고정 — 자동/1/2/3/4명 이상. Maps to the engine's DIAR_MAXK cap.
+    private var speakerCountPicker: some View {
+        Picker("", selection: Binding(
+            get: { session.speakerCount },
+            set: { session.speakerCount = $0 }
+        )) {
+            ForEach(SpeakerCount.allCases) { Text($0.label).tag($0) }
+        }
+        .labelsHidden().disabled(isBusy)
+    }
+
     // Visible drop target + an explicit "Choose File…" button so file input is
     // discoverable without knowing about drag-&-drop.
     private var dropZone: some View {
@@ -602,13 +623,16 @@ struct ContentView: View {
     // and AudioDecode surfaces a clear error if they can't actually be decoded.
     private func isMediaFile(_ url: URL) -> Bool {
         guard let t = UTType(filenameExtension: url.pathExtension.lowercased()) else { return true }
-        return t.conforms(to: .audio) || t.conforms(to: .audiovisualContent) || t.conforms(to: .movie)
+        // audio + video containers (mp4/mov/m4v/webm/mkv…) — AudioDecode extracts
+        // the audio track from any AVFoundation-decodable file.
+        return t.conforms(to: .audio) || t.conforms(to: .audiovisualContent)
+            || t.conforms(to: .movie) || t.conforms(to: .video)
     }
     private func chooseFile() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.audio, .audiovisualContent, .movie]
+        panel.allowedContentTypes = [.audio, .audiovisualContent, .movie, .video]
         if panel.runModal() == .OK, let url = panel.url { session.transcribeFile(url) }
     }
     private func export(_ type: UTType, _ writer: @escaping (URL) throws -> Void) {
