@@ -16,6 +16,7 @@ struct WorkspaceExplorer: View {
     // Resizable column width — drag the trailing edge; persisted across launches.
     @AppStorage("explorerWidth") private var explorerWidth = 260.0
     @State private var dragStartWidth: Double? = nil
+    @State private var handleHovering = false
     private let minWidth = 180.0, maxWidth = 460.0
 
     var body: some View {
@@ -59,9 +60,13 @@ struct WorkspaceExplorer: View {
                     .frame(width: 2, height: 26)
                     .opacity(dragStartWidth == nil ? 0 : 1)
             }
+            // Guarded push/pop so the cursor stack stays balanced even if the
+            // explorer is hidden while the pointer is still over the handle.
             .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                if inside, !handleHovering { handleHovering = true; NSCursor.resizeLeftRight.push() }
+                else if !inside, handleHovering { handleHovering = false; NSCursor.pop() }
             }
+            .onDisappear { if handleHovering { NSCursor.pop(); handleHovering = false } }
             .gesture(
                 DragGesture()
                     .onChanged { v in

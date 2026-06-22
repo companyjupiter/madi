@@ -1,11 +1,15 @@
-// AudioDecode.swift — decode ANY audio container (m4a/mp3/aac/flac/wav/mov…) to a
-// temp 16 kHz mono PCM WAV the engine can read.
+// AudioDecode.swift — decode ANY audio OR video container (m4a/mp3/aac/flac/wav,
+// mp4/mov/m4v…) to a temp 16 kHz mono PCM WAV the engine can read.
 //
 // The engine's file reader only accepts PCM16/float32 WAV; a dropped m4a/mp3
-// would be rejected ("unsupported WAV format"). AVFoundation decodes every
-// format macOS supports, so we transcode to a normalized 16k mono WAV first,
-// then hand THAT path to the engine's fast native file mode. Nonisolated +
-// blocking → call from a background queue. Reuses Resampler + WavWriter.
+// would be rejected ("unsupported WAV format"). Two decode paths, both feeding
+// the SAME Resampler + WavWriter:
+//   · audio-only files  → AVAudioFile (fast, well-tested).
+//   · video containers  → AVAssetReader on the first audio track. AVAudioFile
+//     CANNOT open a video .mp4/.mov (it errors 2003334207 — it reads audio-only
+//     containers), so we fall back to pulling the audio track's LPCM via the
+//     reader. Codecs macOS can't decode (webm/mkv) still surface a clean error.
+// Nonisolated + blocking → call from a background queue.
 import Foundation
 import AVFoundation
 
@@ -37,8 +41,17 @@ enum AudioDecode {
     }
 
     /// Transcode `src` → temp 16 kHz mono PCM16 WAV; returns the temp URL.
+    /// Audio-only files go through AVAudioFile; anything it rejects (video
+    /// containers) falls back to the AVAssetReader audio-track path.
     static func toWav16k(_ src: URL) throws -> URL {
-        let file = try AVAudioFile(forReading: src)
+        if let file = try? AVAudioFile(forReading: src) {
+            return try writeSamples(decodeAudioFile(file, src: src))
+        }
+        return try writeSamples(decodeAssetAudioTrack(src))
+    }
+
+    /// Audio-only path (m4a/mp3/aac/flac/wav…).
+    private static func decodeAudioFile(_ file: AVAudioFile, src: URL) throws -> [Int16] {
         let attrs = try? FileManager.default.attributesOfItem(atPath: src.path)
         try validateImportBounds(
             inputBytes: attrs?[.size] as? Int64,
@@ -56,16 +69,97 @@ enum AudioDecode {
             try file.read(into: buf)
             if buf.frameLength == 0 { break }
             samples.append(contentsOf: rs.convert(buf))
-            if samples.count > maxDecodedSamples {
-                throw NSError(domain: "AudioDecode", code: 5,
-                              userInfo: [NSLocalizedDescriptionKey: "file too long"])
-            }
+            try checkLength(samples.count)
         }
         samples.append(contentsOf: rs.drain())       // flush converter tail
-        if samples.count > maxDecodedSamples {
+        try checkLength(samples.count)
+        return samples
+    }
+
+    /// Video-container path (mp4/mov/m4v…): pull the first audio track's LPCM via
+    /// AVAssetReader (interleaved Float32 at native rate), then the same Resampler.
+    private static func decodeAssetAudioTrack(_ src: URL) throws -> [Int16] {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: src.path)
+        let asset = AVURLAsset(url: src)
+        guard let track = asset.tracks(withMediaType: .audio).first else {
+            throw NSError(domain: "AudioDecode", code: 6,
+                          userInfo: [NSLocalizedDescriptionKey: "no audio track in file"])
+        }
+        guard let fmtDesc = (track.formatDescriptions as? [CMFormatDescription])?.first,
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fmtDesc)?.pointee else {
+            throw NSError(domain: "AudioDecode", code: 7,
+                          userInfo: [NSLocalizedDescriptionKey: "unreadable audio format"])
+        }
+        try validateImportBounds(
+            inputBytes: attrs?[.size] as? Int64,
+            sourceFrames: AVAudioFramePosition(CMTimeGetSeconds(asset.duration) * asbd.mSampleRate),
+            sampleRate: asbd.mSampleRate
+        )
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,   // interleaved → one ABL buffer
+        ])
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else {
+            throw NSError(domain: "AudioDecode", code: 8,
+                          userInfo: [NSLocalizedDescriptionKey: "cannot read audio track"])
+        }
+        reader.add(output)
+        reader.startReading()
+        // Init the Resampler from the reader's OWN LPCM output format description —
+        // it carries the channel layout AVAudioConverter needs to downmix stereo→
+        // mono. A manually-built multi-channel AVAudioFormat lacks that layout and
+        // silently yields SILENCE for stereo input (verified: stereo→0 amplitude).
+        var rs: Resampler?
+        var pcmFormat: AVAudioFormat?
+        var samples: [Int16] = []
+        while reader.status == .reading, let sbuf = output.copyNextSampleBuffer() {
+            if pcmFormat == nil, let fd = CMSampleBufferGetFormatDescription(sbuf) {
+                pcmFormat = AVAudioFormat(cmAudioFormatDescription: fd)
+                rs = pcmFormat.flatMap { Resampler(from: $0) }
+            }
+            if let rs, let fmt = pcmFormat, let pcm = pcmBuffer(from: sbuf, format: fmt) {
+                samples.append(contentsOf: rs.convert(pcm))
+            }
+            CMSampleBufferInvalidate(sbuf)
+            if samples.count > maxDecodedSamples { reader.cancelReading(); break }
+        }
+        if reader.status == .failed {
+            throw reader.error ?? NSError(domain: "AudioDecode", code: 9,
+                userInfo: [NSLocalizedDescriptionKey: "audio decode failed"])
+        }
+        guard let rs else {
+            throw NSError(domain: "AudioDecode", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "no audio decoded"])
+        }
+        samples.append(contentsOf: rs.drain())
+        try checkLength(samples.count)
+        return samples
+    }
+
+    /// Copy one LPCM CMSampleBuffer into an AVAudioPCMBuffer of `format` (must match
+    /// the reader's interleaved-Float32 layout). Returns nil on empty/failed copy.
+    private static func pcmBuffer(from sbuf: CMSampleBuffer, format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        let n = CMSampleBufferGetNumSamples(sbuf)
+        guard n > 0, let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(n)) else { return nil }
+        buf.frameLength = AVAudioFrameCount(n)
+        let st = CMSampleBufferCopyPCMDataIntoAudioBufferList(
+            sbuf, at: 0, frameCount: Int32(n), into: buf.mutableAudioBufferList)
+        return st == noErr ? buf : nil
+    }
+
+    private static func checkLength(_ count: Int) throws {
+        if count > maxDecodedSamples {
             throw NSError(domain: "AudioDecode", code: 5,
                           userInfo: [NSLocalizedDescriptionKey: "file too long"])
         }
+    }
+
+    private static func writeSamples(_ samples: [Int16]) throws -> URL {
         guard !samples.isEmpty else {
             throw NSError(domain: "AudioDecode", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "no audio decoded"])

@@ -1,7 +1,7 @@
 // Theme+Conf.swift — confidence threshold (manual; not a color/font token).
 // Words below this softmax confidence are flagged (amber + underline + fade).
 // Chosen from validation: real errors fall at 0.36–0.54, correct words 0.94–1.0,
-// so 0.65 cleanly separates with low false-positives.
+// so the 0.55 default separates them with low false-positives (user-tunable).
 import Foundation
 extension Theme {
     /// UserDefaults key shared with the Settings VAD slider (@AppStorage).
