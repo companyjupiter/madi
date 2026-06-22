@@ -88,6 +88,14 @@ final class TranscriptStore {
         translationsByLine.removeAll(); editsByLine.removeAll()
     }
 
+    /// Replace the transcript with externally-parsed lines — re-opening an
+    /// archived .md from the workspace explorer. This is a static view of a
+    /// finished session, not a live capture, so all streaming state is cleared.
+    func load(_ newLines: [Line]) {
+        reset()
+        lines = newLines
+    }
+
     /// Re-apply id-keyed overlays after any (re)grouping.
     private func applyOverlays() {
         for i in lines.indices {

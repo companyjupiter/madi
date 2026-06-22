@@ -49,4 +49,30 @@ final class EditorCutsTests: XCTestCase {
         s.silences = true
         XCTAssertEqual(EditorCuts.tighten([l], s).count, 1, "silence on → the gap cut")
     }
+
+    // ── upgrade-safe decode (F4: editor enabled defaults false) ──
+
+    /// New default: a freshly-constructed EditorSettings has the editor OFF.
+    func testEditorDisabledByDefault() {
+        XCTAssertFalse(EditorSettings().enabled)
+    }
+
+    /// A settings blob saved BEFORE `enabled` existed (no such key, fillers turned
+    /// off by the user) must decode — enabled falls back to false, and the user's
+    /// other tunings survive (no keyNotFound wipe).
+    func testUpgradeDecodeMissingEnabledKey() throws {
+        let json = #"{"fillers":false,"silences":true,"chapters":true,"retakes":true,"highlights":true,"silenceMinGap":0.9,"silencePad":0.1,"chapterGap":2.5,"chapterMinLen":20,"retakeSim":0.7,"retakeMinTokens":3,"hlMinWords":5,"hlMinPause":1,"hlMinConf":0.8}"#
+        let s = try JSONDecoder().decode(EditorSettings.self, from: Data(json.utf8))
+        XCTAssertFalse(s.enabled)                                   // missing → false, not a throw
+        XCTAssertFalse(s.fillers)                                   // user's choice preserved
+        XCTAssertEqual(s.silenceMinGap, 0.9, accuracy: 1e-9)        // preserved
+    }
+
+    /// Even a near-empty blob decodes to all-defaults instead of throwing.
+    func testDecodeEmptyObjectUsesDefaults() throws {
+        let s = try JSONDecoder().decode(EditorSettings.self, from: Data("{}".utf8))
+        XCTAssertFalse(s.enabled)
+        XCTAssertTrue(s.fillers)
+        XCTAssertEqual(s.hlMinConf, 0.8, accuracy: 1e-9)
+    }
 }

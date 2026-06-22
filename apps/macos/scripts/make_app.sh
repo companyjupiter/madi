@@ -41,10 +41,12 @@ SRCS=(
   "$APP_DIR"/Sovereign/Model/AssetManifest.swift
   "$APP_DIR"/Sovereign/Model/ModelDownloader.swift
   "$APP_DIR"/Sovereign/Model/TranslateModelDownloader.swift
+  "$APP_DIR"/Sovereign/Model/WorkspaceTree.swift
   "$APP_DIR"/Sovereign/Transcript/WordMerger.swift
   "$APP_DIR"/Sovereign/Transcript/TranscriptStore.swift
   "$APP_DIR"/Sovereign/Transcript/EditorCuts.swift
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift
+  "$APP_DIR"/Sovereign/Transcript/TranscriptArchive.swift
   "$APP_DIR"/Sovereign/Transcript/Retrieval.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryDeck.swift
   "$APP_DIR"/Sovereign/SessionController.swift
@@ -52,6 +54,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/Theme.swift
   "$APP_DIR"/Sovereign/UI/Theme+Conf.swift
   "$APP_DIR"/Sovereign/UI/ContentView.swift
+  "$APP_DIR"/Sovereign/UI/WorkspaceExplorer.swift
   "$APP_DIR"/Sovereign/UI/TranscriptView.swift
   "$APP_DIR"/Sovereign/UI/ModelGateView.swift
   "$APP_DIR"/Sovereign/UI/SettingsView.swift
