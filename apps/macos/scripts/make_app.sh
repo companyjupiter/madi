@@ -55,6 +55,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/Retrieval.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryDeck.swift
   "$APP_DIR"/Sovereign/SessionController.swift
+  "$APP_DIR"/Sovereign/CalendarBridge.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
   "$APP_DIR"/Sovereign/UI/Theme.swift
   "$APP_DIR"/Sovereign/UI/Theme+Conf.swift

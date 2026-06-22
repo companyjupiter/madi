@@ -18,6 +18,9 @@ final class SessionController: EngineProcessDelegate {
     private(set) var phase: Phase = .idle
     var level: Float = 0
     let transcript = TranscriptStore()
+    /// Local Calendar glue — prefills the meeting title/attendees and matches
+    /// speakers to attendees after the session (read-only, on-device).
+    let calendar = CalendarBridge()
 
     // file-mode progress (nil when not transcribing a file)
     private(set) var fileName: String = ""
@@ -189,10 +192,13 @@ final class SessionController: EngineProcessDelegate {
         }
         let mdFiles = workspaceTranscriptURLs()
         guard !mdFiles.isEmpty else { qaAnswer = "워크스페이스에 회의록이 없습니다."; return }
-        let excerpts = WorkspaceRetrieval.relevantExcerpts(q, mdFiles: mdFiles, budget: 800)
+        // Budget the excerpts with headroom for the "[회의명] " prefixes so the
+        // prefixed text fits the engine's ~800-char window without a second
+        // retrieval pass dropping anything (askPreselected skips that re-filter).
+        let excerpts = WorkspaceRetrieval.relevantExcerpts(q, mdFiles: mdFiles, budget: 650)
         guard !excerpts.isEmpty else { qaAnswer = "워크스페이스 회의록에서 관련 내용을 찾지 못했습니다."; return }
         qaAsking = true; qaAnswer = nil
-        s.ask(q, lines: excerpts.map { "[\($0.meeting)] \($0.text)" })
+        s.askPreselected(q, lines: excerpts.map { "[\($0.meeting)] \($0.text)" })
     }
 
     /// Build the People dashboard data: enrolled voiceprint names (basenames of
@@ -219,6 +225,7 @@ final class SessionController: EngineProcessDelegate {
     }
 
     private func clearSummary() {
+        calendar.clear()
         summaryEngine?.stop(); summaryEngine = nil
         meetingSummary = nil; meetingTitle = nil; summarizing = false
         speakerSummary = nil; speakerSummarizing = false
@@ -480,6 +487,7 @@ final class SessionController: EngineProcessDelegate {
         lastAutoSaved = nil
         translatedIDs.removeAll()
         clearSummary()
+        Task { await calendar.loadCurrentEvent() }   // prefill from the live calendar event
         phase = .engineStarting
 
         let e = EngineProcess(config: makeConfig())
@@ -632,6 +640,7 @@ final class SessionController: EngineProcessDelegate {
         preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
+        calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
         // A.I 요약이 켜진 라이브 세션: DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로
         // 승격(rename)한다. 제목을 먼저 enqueue → 요약본 저장 전에 rename이 끝나 같은 베이스로 묶임.

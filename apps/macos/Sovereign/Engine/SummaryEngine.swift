@@ -165,6 +165,18 @@ final class SummaryEngine {
         guard !q.isEmpty else { onResult?("qa", nil); return }
         let t = transcriptOneLine(Retrieval.relevantLines(q, lines, budget: chunkChars))
         guard !t.isEmpty else { onResult?("qa", nil); return }   // no relevant excerpt
+        askPreselected(q, lines: Retrieval.relevantLines(q, lines, budget: chunkChars))
+    }
+
+    /// Same prompt as ask(), but the lines are ALREADY retrieval-selected (e.g.
+    /// workspace RAG, where each line is prefixed with its meeting). Skips the
+    /// second Retrieval pass so those prefixes can't push the joined text past
+    /// the budget and silently drop relevant excerpts — caps to chunkChars instead.
+    func askPreselected(_ question: String, lines: [String]) {
+        let q = question.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { onResult?("qa", nil); return }
+        let t = String(transcriptOneLine(lines).prefix(chunkChars))
+        guard !t.isEmpty else { onResult?("qa", nil); return }
         enqueue("qa",
             "다음 회의록 발췌만 근거로 질문에 답하세요. 회의록과 같은 언어로, 간결하게. "
             + "발췌에 답이 없으면 '회의록에 해당 내용이 없습니다'라고만 답하세요. "

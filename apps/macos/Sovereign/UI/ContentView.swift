@@ -414,6 +414,8 @@ struct ContentView: View {
                 }
             }
 
+            if let ev = session.calendar.event { calendarBlock(ev) }
+
             field("언어") { languagePicker }
 
             field("화자 수") { speakerCountPicker }
@@ -521,6 +523,34 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(label).font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
             control()
+        }
+    }
+
+    // Calendar prefill: the live event's title + attendees. After the session,
+    // attendees who never spoke are dimmed with a "발언 없음" mark.
+    private func calendarBlock(_ ev: CalendarBridge.MeetingEvent) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.accent)
+                Text(ev.title).font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            if !ev.attendees.isEmpty {
+                ForEach(ev.attendees, id: \.self) { name in
+                    let absent = session.calendar.absent.contains(name)
+                    HStack(spacing: 5) {
+                        Circle().fill(absent ? Theme.Colors.textTertiary : Theme.Colors.accent)
+                            .frame(width: 5, height: 5)
+                        Text(name).font(Theme.Fonts.status)
+                            .foregroundStyle(absent ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
+                            .lineLimit(1)
+                        if absent {
+                            Text("발언 없음").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
         }
     }
 

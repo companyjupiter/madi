@@ -18,6 +18,12 @@
   <key>NSMicrophoneUsageDescription</key>
   <string>Madi transcribes your meetings on-device. Audio never leaves your Mac.</string>
 
+  <!-- Calendar: read the current event to prefill meeting title + attendees (local, read-only) -->
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Madi reads the meeting happening now to prefill its title and attendees. Your calendar stays on your Mac.</string>
+  <key>NSCalendarsUsageDescription</key>
+  <string>Madi reads the meeting happening now to prefill its title and attendees. Your calendar stays on your Mac.</string>
+
   <key>NSHighResolutionCapable</key> <true/>
 </dict>
 </plist>
