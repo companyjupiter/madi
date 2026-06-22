@@ -37,7 +37,7 @@ struct WorkspaceExplorer: View {
                     .strokeBorder(Theme.Colors.separator, lineWidth: 1))
         )
         .padding(.vertical, 12)
-        .padding(.trailing, 12)
+        .padding(.leading, 12)
     }
 
     // MARK: header — workspace name + actions
@@ -55,7 +55,7 @@ struct WorkspaceExplorer: View {
                 .buttonStyle(.plain).help("새로고침")
             Button { chooseFolder() } label: { Image(systemName: "folder.badge.gearshape") }
                 .buttonStyle(.plain).help("작업 폴더 변경…")
-            Button { isVisible = false } label: { Image(systemName: "sidebar.right") }
+            Button { isVisible = false } label: { Image(systemName: "sidebar.left") }
                 .buttonStyle(.plain).help("탐색기 닫기")
         }
         .font(.system(size: 12))

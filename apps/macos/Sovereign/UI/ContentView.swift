@@ -49,11 +49,11 @@ struct ContentView: View {
     // transcript fills the window; a fixed control panel sits on the right
     private var mainLayout: some View {
         HStack(spacing: 0) {
-            transcriptPane
             if showExplorer {
                 WorkspaceExplorer(session: session, isVisible: $showExplorer)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .transition(.move(edge: .leading).combined(with: .opacity))
             }
+            transcriptPane
             sidePanel
         }
         .animation(.snappy, value: showExplorer)
@@ -366,7 +366,7 @@ struct ContentView: View {
                     .foregroundStyle(Theme.Colors.accent)
                 Text("Madi").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.brandMark)
                 Spacer()
-                Button { showExplorer.toggle() } label: { Image(systemName: "sidebar.right").font(.system(size: 14)) }
+                Button { showExplorer.toggle() } label: { Image(systemName: "sidebar.left").font(.system(size: 14)) }
                     .buttonStyle(.plain)
                     .foregroundStyle(showExplorer ? Theme.Colors.accent : Theme.Colors.textSecondary)
                     .help("작업 폴더 탐색기")
