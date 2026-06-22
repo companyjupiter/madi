@@ -17,22 +17,35 @@ struct WorkspaceExplorer: View {
     @AppStorage("explorerWidth") private var explorerWidth = 260.0
     @State private var dragStartWidth: Double? = nil
     @State private var handleHovering = false
+    @State private var mode: ExplorerMode = .files
     private let minWidth = 180.0, maxWidth = 460.0
+    private enum ExplorerMode: String, CaseIterable { case files, people }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+            Picker("", selection: $mode) {
+                Text("파일").tag(ExplorerMode.files)
+                Text("사람").tag(ExplorerMode.people)
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            .padding(.horizontal, 12).padding(.bottom, 8)
             Divider().overlay(Theme.Colors.separator)
-            if session.workspace.nodes.isEmpty {
-                emptyState
-            } else {
-                List {
-                    OutlineGroup(session.workspace.nodes, children: \.children) { node in
-                        row(node)
+            switch mode {
+            case .files:
+                if session.workspace.nodes.isEmpty {
+                    emptyState
+                } else {
+                    List {
+                        OutlineGroup(session.workspace.nodes, children: \.children) { node in
+                            row(node)
+                        }
                     }
+                    .listStyle(.sidebar)
+                    .scrollContentBackground(.hidden)
                 }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
+            case .people:
+                PeopleDashboard(people: session.peopleAnalytics())
             }
         }
         .frame(width: explorerWidth)

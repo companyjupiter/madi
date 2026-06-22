@@ -176,6 +176,48 @@ final class SessionController: EngineProcessDelegate {
         s.ask(q, lines: attributedLines)
     }
 
+    /// "Ask the WORKSPACE" — answer grounded in question-relevant excerpts pulled
+    /// from EVERY archived .md in the save folder (cross-meeting RAG), on-device.
+    /// Reuses the same summaryEngine + "qa" result handler as askTranscript; only
+    /// the retrieval scope differs (all meetings vs the open transcript).
+    func askWorkspace(_ question: String) {
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        switch phase { case .recording, .paused, .countingDown: return; default: break }
+        guard let s = ensureSummaryEngine() else {
+            qaAnswer = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
+        }
+        let mdFiles = workspaceTranscriptURLs()
+        guard !mdFiles.isEmpty else { qaAnswer = "워크스페이스에 회의록이 없습니다."; return }
+        let excerpts = WorkspaceRetrieval.relevantExcerpts(q, mdFiles: mdFiles, budget: 800)
+        guard !excerpts.isEmpty else { qaAnswer = "워크스페이스 회의록에서 관련 내용을 찾지 못했습니다."; return }
+        qaAsking = true; qaAnswer = nil
+        s.ask(q, lines: excerpts.map { "[\($0.meeting)] \($0.text)" })
+    }
+
+    /// Build the People dashboard data: enrolled voiceprint names (basenames of
+    /// voiceprintsDir/*.vec) aggregated over every transcript .md in the workspace.
+    func peopleAnalytics() -> [Person] {
+        let names: [String] = ((try? FileManager.default.contentsOfDirectory(
+            at: voiceprintsDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? [])
+            .filter { $0.pathExtension.lowercased() == "vec" }
+            .map { $0.deletingPathExtension().lastPathComponent }
+        return PeopleAnalytics.aggregate(voiceprintNames: names, mdFiles: workspaceTranscriptURLs())
+    }
+
+    /// Every transcript .md leaf from the explorer tree (recursive).
+    private func workspaceTranscriptURLs() -> [URL] {
+        var out: [URL] = []
+        func walk(_ nodes: [FileNode]) {
+            for n in nodes {
+                if let kids = n.children { walk(kids) }
+                else if n.isTranscript { out.append(n.url) }
+            }
+        }
+        walk(workspace.nodes)
+        return out
+    }
+
     private func clearSummary() {
         summaryEngine?.stop(); summaryEngine = nil
         meetingSummary = nil; meetingTitle = nil; summarizing = false
@@ -270,8 +312,7 @@ final class SessionController: EngineProcessDelegate {
         guard autoSaveEnabled, !transcript.lines.isEmpty else { return }
         let base: String
         if fileName.isEmpty {
-            let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HHmm"
-            base = "회의 \(df.string(from: Date()))"
+            base = TitleGenerator.fallbackTitle(date: Date())   // "회의 yyyy-MM-dd HHmm"
         } else {
             base = (fileName as NSString).deletingPathExtension
         }
@@ -653,27 +694,27 @@ final class SessionController: EngineProcessDelegate {
         catch { return nil }
     }
     func exportSRT(to url: URL) throws {
-        try Exporters.srt(transcript.lines, names: speakerNames)
+        try applyPII(Exporters.srt(transcript.lines, names: speakerNames))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportVTT(to url: URL) throws {
-        try Exporters.vtt(transcript.lines, names: speakerNames)
+        try applyPII(Exporters.vtt(transcript.lines, names: speakerNames))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportText(to url: URL) throws {
-        try Exporters.plainText(transcript.lines, names: speakerNames)
+        try applyPII(Exporters.plainText(transcript.lines, names: speakerNames))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportJSON(to url: URL) throws {
-        try Exporters.json(transcript.lines, names: speakerNames, settings: editorSettings)
+        try applyPII(Exporters.json(transcript.lines, names: speakerNames, settings: editorSettings))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportCutList(to url: URL) throws {
-        try Exporters.cutListCSV(transcript.lines, settings: editorSettings)
+        try applyPII(Exporters.cutListCSV(transcript.lines, settings: editorSettings))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportChapters(to url: URL) throws {
-        try Exporters.youtubeChapters(transcript.lines, settings: editorSettings)
+        try applyPII(Exporters.youtubeChapters(transcript.lines, settings: editorSettings))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     /// (cut count, removable seconds) for the tighten stat — honors the toggles.

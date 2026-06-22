@@ -24,6 +24,7 @@ struct ContentView: View {
     @State private var showSummary = false   // on-device meeting summary sheet
     @State private var summaryBySpeaker = false  // 전체 vs 화자별 breakdown
     @State private var qaInput = ""          // "ask the meeting" question
+    @AppStorage("qaScope") private var qaWorkspaceScope = false   // false=이 회의, true=전체 워크스페이스
     @State private var showRecap = false     // shareable one-pager recap card sheet
     @State private var showCommandPalette = false   // ⌘K fuzzy launcher overlay
 
@@ -140,8 +141,13 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 6) {
             Divider().overlay(Theme.Colors.separator)
             Text("회의록에 물어보기").font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
+            Picker("", selection: $qaWorkspaceScope) {
+                Text("이 회의").tag(false)
+                Text("전체 워크스페이스").tag(true)
+            }
+            .pickerStyle(.segmented).labelsHidden()
             HStack(spacing: 6) {
-                TextField("예: 무엇을 결정했나요? / 김부장이 맡은 일은?", text: $qaInput)
+                TextField(qaWorkspaceScope ? "전체 회의록에서 검색 — 예: 지난달 보안 결정은?" : "예: 무엇을 결정했나요? / 김부장이 맡은 일은?", text: $qaInput)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { ask() }
                 Button { ask() } label: { Image(systemName: "paperplane.fill") }
@@ -161,7 +167,7 @@ struct ContentView: View {
     private func ask() {
         let q = qaInput.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return }
-        session.askTranscript(q)
+        if qaWorkspaceScope { session.askWorkspace(q) } else { session.askTranscript(q) }
     }
 
     private func copy(_ s: String) {
