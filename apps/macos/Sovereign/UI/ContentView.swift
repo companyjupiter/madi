@@ -24,6 +24,8 @@ struct ContentView: View {
     @State private var showSummary = false   // on-device meeting summary sheet
     @State private var summaryBySpeaker = false  // 전체 vs 화자별 breakdown
     @State private var qaInput = ""          // "ask the meeting" question
+    @State private var showRecap = false     // shareable one-pager recap card sheet
+    @State private var showCommandPalette = false   // ⌘K fuzzy launcher overlay
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
     private var flaggedWords: [(line: UUID, text: String)] {
@@ -48,22 +50,35 @@ struct ContentView: View {
 
     // transcript fills the window; a fixed control panel sits on the right
     private var mainLayout: some View {
-        HStack(spacing: 0) {
-            if showExplorer {
-                WorkspaceExplorer(session: session, isVisible: $showExplorer)
-                    .transition(.move(edge: .leading).combined(with: .opacity))
+        ZStack {
+            HStack(spacing: 0) {
+                if showExplorer {
+                    WorkspaceExplorer(session: session, isVisible: $showExplorer)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+                transcriptPane
+                sidePanel
             }
-            transcriptPane
-            sidePanel
+            .animation(.snappy, value: showExplorer)
+            .background(Theme.Colors.surfaceSunken)
+            .dropDestination(for: URL.self) { urls, _ in
+                guard canDrop, let url = urls.first(where: isMediaFile) else { return false }
+                session.transcribeFile(url)
+                return true
+            } isTargeted: { dropTargeted = $0 }
+            .sheet(isPresented: $showSummary) { summarySheet }
+            .sheet(isPresented: $showRecap) { RecapCardView(session: session) { showRecap = false } }
+
+            // ⌘K — hidden button carries the shortcut; palette overlays everything.
+            Button("") { showCommandPalette = true }
+                .keyboardShortcut("k", modifiers: .command)
+                .buttonStyle(.plain).frame(width: 0, height: 0).opacity(0).accessibilityHidden(true)
+            if showCommandPalette {
+                CommandPalette(session: session, isPresented: $showCommandPalette)
+                    .transition(.opacity).zIndex(1)
+            }
         }
-        .animation(.snappy, value: showExplorer)
-        .background(Theme.Colors.surfaceSunken)
-        .dropDestination(for: URL.self) { urls, _ in
-            guard canDrop, let url = urls.first(where: isMediaFile) else { return false }
-            session.transcribeFile(url)
-            return true
-        } isTargeted: { dropTargeted = $0 }
-        .sheet(isPresented: $showSummary) { summarySheet }
+        .animation(.snappy, value: showCommandPalette)
     }
 
     // On-device meeting intelligence — summary + action items from the local LLM.
@@ -109,6 +124,7 @@ struct ContentView: View {
                         Label("다시 생성", systemImage: "arrow.clockwise")
                     }
                     Button { exportDeck() } label: { Label("슬라이드(HTML)", systemImage: "rectangle.on.rectangle.angled") }
+                    Button { showRecap = true } label: { Label("리캡 카드", systemImage: "rectangle.portrait.on.rectangle.portrait") }
                     Spacer()
                     Button("내보내기…") { export(.init(filenameExtension: "md")!) { try text.write(to: $0, atomically: true, encoding: .utf8) } }
                 }.font(Theme.Fonts.status)
@@ -166,6 +182,15 @@ struct ContentView: View {
             if case .processing = session.phase { progressBanner }
             if !session.transcript.lines.isEmpty { viewModeBar }
             if viewMode == .detailed && !flaggedWords.isEmpty { reviewBar }
+            if !session.transcript.lines.isEmpty {
+                TimelineScrubberView(
+                    lines: session.transcript.lines,
+                    speakerNames: session.speakerNames,
+                    onSeek: { id in scrollTarget = id; scrollTick += 1 }
+                )
+                .padding(.horizontal, Theme.Space.window)
+                .padding(.bottom, Theme.Space.lineInner)
+            }
             ZStack {
                 if session.transcript.lines.isEmpty {
                     emptyState
@@ -400,6 +425,8 @@ struct ContentView: View {
             if !session.transcript.lines.isEmpty {
                 Divider().overlay(Theme.Colors.separator)
                 speakingStats
+                let energy = EnergyArc.compute(lines: session.transcript.lines)
+                if !energy.isEmpty { EnergyArcView(values: energy) }
             }
 
             Spacer(minLength: 8)
