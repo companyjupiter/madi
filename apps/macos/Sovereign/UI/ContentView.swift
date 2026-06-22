@@ -15,6 +15,8 @@ struct ContentView: View {
     private var viewMode: TranscriptViewMode { contentMode ? .content : .detailed }
     // Transcript text size (pt) — readable default, A−/A+ in the bar. Persisted.
     @AppStorage("transcriptFontSize") private var fontSize = 18.0
+    // IDE-style workspace explorer (save folder as a file tree) on the right.
+    @AppStorage("showWorkspaceExplorer") private var showExplorer = true
     // N2 review navigator (상세 mode): step through low-confidence words.
     @State private var reviewIndex = 0
     @State private var scrollTarget: UUID? = nil
@@ -48,8 +50,13 @@ struct ContentView: View {
     private var mainLayout: some View {
         HStack(spacing: 0) {
             transcriptPane
+            if showExplorer {
+                WorkspaceExplorer(session: session, isVisible: $showExplorer)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
             sidePanel
         }
+        .animation(.snappy, value: showExplorer)
         .background(Theme.Colors.surfaceSunken)
         .dropDestination(for: URL.self) { urls, _ in
             guard canDrop, let url = urls.first(where: isMediaFile) else { return false }
@@ -359,6 +366,10 @@ struct ContentView: View {
                     .foregroundStyle(Theme.Colors.accent)
                 Text("Madi").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.brandMark)
                 Spacer()
+                Button { showExplorer.toggle() } label: { Image(systemName: "sidebar.right").font(.system(size: 14)) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(showExplorer ? Theme.Colors.accent : Theme.Colors.textSecondary)
+                    .help("작업 폴더 탐색기")
                 SettingsLink { Image(systemName: "gearshape").font(.system(size: 14)) }
                     .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
                     .help("설정 (⌘,)")

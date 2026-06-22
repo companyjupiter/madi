@@ -214,13 +214,24 @@ final class SessionController: EngineProcessDelegate {
     var autoSaveEnabled: Bool = (UserDefaults.standard.object(forKey: "autoSaveEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(autoSaveEnabled, forKey: "autoSaveEnabled") }
     }
-    var autoSaveFolder: URL = {
+    /// Resolved auto-save folder: persisted choice, else Documents, else home.
+    /// Static so both `autoSaveFolder` and `workspace` can seed from it without
+    /// a self-reference during stored-property init.
+    static func defaultSaveFolder() -> URL {
         if let p = UserDefaults.standard.string(forKey: "autoSaveFolder") { return URL(fileURLWithPath: p) }
         return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser
-    }() {
-        didSet { UserDefaults.standard.set(autoSaveFolder.path, forKey: "autoSaveFolder") }
     }
+    var autoSaveFolder: URL = SessionController.defaultSaveFolder() {
+        didSet {
+            UserDefaults.standard.set(autoSaveFolder.path, forKey: "autoSaveFolder")
+            workspace.setRoot(autoSaveFolder)   // explorer follows the save root
+        }
+    }
+    /// The save folder as an IDE-style tree for the workspace explorer. Declared
+    /// after `autoSaveFolder` so its didSet (which references this) only fires on
+    /// post-init reassignment, never during init.
+    let workspace = WorkspaceTree(root: SessionController.defaultSaveFolder())
     /// Last auto-saved file (UI confirmation); cleared when a new session starts.
     private(set) var lastAutoSaved: URL? = nil
 
@@ -246,6 +257,7 @@ final class SessionController: EngineProcessDelegate {
             try Exporters.markdown(transcript.lines, names: speakerNames)
                 .write(to: url, atomically: true, encoding: .utf8)
             lastAutoSaved = url
+            workspace.reload()   // surface the new .md in the explorer
         } catch { /* non-fatal — manual export remains available */ }
     }
 
@@ -337,6 +349,20 @@ final class SessionController: EngineProcessDelegate {
         fileName = ""; chunksDone = 0; chunksTotal = 0
         livePartial = ""
         phase = .idle
+    }
+
+    /// Re-open an archived transcript .md (clicked in the workspace explorer)
+    /// into the view. Static read of a finished meeting — replaces the current
+    /// transcript; only allowed when idle/done/error so it never interrupts a
+    /// live capture. No-op if the file isn't a parseable transcript.
+    func openArchived(_ url: URL) {
+        guard phase == .idle || phase == .done || isError else { return }
+        guard let parsed = TranscriptArchive.parse(url) else { return }
+        reset()
+        speakerNames = parsed.names
+        transcript.load(parsed.lines)
+        fileName = url.lastPathComponent
+        phase = .done
     }
 
     /// #2 — commit an inline edit to a (committed) line and, if live translation

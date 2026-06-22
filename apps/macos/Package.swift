@@ -23,6 +23,7 @@ let package = Package(
                 "Transcript/EditorCuts.swift",
                 "Transcript/Retrieval.swift",
                 "Transcript/SummaryDeck.swift",
+                "Transcript/TranscriptArchive.swift",
                 "Engine/EngineProtocol.swift",
             ]
         ),

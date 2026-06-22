@@ -57,6 +57,7 @@ engine/metal/bench/__pycache__/
 
 # macOS app build artifacts
 apps/macos/build/
+apps/macos/.build/
 apps/macos/*.xcodeproj/xcuserdata/
 apps/macos/DerivedData/
 *.dmg
