@@ -145,6 +145,9 @@ struct SettingsView: View {
                         Button("변경…") { chooseAutoSaveFolder() }
                     }
                 }
+                Toggle("내보낼 때 개인정보 마스킹", isOn: $session.piiRedactionEnabled)
+                Text("이메일·전화·주민번호를 [태그]로 가린 사본을 저장합니다. 화면의 전사문은 그대로입니다.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("음성 인식") {
                 slider("저신뢰 표시 기준 (VAD)", $vadThreshold, 0.35...0.9, "%.2f")

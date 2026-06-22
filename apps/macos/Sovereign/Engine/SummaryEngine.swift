@@ -79,6 +79,15 @@ final class SummaryEngine {
     /// Leverages persistent speaker identity (voiceprints) — "who is on the hook".
     func summarizeBySpeaker(lines: [String]) { beginFold(lines, finalTag: "speakers") }
 
+    /// One-line meeting TITLE from the transcript, on-device. Single budget-capped
+    /// request (a title is short — no map-reduce fold). The raw reply is sanitized
+    /// caller-side via TitleGenerator.sanitize; emits the "title" tag through onResult.
+    func generateTitle(lines: [String]) {
+        let t = transcriptOneLine(lines)
+        guard !t.isEmpty else { onResult?("title", nil); return }
+        enqueue("title", TitleGenerator.promptText(String(t.prefix(chunkChars))))
+    }
+
     // The final-format prompt (single fitting text → the user-facing output).
     private func finalPrompt(_ tag: String, _ t: String) -> String {
         switch tag {

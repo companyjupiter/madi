@@ -25,6 +25,8 @@ let package = Package(
                 "Transcript/SummaryDeck.swift",
                 "Transcript/TranscriptArchive.swift",
                 "Transcript/EnergyArc.swift",
+                "Transcript/TitleGenerator.swift",
+                "Transcript/PIIRedactor.swift",
                 "Engine/EngineProtocol.swift",
             ]
         ),

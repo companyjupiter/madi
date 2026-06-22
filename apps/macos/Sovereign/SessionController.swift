@@ -88,6 +88,8 @@ final class SessionController: EngineProcessDelegate {
     // Uses the SAME bundled DNA3.0-4B; the transcript never leaves the device.
     private var summaryEngine: SummaryEngine?
     private(set) var meetingSummary: String? = nil
+    /// Smart auto-title — sanitized one-line meeting name (nil until generated).
+    private(set) var meetingTitle: String? = nil
     private(set) var summarizing = false
     // speaker-aware breakdown (who said what / who owns which action)
     private(set) var speakerSummary: String? = nil
@@ -124,6 +126,13 @@ final class SessionController: EngineProcessDelegate {
                 case "qa":
                     self.qaAsking = false
                     self.qaAnswer = text ?? "답변 생성에 실패했습니다."
+                case "title":
+                    // Smart auto-title: rename the already-saved .md to the AI name
+                    // (the save itself was never deferred — no reliability regression).
+                    if let t = TitleGenerator.sanitize(text ?? "") {
+                        self.meetingTitle = t
+                        self.renameAutoSavedToTitle(t)
+                    }
                 default: break
                 }
             }
@@ -169,7 +178,7 @@ final class SessionController: EngineProcessDelegate {
 
     private func clearSummary() {
         summaryEngine?.stop(); summaryEngine = nil
-        meetingSummary = nil; summarizing = false
+        meetingSummary = nil; meetingTitle = nil; summarizing = false
         speakerSummary = nil; speakerSummarizing = false
         qaAnswer = nil; qaAsking = false
     }
@@ -225,6 +234,12 @@ final class SessionController: EngineProcessDelegate {
     /// Default off; persisted.
     var autoSaveSummary: Bool = (UserDefaults.standard.object(forKey: "autoSaveSummary") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(autoSaveSummary, forKey: "autoSaveSummary") }
+    }
+    /// 개인정보 마스킹 — when on, exports run PIIRedactor over the rendered text so
+    /// emails/전화/주민번호 become category tags before the file is written (the
+    /// on-screen transcript is untouched). Default off; persisted.
+    var piiRedactionEnabled: Bool = (UserDefaults.standard.object(forKey: "piiRedactionEnabled") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(piiRedactionEnabled, forKey: "piiRedactionEnabled") }
     }
     /// Resolved auto-save folder: persisted choice, else Documents, else home.
     /// Static so both `autoSaveFolder` and `workspace` can seed from it without
@@ -577,14 +592,50 @@ final class SessionController: EngineProcessDelegate {
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
+        // A.I 요약이 켜진 라이브 세션: DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로
+        // 승격(rename)한다. 제목을 먼저 enqueue → 요약본 저장 전에 rename이 끝나 같은 베이스로 묶임.
+        if autoSaveEnabled, autoSaveSummary, fileName.isEmpty, let s = ensureSummaryEngine() {
+            s.generateTitle(lines: attributedLines)
+        }
         if autoSaveSummary, autoSaveEnabled { autoSummarizeForSave() }   // 요약본 별개 저장
     }
 
     // MARK: export
 
     func exportMarkdown(to url: URL) throws {
-        try Exporters.markdown(transcript.lines, names: speakerNames, summary: meetingSummary)
+        try applyPII(Exporters.markdown(transcript.lines, names: speakerNames, summary: meetingSummary))
             .write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Mask PII in an about-to-be-exported string when 개인정보 마스킹 is on. The
+    /// live transcript is never mutated — redaction is export-only.
+    private func applyPII(_ s: String) -> String { piiRedactionEnabled ? PIIRedactor.redact(s) : s }
+
+    /// Smart auto-title: rename the just-saved transcript .md (and its companion
+    /// summary file, if already written) to the AI-generated title. The save was
+    /// already done synchronously with the timestamp name, so a failed/late title
+    /// never loses data — this only upgrades the filename. Collision-safe.
+    private func renameAutoSavedToTitle(_ title: String) {
+        let fm = FileManager.default
+        guard let src = lastAutoSaved, fm.fileExists(atPath: src.path) else { return }
+        let oldBase = src.deletingPathExtension().lastPathComponent
+        var dst = autoSaveFolder.appendingPathComponent(title).appendingPathExtension("md")
+        var n = 2
+        while fm.fileExists(atPath: dst.path) {
+            dst = autoSaveFolder.appendingPathComponent("\(title) \(n)").appendingPathExtension("md"); n += 1
+        }
+        do {
+            try fm.moveItem(at: src, to: dst)
+            lastAutoSaved = dst
+            // Move the companion "<oldBase> 요약.md" too, if it landed already.
+            let oldSummary = autoSaveFolder.appendingPathComponent("\(oldBase) 요약").appendingPathExtension("md")
+            if fm.fileExists(atPath: oldSummary.path) {
+                let newBase = dst.deletingPathExtension().lastPathComponent
+                try? fm.moveItem(at: oldSummary,
+                                 to: autoSaveFolder.appendingPathComponent("\(newBase) 요약").appendingPathExtension("md"))
+            }
+            workspace.reload()
+        } catch { /* non-fatal — the timestamp-named file is intact */ }
     }
 
     /// Render the meeting summary as a self-contained, presentation-style HTML deck

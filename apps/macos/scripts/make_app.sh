@@ -48,6 +48,8 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift
   "$APP_DIR"/Sovereign/Transcript/TranscriptArchive.swift
   "$APP_DIR"/Sovereign/Transcript/EnergyArc.swift
+  "$APP_DIR"/Sovereign/Transcript/TitleGenerator.swift
+  "$APP_DIR"/Sovereign/Transcript/PIIRedactor.swift
   "$APP_DIR"/Sovereign/Transcript/Retrieval.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryDeck.swift
   "$APP_DIR"/Sovereign/SessionController.swift
