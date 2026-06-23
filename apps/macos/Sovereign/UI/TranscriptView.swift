@@ -24,6 +24,7 @@ struct TranscriptView: View {
     var scrollTick: Int = 0
     var focusedLine: UUID? = nil   // line to briefly emphasize after a jump
     var interim: String = ""       // live streaming-preview text (gray "진행 중")
+    var interimTranslations: [String: String] = [:]   // provisional translation of the interim
     var fontSize: CGFloat = 13     // transcript body text size (user-adjustable)
     // #2 inline editing of committed lines (live or post). onEdit commits the new
     // text; lockedLineID is the in-progress last line during recording (not yet
@@ -89,6 +90,13 @@ struct TranscriptView: View {
                             .foregroundStyle(Theme.Colors.textSecondary)  // adaptive — readable on light & dark
                             .italic()
                             .id("interim")
+                        // provisional translation of the interim (replaced when the line commits)
+                        ForEach(interimTranslations.keys.sorted(), id: \.self) { lang in
+                            Text(interimTranslations[lang] ?? "")
+                                .font(.system(size: max(12, fontSize - 4)))
+                                .foregroundStyle(Theme.Colors.accent.opacity(0.7))
+                                .italic()
+                        }
                     }
                 }
                 .padding(Theme.Space.window)

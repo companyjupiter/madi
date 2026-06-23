@@ -232,6 +232,7 @@ struct ContentView: View {
                                    scrollTarget: scrollTarget, scrollTick: scrollTick,
                                    focusedLine: scrollTarget,
                                    interim: session.livePartial,
+                                   interimTranslations: session.livePartialTranslations,
                                    fontSize: fontSize,
                                    onEdit: { session.editLine($0, to: $1) },
                                    lockedLineID: isRecordingLike ? session.transcript.lines.last?.id : nil,
