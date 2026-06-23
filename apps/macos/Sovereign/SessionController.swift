@@ -34,6 +34,19 @@ final class SessionController: EngineProcessDelegate {
         linePlayer.toggle(url: url, line: line.id, from: line.start, to: line.end)
     }
 
+    /// Always-on-top live-translation caption overlay (floats over the call app).
+    private let captionOverlay = CaptionOverlayController()
+    private(set) var captionOverlayOn = false
+    func toggleCaptionOverlay() {
+        captionOverlayOn.toggle()
+        if captionOverlayOn {
+            captionOverlay.show(CaptionView(session: self) { [weak self] in self?.hideCaptionOverlay() })
+        } else {
+            captionOverlay.hide()
+        }
+    }
+    private func hideCaptionOverlay() { captionOverlayOn = false; captionOverlay.hide() }
+
     // file-mode progress (nil when not transcribing a file)
     private(set) var fileName: String = ""
     private(set) var chunksDone = 0

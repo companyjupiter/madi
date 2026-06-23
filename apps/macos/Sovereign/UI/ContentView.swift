@@ -430,6 +430,18 @@ struct ContentView: View {
             .foregroundStyle(Theme.Colors.textSecondary)
             .help("완료 시 회의 요약을 전사문과 별개의 ‘요약.md’ 파일로 저장합니다 (요약 모델 필요)")
 
+            if !session.translateTargets.isEmpty {
+                Button { session.toggleCaptionOverlay() } label: {
+                    Label(session.captionOverlayOn ? "자막 오버레이 끄기" : "자막 오버레이",
+                          systemImage: "captions.bubble")
+                        .font(Theme.Fonts.status)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(session.captionOverlayOn ? Theme.Colors.accent : Theme.Colors.textSecondary)
+                .help("화면 위에 떠 있는 실시간 번역 자막 창 — Zoom·Teams 통화 위에 표시")
+            }
+
             dropZone
 
             if !session.transcript.lines.isEmpty {
