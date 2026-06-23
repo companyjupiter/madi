@@ -448,7 +448,7 @@ struct ContentView: View {
                         .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
                 }
             }
-            .help("녹음 중 결정·할 일·질문을 실시간 추출합니다. 메모리 사용이 큽니다(요약 모델 + 전사 동시).")
+            .help("녹음 중 결정·할 일·질문을 실시간 추출합니다. 요약 모델(DNA3)을 전사와 동시 구동 — 메모리 사용이 크고, 같은 모델을 쓰는 ‘실시간 번역’은 이때 일시 중지됩니다. 녹음 전에 설정하세요.")
 
             if !session.translateTargets.isEmpty {
                 Button { session.toggleCaptionOverlay() } label: {

@@ -53,7 +53,7 @@ final class SessionController: EngineProcessDelegate {
     private func startLiveRail() {
         liveRailTimer?.invalidate(); liveRailTimer = nil
         guard Self.liveRailCapable, liveRailEnabled else { return }
-        liveRailItems = []; liveRailLastCount = 0; liveRailBusy = false
+        liveRailItems = []; liveRailLastCount = 0; liveRailBusy = false; liveRailBusyTicks = 0
         liveRailTimer = Timer.scheduledTimer(withTimeInterval: 18, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tickLiveRail() }
         }
@@ -62,15 +62,24 @@ final class SessionController: EngineProcessDelegate {
     /// One extraction pass: only while recording, only when ≥3 new lines landed and
     /// no pass is in flight (so the DNA3 GPU spike stays brief + non-overlapping).
     private func tickLiveRail() {
-        guard phase == .recording, liveRailEnabled, Self.liveRailCapable, !liveRailBusy else { return }
+        guard phase == .recording, liveRailEnabled, Self.liveRailCapable else { return }
+        if liveRailBusy {
+            // No reply after ~2 ticks (≈36s) ⇒ the engine stalled/died — unwedge.
+            liveRailBusyTicks += 1
+            if liveRailBusyTicks >= 2 { liveRailBusy = false; liveRailBusyTicks = 0 }
+            return
+        }
         guard transcript.lines.count >= liveRailLastCount + 3 else { return }
         liveRailLastCount = transcript.lines.count
         guard let s = ensureSummaryEngine() else { return }
-        liveRailBusy = true
+        liveRailBusy = true; liveRailBusyTicks = 0
         s.extractActions(lines: attributedLines)
     }
 
-    private func stopLiveRail() { liveRailTimer?.invalidate(); liveRailTimer = nil; liveRailBusy = false }
+    private func stopLiveRail() {
+        liveRailTimer?.invalidate(); liveRailTimer = nil
+        liveRailBusy = false; liveRailBusyTicks = 0
+    }
 
     // file-mode progress (nil when not transcribing a file)
     private(set) var fileName: String = ""
@@ -192,7 +201,7 @@ final class SessionController: EngineProcessDelegate {
                 case "live-rail":
                     // Accumulate newly-extracted rail items (dedup by content id) so
                     // decisions persist as the recent-window extraction slides forward.
-                    self.liveRailBusy = false
+                    self.liveRailBusy = false; self.liveRailBusyTicks = 0
                     if let text {
                         var seen = Set(self.liveRailItems.map(\.id))
                         for it in LiveActionRail.parse(text) where seen.insert(it.id).inserted {
@@ -353,6 +362,7 @@ final class SessionController: EngineProcessDelegate {
     }
     private(set) var liveRailItems: [RailItem] = []
     private(set) var liveRailBusy = false
+    private var liveRailBusyTicks = 0          // stale-guard: reset busy if the engine never replies
     private var liveRailTimer: Timer?
     private var liveRailLastCount = 0
 
