@@ -31,8 +31,13 @@ final class TranslateEngine {
     private struct Turn { let id: UUID; let lang: String; let source: String; let prompt: String; var retries: Int }
     private var ready = false
     private var current = ""           // reply text accumulating for the in-flight turn
-    private var inflight: [Turn] = []  // FIFO turns awaiting a result
-    private var queued: [Turn] = []    // turns enqueued before READY
+    // Live-priority scheduling: hold turns in a stack and write them NEWEST-FIRST,
+    // one at a time. During a meeting the line you're looking at (the most recent)
+    // gets translated before an older backlog; starved old turns drain at the next
+    // pause / at stop (finalize re-runs the full pass), so nothing is permanently
+    // skipped — it's reordered, not dropped.
+    private var pending: [Turn] = []   // not-yet-sent; popLast() = newest
+    private var inflightTurn: Turn?    // the single turn currently generating
 
     func start(engine: URL, model: URL) -> Bool {
         process.executableURL = engine
@@ -56,7 +61,7 @@ final class TranslateEngine {
     func stop() {
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
         if process.isRunning { process.terminate() }
-        ready = false; current = ""; inflight.removeAll(); queued.removeAll()
+        ready = false; current = ""; pending.removeAll(); inflightTurn = nil
     }
 
     /// Queue a translation of `text` into each of `targets` (English language
@@ -78,13 +83,16 @@ final class TranslateEngine {
         for target in targets {
             let a = Self.anchor[target] ?? "Hello"
             let prompt = "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — Hello => \(a) . Now: \(oneLine) =>"
-            let turn = Turn(id: id, lang: target, source: oneLine, prompt: prompt, retries: 2)
-            if ready { send(turn) } else { queued.append(turn) }
+            pending.append(Turn(id: id, lang: target, source: oneLine, prompt: prompt, retries: 2))
         }
+        pump()
     }
 
-    private func send(_ turn: Turn) {
-        inflight.append(turn)
+    /// Write the NEXT turn (newest pending) iff the engine is free. One turn in
+    /// flight at a time — the DNA3 REPL generates one reply per prompt.
+    private func pump() {
+        guard ready, inflightTurn == nil, let turn = pending.popLast() else { return }
+        inflightTurn = turn
         write(turn.prompt + "\n")
     }
 
@@ -111,15 +119,15 @@ final class TranslateEngine {
         while s.hasPrefix(">") { s = String(s.dropFirst()).trimmingCharacters(in: .whitespaces) }
         if s == "READY" {
             ready = true
-            let q = queued; queued.removeAll()
-            for turn in q { send(turn) }
+            pump()
             return
         }
         if s.hasPrefix("[perf] generation") {           // turn complete
             let t = current.trimmingCharacters(in: .whitespacesAndNewlines)
             current = ""
-            guard !inflight.isEmpty else { return }
-            let turn = inflight.removeFirst()
+            guard let turn = inflightTurn else { return }
+            inflightTurn = nil
+            defer { pump() }                             // start the next turn
             // Failure mode: the 4B sometimes echoes the source verbatim instead of
             // translating (a cross-turn sampling-state effect — see LIVE_TRANSLATE
             // P4). Normalize-compare; retry, then SUPPRESS (don't show the source
@@ -129,7 +137,8 @@ final class TranslateEngine {
             }
             if !t.isEmpty, norm(t) == norm(turn.source) {
                 if turn.retries > 0 {
-                    send(Turn(id: turn.id, lang: turn.lang, source: turn.source, prompt: turn.prompt, retries: turn.retries - 1))
+                    // retry next (push so the very next pump picks it up)
+                    pending.append(Turn(id: turn.id, lang: turn.lang, source: turn.source, prompt: turn.prompt, retries: turn.retries - 1))
                 }
                 return   // retry pending, or suppress the echo
             }

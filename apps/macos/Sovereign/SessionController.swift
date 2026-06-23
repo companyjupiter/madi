@@ -134,7 +134,20 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(livePreviewEnabled, forKey: "livePreviewEnabled") }
     }
     /// Interim "진행 중" text (cleared when the window's committed words land).
-    private(set) var livePartial: String = ""
+    private(set) var livePartial: String = "" {
+        didSet {
+            if livePartial.isEmpty { livePartialTranslations = [:]; interimInFlight = false }
+            else if livePartial != oldValue { scheduleInterimTranslate() }
+        }
+    }
+    /// Provisional translation of the in-progress interim text (lang → text), shown
+    /// immediately so a caption doesn't wait ~10s for the window to close. Replaced
+    /// by the authoritative per-line translation once the line commits.
+    private(set) var livePartialTranslations: [String: String] = [:]
+    private var interimInFlight = false
+    private var interimSource = ""
+    private var interimGen = 0
+    private static let interimID = UUID()
     private let preview = PreviewEngine()
 
     /// Live translation TARGETS — a set of English language NAMES
@@ -177,7 +190,11 @@ final class SessionController: EngineProcessDelegate {
     private func ensureSummaryEngine() -> SummaryEngine? {
         guard let eng = AssetManifest.translateEngineURL, AssetManifest.translateModelIsValid() else { return nil }
         if summaryEngine == nil {
-            translate?.stop(); translate = nil
+            // One-model-resident is a MEMORY constraint, not a hard rule: on ≥16GB
+            // (where the live action rail runs) two DNA3 instances + Whisper fit, so
+            // KEEP the translate engine alive — otherwise the rail's 18s summary tick
+            // would kill+reload translation every cycle, starving live captions.
+            if !Self.liveRailCapable { translate?.stop(); translate = nil }
             let s = SummaryEngine()
             s.onResult = { [weak self] tag, text in
                 guard let self else { return }
@@ -380,11 +397,39 @@ final class SessionController: EngineProcessDelegate {
               AssetManifest.translateModelIsValid() else { return nil }
         if translate == nil {
             let t = TranslateEngine()
-            t.onResult = { [weak self] id, lang, text in self?.transcript.setTranslation(id, lang: lang, text) }
+            t.onResult = { [weak self] id, lang, text in
+                guard let self else { return }
+                if id == Self.interimID {
+                    self.interimInFlight = false
+                    if !self.livePartial.isEmpty { self.livePartialTranslations[lang] = text }
+                    if self.livePartial != self.interimSource { self.scheduleInterimTranslate() }  // grew → refresh
+                } else {
+                    self.transcript.setTranslation(id, lang: lang, text)
+                }
+            }
             _ = t.start(engine: eng, model: AssetManifest.translateModelURL)
             translate = t
         }
         return translate
+    }
+
+    /// Debounced (≈0.6s, one in flight) translation of the in-progress interim text
+    /// so a PROVISIONAL caption appears right after you speak instead of waiting for
+    /// the window to close. Best-effort + throwaway — the per-line translation wins.
+    private func scheduleInterimTranslate() {
+        guard !translateTargets.isEmpty else { return }
+        interimGen += 1
+        let gen = interimGen
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard let self, gen == self.interimGen, !self.interimInFlight, !self.livePartial.isEmpty else { return }
+            guard let t = self.ensureTranslateEngine() else { return }
+            let targets = self.translateTargets.subtracting([self.sourceLangName].compactMap { $0 }).sorted()
+            guard !targets.isEmpty else { return }
+            self.interimInFlight = true
+            self.interimSource = self.livePartial
+            t.translate(self.livePartial, into: targets, id: Self.interimID)
+        }
     }
 
     /// Translate every stable line (all but the last, which may still grow) that
