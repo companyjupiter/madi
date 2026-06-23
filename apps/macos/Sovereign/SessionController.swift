@@ -190,7 +190,11 @@ final class SessionController: EngineProcessDelegate {
     private func ensureSummaryEngine() -> SummaryEngine? {
         guard let eng = AssetManifest.translateEngineURL, AssetManifest.translateModelIsValid() else { return nil }
         if summaryEngine == nil {
-            translate?.stop(); translate = nil
+            // One-model-resident is a MEMORY constraint, not a hard rule: on ≥16GB
+            // (where the live action rail runs) two DNA3 instances + Whisper fit, so
+            // KEEP the translate engine alive — otherwise the rail's 18s summary tick
+            // would kill+reload translation every cycle, starving live captions.
+            if !Self.liveRailCapable { translate?.stop(); translate = nil }
             let s = SummaryEngine()
             s.onResult = { [weak self] tag, text in
                 guard let self else { return }
