@@ -210,7 +210,9 @@ struct ContentView: View {
                                    fontSize: fontSize,
                                    onEdit: { session.editLine($0, to: $1) },
                                    lockedLineID: isRecordingLike ? session.transcript.lines.last?.id : nil,
-                                   onRequestDetailed: { contentMode = false })
+                                   onRequestDetailed: { contentMode = false },
+                                   onPlay: session.sourceMediaURL != nil ? { session.playLine($0) } : nil,
+                                   playingLine: session.linePlayer.currentLine)
                 }
                 if dropTargeted {
                     RoundedRectangle(cornerRadius: 12)
