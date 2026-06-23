@@ -66,6 +66,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/TimelineScrubberView.swift
   "$APP_DIR"/Sovereign/UI/EnergyArcView.swift
   "$APP_DIR"/Sovereign/UI/CommandPalette.swift
+  "$APP_DIR"/Sovereign/UI/CaptionOverlay.swift
   "$APP_DIR"/Sovereign/UI/PeopleDashboard.swift
   "$APP_DIR"/Sovereign/UI/TranscriptView.swift
   "$APP_DIR"/Sovereign/UI/ModelGateView.swift
