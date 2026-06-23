@@ -19,7 +19,7 @@ struct WorkspaceExplorer: View {
     @State private var handleHovering = false
     @State private var mode: ExplorerMode = .files
     private let minWidth = 180.0, maxWidth = 460.0
-    private enum ExplorerMode: String, CaseIterable { case files, people }
+    private enum ExplorerMode: String, CaseIterable { case files, people, openLoops }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -27,6 +27,7 @@ struct WorkspaceExplorer: View {
             Picker("", selection: $mode) {
                 Text("파일").tag(ExplorerMode.files)
                 Text("사람").tag(ExplorerMode.people)
+                Text("열린 항목").tag(ExplorerMode.openLoops)
             }
             .pickerStyle(.segmented).labelsHidden()
             .padding(.horizontal, 12).padding(.bottom, 8)
@@ -46,6 +47,8 @@ struct WorkspaceExplorer: View {
                 }
             case .people:
                 PeopleDashboard(people: session.peopleAnalytics())
+            case .openLoops:
+                OpenLoopsView(session: session)
             }
         }
         .frame(width: explorerWidth)
@@ -135,10 +138,15 @@ struct WorkspaceExplorer: View {
                 .font(.system(size: 12))
                 .foregroundStyle(node.isTranscript ? Theme.Colors.accent : Theme.Colors.textTertiary)
                 .frame(width: 16)
-            Text(node.name)
-                .font(Theme.Fonts.status)
-                .foregroundStyle(node.isDir ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
-                .lineLimit(1).truncationMode(.middle)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(node.name)
+                    .font(Theme.Fonts.status)
+                    .foregroundStyle(node.isDir ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
+                    .lineLimit(1).truncationMode(.middle)
+                if node.isTranscript {
+                    GistView(url: node.url)
+                }
+            }
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())

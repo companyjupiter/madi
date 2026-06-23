@@ -27,8 +27,11 @@ final class LinePlayer {
 
         let start = CMTime(seconds: max(0, from), preferredTimescale: 600)
         p.seek(to: start, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            // Ignore a stale seek completion if the user already switched lines.
-            guard let self, self.currentLine == lineID else { return }
+            // Ignore a stale seek completion. The lineID check alone is insufficient
+            // when two consecutive words share the SAME line (currentLine is re-set to
+            // the same value by the next toggle): also require that `p` is still the
+            // active player, so only the current toggle's player ever starts.
+            guard let self, self.currentLine == lineID, p === self.player else { return }
             p.play()
         }
         // Auto-stop at the line's end (min 0.3s so a zero-span line still plays a bit).

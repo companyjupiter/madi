@@ -102,6 +102,10 @@ final class SessionController: EngineProcessDelegate {
     }()
     var speakerNames: [Int: String] = [:]
 
+    /// Personal vocabulary — domain terms/names the user has corrected over time.
+    /// Loaded once at init; auto-correction is OFF until glossary.enabled is set.
+    var glossary = Glossary.load()
+
     /// Fixed speaker count for diarization (자동/1/2/3/4명 이상). Persisted; maps to
     /// the engine's DIAR_MAXK upper bound. 자동 and 4+ leave the cap at 8.
     var speakerCount: SpeakerCount = SpeakerCount(rawValue: UserDefaults.standard.integer(forKey: "fixedSpeakerCount")) ?? .auto {
@@ -283,13 +287,68 @@ final class SessionController: EngineProcessDelegate {
         return PeopleAnalytics.aggregate(voiceprintNames: names, mdFiles: workspaceTranscriptURLs())
     }
 
+    /// Build the Open Loops data: every unresolved 결정/액션/질문 pulled from each
+    /// archived meeting's summary block, aged by the .md creation date and flagged
+    /// when a later meeting re-mentions it. Computed on demand (like peopleAnalytics()).
+    func openLoopsAnalytics() -> [OpenLoopItem] {
+        let mds = workspaceTranscriptURLs()
+        let summaryByBase: [String: URL] = Dictionary(
+            mds.map { ($0.deletingPathExtension().lastPathComponent, $0) },
+            uniquingKeysWith: { a, _ in a })
+        return OpenLoopsAggregator.aggregate(mdFiles: mds) { url in
+            let base = url.deletingPathExtension().lastPathComponent
+            guard let sib = summaryByBase["\(base) 요약"] else { return nil }
+            return try? String(contentsOf: sib, encoding: .utf8)
+        }
+    }
+
+    // Meeting Prep Brief — pre-record context snapshot for the detected calendar
+    // event's attendees, built headless (pure retrieval, no LLM) from the workspace.
+    var prepBriefData: PrepBriefData? = nil
+    private(set) var loadingPrepBrief = false
+
+    /// Build the Meeting Prep Brief for the currently-detected calendar event:
+    /// surface prior decisions + open action items for its attendees from the
+    /// workspace transcripts. Headless (pure retrieval, no engine).
+    func ensurePrepBrief() {
+        guard let ev = calendar.event else { prepBriefData = nil; return }
+        loadingPrepBrief = true
+        let title = ev.title
+        let attendees = ev.attendees
+        let mdFiles = workspaceTranscriptURLs()
+        Task.detached(priority: .userInitiated) {
+            let brief = MeetingPrepBrief.aggregate(title: title, attendees: attendees, mdFiles: mdFiles)
+            await MainActor.run {
+                self.prepBriefData = brief
+                self.loadingPrepBrief = false
+            }
+        }
+    }
+
+    /// Optional LLM-grounded prep context: ask the summary model the open
+    /// decisions/actions for the event's attendees, grounded in workspace excerpts.
+    func searchPrepContext() {
+        guard let ev = calendar.event else { return }
+        let q = MeetingPrepBrief.contextQuery(title: ev.title, attendees: ev.attendees)
+        guard let s = ensureSummaryEngine() else {
+            qaAnswer = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
+        }
+        let mdFiles = workspaceTranscriptURLs()
+        let excerpts = WorkspaceRetrieval.relevantExcerpts(q, mdFiles: mdFiles, budget: 650)
+        guard !excerpts.isEmpty else { qaAnswer = "워크스페이스 회의록에서 관련 내용을 찾지 못했습니다."; return }
+        qaAsking = true; qaAnswer = nil
+        s.askPreselected(q, lines: excerpts.map { "[\($0.meeting)] \($0.text)" })
+    }
+
     /// Every transcript .md leaf from the explorer tree (recursive).
     private func workspaceTranscriptURLs() -> [URL] {
         var out: [URL] = []
         func walk(_ nodes: [FileNode]) {
             for n in nodes {
                 if let kids = n.children { walk(kids) }
-                else if n.isTranscript { out.append(n.url) }
+                // Skip "<base> 요약.md" summary siblings — they aren't separate
+                // meetings; including them double-counts every action/decision.
+                else if n.isTranscript, !n.isSummaryFile { out.append(n.url) }
             }
         }
         walk(workspace.nodes)
@@ -304,6 +363,7 @@ final class SessionController: EngineProcessDelegate {
         meetingSummary = nil; meetingTitle = nil; summarizing = false
         speakerSummary = nil; speakerSummarizing = false
         qaAnswer = nil; qaAsking = false
+        prepBriefData = nil; loadingPrepBrief = false
     }
 
     /// English language name of the detected/selected source, to skip translating
@@ -559,6 +619,17 @@ final class SessionController: EngineProcessDelegate {
     /// is on, re-translate the edited text so the translation tracks the edit.
     func editLine(_ id: UUID, to newText: String) {
         transcript.editLine(id, newText)
+        // LEARN: the user just corrected this line — index any swapped tokens so
+        // future mis-recognitions of the same term self-correct. Diff the ASR text
+        // (joinedText of the current words) against the user's new text.
+        if let line = transcript.lines.first(where: { $0.id == id }) {
+            let asrText = line.words.map(\.text).joined(separator: " ")
+            let pairs = PersonalVocabulary.diff(before: asrText, after: newText)
+            if !pairs.isEmpty {
+                for p in pairs { glossary.learn(wrong: p.wrong, right: p.right) }
+                glossary.save()
+            }
+        }
         guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
         let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
         guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == id }) else { return }
@@ -575,7 +646,10 @@ final class SessionController: EngineProcessDelegate {
         lastAutoSaved = nil
         translatedIDs.removeAll()
         clearSummary()
-        Task { await calendar.loadCurrentEvent() }   // prefill from the live calendar event
+        // Prefill from the live calendar event. ContentView observes calendar.event.id
+        // and calls ensurePrepBrief() on change, so we do NOT call it here too (that
+        // double-ran the headless aggregation and raced two detached tasks).
+        Task { await calendar.loadCurrentEvent() }
         startLiveRail()                              // throttled live action extraction (≥16GB + on)
         phase = .engineStarting
 
@@ -706,6 +780,12 @@ final class SessionController: EngineProcessDelegate {
             // a live speaker matched an enrolled voiceprint → auto-label (the user
             // can still override). Cross-session speaker re-identification.
             speakerNames[id] = name
+        case .word(let t0, let t1, let text, let conf):
+            // APPLY (live): correct a low-confidence recognized word against the
+            // personal glossary before it enters the transcript. String-level —
+            // no Word exists yet, so no id/translation to disturb.
+            let fixed = PersonalVocabulary.correctIncomingText(text, conf: conf, glossary)
+            transcript.ingest(fixed == text ? event : .word(t0: t0, t1: t1, text: fixed, conf: conf))
         default: transcript.ingest(event)
         }
     }
@@ -725,6 +805,17 @@ final class SessionController: EngineProcessDelegate {
     private func finalizeOnce() {
         guard phase != .done else { return }
         transcript.finalize()
+        // APPLY (final): cement corrections on the committed lines. correctedLineText
+        // is non-destructive — it returns the corrected display string, applied via
+        // the existing line-id-keyed edit overlay so Word ids + async translations
+        // (keyed by line.id) survive. Skips lines the user already edited.
+        if glossary.enabled {
+            for line in transcript.lines where line.editedText == nil {
+                if let corrected = PersonalVocabulary.correctedLineText(line, glossary) {
+                    transcript.editLine(line.id, corrected)
+                }
+            }
+        }
         engine?.terminate()
         engine = nil
         preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text

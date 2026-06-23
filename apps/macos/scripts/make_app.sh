@@ -56,6 +56,13 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/LiveActionRail.swift
   "$APP_DIR"/Sovereign/Transcript/Retrieval.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryDeck.swift
+  "$APP_DIR"/Sovereign/Transcript/OpenLoopsAggregator.swift
+  "$APP_DIR"/Sovereign/Transcript/GlossaryStore.swift
+  "$APP_DIR"/Sovereign/Transcript/PersonalVocabulary.swift
+  "$APP_DIR"/Sovereign/Transcript/GistExtractor.swift
+  "$APP_DIR"/Sovereign/Transcript/MeetingPrepBrief.swift
+  "$APP_DIR"/Sovereign/Transcript/PrepBriefData.swift
+  "$APP_DIR"/Sovereign/Transcript/ReviewController.swift
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/CalendarBridge.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
@@ -63,6 +70,10 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/Theme+Conf.swift
   "$APP_DIR"/Sovereign/UI/ContentView.swift
   "$APP_DIR"/Sovereign/UI/WorkspaceExplorer.swift
+  "$APP_DIR"/Sovereign/UI/OpenLoopsView.swift
+  "$APP_DIR"/Sovereign/UI/GistView.swift
+  "$APP_DIR"/Sovereign/UI/PrepBriefView.swift
+  "$APP_DIR"/Sovereign/UI/ReviewControlView.swift
   "$APP_DIR"/Sovereign/UI/RecapCardView.swift
   "$APP_DIR"/Sovereign/UI/TimelineScrubberView.swift
   "$APP_DIR"/Sovereign/UI/EnergyArcView.swift

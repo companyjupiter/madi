@@ -13,7 +13,13 @@ import EventKit
 @Observable
 @MainActor
 final class CalendarBridge {
-    struct MeetingEvent: Sendable { let title: String; let attendees: [String]; let start: Date; let end: Date }
+    struct MeetingEvent: Sendable, Identifiable {
+        let title: String; let attendees: [String]; let start: Date; let end: Date
+        /// Stable identity for a detected event (title + start instant) so UI can
+        /// track per-event state — e.g. "the prep brief was dismissed for THIS
+        /// event" — without re-triggering when the same event re-loads.
+        var id: String { "\(title)@\(start.timeIntervalSinceReferenceDate)" }
+    }
 
     private(set) var event: MeetingEvent?
     private(set) var matched: Set<String> = []   // attendees correlated to a speaker
