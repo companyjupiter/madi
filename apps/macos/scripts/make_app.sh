@@ -53,6 +53,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/PIIRedactor.swift
   "$APP_DIR"/Sovereign/Transcript/WorkspaceRetrieval.swift
   "$APP_DIR"/Sovereign/Transcript/PeopleAnalytics.swift
+  "$APP_DIR"/Sovereign/Transcript/LiveActionRail.swift
   "$APP_DIR"/Sovereign/Transcript/Retrieval.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryDeck.swift
   "$APP_DIR"/Sovereign/SessionController.swift
@@ -68,6 +69,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/CommandPalette.swift
   "$APP_DIR"/Sovereign/UI/CaptionOverlay.swift
   "$APP_DIR"/Sovereign/UI/PeopleDashboard.swift
+  "$APP_DIR"/Sovereign/UI/LiveActionRailView.swift
   "$APP_DIR"/Sovereign/UI/TranscriptView.swift
   "$APP_DIR"/Sovereign/UI/ModelGateView.swift
   "$APP_DIR"/Sovereign/UI/SettingsView.swift

@@ -29,6 +29,7 @@ let package = Package(
                 "Transcript/PIIRedactor.swift",
                 "Transcript/WorkspaceRetrieval.swift",
                 "Transcript/PeopleAnalytics.swift",
+                "Transcript/LiveActionRail.swift",
                 "Engine/EngineProtocol.swift",
             ]
         ),

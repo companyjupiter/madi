@@ -418,6 +418,12 @@ struct ContentView: View {
 
             if let ev = session.calendar.event { calendarBlock(ev) }
 
+            if SessionController.liveRailCapable, session.liveRailEnabled,
+               isRecordingLike || !session.liveRailItems.isEmpty {
+                Divider().overlay(Theme.Colors.separator)
+                LiveActionRailView(items: session.liveRailItems, extracting: session.liveRailBusy)
+            }
+
             field("언어") { languagePicker }
 
             field("화자 수") { speakerCountPicker }
@@ -429,6 +435,20 @@ struct ContentView: View {
             .toggleStyle(.checkbox)
             .foregroundStyle(Theme.Colors.textSecondary)
             .help("완료 시 회의 요약을 전사문과 별개의 ‘요약.md’ 파일로 저장합니다 (요약 모델 필요)")
+
+            VStack(alignment: .leading, spacing: 1) {
+                Toggle(isOn: $session.liveRailEnabled) {
+                    Label("라이브 액션 추출", systemImage: "bolt").font(Theme.Fonts.status)
+                }
+                .toggleStyle(.checkbox)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .disabled(!SessionController.liveRailCapable || isRecordingLike)
+                if !SessionController.liveRailCapable {
+                    Text("16GB 이상 메모리 필요 (DNA3 LLM 동시 구동)")
+                        .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                }
+            }
+            .help("녹음 중 결정·할 일·질문을 실시간 추출합니다. 메모리 사용이 큽니다(요약 모델 + 전사 동시).")
 
             if !session.translateTargets.isEmpty {
                 Button { session.toggleCaptionOverlay() } label: {
