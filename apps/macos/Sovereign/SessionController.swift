@@ -106,7 +106,10 @@ final class SessionController: EngineProcessDelegate {
     var translateTargets: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "translateTargets") ?? []) {
         didSet {
             UserDefaults.standard.set(Array(translateTargets), forKey: "translateTargets")
-            if translateTargets.isEmpty { translate?.stop(); translate = nil }
+            if translateTargets.isEmpty {
+                translate?.stop(); translate = nil
+                if captionOverlayOn { hideCaptionOverlay() }   // overlay is meaningless w/o targets
+            }
         }
     }
     private var translate: TranslateEngine?
