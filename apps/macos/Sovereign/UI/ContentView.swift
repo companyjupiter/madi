@@ -767,8 +767,17 @@ struct ContentView: View {
     private func export(_ type: UTType, _ writer: @escaping (URL) throws -> Void) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [type]
-        panel.nameFieldStringValue = "transcript"
+        panel.directoryURL = session.autoSaveFolder      // default to the left-panel workspace folder
+        panel.nameFieldStringValue = exportBaseName
         if panel.runModal() == .OK, let url = panel.url { try? writer(url) }
+    }
+    /// Default export filename — the auto-saved meeting name / source file / title,
+    /// so a manual export lands beside the workspace's other files with a real name.
+    private var exportBaseName: String {
+        if let saved = session.lastAutoSaved { return saved.deletingPathExtension().lastPathComponent }
+        let f = (session.fileName as NSString).deletingPathExtension
+        if !f.isEmpty { return f }
+        return session.meetingTitle ?? "transcript"
     }
 
     private var phaseText: String {
