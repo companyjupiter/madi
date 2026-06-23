@@ -47,6 +47,40 @@ final class SessionController: EngineProcessDelegate {
     }
     private func hideCaptionOverlay() { captionOverlayOn = false; captionOverlay.hide() }
 
+    // ── live action rail scheduling ──
+    /// Start the throttled extraction loop for a live recording (no-op unless the
+    /// machine is ≥16 GB AND the toggle is on). Resets the rail for the new session.
+    private func startLiveRail() {
+        liveRailTimer?.invalidate(); liveRailTimer = nil
+        guard Self.liveRailCapable, liveRailEnabled else { return }
+        liveRailItems = []; liveRailLastCount = 0; liveRailBusy = false; liveRailBusyTicks = 0
+        liveRailTimer = Timer.scheduledTimer(withTimeInterval: 18, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickLiveRail() }
+        }
+    }
+
+    /// One extraction pass: only while recording, only when ≥3 new lines landed and
+    /// no pass is in flight (so the DNA3 GPU spike stays brief + non-overlapping).
+    private func tickLiveRail() {
+        guard phase == .recording, liveRailEnabled, Self.liveRailCapable else { return }
+        if liveRailBusy {
+            // No reply after ~2 ticks (≈36s) ⇒ the engine stalled/died — unwedge.
+            liveRailBusyTicks += 1
+            if liveRailBusyTicks >= 2 { liveRailBusy = false; liveRailBusyTicks = 0 }
+            return
+        }
+        guard transcript.lines.count >= liveRailLastCount + 3 else { return }
+        liveRailLastCount = transcript.lines.count
+        guard let s = ensureSummaryEngine() else { return }
+        liveRailBusy = true; liveRailBusyTicks = 0
+        s.extractActions(lines: attributedLines)
+    }
+
+    private func stopLiveRail() {
+        liveRailTimer?.invalidate(); liveRailTimer = nil
+        liveRailBusy = false; liveRailBusyTicks = 0
+    }
+
     // file-mode progress (nil when not transcribing a file)
     private(set) var fileName: String = ""
     private(set) var chunksDone = 0
@@ -164,6 +198,16 @@ final class SessionController: EngineProcessDelegate {
                         self.meetingTitle = t
                         self.renameAutoSavedToTitle(t)
                     }
+                case "live-rail":
+                    // Accumulate newly-extracted rail items (dedup by content id) so
+                    // decisions persist as the recent-window extraction slides forward.
+                    self.liveRailBusy = false; self.liveRailBusyTicks = 0
+                    if let text {
+                        var seen = Set(self.liveRailItems.map(\.id))
+                        for it in LiveActionRail.parse(text) where seen.insert(it.id).inserted {
+                            self.liveRailItems.append(it)
+                        }
+                    }
                 default: break
                 }
             }
@@ -254,6 +298,7 @@ final class SessionController: EngineProcessDelegate {
 
     private func clearSummary() {
         calendar.clear()
+        stopLiveRail(); liveRailItems = []         // new session → reset the live rail
         linePlayer.stop(); sourceMediaURL = nil   // new session → drop click-to-play audio
         summaryEngine?.stop(); summaryEngine = nil
         meetingSummary = nil; meetingTitle = nil; summarizing = false
@@ -307,6 +352,20 @@ final class SessionController: EngineProcessDelegate {
     var autoSaveEnabled: Bool = (UserDefaults.standard.object(forKey: "autoSaveEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(autoSaveEnabled, forKey: "autoSaveEnabled") }
     }
+    // ── live action rail: real-time decisions/actions/questions during recording ──
+    /// Hardware gate: the live rail runs the 2.6 GB DNA3 LLM concurrently with the
+    /// Whisper engine, which only fits comfortably on ≥16 GB unified memory. On the
+    /// 8 GB floor (M1 Air) the toggle is disabled — the post-session A.I 요약 covers it.
+    static let liveRailCapable = ProcessInfo.processInfo.physicalMemory >= 16 * (1 << 30)
+    var liveRailEnabled: Bool = (UserDefaults.standard.object(forKey: "liveRailEnabled") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(liveRailEnabled, forKey: "liveRailEnabled") }
+    }
+    private(set) var liveRailItems: [RailItem] = []
+    private(set) var liveRailBusy = false
+    private var liveRailBusyTicks = 0          // stale-guard: reset busy if the engine never replies
+    private var liveRailTimer: Timer?
+    private var liveRailLastCount = 0
+
     /// "A.I 요약" — when on, a session finish also generates the on-device summary
     /// and saves it as a SEPARATE "<base> 요약.md" (never embedded in the transcript).
     /// Default off; persisted.
@@ -517,6 +576,7 @@ final class SessionController: EngineProcessDelegate {
         translatedIDs.removeAll()
         clearSummary()
         Task { await calendar.loadCurrentEvent() }   // prefill from the live calendar event
+        startLiveRail()                              // throttled live action extraction (≥16GB + on)
         phase = .engineStarting
 
         let e = EngineProcess(config: makeConfig())
@@ -670,6 +730,7 @@ final class SessionController: EngineProcessDelegate {
         preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
+        stopLiveRail()       // recording ended — keep the accumulated rail for review
         calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
         // A.I 요약이 켜진 라이브 세션: DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로

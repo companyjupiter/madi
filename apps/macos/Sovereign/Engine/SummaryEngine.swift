@@ -88,6 +88,15 @@ final class SummaryEngine {
         enqueue("title", TitleGenerator.promptText(String(t.prefix(chunkChars))))
     }
 
+    /// LIVE action-rail extraction — decisions / actions / open questions from the
+    /// recent transcript window, during the meeting. Single budget-capped request;
+    /// the reply is parsed caller-side via LiveActionRail.parse. "live-rail" tag.
+    func extractActions(lines: [String]) {
+        let t = transcriptOneLine(lines)
+        guard !t.isEmpty else { onResult?("live-rail", nil); return }
+        enqueue("live-rail", LiveActionRail.prompt(String(t.suffix(chunkChars))))
+    }
+
     // The final-format prompt (single fitting text → the user-facing output).
     private func finalPrompt(_ tag: String, _ t: String) -> String {
         switch tag {
