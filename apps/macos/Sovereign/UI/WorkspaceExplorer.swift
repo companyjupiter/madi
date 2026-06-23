@@ -105,6 +105,11 @@ struct WorkspaceExplorer: View {
                 .lineLimit(1).truncationMode(.middle)
                 .help(session.workspace.root.path)
             Spacer(minLength: 4)
+            Button { session.autoSaveFolder = session.workspace.root.deletingLastPathComponent() } label: {
+                Image(systemName: "arrow.up")
+            }
+            .buttonStyle(.plain).help("상위 폴더로")
+            .disabled(session.workspace.root.path == "/")
             Button { session.workspace.reload() } label: { Image(systemName: "arrow.clockwise") }
                 .buttonStyle(.plain).help("새로고침")
             Button { chooseFolder() } label: { Image(systemName: "folder.badge.gearshape") }
@@ -152,12 +157,13 @@ struct WorkspaceExplorer: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if node.isTranscript { session.openArchived(node.url) }
-            else if !node.isDir { reveal(node.url) }
-            // folders expand via the disclosure chevron (OutlineGroup)
+            else if node.isDir { session.autoSaveFolder = node.url }   // enter folder = make it the workspace + save/export folder
+            else { reveal(node.url) }
+            // (a folder's subtree also still expands inline via the disclosure chevron)
         }
         .contextMenu {
             if node.isDir {
-                Button("이 폴더를 저장 위치로") { session.autoSaveFolder = node.url }
+                Button("이 폴더 열기 (작업 폴더로)") { session.autoSaveFolder = node.url }
             } else if node.isTranscript {
                 Button("회의록 열기") { session.openArchived(node.url) }
             }
