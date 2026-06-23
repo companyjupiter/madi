@@ -32,6 +32,10 @@ struct TranscriptView: View {
     var onEdit: ((UUID, String) -> Void)? = nil
     var lockedLineID: UUID? = nil
     var onRequestDetailed: (() -> Void)? = nil
+    // Click-to-play: when set, each line shows a play button that hears that
+    // moment of the source media. playingLine drives the play/pause icon.
+    var onPlay: ((Line) -> Void)? = nil
+    var playingLine: UUID? = nil
     private var bodyFont: Font { .system(size: fontSize) }
 
     @State private var editingSpeaker: Int? = nil
@@ -182,6 +186,15 @@ struct TranscriptView: View {
                 .help("클릭하여 이름 지정")
                 Text(timecode(line.start)).font(Theme.Fonts.timestamp)
                     .foregroundStyle(Theme.Colors.textTertiary)
+                if let onPlay {
+                    Button { onPlay(line) } label: {
+                        Image(systemName: playingLine == line.id ? "pause.circle.fill" : "play.circle")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(playingLine == line.id ? Theme.Colors.accent : Theme.Colors.textTertiary)
+                    .help("이 구간 오디오 재생")
+                }
                 if line.isEdited {
                     Text("편집됨").font(Theme.Fonts.timestamp).foregroundStyle(Theme.Colors.accent)
                 }

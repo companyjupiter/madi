@@ -21,6 +21,18 @@ final class SessionController: EngineProcessDelegate {
     /// Local Calendar glue — prefills the meeting title/attendees and matches
     /// speakers to attendees after the session (read-only, on-device).
     let calendar = CalendarBridge()
+    /// Click-to-play: seeks the original media to a line's moment. Only armed for
+    /// file-transcribed sessions, where the source file + its timeline persist.
+    let linePlayer = LinePlayer()
+    /// The original media a file transcription came from (nil for live recordings
+    /// and re-opened archives). Backs click-to-play.
+    private(set) var sourceMediaURL: URL?
+
+    /// Play the audio span of a transcript line (file-transcribed sessions only).
+    func playLine(_ line: Line) {
+        guard let url = sourceMediaURL else { return }
+        linePlayer.toggle(url: url, line: line.id, from: line.start, to: line.end)
+    }
 
     // file-mode progress (nil when not transcribing a file)
     private(set) var fileName: String = ""
@@ -226,6 +238,7 @@ final class SessionController: EngineProcessDelegate {
 
     private func clearSummary() {
         calendar.clear()
+        linePlayer.stop(); sourceMediaURL = nil   // new session → drop click-to-play audio
         summaryEngine?.stop(); summaryEngine = nil
         meetingSummary = nil; meetingTitle = nil; summarizing = false
         speakerSummary = nil; speakerSummarizing = false
@@ -542,6 +555,7 @@ final class SessionController: EngineProcessDelegate {
         translatedIDs.removeAll()
         clearSummary()
         fileName = url.lastPathComponent
+        sourceMediaURL = url        // arm click-to-play (original timeline matches)
         chunksDone = 0; chunksTotal = 0
         phase = .processing
 

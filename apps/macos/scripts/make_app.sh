@@ -38,6 +38,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Audio/AudioCapture.swift
   "$APP_DIR"/Sovereign/Audio/AudioDevices.swift
   "$APP_DIR"/Sovereign/Audio/AudioDecode.swift
+  "$APP_DIR"/Sovereign/Audio/LinePlayer.swift
   "$APP_DIR"/Sovereign/Model/AssetManifest.swift
   "$APP_DIR"/Sovereign/Model/ModelDownloader.swift
   "$APP_DIR"/Sovereign/Model/TranslateModelDownloader.swift
