@@ -79,6 +79,15 @@ final class SummaryEngine {
     /// Leverages persistent speaker identity (voiceprints) — "who is on the hook".
     func summarizeBySpeaker(lines: [String]) { beginFold(lines, finalTag: "speakers") }
 
+    /// One-line meeting TITLE from the transcript, on-device. Single budget-capped
+    /// request (a title is short — no map-reduce fold). The raw reply is sanitized
+    /// caller-side via TitleGenerator.sanitize; emits the "title" tag through onResult.
+    func generateTitle(lines: [String]) {
+        let t = transcriptOneLine(lines)
+        guard !t.isEmpty else { onResult?("title", nil); return }
+        enqueue("title", TitleGenerator.promptText(String(t.prefix(chunkChars))))
+    }
+
     // The final-format prompt (single fitting text → the user-facing output).
     private func finalPrompt(_ tag: String, _ t: String) -> String {
         switch tag {
@@ -156,6 +165,18 @@ final class SummaryEngine {
         guard !q.isEmpty else { onResult?("qa", nil); return }
         let t = transcriptOneLine(Retrieval.relevantLines(q, lines, budget: chunkChars))
         guard !t.isEmpty else { onResult?("qa", nil); return }   // no relevant excerpt
+        askPreselected(q, lines: Retrieval.relevantLines(q, lines, budget: chunkChars))
+    }
+
+    /// Same prompt as ask(), but the lines are ALREADY retrieval-selected (e.g.
+    /// workspace RAG, where each line is prefixed with its meeting). Skips the
+    /// second Retrieval pass so those prefixes can't push the joined text past
+    /// the budget and silently drop relevant excerpts — caps to chunkChars instead.
+    func askPreselected(_ question: String, lines: [String]) {
+        let q = question.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { onResult?("qa", nil); return }
+        let t = String(transcriptOneLine(lines).prefix(chunkChars))
+        guard !t.isEmpty else { onResult?("qa", nil); return }
         enqueue("qa",
             "다음 회의록 발췌만 근거로 질문에 답하세요. 회의록과 같은 언어로, 간결하게. "
             + "발췌에 답이 없으면 '회의록에 해당 내용이 없습니다'라고만 답하세요. "

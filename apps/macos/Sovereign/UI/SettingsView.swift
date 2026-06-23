@@ -145,6 +145,9 @@ struct SettingsView: View {
                         Button("변경…") { chooseAutoSaveFolder() }
                     }
                 }
+                Toggle("내보내기 시 개인정보 마스킹", isOn: $session.piiRedactionEnabled)
+                Text("‘내보내기’로 만든 공유용 파일에서만 이메일·전화·주민번호를 [태그]로 가립니다. 자동저장된 원본과 화면의 전사문은 그대로 유지됩니다.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("음성 인식") {
                 slider("저신뢰 표시 기준 (VAD)", $vadThreshold, 0.35...0.9, "%.2f")

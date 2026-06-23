@@ -18,6 +18,9 @@ final class SessionController: EngineProcessDelegate {
     private(set) var phase: Phase = .idle
     var level: Float = 0
     let transcript = TranscriptStore()
+    /// Local Calendar glue — prefills the meeting title/attendees and matches
+    /// speakers to attendees after the session (read-only, on-device).
+    let calendar = CalendarBridge()
 
     // file-mode progress (nil when not transcribing a file)
     private(set) var fileName: String = ""
@@ -88,6 +91,8 @@ final class SessionController: EngineProcessDelegate {
     // Uses the SAME bundled DNA3.0-4B; the transcript never leaves the device.
     private var summaryEngine: SummaryEngine?
     private(set) var meetingSummary: String? = nil
+    /// Smart auto-title — sanitized one-line meeting name (nil until generated).
+    private(set) var meetingTitle: String? = nil
     private(set) var summarizing = false
     // speaker-aware breakdown (who said what / who owns which action)
     private(set) var speakerSummary: String? = nil
@@ -124,6 +129,13 @@ final class SessionController: EngineProcessDelegate {
                 case "qa":
                     self.qaAsking = false
                     self.qaAnswer = text ?? "답변 생성에 실패했습니다."
+                case "title":
+                    // Smart auto-title: rename the already-saved .md to the AI name
+                    // (the save itself was never deferred — no reliability regression).
+                    if let t = TitleGenerator.sanitize(text ?? "") {
+                        self.meetingTitle = t
+                        self.renameAutoSavedToTitle(t)
+                    }
                 default: break
                 }
             }
@@ -167,9 +179,55 @@ final class SessionController: EngineProcessDelegate {
         s.ask(q, lines: attributedLines)
     }
 
+    /// "Ask the WORKSPACE" — answer grounded in question-relevant excerpts pulled
+    /// from EVERY archived .md in the save folder (cross-meeting RAG), on-device.
+    /// Reuses the same summaryEngine + "qa" result handler as askTranscript; only
+    /// the retrieval scope differs (all meetings vs the open transcript).
+    func askWorkspace(_ question: String) {
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        switch phase { case .recording, .paused, .countingDown: return; default: break }
+        guard let s = ensureSummaryEngine() else {
+            qaAnswer = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
+        }
+        let mdFiles = workspaceTranscriptURLs()
+        guard !mdFiles.isEmpty else { qaAnswer = "워크스페이스에 회의록이 없습니다."; return }
+        // Budget the excerpts with headroom for the "[회의명] " prefixes so the
+        // prefixed text fits the engine's ~800-char window without a second
+        // retrieval pass dropping anything (askPreselected skips that re-filter).
+        let excerpts = WorkspaceRetrieval.relevantExcerpts(q, mdFiles: mdFiles, budget: 650)
+        guard !excerpts.isEmpty else { qaAnswer = "워크스페이스 회의록에서 관련 내용을 찾지 못했습니다."; return }
+        qaAsking = true; qaAnswer = nil
+        s.askPreselected(q, lines: excerpts.map { "[\($0.meeting)] \($0.text)" })
+    }
+
+    /// Build the People dashboard data: enrolled voiceprint names (basenames of
+    /// voiceprintsDir/*.vec) aggregated over every transcript .md in the workspace.
+    func peopleAnalytics() -> [Person] {
+        let names: [String] = ((try? FileManager.default.contentsOfDirectory(
+            at: voiceprintsDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? [])
+            .filter { $0.pathExtension.lowercased() == "vec" }
+            .map { $0.deletingPathExtension().lastPathComponent }
+        return PeopleAnalytics.aggregate(voiceprintNames: names, mdFiles: workspaceTranscriptURLs())
+    }
+
+    /// Every transcript .md leaf from the explorer tree (recursive).
+    private func workspaceTranscriptURLs() -> [URL] {
+        var out: [URL] = []
+        func walk(_ nodes: [FileNode]) {
+            for n in nodes {
+                if let kids = n.children { walk(kids) }
+                else if n.isTranscript { out.append(n.url) }
+            }
+        }
+        walk(workspace.nodes)
+        return out
+    }
+
     private func clearSummary() {
+        calendar.clear()
         summaryEngine?.stop(); summaryEngine = nil
-        meetingSummary = nil; summarizing = false
+        meetingSummary = nil; meetingTitle = nil; summarizing = false
         speakerSummary = nil; speakerSummarizing = false
         qaAnswer = nil; qaAsking = false
     }
@@ -226,6 +284,12 @@ final class SessionController: EngineProcessDelegate {
     var autoSaveSummary: Bool = (UserDefaults.standard.object(forKey: "autoSaveSummary") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(autoSaveSummary, forKey: "autoSaveSummary") }
     }
+    /// 개인정보 마스킹 — when on, exports run PIIRedactor over the rendered text so
+    /// emails/전화/주민번호 become category tags before the file is written (the
+    /// on-screen transcript is untouched). Default off; persisted.
+    var piiRedactionEnabled: Bool = (UserDefaults.standard.object(forKey: "piiRedactionEnabled") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(piiRedactionEnabled, forKey: "piiRedactionEnabled") }
+    }
     /// Resolved auto-save folder: persisted choice, else Documents, else home.
     /// Static so both `autoSaveFolder` and `workspace` can seed from it without
     /// a self-reference during stored-property init.
@@ -255,8 +319,7 @@ final class SessionController: EngineProcessDelegate {
         guard autoSaveEnabled, !transcript.lines.isEmpty else { return }
         let base: String
         if fileName.isEmpty {
-            let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HHmm"
-            base = "회의 \(df.string(from: Date()))"
+            base = TitleGenerator.fallbackTitle(date: Date())   // "회의 yyyy-MM-dd HHmm"
         } else {
             base = (fileName as NSString).deletingPathExtension
         }
@@ -424,6 +487,7 @@ final class SessionController: EngineProcessDelegate {
         lastAutoSaved = nil
         translatedIDs.removeAll()
         clearSummary()
+        Task { await calendar.loadCurrentEvent() }   // prefill from the live calendar event
         phase = .engineStarting
 
         let e = EngineProcess(config: makeConfig())
@@ -576,15 +640,52 @@ final class SessionController: EngineProcessDelegate {
         preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
+        calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
+        // A.I 요약이 켜진 라이브 세션: DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로
+        // 승격(rename)한다. 제목을 먼저 enqueue → 요약본 저장 전에 rename이 끝나 같은 베이스로 묶임.
+        if autoSaveEnabled, autoSaveSummary, fileName.isEmpty, let s = ensureSummaryEngine() {
+            s.generateTitle(lines: attributedLines)
+        }
         if autoSaveSummary, autoSaveEnabled { autoSummarizeForSave() }   // 요약본 별개 저장
     }
 
     // MARK: export
 
     func exportMarkdown(to url: URL) throws {
-        try Exporters.markdown(transcript.lines, names: speakerNames, summary: meetingSummary)
+        try applyPII(Exporters.markdown(transcript.lines, names: speakerNames, summary: meetingSummary))
             .write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// Mask PII in an about-to-be-exported string when 개인정보 마스킹 is on. The
+    /// live transcript is never mutated — redaction is export-only.
+    private func applyPII(_ s: String) -> String { piiRedactionEnabled ? PIIRedactor.redact(s) : s }
+
+    /// Smart auto-title: rename the just-saved transcript .md (and its companion
+    /// summary file, if already written) to the AI-generated title. The save was
+    /// already done synchronously with the timestamp name, so a failed/late title
+    /// never loses data — this only upgrades the filename. Collision-safe.
+    private func renameAutoSavedToTitle(_ title: String) {
+        let fm = FileManager.default
+        guard let src = lastAutoSaved, fm.fileExists(atPath: src.path) else { return }
+        let oldBase = src.deletingPathExtension().lastPathComponent
+        var dst = autoSaveFolder.appendingPathComponent(title).appendingPathExtension("md")
+        var n = 2
+        while fm.fileExists(atPath: dst.path) {
+            dst = autoSaveFolder.appendingPathComponent("\(title) \(n)").appendingPathExtension("md"); n += 1
+        }
+        do {
+            try fm.moveItem(at: src, to: dst)
+            lastAutoSaved = dst
+            // Move the companion "<oldBase> 요약.md" too, if it landed already.
+            let oldSummary = autoSaveFolder.appendingPathComponent("\(oldBase) 요약").appendingPathExtension("md")
+            if fm.fileExists(atPath: oldSummary.path) {
+                let newBase = dst.deletingPathExtension().lastPathComponent
+                try? fm.moveItem(at: oldSummary,
+                                 to: autoSaveFolder.appendingPathComponent("\(newBase) 요약").appendingPathExtension("md"))
+            }
+            workspace.reload()
+        } catch { /* non-fatal — the timestamp-named file is intact */ }
     }
 
     /// Render the meeting summary as a self-contained, presentation-style HTML deck
@@ -602,27 +703,27 @@ final class SessionController: EngineProcessDelegate {
         catch { return nil }
     }
     func exportSRT(to url: URL) throws {
-        try Exporters.srt(transcript.lines, names: speakerNames)
+        try applyPII(Exporters.srt(transcript.lines, names: speakerNames))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportVTT(to url: URL) throws {
-        try Exporters.vtt(transcript.lines, names: speakerNames)
+        try applyPII(Exporters.vtt(transcript.lines, names: speakerNames))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportText(to url: URL) throws {
-        try Exporters.plainText(transcript.lines, names: speakerNames)
+        try applyPII(Exporters.plainText(transcript.lines, names: speakerNames))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportJSON(to url: URL) throws {
-        try Exporters.json(transcript.lines, names: speakerNames, settings: editorSettings)
+        try applyPII(Exporters.json(transcript.lines, names: speakerNames, settings: editorSettings))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportCutList(to url: URL) throws {
-        try Exporters.cutListCSV(transcript.lines, settings: editorSettings)
+        try applyPII(Exporters.cutListCSV(transcript.lines, settings: editorSettings))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportChapters(to url: URL) throws {
-        try Exporters.youtubeChapters(transcript.lines, settings: editorSettings)
+        try applyPII(Exporters.youtubeChapters(transcript.lines, settings: editorSettings))
             .write(to: url, atomically: true, encoding: .utf8)
     }
     /// (cut count, removable seconds) for the tighten stat — honors the toggles.

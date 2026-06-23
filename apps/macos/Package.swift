@@ -24,6 +24,11 @@ let package = Package(
                 "Transcript/Retrieval.swift",
                 "Transcript/SummaryDeck.swift",
                 "Transcript/TranscriptArchive.swift",
+                "Transcript/EnergyArc.swift",
+                "Transcript/TitleGenerator.swift",
+                "Transcript/PIIRedactor.swift",
+                "Transcript/WorkspaceRetrieval.swift",
+                "Transcript/PeopleAnalytics.swift",
                 "Engine/EngineProtocol.swift",
             ]
         ),

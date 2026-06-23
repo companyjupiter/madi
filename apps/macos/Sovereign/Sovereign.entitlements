@@ -5,6 +5,9 @@
   <!-- Microphone capture (AVAudioEngine) -->
   <key>com.apple.security.device.audio-input</key> <true/>
 
+  <!-- Read the user's local Calendar (EventKit) to prefill meeting title/attendees -->
+  <key>com.apple.security.personal-information.calendars</key> <true/>
+
   <!-- NOT sandboxed: Developer ID DMG distribution; we spawn the engine binary
        and read/write temp segment files. (Mac App Store would require
        App Sandbox + a redesign, see DESIGN.md section 9.) Until then,

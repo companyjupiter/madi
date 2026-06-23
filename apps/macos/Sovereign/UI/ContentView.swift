@@ -24,6 +24,9 @@ struct ContentView: View {
     @State private var showSummary = false   // on-device meeting summary sheet
     @State private var summaryBySpeaker = false  // 전체 vs 화자별 breakdown
     @State private var qaInput = ""          // "ask the meeting" question
+    @AppStorage("qaScope") private var qaWorkspaceScope = false   // false=이 회의, true=전체 워크스페이스
+    @State private var showRecap = false     // shareable one-pager recap card sheet
+    @State private var showCommandPalette = false   // ⌘K fuzzy launcher overlay
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
     private var flaggedWords: [(line: UUID, text: String)] {
@@ -48,22 +51,35 @@ struct ContentView: View {
 
     // transcript fills the window; a fixed control panel sits on the right
     private var mainLayout: some View {
-        HStack(spacing: 0) {
-            if showExplorer {
-                WorkspaceExplorer(session: session, isVisible: $showExplorer)
-                    .transition(.move(edge: .leading).combined(with: .opacity))
+        ZStack {
+            HStack(spacing: 0) {
+                if showExplorer {
+                    WorkspaceExplorer(session: session, isVisible: $showExplorer)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+                transcriptPane
+                sidePanel
             }
-            transcriptPane
-            sidePanel
+            .animation(.snappy, value: showExplorer)
+            .background(Theme.Colors.surfaceSunken)
+            .dropDestination(for: URL.self) { urls, _ in
+                guard canDrop, let url = urls.first(where: isMediaFile) else { return false }
+                session.transcribeFile(url)
+                return true
+            } isTargeted: { dropTargeted = $0 }
+            .sheet(isPresented: $showSummary) { summarySheet }
+            .sheet(isPresented: $showRecap) { RecapCardView(session: session) { showRecap = false } }
+
+            // ⌘K — hidden button carries the shortcut; palette overlays everything.
+            Button("") { showCommandPalette = true }
+                .keyboardShortcut("k", modifiers: .command)
+                .buttonStyle(.plain).frame(width: 0, height: 0).opacity(0).accessibilityHidden(true)
+            if showCommandPalette {
+                CommandPalette(session: session, isPresented: $showCommandPalette)
+                    .transition(.opacity).zIndex(1)
+            }
         }
-        .animation(.snappy, value: showExplorer)
-        .background(Theme.Colors.surfaceSunken)
-        .dropDestination(for: URL.self) { urls, _ in
-            guard canDrop, let url = urls.first(where: isMediaFile) else { return false }
-            session.transcribeFile(url)
-            return true
-        } isTargeted: { dropTargeted = $0 }
-        .sheet(isPresented: $showSummary) { summarySheet }
+        .animation(.snappy, value: showCommandPalette)
     }
 
     // On-device meeting intelligence — summary + action items from the local LLM.
@@ -109,6 +125,7 @@ struct ContentView: View {
                         Label("다시 생성", systemImage: "arrow.clockwise")
                     }
                     Button { exportDeck() } label: { Label("슬라이드(HTML)", systemImage: "rectangle.on.rectangle.angled") }
+                    Button { showRecap = true } label: { Label("리캡 카드", systemImage: "rectangle.portrait.on.rectangle.portrait") }
                     Spacer()
                     Button("내보내기…") { export(.init(filenameExtension: "md")!) { try text.write(to: $0, atomically: true, encoding: .utf8) } }
                 }.font(Theme.Fonts.status)
@@ -124,8 +141,13 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 6) {
             Divider().overlay(Theme.Colors.separator)
             Text("회의록에 물어보기").font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
+            Picker("", selection: $qaWorkspaceScope) {
+                Text("이 회의").tag(false)
+                Text("전체 워크스페이스").tag(true)
+            }
+            .pickerStyle(.segmented).labelsHidden()
             HStack(spacing: 6) {
-                TextField("예: 무엇을 결정했나요? / 김부장이 맡은 일은?", text: $qaInput)
+                TextField(qaWorkspaceScope ? "전체 회의록에서 검색 — 예: 지난달 보안 결정은?" : "예: 무엇을 결정했나요? / 김부장이 맡은 일은?", text: $qaInput)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { ask() }
                 Button { ask() } label: { Image(systemName: "paperplane.fill") }
@@ -145,7 +167,7 @@ struct ContentView: View {
     private func ask() {
         let q = qaInput.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return }
-        session.askTranscript(q)
+        if qaWorkspaceScope { session.askWorkspace(q) } else { session.askTranscript(q) }
     }
 
     private func copy(_ s: String) {
@@ -166,6 +188,15 @@ struct ContentView: View {
             if case .processing = session.phase { progressBanner }
             if !session.transcript.lines.isEmpty { viewModeBar }
             if viewMode == .detailed && !flaggedWords.isEmpty { reviewBar }
+            if !session.transcript.lines.isEmpty {
+                TimelineScrubberView(
+                    lines: session.transcript.lines,
+                    speakerNames: session.speakerNames,
+                    onSeek: { id in scrollTarget = id; scrollTick += 1 }
+                )
+                .padding(.horizontal, Theme.Space.window)
+                .padding(.bottom, Theme.Space.lineInner)
+            }
             ZStack {
                 if session.transcript.lines.isEmpty {
                     emptyState
@@ -383,6 +414,8 @@ struct ContentView: View {
                 }
             }
 
+            if let ev = session.calendar.event { calendarBlock(ev) }
+
             field("언어") { languagePicker }
 
             field("화자 수") { speakerCountPicker }
@@ -400,6 +433,8 @@ struct ContentView: View {
             if !session.transcript.lines.isEmpty {
                 Divider().overlay(Theme.Colors.separator)
                 speakingStats
+                let energy = EnergyArc.compute(lines: session.transcript.lines)
+                if !energy.isEmpty { EnergyArcView(values: energy) }
             }
 
             Spacer(minLength: 8)
@@ -488,6 +523,34 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(label).font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
             control()
+        }
+    }
+
+    // Calendar prefill: the live event's title + attendees. After the session,
+    // attendees who never spoke are dimmed with a "발언 없음" mark.
+    private func calendarBlock(_ ev: CalendarBridge.MeetingEvent) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.accent)
+                Text(ev.title).font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            if !ev.attendees.isEmpty {
+                ForEach(ev.attendees, id: \.self) { name in
+                    let absent = session.calendar.absent.contains(name)
+                    HStack(spacing: 5) {
+                        Circle().fill(absent ? Theme.Colors.textTertiary : Theme.Colors.accent)
+                            .frame(width: 5, height: 5)
+                        Text(name).font(Theme.Fonts.status)
+                            .foregroundStyle(absent ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
+                            .lineLimit(1)
+                        if absent {
+                            Text("발언 없음").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
         }
     }
 
