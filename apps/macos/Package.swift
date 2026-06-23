@@ -30,6 +30,13 @@ let package = Package(
                 "Transcript/WorkspaceRetrieval.swift",
                 "Transcript/PeopleAnalytics.swift",
                 "Transcript/LiveActionRail.swift",
+                "Transcript/OpenLoopsAggregator.swift",
+                "Transcript/GlossaryStore.swift",
+                "Transcript/PersonalVocabulary.swift",
+                "Transcript/GistExtractor.swift",
+                "Transcript/MeetingPrepBrief.swift",
+                "Transcript/PrepBriefData.swift",
+                "Transcript/ReviewController.swift",
                 "Engine/EngineProtocol.swift",
             ]
         ),

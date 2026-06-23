@@ -19,9 +19,17 @@ struct ContentView: View {
     @AppStorage("showWorkspaceExplorer") private var showExplorer = true
     // N2 review navigator (상세 mode): step through low-confidence words.
     @State private var reviewIndex = 0
+    // N2 listen-to-review: auto-plays each low-confidence word's audio in sequence.
+    @State private var review = ReviewController()
     @State private var scrollTarget: UUID? = nil
     @State private var scrollTick = 0
     @State private var showSummary = false   // on-device meeting summary sheet
+    @State private var showPrepBrief = false
+    // Per-EVENT dismissal (not per-session): once the user closes the brief for a
+    // specific calendar event we don't auto-show it again for that same event, but a
+    // genuinely different event (different id) still auto-shows. Avoids the stuck flag
+    // that blocked the brief for every later meeting once dismissed.
+    @State private var dismissedPrepBriefEventIDs: Set<String> = []
     @State private var summaryBySpeaker = false  // 전체 vs 화자별 breakdown
     @State private var qaInput = ""          // "ask the meeting" question
     @AppStorage("qaScope") private var qaWorkspaceScope = false   // false=이 회의, true=전체 워크스페이스
@@ -69,6 +77,23 @@ struct ContentView: View {
             } isTargeted: { dropTargeted = $0 }
             .sheet(isPresented: $showSummary) { summarySheet }
             .sheet(isPresented: $showRecap) { RecapCardView(session: session) { showRecap = false } }
+            .sheet(isPresented: $showPrepBrief) {
+                PrepBriefView(
+                    session: session,
+                    onClose: {
+                        showPrepBrief = false
+                        if let id = session.calendar.event?.id { dismissedPrepBriefEventIDs.insert(id) }
+                    },
+                    onSearchWorkspace: { session.searchPrepContext() }
+                )
+            }
+            // Auto-show when a NEW event is detected (keyed by event id, so re-loading
+            // the same event doesn't re-fire) and the user hasn't dismissed THAT event.
+            .onChange(of: session.calendar.event?.id) { _, id in
+                guard let id, !dismissedPrepBriefEventIDs.contains(id) else { return }
+                session.ensurePrepBrief()
+                showPrepBrief = true
+            }
 
             // ⌘K — hidden button carries the shortcut; palette overlays everything.
             Button("") { showCommandPalette = true }
@@ -278,6 +303,7 @@ struct ContentView: View {
         let idx = min(reviewIndex, max(0, flagged.count - 1))
         func jump(_ d: Int) {
             guard !flagged.isEmpty else { return }
+            review.stop(); session.linePlayer.stop()   // manual chevron pauses listen-mode
             reviewIndex = ((idx + d) % flagged.count + flagged.count) % flagged.count
             scrollTarget = flagged[reviewIndex].line
             scrollTick += 1
@@ -292,6 +318,11 @@ struct ContentView: View {
                 Spacer()
                 Text("\(idx + 1)/\(flagged.count)").font(Theme.Fonts.status)
                     .foregroundStyle(Theme.Colors.textTertiary)
+                ReviewControlView(session: session, controller: review,
+                                  reviewIndex: $reviewIndex,
+                                  scrollTarget: $scrollTarget,
+                                  scrollTick: $scrollTick,
+                                  flaggedCount: flagged.count)
                 Button { jump(-1) } label: { Image(systemName: "chevron.up") }
                     .buttonStyle(.plain).help("이전 검토 단어")
                 Button { jump(1) } label: { Image(systemName: "chevron.down") }

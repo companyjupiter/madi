@@ -22,6 +22,13 @@ struct FileNode: Identifiable, Hashable {
     var ext: String { url.pathExtension.lowercased() }
     /// A transcript the app itself produced — the primary "open me" target.
     var isTranscript: Bool { isDir == false && ext == "md" }
+    /// A SEPARATE AI-summary file ("<base> 요약.md") written next to the
+    /// transcript. It is a sibling of a meeting, NOT a meeting in its own right —
+    /// aggregators (Open Loops / People / Prep Brief) must skip it so its items
+    /// don't get counted twice. The explorer still opens it as a normal .md.
+    var isSummaryFile: Bool {
+        isTranscript && url.deletingPathExtension().lastPathComponent.hasSuffix(" 요약")
+    }
 }
 
 @Observable
