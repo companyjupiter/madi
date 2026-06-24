@@ -603,7 +603,8 @@ final class SessionController: EngineProcessDelegate {
             bpeURL: AssetManifest.bundledBPE,
             assetsDir: AssetManifest.bundledAssetsDir,
             diarize: diarize, osd: osd,
-            languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers, voiceprintsDir: voiceprintsDir,
+            languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers,
+            vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
             streamWavRoots: [capture.segmentDirectory])
     }
 
@@ -981,6 +982,20 @@ enum SpeakerCount: Int, CaseIterable, Identifiable {
         case .one:             return 1
         case .two:             return 2
         case .three:           return 3
+        }
+    }
+    /// Per-speaker-count Silero speech-gate (VAD_PROB) default — each bucket's
+    /// outlier-robust DER optimum from the 2026-06-25 sweep (bench/VAD_TUNING.md).
+    /// More speakers ⇒ more cross-talk/backchannel false-speech ⇒ a stricter gate
+    /// trims FA. Gains over a flat 0.5 are small (≤~0.1pp, within noise on clean
+    /// close-mic audio); the mapping just sits each setting on its measured min.
+    /// auto = unknown count ⇒ the safe global 0.5. (Has no effect on far-field,
+    /// which is heterogeneous — see VAD_TUNING.md.)
+    var vadProb: Double {
+        switch self {
+        case .auto, .one:        return 0.5
+        case .two:               return 0.65
+        case .three, .fourPlus:  return 0.8
         }
     }
 }

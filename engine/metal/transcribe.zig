@@ -1049,6 +1049,7 @@ pub fn main() !void {
     var diar_emb = std.ArrayList(f32).init(alloc); // n × 256
     var diar_bm = std.ArrayList(f32).init(alloc); // per-window RMS (for VAD)
     var diar_t0 = std.ArrayList(f32).init(alloc);
+    var diar_pf = std.ArrayList(f32).init(alloc); // per-window raw silero frame probs (offline VAD sweep, VAD_DUMP)
     var diar_n: usize = 0;
     // diar threading: 1 sgemm thread per worker (avoid Accelerate oversubscription)
     _ = setenv("VECLIB_MAXIMUM_THREADS", "1", 1);
@@ -1130,6 +1131,13 @@ pub fn main() !void {
     const hallu_guard = !std.mem.eql(u8, std.posix.getenv("HALLU_GUARD") orelse "1", "0");
     const hallu_rms = envF("HALLU_RMS", 0.020);
     const vad_thresh = envF("VAD_THRESH", 0.010);
+    // Silero trained-VAD speech-probability threshold (was hardcoded 0.5).
+    // Exposed for per-language / per-speaker-count tuning: KO conversational and
+    // far-field multi-speaker audio want different operating points than the
+    // whisper.cpp default. neg (hysteresis exit) defaults to prob−0.15.
+    const vad_prob = envF("VAD_PROB", 0.5);
+    const vad_neg = envF("VAD_NEG", vad_prob - 0.15);
+    _ = vad_neg; // (segment-state-machine neg lives in vad_silero.zig; kept for symmetry/diag)
     // gate-only AGC: low-gain sources (quiet mic, far speaker; FLEURS masters at
     // −33 dBFS) were silently dropped by BOTH speech gates (energy RMS and
     // Silero STFT magnitudes too small → product goes totally silent). Normalize
@@ -1338,7 +1346,7 @@ pub fn main() !void {
                     vad_thread = null;
                     chunk_speech_s = 0;
                     for (vad_probs[0..vad_np]) |pv| {
-                        if (pv >= 0.5) chunk_speech_s += 0.032;
+                        if (pv >= vad_prob) chunk_speech_s += 0.032;
                     }
                     { // speech intervals: file-mode RTTM clipping AND live SPK/SPKFIX clipping
                         var iv = try vad.segmentsFromProbsP(alloc, vad_probs[0..vad_np], @intCast(envU("VAD_MIN_SPEECH_MS", 60)), @intCast(envU("VAD_PAD_MS", 200)));
@@ -1388,7 +1396,7 @@ pub fn main() !void {
                         const f1 = @min(f0 + SEG_SAMP / vad.N_WINDOW, vad_np);
                         var sp_s: f32 = 0;
                         for (vad_probs[f0..f1]) |pv| {
-                            if (pv >= 0.5) sp_s += 0.032;
+                            if (pv >= vad_prob) sp_s += 0.032;
                         }
                         crms[wsg] = if (sp_s >= sp_gate) 1.0 else 0.0;
                     }
@@ -1455,10 +1463,18 @@ pub fn main() !void {
                         }
                     }
                 } else {
+                    const FPW = SEG_SAMP / vad.N_WINDOW; // silero frames per 1.5 s window
                     for (0..nwin) |wsg| {
                         try diar_emb.appendSlice(cemb[wsg * diar.EMB ..][0 .. diar.EMB]);
                         try diar_bm.append(crms[wsg]);
                         try diar_t0.append(t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC);
+                        // raw per-frame silero probs for this window (offline VAD-threshold
+                        // sweep): reproduces the f0 indexing of the binarization loop above.
+                        const pf0 = wsg * SEG_SAMP / vad.N_WINDOW;
+                        for (0..FPW) |fi| {
+                            const idx = pf0 + fi;
+                            try diar_pf.append(if (idx < vad_np) vad_probs[idx] else 0.0);
+                        }
                         diar_n += 1;
                     }
                 }
@@ -1470,7 +1486,7 @@ pub fn main() !void {
             vad_thread = null;
             chunk_speech_s = 0;
             for (vad_probs[0..vad_np]) |pv| {
-                if (pv >= 0.5) chunk_speech_s += 0.032;
+                if (pv >= vad_prob) chunk_speech_s += 0.032;
             }
         }
         // DIAR_ONLY=1: diarization-only run (DER benches) — diar windows +
@@ -1929,6 +1945,21 @@ pub fn main() !void {
             try df.writeAll(std.mem.sliceAsBytes(diar_bm.items[0..diar_n])); // per-window RMS (VAD replication offline)
             try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
             try out.print("  [diar dump → {s}: {d} segs × {d}]\n", .{ dp, diar_n, SEGD });
+        }
+        // VAD_DUMP: richer dump incl. raw per-window silero frame probs → enables a
+        // FULLY OFFLINE sweep of (VAD_PROB × sp_gate × min_speech × pad × cluster
+        // params) from a single encoder pass. Format: u32{n, SEGD, FPW}, then
+        // t0[n], emb[n*SEGD], pf[n*FPW] (all little-endian f32).
+        if (std.posix.getenv("VAD_DUMP")) |dp| {
+            const FPW: usize = SEG_SAMP / vad.N_WINDOW;
+            var df = try std.fs.cwd().createFile(dp, .{});
+            defer df.close();
+            const hdr = [_]u32{ @intCast(diar_n), @intCast(SEGD), @intCast(FPW) };
+            try df.writeAll(std.mem.sliceAsBytes(hdr[0..]));
+            try df.writeAll(std.mem.sliceAsBytes(diar_t0.items[0..diar_n]));
+            try df.writeAll(std.mem.sliceAsBytes(diar_emb.items[0 .. diar_n * SEGD]));
+            try df.writeAll(std.mem.sliceAsBytes(diar_pf.items[0 .. diar_n * FPW]));
+            try out.print("  [vad dump → {s}: {d} win × ({d} emb + {d} pf)]\n", .{ dp, diar_n, SEGD, FPW });
         }
         var diart = try std.time.Timer.start();
         try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);

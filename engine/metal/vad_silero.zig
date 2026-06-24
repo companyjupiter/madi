@@ -229,8 +229,17 @@ pub fn segmentsFromProbs(alloc: std.mem.Allocator, probs: []const f32) !std.Arra
 
 pub fn segmentsFromProbsP(alloc: std.mem.Allocator, probs: []const f32, min_speech_ms: u32, pad_ms: u32) !std.ArrayList(Segment) {
     const SR: f32 = 16000;
-    const threshold: f32 = 0.5;
-    const neg_threshold: f32 = threshold - 0.15;
+    // speech-probability threshold (was hardcoded 0.5 = whisper.cpp default).
+    // VAD_PROB / VAD_NEG let the segment state machine track the same operating
+    // point chosen for diar window selection (per-language / per-speaker tuning).
+    const threshold: f32 = blk: {
+        if (std.posix.getenv("VAD_PROB")) |s| break :blk std.fmt.parseFloat(f32, s) catch 0.5;
+        break :blk 0.5;
+    };
+    const neg_threshold: f32 = blk: {
+        if (std.posix.getenv("VAD_NEG")) |s| break :blk std.fmt.parseFloat(f32, s) catch (threshold - 0.15);
+        break :blk threshold - 0.15;
+    };
     const min_silence: i64 = 16000 * 100 / 1000;
     const min_speech: i64 = @as(i64, @intCast(min_speech_ms)) * 16;
     const pad_s: i64 = @as(i64, @intCast(pad_ms)) * 16;
