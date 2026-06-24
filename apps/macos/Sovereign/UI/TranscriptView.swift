@@ -16,6 +16,7 @@ enum TranscriptViewMode { case content, detailed }
 struct TranscriptView: View {
     let lines: [Line]
     let names: [Int: String]
+    var autoRecognizedSpeakers: Set<Int> = []
     var mode: TranscriptViewMode = .detailed
     var onRename: ((Int, String) -> Void)? = nil   // speaker id → new name
     // Review navigator: bump `scrollTick` to scroll the line `scrollTarget` into
@@ -138,8 +139,17 @@ struct TranscriptView: View {
                     draftName = names[b.speaker] ?? ""
                     editingSpeaker = b.speaker
                 } label: {
-                    Text(name(b.speaker)).font(Theme.Fonts.speaker)
-                        .foregroundStyle(Theme.Colors.speaker(b.speaker))
+                    HStack(spacing: 4) {
+                        Text(name(b.speaker)).font(Theme.Fonts.speaker)
+                            .foregroundStyle(Theme.Colors.speaker(b.speaker))
+                        if autoRecognizedSpeakers.contains(b.speaker) {
+                            Label("음성 인식됨", systemImage: "checkmark.seal.fill")
+                                .labelStyle(.iconOnly)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.Colors.accent)
+                                .help("음성 인식됨 — 등록된 목소리와 일치")
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
                 .help("클릭하여 이름 지정")
@@ -187,8 +197,17 @@ struct TranscriptView: View {
                     draftName = names[line.speaker] ?? ""
                     editingSpeaker = line.speaker
                 } label: {
-                    Text(name(line.speaker)).font(Theme.Fonts.speaker)
-                        .foregroundStyle(Theme.Colors.speaker(line.speaker))
+                    HStack(spacing: 4) {
+                        Text(name(line.speaker)).font(Theme.Fonts.speaker)
+                            .foregroundStyle(Theme.Colors.speaker(line.speaker))
+                        if autoRecognizedSpeakers.contains(line.speaker) {
+                            Label("음성 인식됨", systemImage: "checkmark.seal.fill")
+                                .labelStyle(.iconOnly)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.Colors.accent)
+                                .help("음성 인식됨 — 등록된 목소리와 일치")
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
                 .help("클릭하여 이름 지정")
@@ -265,7 +284,7 @@ struct TranscriptView: View {
         return s
     }
 
-    private func name(_ id: Int) -> String { names[id] ?? "Speaker \(id)" }
+    private func name(_ id: Int) -> String { names[id] ?? "화자 \(id)" }
     private func timecode(_ t: Double) -> String {
         String(format: "%02d:%02d", Int(t) / 60, Int(t) % 60)
     }

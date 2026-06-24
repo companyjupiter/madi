@@ -102,6 +102,14 @@ final class SessionController: EngineProcessDelegate {
     }()
     var speakerNames: [Int: String] = [:]
 
+    /// Speaker ids auto-labeled this session because their voice matched an
+    /// enrolled voiceprint (engine SPKNAME event) — vs. names the user typed.
+    /// Session-scoped; drives the '✓ 음성 인식됨' affordance. Not persisted.
+    var autoRecognizedSpeakers: Set<Int> = []
+    /// Mid-session speaker names buffered for deferred voiceprint enrollment
+    /// (the engine only dumps centroids AFTER flush — see finalizeOnce).
+    private var pendingEnrollment = PendingEnrollmentStore()
+
     /// Personal vocabulary — domain terms/names the user has corrected over time.
     /// Loaded once at init; auto-correction is OFF until glossary.enabled is set.
     var glossary = Glossary.load()
@@ -573,8 +581,15 @@ final class SessionController: EngineProcessDelegate {
     /// recognized in future sessions (if the engine dumped this session's centroid).
     func renameSpeaker(_ id: Int, to name: String) {
         let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.isEmpty { speakerNames[id] = nil; return }
+        if t.isEmpty { speakerNames[id] = nil; pendingEnrollment.remove(id: id); autoRecognizedSpeakers.remove(id); return }
         speakerNames[id] = t
+        // BUFFER, don't enroll now: the engine dumps this session's centroid to
+        // .last/spk<id>.vec only after flush, so an immediate copy finds no source
+        // and silently no-ops. finalizeOnce() drains this after engine flush.
+        pendingEnrollment.add(id: id, name: t)
+        // Still attempt an immediate enroll: in a re-opened/finished session a
+        // centroid may already exist, and enrollVoiceprint() is a safe no-op when
+        // it doesn't. The deferred drain covers the live-recording case.
         enrollVoiceprint(speaker: id, name: t)
     }
 
@@ -639,6 +654,8 @@ final class SessionController: EngineProcessDelegate {
         countdownTask?.cancel(); countdownTask = nil
         transcript.reset()
         speakerNames = [:]
+        autoRecognizedSpeakers.removeAll()
+        pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
         clearSummary()
@@ -656,6 +673,7 @@ final class SessionController: EngineProcessDelegate {
         guard let parsed = TranscriptArchive.parse(url) else { return }
         reset()
         speakerNames = parsed.names
+        autoRecognizedSpeakers.removeAll()
         transcript.load(parsed.lines)
         fileName = url.lastPathComponent
         phase = .done
@@ -689,6 +707,8 @@ final class SessionController: EngineProcessDelegate {
         }
         transcript.reset()
         speakerNames = [:]
+        autoRecognizedSpeakers.removeAll()
+        pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
         clearSummary()
@@ -747,6 +767,8 @@ final class SessionController: EngineProcessDelegate {
         guard AssetManifest.modelIsValid() else { phase = .error("model not ready"); return }
         transcript.reset()
         speakerNames = [:]
+        autoRecognizedSpeakers.removeAll()
+        pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
         clearSummary()
@@ -826,6 +848,7 @@ final class SessionController: EngineProcessDelegate {
             // a live speaker matched an enrolled voiceprint → auto-label (the user
             // can still override). Cross-session speaker re-identification.
             speakerNames[id] = name
+            autoRecognizedSpeakers.insert(id)
         case .word(let t0, let t1, let text, let conf):
             // APPLY (live): correct a low-confidence recognized word against the
             // personal glossary before it enters the transcript. String-level —
@@ -863,6 +886,10 @@ final class SessionController: EngineProcessDelegate {
             }
         }
         engine?.terminate()
+        // Drain mid-session names now that the engine has dumped its centroids
+        // (.last/spk<id>.vec) on flush — THIS is the enrollment-timing fix.
+        for p in pendingEnrollment.pending() { enrollVoiceprint(speaker: p.id, name: p.name) }
+        pendingEnrollment.clear()
         engine = nil
         preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
         phase = .done
