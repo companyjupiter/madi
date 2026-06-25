@@ -19,6 +19,7 @@ struct SettingsView: View {
             recording.tabItem { Label("녹음", systemImage: "mic") }
             editor.tabItem { Label("편집·저장", systemImage: "scissors") }
             translate.tabItem { Label("번역", systemImage: "character.bubble") }
+            GlossarySettingsView(session: session).tabItem { Label("단어장", systemImage: "character.book.closed") }
             model.tabItem { Label("모델", systemImage: "shippingbox") }
             DictationSettingsView(dictation: dictation).tabItem { Label("받아쓰기", systemImage: "keyboard") }
         }
