@@ -19,7 +19,7 @@ struct WorkspaceExplorer: View {
     @State private var handleHovering = false
     @State private var mode: ExplorerMode = .files
     private let minWidth = 180.0, maxWidth = 460.0
-    private enum ExplorerMode: String, CaseIterable { case files, people, openLoops }
+    private enum ExplorerMode: String, CaseIterable { case files, people, openLoops, voiceprints }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -28,6 +28,7 @@ struct WorkspaceExplorer: View {
                 Text("파일").tag(ExplorerMode.files)
                 Text("사람").tag(ExplorerMode.people)
                 Text("열린 항목").tag(ExplorerMode.openLoops)
+                Text("음성").tag(ExplorerMode.voiceprints)
             }
             .pickerStyle(.segmented).labelsHidden()
             .padding(.horizontal, 12).padding(.bottom, 8)
@@ -46,9 +47,13 @@ struct WorkspaceExplorer: View {
                     .scrollContentBackground(.hidden)
                 }
             case .people:
-                PeopleDashboard(people: session.peopleAnalytics())
+                PeopleDashboard(
+                    people: session.peopleAnalytics(),
+                    autoRecognizedNames: Set(session.autoRecognizedSpeakers.compactMap { session.speakerNames[$0] }))
             case .openLoops:
                 OpenLoopsView(session: session)
+            case .voiceprints:
+                VoiceprintManagementView(session: session)
             }
         }
         .frame(width: explorerWidth)

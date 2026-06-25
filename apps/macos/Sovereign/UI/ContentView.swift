@@ -227,6 +227,7 @@ struct ContentView: View {
                     emptyState
                 } else {
                     TranscriptView(lines: session.transcript.lines, names: session.speakerNames,
+                                   autoRecognizedSpeakers: session.autoRecognizedSpeakers,
                                    mode: viewMode,
                                    onRename: { session.renameSpeaker($0, to: $1) },
                                    scrollTarget: scrollTarget, scrollTick: scrollTick,

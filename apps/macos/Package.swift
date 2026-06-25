@@ -29,6 +29,8 @@ let package = Package(
                 "Transcript/PIIRedactor.swift",
                 "Transcript/WorkspaceRetrieval.swift",
                 "Transcript/PeopleAnalytics.swift",
+                "Transcript/PendingEnrollmentStore.swift",
+                "Transcript/VoiceprintStore.swift",
                 "Transcript/LiveActionRail.swift",
                 "Transcript/OpenLoopsAggregator.swift",
                 "Transcript/GlossaryStore.swift",
