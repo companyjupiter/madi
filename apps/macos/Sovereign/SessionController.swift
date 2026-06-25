@@ -188,6 +188,10 @@ final class SessionController: EngineProcessDelegate {
     }
     private var translate: TranslateEngine?
     private var translatedIDs: Set<UUID> = []
+    /// O3 — reuse interim translations for the matching committed line instead of
+    /// re-queuing a fresh DNA3 turn. Cleared on every session boundary to prevent
+    /// cross-meeting bleed.
+    private var interimCache = InterimTranslationCache()
 
     // ── on-device meeting intelligence (post-session summary + action items) ──
     // Uses the SAME bundled DNA3.0-4B; the transcript never leaves the device.
@@ -432,7 +436,13 @@ final class SessionController: EngineProcessDelegate {
                 guard let self else { return }
                 if id == Self.interimID {
                     self.interimInFlight = false
-                    if !self.livePartial.isEmpty { self.livePartialTranslations[lang] = text }
+                    if !self.livePartial.isEmpty {
+                        self.livePartialTranslations[lang] = text
+                        // Cache this interim source's translations so the matching
+                        // committed line can reuse them (O3). Keyed by interimSource —
+                        // the exact text that was sent to translate() for this turn.
+                        self.interimCache.put(self.interimSource, self.livePartialTranslations)
+                    }
                     if self.livePartial != self.interimSource { self.scheduleInterimTranslate() }  // grew → refresh
                 } else {
                     self.transcript.setTranslation(id, lang: lang, text)
@@ -476,6 +486,18 @@ final class SessionController: EngineProcessDelegate {
             let line = lines[i]
             if translatedIDs.contains(line.id) { continue }
             translatedIDs.insert(line.id)
+            // O3: if this line's text was already translated as interim, reuse the
+            // cached translations and skip the DNA3 turn entirely. Only reuse the
+            // targets we actually have cached; queue the engine for any that miss.
+            if let cached = interimCache.get(line.text) {
+                let missing = targets.filter { cached[$0] == nil }
+                for tgt in targets where cached[tgt] != nil {
+                    transcript.setTranslation(line.id, lang: tgt, cached[tgt]!)
+                }
+                if missing.isEmpty { continue }
+                t.translate(line.text, into: missing, id: line.id)
+                continue
+            }
             t.translate(line.text, into: targets, id: line.id)
         }
     }
@@ -739,6 +761,7 @@ final class SessionController: EngineProcessDelegate {
         pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
+        interimCache.clear()
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
         livePartial = ""
@@ -792,6 +815,7 @@ final class SessionController: EngineProcessDelegate {
         pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
+        interimCache.clear()
         clearSummary()
         // Prefill from the live calendar event. ContentView observes calendar.event.id
         // and calls ensurePrepBrief() on change, so we do NOT call it here too (that
@@ -853,6 +877,7 @@ final class SessionController: EngineProcessDelegate {
         pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
+        interimCache.clear()
         clearSummary()
         fileName = url.lastPathComponent
         sourceMediaURL = url        // arm click-to-play (original timeline matches)
@@ -904,6 +929,9 @@ final class SessionController: EngineProcessDelegate {
         phase = .flushing
         capture.stop()          // flush final tail segment(s) into the engine
         engine?.flush()         // → SPKFIX/SPKOV → <<FLUSH_END>>
+        // NOTE: do NOT clear interimCache here. finalizeOnce() runs later (post-flush
+        // via engineDidFlush) and reuses the cached interim translations for the final
+        // committed lines, then clears. Clearing here would defeat that final-line reuse.
     }
 
     // MARK: EngineProcessDelegate
@@ -976,6 +1004,7 @@ final class SessionController: EngineProcessDelegate {
         preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
+        interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
         stopLiveRail()       // recording ended — keep the accumulated rail for review
         stopLiveCoach(); recomputeCoach()   // stop the 1Hz loop, snapshot the final transcript once
         calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag

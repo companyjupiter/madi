@@ -63,6 +63,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/OpenLoopsAggregator.swift
   "$APP_DIR"/Sovereign/Transcript/GlossaryStore.swift
   "$APP_DIR"/Sovereign/Transcript/PersonalVocabulary.swift
+  "$APP_DIR"/Sovereign/Transcript/InterimTranslationCache.swift
   "$APP_DIR"/Sovereign/Transcript/GistExtractor.swift
   "$APP_DIR"/Sovereign/Transcript/MeetingPrepBrief.swift
   "$APP_DIR"/Sovereign/Transcript/PrepBriefData.swift

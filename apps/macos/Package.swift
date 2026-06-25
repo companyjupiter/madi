@@ -37,6 +37,7 @@ let package = Package(
                 "Transcript/OpenLoopsAggregator.swift",
                 "Transcript/GlossaryStore.swift",
                 "Transcript/PersonalVocabulary.swift",
+                "Transcript/InterimTranslationCache.swift",
                 "Transcript/GistExtractor.swift",
                 "Transcript/MeetingPrepBrief.swift",
                 "Transcript/PrepBriefData.swift",
