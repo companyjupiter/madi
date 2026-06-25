@@ -46,7 +46,23 @@ struct SovereignApp: App {
         .windowStyle(.titleBar)
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1100, height: 720)
+        .commands {
+            // Replace the empty default Help menu with a link to the bundled
+            // user manual (sealed into Resources/manual/ by make_app.sh).
+            CommandGroup(replacing: .help) {
+                Button("Madi 사용자 매뉴얼") { Self.openManual() }
+                    .keyboardShortcut("?", modifiers: .command)
+            }
+        }
 
         Settings { SettingsView(session: session, downloader: downloader, translateDownloader: translateDownloader, dictation: dictation) }
+    }
+
+    /// Open the bundled, self-contained user manual (Resources/manual/index.html)
+    /// in the default browser. Works fully offline.
+    private static func openManual() {
+        if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "manual") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
