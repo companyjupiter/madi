@@ -73,11 +73,13 @@ final class SummaryEngine {
 
     /// Summarize a speaker-attributed transcript ("화자: 발언" lines), map-reducing
     /// over chunks so arbitrarily long meetings fit the engine's context.
-    func summarize(lines: [String]) { beginFold(lines, finalTag: "summary") }
+    private var foldStyleSuffix = ""   // mode prompt nudge appended to the FINAL format prompt
+
+    func summarize(lines: [String], styleSuffix: String = "") { beginFold(lines, finalTag: "summary", styleSuffix: styleSuffix) }
 
     /// Per-speaker breakdown: each speaker's key point + the actions they own.
     /// Leverages persistent speaker identity (voiceprints) — "who is on the hook".
-    func summarizeBySpeaker(lines: [String]) { beginFold(lines, finalTag: "speakers") }
+    func summarizeBySpeaker(lines: [String], styleSuffix: String = "") { beginFold(lines, finalTag: "speakers", styleSuffix: styleSuffix) }
 
     /// One-line meeting TITLE from the transcript, on-device. Single budget-capped
     /// request (a title is short — no map-reduce fold). The raw reply is sanitized
@@ -103,11 +105,11 @@ final class SummaryEngine {
         case "speakers":
             return "다음 회의록을 화자별로 정리하세요. 회의록과 같은 언어로. "
                 + "각 화자마다 '■ 이름: 핵심 발언 1문장. 맡은 일: - 할 일'(맡은 일 없으면 그 부분 생략). "
-                + "다른 말 없이 이 형식만. 회의록: \(t)"
+                + "다른 말 없이 이 형식만. 회의록: \(t)" + foldStyleSuffix
         default:
             return "다음 회의록을 요약하세요. 회의록과 같은 언어로 답하세요. "
                 + "형식: [요약] 핵심을 2-4문장. [액션] 각 줄 '- 담당자: 할 일'(없으면 생략). "
-                + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(t)"
+                + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(t)" + foldStyleSuffix
         }
     }
     // Intermediate "condense" prompt — preserve names, decisions, and to-dos.
@@ -116,7 +118,8 @@ final class SummaryEngine {
             + "회의록과 같은 언어로, 군더더기 없이. 내용: \(t)"
     }
 
-    private func beginFold(_ lines: [String], finalTag: String) {
+    private func beginFold(_ lines: [String], finalTag: String, styleSuffix: String = "") {
+        foldStyleSuffix = styleSuffix
         let full = transcriptOneLine(lines)
         guard !full.isEmpty else { onResult?(finalTag, nil); return }
         foldFinalTag = finalTag
