@@ -24,7 +24,16 @@ enum Theme {
         static let meterFill = Color(red: 0.2039, green: 0.7804, blue: 0.4824, opacity: 1.0)
         static let meterTrack = Color(nsColor: .quaternaryLabelColor)
         static let surface = Color(nsColor: .controlBackgroundColor)
-        static let surfaceSunken = Color(nsColor: .windowBackgroundColor)
+        // NSColor.windowBackgroundColor renders pure white (1,1,1) in light mode on
+        // recent macOS, making "sunken" surfaces invisible against white cards —
+        // override light mode with tokens.json's literal #F2F2F7; dark mode's
+        // system value is fine as-is.
+        static let surfaceSunken = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor.windowBackgroundColor
+                : NSColor(red: 0.9490, green: 0.9490, blue: 0.9686, alpha: 1.0)   // #F2F2F7 (light)
+        })
         static let separator = Color(nsColor: .separatorColor)
         static let textPrimary = Color(nsColor: .labelColor)
         static let textSecondary = Color(nsColor: .secondaryLabelColor)

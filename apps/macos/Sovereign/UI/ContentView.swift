@@ -35,6 +35,10 @@ struct ContentView: View {
     @AppStorage("qaScope") private var qaWorkspaceScope = false   // false=이 회의, true=전체 워크스페이스
     @State private var showRecap = false     // shareable one-pager recap card sheet
     @State private var showCommandPalette = false   // ⌘K fuzzy launcher overlay
+    @State private var languagePickerOpen = false
+    @State private var speakerCountPickerOpen = false
+    @State private var languagePickerWidth: CGFloat = 0
+    @State private var speakerCountPickerWidth: CGFloat = 0
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
     private var flaggedWords: [(line: UUID, text: String)] {
@@ -69,7 +73,19 @@ struct ContentView: View {
                 sidePanel
             }
             .animation(.snappy, value: showExplorer)
-            .background(Theme.Colors.surfaceSunken)
+            .background(
+                ZStack {
+                    Theme.Colors.surfaceSunken
+                    // Same trick as sidePanel's own catcher, one level further out:
+                    // closes a pill dropdown when clicking the transcript pane too,
+                    // while staying BEHIND this whole HStack's content so it never
+                    // wins hit-testing over the dropdown rows themselves.
+                    if languagePickerOpen || speakerCountPickerOpen {
+                        Color.black.opacity(0.0001)
+                            .onTapGesture { languagePickerOpen = false; speakerCountPickerOpen = false }
+                    }
+                }
+            )
             .dropDestination(for: URL.self) { urls, _ in
                 guard canDrop, let url = urls.first(where: isMediaFile) else { return false }
                 session.transcribeFile(url)
@@ -424,12 +440,9 @@ struct ContentView: View {
     // MARK: right control panel
 
     private var sidePanel: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.panelGap) {
+        VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 8) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.Colors.accent)
-                Text("Madi").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.brandMark)
+                BrandLogo(width: 90)
                 Spacer()
                 Button { showExplorer.toggle() } label: { Image(systemName: "sidebar.left").font(.system(size: 14)) }
                     .buttonStyle(.plain)
@@ -440,12 +453,13 @@ struct ContentView: View {
                     .help("설정 (⌘,)")
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .trailing, spacing: 8) {
+                if session.sourceMediaURL != nil { loadedFileChip } else { dropZone }
                 recordButton
-                if session.phase == .recording || session.phase == .paused {
-                    LevelMeter(level: session.level).frame(height: Theme.Size.meterH)
-                        .opacity(session.phase == .paused ? 0.4 : 1)
-                }
+            }
+            if session.phase == .recording || session.phase == .paused {
+                LevelMeter(level: session.level).frame(height: Theme.Size.meterH)
+                    .opacity(session.phase == .paused ? 0.4 : 1)
             }
 
             if let ev = session.calendar.event { calendarBlock(ev) }
@@ -457,30 +471,40 @@ struct ContentView: View {
             }
 
             field("언어") { languagePicker }
+                .zIndex(languagePickerOpen ? 10 : 0)
 
             field("화자 수") { speakerCountPicker }
+                .zIndex(speakerCountPickerOpen ? 10 : 0)
 
-            Toggle(isOn: $session.autoSaveSummary) {
-                Label("A.I 요약", systemImage: "sparkles")
-                    .font(Theme.Fonts.status)
-            }
-            .toggleStyle(.checkbox)
-            .foregroundStyle(Theme.Colors.textSecondary)
-            .help("완료 시 회의 요약을 전사문과 별개의 ‘요약.md’ 파일로 저장합니다 (요약 모델 필요)")
-
-            VStack(alignment: .leading, spacing: 1) {
-                Toggle(isOn: $session.liveRailEnabled) {
-                    Label("라이브 액션 추출", systemImage: "bolt").font(Theme.Fonts.status)
+            // Checkbox group (Figma): the two checks share one block with a
+            // common 12px item-to-item gap, matching the 발언 시간 row spacing.
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(isOn: $session.autoSaveSummary) {
+                    Text("A.I 요약")
+                        .font(.system(size: 12))
                 }
-                .toggleStyle(.checkbox)
+                .toggleStyle(FigmaCheckboxToggleStyle())
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .disabled(!SessionController.liveRailCapable || isRecordingLike)
-                if !SessionController.liveRailCapable {
-                    Text("16GB 이상 메모리 필요 (DNA3 LLM 동시 구동)")
+                .help("완료 시 회의 요약을 전사문과 별개의 ‘요약.md’ 파일로 저장합니다 (요약 모델 필요)")
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Toggle(isOn: $session.liveRailEnabled) {
+                        Text("라이브 액션 추출").font(.system(size: 12))
+                    }
+                    .toggleStyle(FigmaCheckboxToggleStyle())
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .disabled(!SessionController.liveRailCapable || isRecordingLike)
+                    Text("녹음 중 결정, 할 일, 질문을 실시간으로 정리합니다.")
                         .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                        .padding(.leading, 22)
+                    if !SessionController.liveRailCapable {
+                        Text("16GB 이상 메모리 필요 (DNA3 LLM 동시 구동)")
+                            .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                            .padding(.leading, 22)
+                    }
                 }
+                .help("녹음 중 결정·할 일·질문을 실시간 추출합니다. 요약 모델(DNA3)을 전사와 동시 구동 — 메모리 사용이 크고, 같은 모델을 쓰는 ‘실시간 번역’은 이때 일시 중지됩니다. 녹음 전에 설정하세요.")
             }
-            .help("녹음 중 결정·할 일·질문을 실시간 추출합니다. 요약 모델(DNA3)을 전사와 동시 구동 — 메모리 사용이 크고, 같은 모델을 쓰는 ‘실시간 번역’은 이때 일시 중지됩니다. 녹음 전에 설정하세요.")
 
             if !session.translateTargets.isEmpty {
                 Button { session.toggleCaptionOverlay() } label: {
@@ -494,13 +518,15 @@ struct ContentView: View {
                 .help("화면 위에 떠 있는 실시간 번역 자막 창 — Zoom·Teams 통화 위에 표시")
             }
 
-            dropZone
-
             if !session.transcript.lines.isEmpty {
-                Divider().overlay(Theme.Colors.separator)
+                Divider().overlay(Theme.Colors.surfaceSunken)
                 speakingStats
                 let energy = EnergyArc.compute(lines: session.transcript.lines)
-                if !energy.isEmpty { EnergyArcView(values: energy) }
+                if !energy.isEmpty {
+                    EnergyArcView(values: energy, lines: session.transcript.lines) { id in
+                        scrollTarget = id; scrollTick += 1
+                    }
+                }
             }
 
             Spacer(minLength: 8)
@@ -517,10 +543,22 @@ struct ContentView: View {
         .padding(Theme.Space.window)
         .frame(width: Theme.Size.sidePanelW)
         .background(
-            Theme.Colors.surface
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel).strokeBorder(Theme.Colors.separator, lineWidth: 1))
-                .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 2)
+            ZStack {
+                Theme.Colors.surface
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel).strokeBorder(Theme.Colors.separator, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 2)
+                // Tap-outside catcher for the pill dropdowns, painted in the SAME
+                // stacking context as the fields (a background of this VStack, not
+                // a sibling elsewhere) — otherwise it sits in front of the dropdown
+                // rows for hit-testing and swallows the tap instead of the row's
+                // own button action (only the close-on-outside-tap fired, the
+                // selection never landed).
+                if languagePickerOpen || speakerCountPickerOpen {
+                    Color.black.opacity(0.0001)
+                        .onTapGesture { languagePickerOpen = false; speakerCountPickerOpen = false }
+                }
+            }
         )
         .padding(.vertical, 12)
         .padding(.trailing, 12)
@@ -553,41 +591,51 @@ struct ContentView: View {
     }
 
     // 발언권 분석: per-speaker talk time from the diarized lines (who talked how
-    // much). Σ(line end − start) per speaker → colored share bars.
+    // much). Σ(line end − start) per speaker. Layout is Figma node 30:372,
+    // measured layer-by-layer: title→rows gap 10, between-row gap 12, name-row→
+    // underline gap 6, dot 4×4 with a 5px gap to the name, time/percent are
+    // separate texts with a 10px gap, underline is a flat 3px speaker-color bar
+    // (NOT a percentage fill — the percentage lives only in the "97%" text).
     private var speakingStats: some View {
         var times: [Int: Double] = [:]
         for l in session.transcript.lines { times[l.speaker, default: 0] += max(0, l.end - l.start) }
         let total = max(0.001, times.values.reduce(0, +))
         let sorted = times.sorted { $0.value > $1.value }
-        return VStack(alignment: .leading, spacing: 7) {
-            Text("발언 시간").font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
-            ForEach(sorted, id: \.key) { entry in
-                let frac = entry.value / total
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 5) {
-                        Circle().fill(Theme.Colors.speaker(entry.key)).frame(width: 7, height: 7)
-                        Text(session.speakerNames[entry.key] ?? "Speaker \(entry.key)")
-                            .font(Theme.Fonts.status).lineLimit(1)
-                        Spacer()
-                        Text("\(mmss(entry.value)) · \(Int((frac * 100).rounded()))%")
-                            .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Theme.Colors.speaker(entry.key).opacity(0.18))
-                            Capsule().fill(Theme.Colors.speaker(entry.key))
-                                .frame(width: geo.size.width * frac)
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("발언 시간").font(sidePanelTitleFont).foregroundStyle(Theme.Colors.textSecondary)
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(sorted, id: \.key) { entry in
+                    let frac = entry.value / total
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            HStack(spacing: 5) {
+                                Circle().fill(Theme.Colors.speaker(entry.key)).frame(width: 4, height: 4)
+                                Text(session.speakerNames[entry.key] ?? "Speaker \(entry.key)")
+                                    .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.Colors.textPrimary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            HStack(spacing: 10) {
+                                Text(mmss(entry.value))
+                                Text("\(Int((frac * 100).rounded()))%")
+                            }
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.Colors.textSecondary)
                         }
-                    }.frame(height: 4)
+                        Capsule().fill(Theme.Colors.speaker(entry.key)).frame(height: 3)
+                    }
                 }
             }
         }
     }
     private func mmss(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
 
-    @ViewBuilder private func field<V: View>(_ label: String, @ViewBuilder _ control: () -> V) -> some View {
+    // Shared title size for the side panel's section labels (언어 / 화자 수 /
+    // 발언 시간 / …) — kept as one constant so they stay in lockstep.
+    private var sidePanelTitleFont: Font { .system(size: 12, weight: .semibold, design: .rounded) }
+
+    @ViewBuilder private func field<V: View>(_ label: String, labelFont: Font? = nil, @ViewBuilder _ control: () -> V) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
+            Text(label).font(labelFont ?? sidePanelTitleFont).foregroundStyle(Theme.Colors.textSecondary)
             control()
         }
     }
@@ -624,97 +672,196 @@ struct ContentView: View {
         switch session.phase {
         case .recording:
             HStack(spacing: 8) {
-                Button { session.pauseRecording() } label: {
-                    Label("일시정지", systemImage: "pause.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered).controlSize(.large).keyboardShortcut("p")
-                Button(role: .destructive) { session.stop() } label: {
-                    Label("정지", systemImage: "stop.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent).tint(Theme.Colors.recording)
-                .controlSize(.large).keyboardShortcut("r")
+                pillButton("일시정지", icon: "pause.fill", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
+                    session.pauseRecording()
+                }.keyboardShortcut("p")
+                pillButton("정지", icon: "stop.fill", fill: Theme.Colors.recording, textColor: .white) {
+                    session.stop()
+                }.keyboardShortcut("r")
             }
         case .paused:
             HStack(spacing: 8) {
-                Button { session.resumeRecording() } label: {
-                    Label("재개", systemImage: "record.circle.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent).controlSize(.large).keyboardShortcut("p").tint(Theme.Colors.recording)
-                Button(role: .destructive) { session.stop() } label: {
-                    Label("정지", systemImage: "stop.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered).controlSize(.large).keyboardShortcut("r")
+                pillButton("재개", icon: "record.circle.fill", fill: Theme.Colors.recording, textColor: .white) {
+                    session.resumeRecording()
+                }.keyboardShortcut("p")
+                pillButton("정지", icon: "stop.fill", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
+                    session.stop()
+                }.keyboardShortcut("r")
             }
         case .countingDown(let n):
-            Button { session.cancelCountdown() } label: {
-                Label("시작까지 \(n)… (취소)", systemImage: "xmark.circle")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .frame(maxWidth: .infinity).frame(height: 8)
-            }
-            .buttonStyle(.bordered).controlSize(.large).keyboardShortcut(.cancelAction)
+            pillButton("시작까지 \(n)… (취소)", icon: "xmark.circle", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
+                session.cancelCountdown()
+            }.keyboardShortcut(.cancelAction)
         case .engineStarting, .ready, .processing, .flushing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
             }
-            .frame(maxWidth: .infinity).frame(height: 36)
+            .frame(maxWidth: .infinity).frame(height: 25)
         default:
-            Button { session.startCountdown() } label: {
-                Label("녹음 시작", systemImage: "record.circle.fill")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .frame(maxWidth: .infinity).frame(height: 8)
+            // A loaded file occupies the session (Figma node 30:118: 30%-opacity
+            // accent fill) — recording and file transcription are mutually exclusive.
+            let fileLoaded = session.sourceMediaURL != nil
+            pillButton("녹음 시작", icon: "play.fill",
+                       fill: fileLoaded ? Theme.Colors.accent.opacity(0.3) : Theme.Colors.accent,
+                       textColor: .white) {
+                session.startCountdown()
             }
-            .buttonStyle(.borderedProminent).tint(Theme.Colors.accent)
-            .controlSize(.large).keyboardShortcut("r")
+            .keyboardShortcut("r")
+            .disabled(fileLoaded)
         }
+    }
+
+    // Slim accent pill (Figma node 28:203, "녹음 시작": rounded-40, height 21,
+    // font 11 semibold) — replaces the native .borderedProminent button so all
+    // recordButton states share one compact capsule shape.
+    private func pillButton(_ title: String, icon: String, fill: Color, textColor: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 9, weight: .semibold))
+                Text(title).font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(textColor)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 10).padding(.vertical, 4).frame(height: 25)
+            .background(Capsule().fill(fill))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Pill-style dropdown (Figma node 28:363: bg #ECECEC pill, rounded-40,
+    // height 25 (21 + 2px/side bump), and — 2px below — a tailless white panel
+    // the EXACT width of the pill: rounded-7, hairline border (black 4%),
+    // barely-there shadow (black 2%, y4 blur3.5). A manual overlay instead of
+    // .popover/Menu: both force their own arrow/chevron and a much heavier
+    // system shadow that doesn't match this spec.
+    private func pillDropdown(_ text: String, isOpen: Binding<Bool>, width: Binding<CGFloat>, @ViewBuilder options: @escaping () -> some View) -> some View {
+        Button { isOpen.wrappedValue.toggle() } label: {
+            HStack(spacing: 4) {
+                Text(text).font(.system(size: 11, weight: .semibold)).foregroundStyle(.black)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 4).frame(height: 25)
+            .background(
+                Capsule().fill(Color(red: 0.925, green: 0.925, blue: 0.925))
+                    .overlay(
+                        GeometryReader { geo in
+                            Color.clear.onAppear { width.wrappedValue = geo.size.width }
+                                .onChange(of: geo.size.width) { _, w in width.wrappedValue = w }
+                        }
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .topLeading) {
+            if isOpen.wrappedValue {
+                VStack(alignment: .leading, spacing: 0) { options() }
+                    .padding(.vertical, 5)
+                    .frame(width: width.wrappedValue, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(.white))
+                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.black.opacity(0.04)))
+                    .shadow(color: Color.black.opacity(0.02), radius: 1.75, x: 0, y: 4)
+                    .offset(y: 27)
+            }
+        }
+    }
+
+    // Dropdown row (Figma node 28:337): 10px black text, selected row shows a
+    // small accent checkmark trailing.
+    private func dropdownRow(_ text: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(text).font(.system(size: 10, weight: .semibold)).foregroundStyle(.black)
+                Spacer(minLength: 0)
+                if selected {
+                    Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Theme.Colors.accent)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // Prominent language selector — the deterministic fix for "spoke Korean,
     // got English": auto-detect can misfire on an ambiguous opening; picking
     // the language locks it. Persisted across launches.
     private var languagePicker: some View {
-        Picker("", selection: Binding(
+        let binding = Binding<Int?>(
             get: { session.languageTokenID },
             set: { session.languageTokenID = $0
                    UserDefaults.standard.set($0 ?? 0, forKey: "languageTokenID") }
-        )) {
-            Text("자동 감지").tag(Int?.none)
-            Text("한국어").tag(Int?.some(WhisperLang.ko))
-            Text("English").tag(Int?.some(WhisperLang.en))
+        )
+        let label = binding.wrappedValue == WhisperLang.ko ? "한국어"
+            : binding.wrappedValue == WhisperLang.en ? "English" : "자동 감지"
+        return pillDropdown(label, isOpen: $languagePickerOpen, width: $languagePickerWidth) {
+            dropdownRow("자동 감지", selected: binding.wrappedValue == nil) { binding.wrappedValue = nil; languagePickerOpen = false }
+            dropdownRow("한국어", selected: binding.wrappedValue == WhisperLang.ko) { binding.wrappedValue = WhisperLang.ko; languagePickerOpen = false }
+            dropdownRow("English", selected: binding.wrappedValue == WhisperLang.en) { binding.wrappedValue = WhisperLang.en; languagePickerOpen = false }
         }
-        .labelsHidden().disabled(isBusy)
+        .disabled(isBusy)
     }
 
     // 화자 수 고정 — 자동/1/2/3/4명 이상. Maps to the engine's DIAR_MAXK cap.
     private var speakerCountPicker: some View {
-        Picker("", selection: Binding(
-            get: { session.speakerCount },
-            set: { session.speakerCount = $0 }
-        )) {
-            ForEach(SpeakerCount.allCases) { Text($0.label).tag($0) }
+        pillDropdown(session.speakerCount.label, isOpen: $speakerCountPickerOpen, width: $speakerCountPickerWidth) {
+            ForEach(SpeakerCount.allCases) { c in
+                dropdownRow(c.label, selected: c == session.speakerCount) { session.speakerCount = c; speakerCountPickerOpen = false }
+            }
         }
-        .labelsHidden().disabled(isBusy)
+        .disabled(isBusy)
     }
 
     // Visible drop target + an explicit "Choose File…" button so file input is
-    // discoverable without knowing about drag-&-drop.
+    // discoverable without knowing about drag-&-drop. (Figma node 28:203)
     private var dropZone: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 5) {
             Image(systemName: "tray.and.arrow.down")
-                .font(.system(size: 24))
+                .font(.system(size: 19))
                 .foregroundStyle(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary)
-            Text("오디오·영상 파일\n드래그 앤 드롭")
+            Text("오디오 영상 파일\n드래그 앤 드롭")
                 .multilineTextAlignment(.center)
-                .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
-            Button("파일 선택…") { chooseFile() }
-                .controlSize(.small).disabled(!canDrop)
+                .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.Colors.textSecondary)
+            Button { chooseFile() } label: {
+                Text("파일 선택")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(Capsule().fill(Theme.Colors.meterTrack))
+            }
+            .buttonStyle(.plain).disabled(!canDrop)
         }
-        .frame(maxWidth: .infinity).frame(height: 124)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.dropZone)
-            .fill(Theme.Colors.accent.opacity(dropTargeted ? 0.12 : 0.05)))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.dropZone)
-            .strokeBorder(dropTargeted ? Theme.Colors.accent : Theme.Colors.separator,
-                          style: StrokeStyle(lineWidth: 1.5, dash: [6])))
+        .frame(maxWidth: .infinity).frame(height: 107)
+        .background(RoundedRectangle(cornerRadius: 7)
+            .fill(Theme.Colors.surfaceSunken))
+        .overlay(RoundedRectangle(cornerRadius: 7)
+            .strokeBorder(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary,
+                          style: StrokeStyle(lineWidth: 1, dash: [2, 2])))
+    }
+
+    // Loaded-file chip (Figma node 30:118) — replaces dropZone once a file is
+    // staged/transcribing. X cancels (terminates an in-flight file engine too)
+    // and returns to the empty drop zone.
+    private var loadedFileChip: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "doc.fill").font(.system(size: 13))
+                .foregroundStyle(Theme.Colors.textTertiary)
+            Text(session.fileName)
+                .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 0)
+            Button { session.cancelFile() } label: {
+                Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Theme.Colors.surfaceSunken))
     }
 
     private var exportMenu: some View {
@@ -792,6 +939,30 @@ struct ContentView: View {
         case .flushing: "마무리…"
         case .done: "완료"
         case .error(let m): "오류: \(m)"
+        }
+    }
+}
+
+// FigmaCheckboxToggleStyle — 14x14 rounded-3px box (Figma nodes 28:41 / 28:45,
+// +2px over spec per follow-up feedback): off = flat #D9D9D9, on =
+// Theme.Colors.accent with a small white checkmark.
+struct FigmaCheckboxToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            Button { configuration.isOn.toggle() } label: {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(configuration.isOn ? Theme.Colors.accent : Color(red: 0.851, green: 0.851, blue: 0.851))
+                    .frame(width: 14, height: 14)
+                    .overlay {
+                        if configuration.isOn {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+            configuration.label
         }
     }
 }

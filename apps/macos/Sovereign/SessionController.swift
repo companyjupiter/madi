@@ -646,6 +646,19 @@ final class SessionController: EngineProcessDelegate {
         phase = .idle
     }
 
+    /// X button on the loaded-file chip (Figma node 30:118): drop the staged/
+    /// in-flight file and return to idle. Unlike reset(), this also tears down
+    /// an in-progress file transcription (phase .processing/.flushing) — the
+    /// user explicitly asked to cancel, not just clear a finished result.
+    func cancelFile() {
+        guard sourceMediaURL != nil else { return }
+        if phase == .processing || phase == .flushing {
+            engine?.terminate(); engine = nil
+        }
+        if phase != .done && phase != .idle && !isError { phase = .done }
+        reset()
+    }
+
     /// Re-open an archived transcript .md (clicked in the workspace explorer)
     /// into the view. Static read of a finished meeting — replaces the current
     /// transcript; only allowed when idle/done/error so it never interrupts a

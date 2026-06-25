@@ -19,18 +19,46 @@ struct WorkspaceExplorer: View {
     @State private var handleHovering = false
     @State private var mode: ExplorerMode = .files
     private let minWidth = 180.0, maxWidth = 460.0
-    private enum ExplorerMode: String, CaseIterable { case files, people, openLoops }
+    private enum ExplorerMode: String, CaseIterable {
+        case files, people, openLoops
+        var label: String { self == .files ? "파일" : self == .people ? "사람" : "열린 항목" }
+    }
+
+    // Pill-shaped segmented switch (Figma node 26:14) — replaces the native
+    // .segmented Picker. A single accent capsule slides between segments via
+    // matchedGeometryEffect instead of each segment owning its own fill.
+    @Namespace private var modeSwitcherNS
+
+    private var modeSwitcher: some View {
+        HStack(spacing: 1) {
+            ForEach(ExplorerMode.allCases, id: \.self) { m in
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { mode = m }
+                } label: {
+                    Text(m.label)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(mode == m ? .white : Theme.Colors.textSecondary)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                        .background {
+                            if mode == m {
+                                Capsule().fill(Theme.Colors.accent)
+                                    .matchedGeometryEffect(id: "modeSwitcherPill", in: modeSwitcherNS)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(Theme.Colors.surfaceSunken))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Picker("", selection: $mode) {
-                Text("파일").tag(ExplorerMode.files)
-                Text("사람").tag(ExplorerMode.people)
-                Text("열린 항목").tag(ExplorerMode.openLoops)
-            }
-            .pickerStyle(.segmented).labelsHidden()
-            .padding(.horizontal, 12).padding(.bottom, 8)
+            modeSwitcher
+                .padding(.horizontal, 12).padding(.bottom, 8)
             Divider().overlay(Theme.Colors.separator)
             switch mode {
             case .files:
