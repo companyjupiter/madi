@@ -79,6 +79,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/GistView.swift
   "$APP_DIR"/Sovereign/UI/PrepBriefView.swift
   "$APP_DIR"/Sovereign/UI/ReviewControlView.swift
+  "$APP_DIR"/Sovereign/UI/GlossarySettingsView.swift
   "$APP_DIR"/Sovereign/UI/RecapCardView.swift
   "$APP_DIR"/Sovereign/UI/TimelineScrubberView.swift
   "$APP_DIR"/Sovereign/UI/EnergyArcView.swift
