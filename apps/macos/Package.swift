@@ -40,6 +40,7 @@ let package = Package(
                 "Transcript/PrepBriefData.swift",
                 "Transcript/ReviewController.swift",
                 "Engine/EngineProtocol.swift",
+                "Dictation/DictationFormatting.swift",
             ]
         ),
         .testTarget(

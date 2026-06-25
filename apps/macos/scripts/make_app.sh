@@ -65,6 +65,8 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/MeetingPrepBrief.swift
   "$APP_DIR"/Sovereign/Transcript/PrepBriefData.swift
   "$APP_DIR"/Sovereign/Transcript/ReviewController.swift
+  "$APP_DIR"/Sovereign/Dictation/DictationFormatting.swift
+  "$APP_DIR"/Sovereign/Dictation/DictationController.swift
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/CalendarBridge.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
@@ -87,6 +89,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/TranscriptView.swift
   "$APP_DIR"/Sovereign/UI/ModelGateView.swift
   "$APP_DIR"/Sovereign/UI/SettingsView.swift
+  "$APP_DIR"/Sovereign/UI/DictationSettingsView.swift
 )
 swiftc -O -parse-as-library -target arm64-apple-macosx14.0 \
   "${SRCS[@]}" -o "$OUT/Madi"

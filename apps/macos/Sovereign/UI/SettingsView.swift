@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Bindable var session: SessionController
     @Bindable var downloader: ModelDownloader
     @Bindable var translateDownloader: TranslateModelDownloader
+    @Bindable var dictation: DictationController
     @AppStorage("appearance") private var appearance = Appearance.system
     // VAD/confidence threshold — same key Theme.confThreshold reads (Theme.confKey).
     @AppStorage("vadConfThreshold") private var vadThreshold = 0.55
@@ -19,6 +20,7 @@ struct SettingsView: View {
             editor.tabItem { Label("편집·저장", systemImage: "scissors") }
             translate.tabItem { Label("번역", systemImage: "character.bubble") }
             model.tabItem { Label("모델", systemImage: "shippingbox") }
+            DictationSettingsView(dictation: dictation).tabItem { Label("받아쓰기", systemImage: "keyboard") }
         }
         .frame(width: 460, height: 380)
         .padding()
