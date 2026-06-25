@@ -120,6 +120,21 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(speakerCount.rawValue, forKey: "fixedSpeakerCount") }
     }
 
+    /// Current meeting-shape preset. Persisted (rawValue key "meetingMode"; unknown
+    /// or absent → .general, today's baseline). On change it auto-applies the
+    /// preset's default diarization speaker count; summaryPromptSuffix is threaded
+    /// into the summarize calls below.
+    var meetingMode: MeetingMode = MeetingMode(rawValue: UserDefaults.standard.string(forKey: "meetingMode") ?? "") ?? .general {
+        didSet {
+            UserDefaults.standard.set(meetingMode.rawValue, forKey: "meetingMode")
+            // Apply the preset's diarization hint (map raw Int → SpeakerCount). A
+            // preset, not a lock — the user can still adjust 화자 수 afterward.
+            if let sc = SpeakerCount(rawValue: meetingMode.config.defaultSpeakerCountRaw) {
+                speakerCount = sc
+            }
+        }
+    }
+
     /// Live segment window (s) — the live FELT-latency knob. Text lands when a
     /// window closes, so a shorter window = snappier live text but less Whisper
     /// context (more boundary error). Default 10 = current accuracy (no
@@ -233,9 +248,13 @@ final class SessionController: EngineProcessDelegate {
                     self.liveRailBusy = false; self.liveRailBusyTicks = 0
                     if let text {
                         var seen = Set(self.liveRailItems.map(\.id))
+                        var added = false
                         for it in LiveActionRail.parse(text) where seen.insert(it.id).inserted {
-                            self.liveRailItems.append(it)
+                            self.liveRailItems.append(it); added = true
                         }
+                        // New rail questions are a coach input → refresh once on append
+                        // (cheap, ≤ once per 18s rail tick), not per word event.
+                        if added { self.recomputeCoach() }
                     }
                 default: break
                 }
@@ -248,24 +267,26 @@ final class SessionController: EngineProcessDelegate {
 
     /// Structured [요약]/[액션]/[결정] from the diarized transcript, on-device.
     func summarize() {
+        guard !summarizing else { return }
         guard !transcript.lines.isEmpty else { return }
         switch phase { case .recording, .paused, .countingDown: return; default: break }
         guard let s = ensureSummaryEngine() else {
             meetingSummary = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
         }
         summarizing = true; meetingSummary = nil
-        s.summarize(lines: attributedLines)
+        s.summarize(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// Per-speaker breakdown (who said what / who owns which action), on-device.
     func summarizeBySpeaker() {
+        guard !speakerSummarizing else { return }
         guard !transcript.lines.isEmpty else { return }
         switch phase { case .recording, .paused, .countingDown: return; default: break }
         guard let s = ensureSummaryEngine() else {
             speakerSummary = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
         }
         speakerSummarizing = true; speakerSummary = nil
-        s.summarizeBySpeaker(lines: attributedLines)
+        s.summarizeBySpeaker(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// "Ask the meeting" — answer grounded only in the transcript, on-device.
@@ -346,6 +367,7 @@ final class SessionController: EngineProcessDelegate {
             await MainActor.run {
                 self.prepBriefData = brief
                 self.loadingPrepBrief = false
+                self.updateCoachAgenda()   // agenda inputs changed → re-derive + recompute
             }
         }
     }
@@ -383,6 +405,7 @@ final class SessionController: EngineProcessDelegate {
     private func clearSummary() {
         calendar.clear()
         stopLiveRail(); liveRailItems = []         // new session → reset the live rail
+        stopLiveCoach(); coachAgenda = []; liveCoachState = .empty   // reset the coach too
         linePlayer.stop(); sourceMediaURL = nil   // new session → drop click-to-play audio
         summaryEngine?.stop(); summaryEngine = nil
         meetingSummary = nil; meetingTitle = nil; summarizing = false
@@ -473,6 +496,64 @@ final class SessionController: EngineProcessDelegate {
     var liveRailEnabled: Bool = (UserDefaults.standard.object(forKey: "liveRailEnabled") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(liveRailEnabled, forKey: "liveRailEnabled") }
     }
+
+    /// Host-facing live coach / teleprompter toggle (agenda coverage + unanswered
+    /// questions + pace). Pure on-device compute, no extra model — safe on any
+    /// machine (unlike the live rail's 16GB gate). Persisted. Default OFF.
+    var liveCoachEnabled: Bool = (UserDefaults.standard.object(forKey: "liveCoachEnabled") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(liveCoachEnabled, forKey: "liveCoachEnabled")
+            if liveCoachEnabled { recomputeCoach() } else { stopLiveCoach() }
+        }
+    }
+
+    /// Cached live-coach snapshot. The View renders THIS (a cheap struct read) instead
+    /// of calling LiveCoach.compute() on every body render — body re-renders on every
+    /// word event (40k+/hr) and the compute is O(transcript × keywords). We recompute
+    /// only on a throttled cadence while recording (coachTimer, ~1Hz) plus on the
+    /// discrete events that change its inputs (prepBrief load, rail append, finalize).
+    private(set) var liveCoachState: LiveCoachState = .empty
+    /// Derived agenda, cached — Retrieval.keywords over every prep item is non-trivial,
+    /// and the agenda only changes when prepBriefData changes. Re-derived in
+    /// updateCoachAgenda(), not on every recompute.
+    private var coachAgenda: [CoachAgendaItem] = []
+    private var liveCoachTimer: Timer?
+
+    /// Re-derive the cached agenda from the current prep brief, then recompute state.
+    /// Call when prepBriefData changes (the only input to agenda derivation).
+    func updateCoachAgenda() {
+        coachAgenda = prepBriefData.map { LiveCoach.agenda(from: $0) } ?? []
+        recomputeCoach()
+    }
+
+    /// Recompute the cached coach snapshot from the current immutable inputs. Cheap
+    /// relative to body-render frequency because it fires on a ~1Hz throttle while
+    /// recording (or once per discrete input change), not per word event.
+    func recomputeCoach() {
+        guard liveCoachEnabled else { liveCoachState = .empty; return }
+        liveCoachState = LiveCoach.compute(
+            agenda: coachAgenda,
+            spokenLines: transcript.lines.map(\.text),
+            railQuestions: liveRailItems.filter { $0.kind == .question }.map(\.text),
+            lines: transcript.lines)
+    }
+
+    /// Throttled recompute loop: while recording, refresh the coach at ~1Hz so the
+    /// agenda-coverage / unanswered-question / pace readout tracks the live transcript
+    /// without recomputing on every one of the 40k+ word events in an hour.
+    private func startLiveCoach() {
+        liveCoachTimer?.invalidate(); liveCoachTimer = nil
+        guard liveCoachEnabled else { return }
+        recomputeCoach()
+        liveCoachTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.recomputeCoach() }
+        }
+    }
+
+    private func stopLiveCoach() {
+        liveCoachTimer?.invalidate(); liveCoachTimer = nil
+        if !liveCoachEnabled { liveCoachState = .empty }
+    }
     private(set) var liveRailItems: [RailItem] = []
     private(set) var liveRailBusy = false
     private var liveRailBusyTicks = 0          // stale-guard: reset busy if the engine never replies
@@ -561,7 +642,7 @@ final class SessionController: EngineProcessDelegate {
     private func autoSummarizeForSave() {
         guard !transcript.lines.isEmpty, !summarizing, let s = ensureSummaryEngine() else { return }
         summarizing = true; meetingSummary = nil
-        s.summarize(lines: attributedLines)
+        s.summarize(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// Persistent per-speaker voiceprints. When you name a speaker, their centroid
@@ -717,6 +798,7 @@ final class SessionController: EngineProcessDelegate {
         // double-ran the headless aggregation and raced two detached tasks).
         Task { await calendar.loadCurrentEvent() }
         startLiveRail()                              // throttled live action extraction (≥16GB + on)
+        startLiveCoach()                             // throttled coach recompute (~1Hz while recording)
         phase = .engineStarting
 
         let e = EngineProcess(config: makeConfig())
@@ -895,6 +977,7 @@ final class SessionController: EngineProcessDelegate {
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
         stopLiveRail()       // recording ended — keep the accumulated rail for review
+        stopLiveCoach(); recomputeCoach()   // stop the 1Hz loop, snapshot the final transcript once
         calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
         // A.I 요약이 켜진 라이브 세션: DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로

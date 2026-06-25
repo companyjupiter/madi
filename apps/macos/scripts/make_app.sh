@@ -49,6 +49,8 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift
   "$APP_DIR"/Sovereign/Transcript/TranscriptArchive.swift
   "$APP_DIR"/Sovereign/Transcript/EnergyArc.swift
+  "$APP_DIR"/Sovereign/Transcript/MeetingMode.swift
+  "$APP_DIR"/Sovereign/Transcript/LiveCoach.swift
   "$APP_DIR"/Sovereign/Transcript/TitleGenerator.swift
   "$APP_DIR"/Sovereign/Transcript/PIIRedactor.swift
   "$APP_DIR"/Sovereign/Transcript/WorkspaceRetrieval.swift
@@ -87,6 +89,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/CaptionOverlay.swift
   "$APP_DIR"/Sovereign/UI/PeopleDashboard.swift
   "$APP_DIR"/Sovereign/UI/LiveActionRailView.swift
+  "$APP_DIR"/Sovereign/UI/LiveCoachView.swift
   "$APP_DIR"/Sovereign/UI/TranscriptView.swift
   "$APP_DIR"/Sovereign/UI/ModelGateView.swift
   "$APP_DIR"/Sovereign/UI/SettingsView.swift
