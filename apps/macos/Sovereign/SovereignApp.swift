@@ -32,6 +32,7 @@ struct SovereignApp: App {
     @State private var downloader = ModelDownloader()
     @State private var session = SessionController()
     @State private var translateDownloader = TranslateModelDownloader()
+    @State private var dictation = DictationController()
     @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some Scene {
@@ -40,11 +41,12 @@ struct SovereignApp: App {
                 .frame(minWidth: Theme.Size.windowMinW, minHeight: Theme.Size.windowMinH)
                 .preferredColorScheme(appearance.colorScheme)
                 .task { downloader.ensureModel() }
+                .task { dictation.micBusy = { session.phase == .recording || session.phase == .paused } }
         }
         .windowStyle(.titleBar)
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1100, height: 720)
 
-        Settings { SettingsView(session: session, downloader: downloader, translateDownloader: translateDownloader) }
+        Settings { SettingsView(session: session, downloader: downloader, translateDownloader: translateDownloader, dictation: dictation) }
     }
 }
