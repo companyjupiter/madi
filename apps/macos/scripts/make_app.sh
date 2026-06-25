@@ -121,6 +121,19 @@ for f in "${ASSETS[@]}"; do
   fi
 done
 
+# ── 2a. bundle the user manual (self-contained index.html) ──────────────────
+# Regenerate from the .md sources if node is available (best-effort), then seal
+# a copy into Resources/manual/ so Help → "Madi 사용자 매뉴얼" opens it offline.
+if command -v node >/dev/null 2>&1 && [ -f "$ROOT/docs/manual/build_index.mjs" ]; then
+  node "$ROOT/docs/manual/build_index.mjs" >/dev/null 2>&1 || true
+fi
+if [ -f "$ROOT/docs/manual/index.html" ]; then
+  mkdir -p "$BUNDLE/Contents/Resources/manual"
+  cp "$ROOT/docs/manual/index.html" "$BUNDLE/Contents/Resources/manual/index.html"
+else
+  echo "  ⚠ docs/manual/index.html missing — Help → 사용자 매뉴얼 will be unavailable"
+fi
+
 # ── 2b. optional: bundle the model INSIDE the .app (self-contained DMG) ──────
 # Must happen BEFORE signing so the 867 MB model is sealed by the bundle
 # signature. AssetManifest.modelURL then prefers this copy → no download.
