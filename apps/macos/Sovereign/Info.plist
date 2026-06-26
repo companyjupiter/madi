@@ -9,6 +9,7 @@
   <key>CFBundleShortVersionString</key> <string>1.0</string>
   <key>CFBundlePackageType</key>     <string>APPL</string>
   <key>CFBundleExecutable</key>      <string>Madi</string>
+  <key>CFBundleIconFile</key>        <string>AppIcon</string>
   <key>LSMinimumSystemVersion</key>  <string>13.0</string>
   <!-- arm64-only (M1+); Metal-4 kernels auto-fall back to MPS on older OS -->
   <key>LSRequiresNativeExecution</key> <true/>

@@ -67,12 +67,15 @@ struct ContentView: View {
     private var mainLayout: some View {
         ZStack {
             HStack(spacing: 0) {
+                // zIndex so its drop shadow (right edge) renders over
+                // transcriptPane's opaque background instead of being clipped by
+                // it — HStack draws later siblings on top by default.
+                sidePanel.zIndex(1)
+                transcriptPane
                 if showExplorer {
                     WorkspaceExplorer(session: session, isVisible: $showExplorer)
-                        .transition(.move(edge: .leading).combined(with: .opacity))
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
-                transcriptPane
-                sidePanel
             }
             .animation(.snappy, value: showExplorer)
             .background(
@@ -478,7 +481,7 @@ struct ContentView: View {
             HStack(spacing: 8) {
                 BrandLogo(width: 90)
                 Spacer()
-                Button { showExplorer.toggle() } label: { Image(systemName: "sidebar.left").font(.system(size: 14)) }
+                Button { showExplorer.toggle() } label: { Image(systemName: "sidebar.right").font(.system(size: 14)) }
                     .buttonStyle(.plain)
                     .foregroundStyle(showExplorer ? Theme.Colors.accent : Theme.Colors.textSecondary)
                     .help("작업 폴더 탐색기")
@@ -622,7 +625,7 @@ struct ContentView: View {
             }
         )
         .padding(.vertical, 12)
-        .padding(.trailing, 12)
+        .padding(.leading, 12)
     }
 
     // saved-confirmation only — the auto-save folder config lives in Settings.

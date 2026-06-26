@@ -108,6 +108,7 @@ mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/assets-small"
 cp "$OUT/Madi" "$BUNDLE/Contents/MacOS/Madi"
 cp "$APP_DIR/Sovereign/Info.plist" "$BUNDLE/Contents/Info.plist"
 cp "$APP_DIR/Sovereign/Resources/logo_madi.png" "$BUNDLE/Contents/Resources/logo_madi.png"
+cp "$APP_DIR/Sovereign/Resources/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns"
 cp "$ROOT/engine/metal/out/transcribe" "$BUNDLE/Contents/MacOS/transcribe"
 # engine @embedFile's the metallib; external copy is informational only —
 # Resources/ so it's sealed by the bundle signature, not treated as code

@@ -99,13 +99,14 @@ struct WorkspaceExplorer: View {
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel)
                     .strokeBorder(Theme.Colors.separator, lineWidth: 1))
         )
-        .overlay(alignment: .trailing) { resizeHandle }
+        .overlay(alignment: .leading) { resizeHandle }
         .padding(.vertical, 12)
-        .padding(.leading, 12)
+        .padding(.trailing, 12)
     }
 
-    // A thin hit-zone on the trailing edge: drag to resize, hover shows the
-    // left-right resize cursor. Width is clamped to [min,max] and persisted.
+    // A thin hit-zone on the leading edge (panel now sits on the right side of
+    // the window): drag to resize, hover shows the left-right resize cursor.
+    // Width is clamped to [min,max] and persisted.
     private var resizeHandle: some View {
         Rectangle()
             .fill(Color.clear)
@@ -129,7 +130,10 @@ struct WorkspaceExplorer: View {
                     .onChanged { v in
                         let start = dragStartWidth ?? explorerWidth
                         if dragStartWidth == nil { dragStartWidth = explorerWidth }
-                        explorerWidth = min(maxWidth, max(minWidth, start + v.translation.width))
+                        // Panel is now on the right: dragging the leading edge LEFT
+                        // (negative translation) grows it, so the sign flips vs. the
+                        // old left-side layout.
+                        explorerWidth = min(maxWidth, max(minWidth, start - v.translation.width))
                     }
                     .onEnded { _ in dragStartWidth = nil }
             )
@@ -155,7 +159,7 @@ struct WorkspaceExplorer: View {
                 .buttonStyle(.plain).help("새로고침")
             Button { chooseFolder() } label: { Image(systemName: "folder.badge.gearshape") }
                 .buttonStyle(.plain).help("작업 폴더 변경…")
-            Button { isVisible = false } label: { Image(systemName: "sidebar.left") }
+            Button { isVisible = false } label: { Image(systemName: "sidebar.right") }
                 .buttonStyle(.plain).help("탐색기 닫기")
         }
         .font(.system(size: 12))
