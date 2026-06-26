@@ -111,7 +111,7 @@ struct OpenLoopsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.card)
-                .fill(Theme.Colors.surfaceSunken)
+                .fill(Theme.Colors.surface)
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card)
                     .strokeBorder(Theme.Colors.separator, lineWidth: 1))
         )

@@ -75,7 +75,7 @@ struct ContentView: View {
             .animation(.snappy, value: showExplorer)
             .background(
                 ZStack {
-                    Theme.Colors.surfaceSunken
+                    Theme.Colors.surface
                     // Same trick as sidePanel's own catcher, one level further out:
                     // closes a pill dropdown when clicking the transcript pane too,
                     // while staying BEHIND this whole HStack's content so it never
@@ -267,6 +267,7 @@ struct ContentView: View {
                 if case .countingDown(let n) = session.phase { countdownOverlay(n) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.Colors.surface)
         }
     }
 
@@ -448,10 +449,12 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(showExplorer ? Theme.Colors.accent : Theme.Colors.textSecondary)
                     .help("작업 폴더 탐색기")
+                    .padding(.trailing, 3)
                 SettingsLink { Image(systemName: "gearshape").font(.system(size: 14)) }
                     .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
                     .help("설정 (⌘,)")
             }
+            .padding(.bottom, -5)
 
             VStack(alignment: .trailing, spacing: 8) {
                 if session.sourceMediaURL != nil { loadedFileChip } else { dropZone }
