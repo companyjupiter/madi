@@ -12,6 +12,7 @@ import SwiftUI
 
 struct PeopleDashboard: View {
     let people: [Person]
+    var autoRecognizedNames: Set<String> = []
 
     /// Largest total talk-time, for scaling the bars (≥1 to avoid /0).
     private var maxTalk: Double { max(1, people.map(\.totalTalk).max() ?? 1) }
@@ -56,10 +57,18 @@ struct PeopleDashboard: View {
             HStack(spacing: 10) {
                 avatar(person.name, color: color)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(person.name)
-                        .font(Theme.Fonts.speaker)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(person.name)
+                            .font(Theme.Fonts.speaker)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .lineLimit(1)
+                        if autoRecognizedNames.contains(person.name) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.Colors.accent)
+                                .help("음성 인식됨")
+                        }
+                    }
                     Text("\(person.meetings)개 회의 · \(timeText(person.totalTalk))")
                         .font(Theme.Fonts.status)
                         .foregroundStyle(Theme.Colors.textSecondary)

@@ -243,6 +243,7 @@ struct ContentView: View {
                     emptyState
                 } else {
                     TranscriptView(lines: session.transcript.lines, names: session.speakerNames,
+                                   autoRecognizedSpeakers: session.autoRecognizedSpeakers,
                                    mode: viewMode,
                                    onRename: { session.renameSpeaker($0, to: $1) },
                                    scrollTarget: scrollTarget, scrollTick: scrollTick,
@@ -473,6 +474,17 @@ struct ContentView: View {
                 LiveActionRailView(items: session.liveRailItems, extracting: session.liveRailBusy)
             }
 
+            if session.liveCoachEnabled,
+               isRecordingLike || !(session.prepBriefData?.isEmpty ?? true) {
+                Divider().overlay(Theme.Colors.separator)
+                // Render the cached snapshot (recomputed on a ~1Hz throttle by
+                // SessionController) — NOT a per-body-render compute, which would
+                // fire on every word event (40k+/hr) and O(transcript × keywords).
+                LiveCoachView(state: session.liveCoachState)
+            }
+
+            field("회의 모드") { meetingModePicker }
+
             field("언어") { languagePicker }
                 .zIndex(languagePickerOpen ? 10 : 0)
 
@@ -508,6 +520,13 @@ struct ContentView: View {
                 }
                 .help("녹음 중 결정·할 일·질문을 실시간 추출합니다. 요약 모델(DNA3)을 전사와 동시 구동 — 메모리 사용이 크고, 같은 모델을 쓰는 ‘실시간 번역’은 이때 일시 중지됩니다. 녹음 전에 설정하세요.")
             }
+
+            Toggle(isOn: $session.liveCoachEnabled) {
+                Label("라이브 코치", systemImage: "checklist").font(Theme.Fonts.status)
+            }
+            .toggleStyle(.checkbox)
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .help("녹음 중 안건(지난 결정·미해결 액션) 처리 현황, 미답변 질문, 회의 흐름을 실시간으로 코치합니다. 모델 불필요 — 모든 기기에서 동작합니다.")
 
             if !session.translateTargets.isEmpty {
                 Button { session.toggleCaptionOverlay() } label: {
@@ -807,6 +826,23 @@ struct ContentView: View {
             dropdownRow("English", selected: binding.wrappedValue == WhisperLang.en) { binding.wrappedValue = WhisperLang.en; languagePickerOpen = false }
         }
         .disabled(isBusy)
+    }
+
+    private var meetingModePicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("", selection: Binding(
+                get: { session.meetingMode },
+                set: { session.meetingMode = $0 }
+            )) {
+                ForEach(MeetingMode.allCases) { mode in
+                    Label(mode.label, systemImage: mode.sfSymbol).tag(mode)
+                }
+            }
+            .labelsHidden().disabled(isBusy || isRecordingLike)
+            Text(session.meetingMode.config.mode.summaryDescription)
+                .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                .lineLimit(1).truncationMode(.tail)
+        }
     }
 
     // 화자 수 고정 — 자동/1/2/3/4명 이상. Maps to the engine's DIAR_MAXK cap.

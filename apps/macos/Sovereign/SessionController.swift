@@ -102,6 +102,14 @@ final class SessionController: EngineProcessDelegate {
     }()
     var speakerNames: [Int: String] = [:]
 
+    /// Speaker ids auto-labeled this session because their voice matched an
+    /// enrolled voiceprint (engine SPKNAME event) — vs. names the user typed.
+    /// Session-scoped; drives the '✓ 음성 인식됨' affordance. Not persisted.
+    var autoRecognizedSpeakers: Set<Int> = []
+    /// Mid-session speaker names buffered for deferred voiceprint enrollment
+    /// (the engine only dumps centroids AFTER flush — see finalizeOnce).
+    private var pendingEnrollment = PendingEnrollmentStore()
+
     /// Personal vocabulary — domain terms/names the user has corrected over time.
     /// Loaded once at init; auto-correction is OFF until glossary.enabled is set.
     var glossary = Glossary.load()
@@ -110,6 +118,21 @@ final class SessionController: EngineProcessDelegate {
     /// the engine's DIAR_MAXK upper bound. 자동 and 4+ leave the cap at 8.
     var speakerCount: SpeakerCount = SpeakerCount(rawValue: UserDefaults.standard.integer(forKey: "fixedSpeakerCount")) ?? .auto {
         didSet { UserDefaults.standard.set(speakerCount.rawValue, forKey: "fixedSpeakerCount") }
+    }
+
+    /// Current meeting-shape preset. Persisted (rawValue key "meetingMode"; unknown
+    /// or absent → .general, today's baseline). On change it auto-applies the
+    /// preset's default diarization speaker count; summaryPromptSuffix is threaded
+    /// into the summarize calls below.
+    var meetingMode: MeetingMode = MeetingMode(rawValue: UserDefaults.standard.string(forKey: "meetingMode") ?? "") ?? .general {
+        didSet {
+            UserDefaults.standard.set(meetingMode.rawValue, forKey: "meetingMode")
+            // Apply the preset's diarization hint (map raw Int → SpeakerCount). A
+            // preset, not a lock — the user can still adjust 화자 수 afterward.
+            if let sc = SpeakerCount(rawValue: meetingMode.config.defaultSpeakerCountRaw) {
+                speakerCount = sc
+            }
+        }
     }
 
     /// Live segment window (s) — the live FELT-latency knob. Text lands when a
@@ -165,6 +188,10 @@ final class SessionController: EngineProcessDelegate {
     }
     private var translate: TranslateEngine?
     private var translatedIDs: Set<UUID> = []
+    /// O3 — reuse interim translations for the matching committed line instead of
+    /// re-queuing a fresh DNA3 turn. Cleared on every session boundary to prevent
+    /// cross-meeting bleed.
+    private var interimCache = InterimTranslationCache()
 
     // ── on-device meeting intelligence (post-session summary + action items) ──
     // Uses the SAME bundled DNA3.0-4B; the transcript never leaves the device.
@@ -225,9 +252,13 @@ final class SessionController: EngineProcessDelegate {
                     self.liveRailBusy = false; self.liveRailBusyTicks = 0
                     if let text {
                         var seen = Set(self.liveRailItems.map(\.id))
+                        var added = false
                         for it in LiveActionRail.parse(text) where seen.insert(it.id).inserted {
-                            self.liveRailItems.append(it)
+                            self.liveRailItems.append(it); added = true
                         }
+                        // New rail questions are a coach input → refresh once on append
+                        // (cheap, ≤ once per 18s rail tick), not per word event.
+                        if added { self.recomputeCoach() }
                     }
                 default: break
                 }
@@ -240,24 +271,26 @@ final class SessionController: EngineProcessDelegate {
 
     /// Structured [요약]/[액션]/[결정] from the diarized transcript, on-device.
     func summarize() {
+        guard !summarizing else { return }
         guard !transcript.lines.isEmpty else { return }
         switch phase { case .recording, .paused, .countingDown: return; default: break }
         guard let s = ensureSummaryEngine() else {
             meetingSummary = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
         }
         summarizing = true; meetingSummary = nil
-        s.summarize(lines: attributedLines)
+        s.summarize(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// Per-speaker breakdown (who said what / who owns which action), on-device.
     func summarizeBySpeaker() {
+        guard !speakerSummarizing else { return }
         guard !transcript.lines.isEmpty else { return }
         switch phase { case .recording, .paused, .countingDown: return; default: break }
         guard let s = ensureSummaryEngine() else {
             speakerSummary = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
         }
         speakerSummarizing = true; speakerSummary = nil
-        s.summarizeBySpeaker(lines: attributedLines)
+        s.summarizeBySpeaker(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// "Ask the meeting" — answer grounded only in the transcript, on-device.
@@ -338,6 +371,7 @@ final class SessionController: EngineProcessDelegate {
             await MainActor.run {
                 self.prepBriefData = brief
                 self.loadingPrepBrief = false
+                self.updateCoachAgenda()   // agenda inputs changed → re-derive + recompute
             }
         }
     }
@@ -375,6 +409,7 @@ final class SessionController: EngineProcessDelegate {
     private func clearSummary() {
         calendar.clear()
         stopLiveRail(); liveRailItems = []         // new session → reset the live rail
+        stopLiveCoach(); coachAgenda = []; liveCoachState = .empty   // reset the coach too
         linePlayer.stop(); sourceMediaURL = nil   // new session → drop click-to-play audio
         summaryEngine?.stop(); summaryEngine = nil
         meetingSummary = nil; meetingTitle = nil; summarizing = false
@@ -401,7 +436,13 @@ final class SessionController: EngineProcessDelegate {
                 guard let self else { return }
                 if id == Self.interimID {
                     self.interimInFlight = false
-                    if !self.livePartial.isEmpty { self.livePartialTranslations[lang] = text }
+                    if !self.livePartial.isEmpty {
+                        self.livePartialTranslations[lang] = text
+                        // Cache this interim source's translations so the matching
+                        // committed line can reuse them (O3). Keyed by interimSource —
+                        // the exact text that was sent to translate() for this turn.
+                        self.interimCache.put(self.interimSource, self.livePartialTranslations)
+                    }
                     if self.livePartial != self.interimSource { self.scheduleInterimTranslate() }  // grew → refresh
                 } else {
                     self.transcript.setTranslation(id, lang: lang, text)
@@ -445,6 +486,18 @@ final class SessionController: EngineProcessDelegate {
             let line = lines[i]
             if translatedIDs.contains(line.id) { continue }
             translatedIDs.insert(line.id)
+            // O3: if this line's text was already translated as interim, reuse the
+            // cached translations and skip the DNA3 turn entirely. Only reuse the
+            // targets we actually have cached; queue the engine for any that miss.
+            if let cached = interimCache.get(line.text) {
+                let missing = targets.filter { cached[$0] == nil }
+                for tgt in targets where cached[tgt] != nil {
+                    transcript.setTranslation(line.id, lang: tgt, cached[tgt]!)
+                }
+                if missing.isEmpty { continue }
+                t.translate(line.text, into: missing, id: line.id)
+                continue
+            }
             t.translate(line.text, into: targets, id: line.id)
         }
     }
@@ -464,6 +517,64 @@ final class SessionController: EngineProcessDelegate {
     static let liveRailCapable = ProcessInfo.processInfo.physicalMemory >= 16 * (1 << 30)
     var liveRailEnabled: Bool = (UserDefaults.standard.object(forKey: "liveRailEnabled") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(liveRailEnabled, forKey: "liveRailEnabled") }
+    }
+
+    /// Host-facing live coach / teleprompter toggle (agenda coverage + unanswered
+    /// questions + pace). Pure on-device compute, no extra model — safe on any
+    /// machine (unlike the live rail's 16GB gate). Persisted. Default OFF.
+    var liveCoachEnabled: Bool = (UserDefaults.standard.object(forKey: "liveCoachEnabled") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(liveCoachEnabled, forKey: "liveCoachEnabled")
+            if liveCoachEnabled { recomputeCoach() } else { stopLiveCoach() }
+        }
+    }
+
+    /// Cached live-coach snapshot. The View renders THIS (a cheap struct read) instead
+    /// of calling LiveCoach.compute() on every body render — body re-renders on every
+    /// word event (40k+/hr) and the compute is O(transcript × keywords). We recompute
+    /// only on a throttled cadence while recording (coachTimer, ~1Hz) plus on the
+    /// discrete events that change its inputs (prepBrief load, rail append, finalize).
+    private(set) var liveCoachState: LiveCoachState = .empty
+    /// Derived agenda, cached — Retrieval.keywords over every prep item is non-trivial,
+    /// and the agenda only changes when prepBriefData changes. Re-derived in
+    /// updateCoachAgenda(), not on every recompute.
+    private var coachAgenda: [CoachAgendaItem] = []
+    private var liveCoachTimer: Timer?
+
+    /// Re-derive the cached agenda from the current prep brief, then recompute state.
+    /// Call when prepBriefData changes (the only input to agenda derivation).
+    func updateCoachAgenda() {
+        coachAgenda = prepBriefData.map { LiveCoach.agenda(from: $0) } ?? []
+        recomputeCoach()
+    }
+
+    /// Recompute the cached coach snapshot from the current immutable inputs. Cheap
+    /// relative to body-render frequency because it fires on a ~1Hz throttle while
+    /// recording (or once per discrete input change), not per word event.
+    func recomputeCoach() {
+        guard liveCoachEnabled else { liveCoachState = .empty; return }
+        liveCoachState = LiveCoach.compute(
+            agenda: coachAgenda,
+            spokenLines: transcript.lines.map(\.text),
+            railQuestions: liveRailItems.filter { $0.kind == .question }.map(\.text),
+            lines: transcript.lines)
+    }
+
+    /// Throttled recompute loop: while recording, refresh the coach at ~1Hz so the
+    /// agenda-coverage / unanswered-question / pace readout tracks the live transcript
+    /// without recomputing on every one of the 40k+ word events in an hour.
+    private func startLiveCoach() {
+        liveCoachTimer?.invalidate(); liveCoachTimer = nil
+        guard liveCoachEnabled else { return }
+        recomputeCoach()
+        liveCoachTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.recomputeCoach() }
+        }
+    }
+
+    private func stopLiveCoach() {
+        liveCoachTimer?.invalidate(); liveCoachTimer = nil
+        if !liveCoachEnabled { liveCoachState = .empty }
     }
     private(set) var liveRailItems: [RailItem] = []
     private(set) var liveRailBusy = false
@@ -553,7 +664,7 @@ final class SessionController: EngineProcessDelegate {
     private func autoSummarizeForSave() {
         guard !transcript.lines.isEmpty, !summarizing, let s = ensureSummaryEngine() else { return }
         summarizing = true; meetingSummary = nil
-        s.summarize(lines: attributedLines)
+        s.summarize(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// Persistent per-speaker voiceprints. When you name a speaker, their centroid
@@ -573,8 +684,15 @@ final class SessionController: EngineProcessDelegate {
     /// recognized in future sessions (if the engine dumped this session's centroid).
     func renameSpeaker(_ id: Int, to name: String) {
         let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.isEmpty { speakerNames[id] = nil; return }
+        if t.isEmpty { speakerNames[id] = nil; pendingEnrollment.remove(id: id); autoRecognizedSpeakers.remove(id); return }
         speakerNames[id] = t
+        // BUFFER, don't enroll now: the engine dumps this session's centroid to
+        // .last/spk<id>.vec only after flush, so an immediate copy finds no source
+        // and silently no-ops. finalizeOnce() drains this after engine flush.
+        pendingEnrollment.add(id: id, name: t)
+        // Still attempt an immediate enroll: in a re-opened/finished session a
+        // centroid may already exist, and enrollVoiceprint() is a safe no-op when
+        // it doesn't. The deferred drain covers the live-recording case.
         enrollVoiceprint(speaker: id, name: t)
     }
 
@@ -603,7 +721,8 @@ final class SessionController: EngineProcessDelegate {
             bpeURL: AssetManifest.bundledBPE,
             assetsDir: AssetManifest.bundledAssetsDir,
             diarize: diarize, osd: osd,
-            languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers, voiceprintsDir: voiceprintsDir,
+            languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers,
+            vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
             streamWavRoots: [capture.segmentDirectory])
     }
 
@@ -638,8 +757,11 @@ final class SessionController: EngineProcessDelegate {
         countdownTask?.cancel(); countdownTask = nil
         transcript.reset()
         speakerNames = [:]
+        autoRecognizedSpeakers.removeAll()
+        pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
+        interimCache.clear()
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
         livePartial = ""
@@ -668,6 +790,7 @@ final class SessionController: EngineProcessDelegate {
         guard let parsed = TranscriptArchive.parse(url) else { return }
         reset()
         speakerNames = parsed.names
+        autoRecognizedSpeakers.removeAll()
         transcript.load(parsed.lines)
         fileName = url.lastPathComponent
         phase = .done
@@ -701,14 +824,18 @@ final class SessionController: EngineProcessDelegate {
         }
         transcript.reset()
         speakerNames = [:]
+        autoRecognizedSpeakers.removeAll()
+        pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
+        interimCache.clear()
         clearSummary()
         // Prefill from the live calendar event. ContentView observes calendar.event.id
         // and calls ensurePrepBrief() on change, so we do NOT call it here too (that
         // double-ran the headless aggregation and raced two detached tasks).
         Task { await calendar.loadCurrentEvent() }
         startLiveRail()                              // throttled live action extraction (≥16GB + on)
+        startLiveCoach()                             // throttled coach recompute (~1Hz while recording)
         phase = .engineStarting
 
         let e = EngineProcess(config: makeConfig())
@@ -759,8 +886,11 @@ final class SessionController: EngineProcessDelegate {
         guard AssetManifest.modelIsValid() else { phase = .error("model not ready"); return }
         transcript.reset()
         speakerNames = [:]
+        autoRecognizedSpeakers.removeAll()
+        pendingEnrollment.clear()
         lastAutoSaved = nil
         translatedIDs.removeAll()
+        interimCache.clear()
         clearSummary()
         fileName = url.lastPathComponent
         sourceMediaURL = url        // arm click-to-play (original timeline matches)
@@ -812,6 +942,9 @@ final class SessionController: EngineProcessDelegate {
         phase = .flushing
         capture.stop()          // flush final tail segment(s) into the engine
         engine?.flush()         // → SPKFIX/SPKOV → <<FLUSH_END>>
+        // NOTE: do NOT clear interimCache here. finalizeOnce() runs later (post-flush
+        // via engineDidFlush) and reuses the cached interim translations for the final
+        // committed lines, then clears. Clearing here would defeat that final-line reuse.
     }
 
     // MARK: EngineProcessDelegate
@@ -838,6 +971,7 @@ final class SessionController: EngineProcessDelegate {
             // a live speaker matched an enrolled voiceprint → auto-label (the user
             // can still override). Cross-session speaker re-identification.
             speakerNames[id] = name
+            autoRecognizedSpeakers.insert(id)
         case .word(let t0, let t1, let text, let conf):
             // APPLY (live): correct a low-confidence recognized word against the
             // personal glossary before it enters the transcript. String-level —
@@ -875,11 +1009,17 @@ final class SessionController: EngineProcessDelegate {
             }
         }
         engine?.terminate()
+        // Drain mid-session names now that the engine has dumped its centroids
+        // (.last/spk<id>.vec) on flush — THIS is the enrollment-timing fix.
+        for p in pendingEnrollment.pending() { enrollVoiceprint(speaker: p.id, name: p.name) }
+        pendingEnrollment.clear()
         engine = nil
         preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
+        interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
         stopLiveRail()       // recording ended — keep the accumulated rail for review
+        stopLiveCoach(); recomputeCoach()   // stop the 1Hz loop, snapshot the final transcript once
         calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
         // A.I 요약이 켜진 라이브 세션: DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로
@@ -994,6 +1134,20 @@ enum SpeakerCount: Int, CaseIterable, Identifiable {
         case .one:             return 1
         case .two:             return 2
         case .three:           return 3
+        }
+    }
+    /// Per-speaker-count Silero speech-gate (VAD_PROB) default — each bucket's
+    /// outlier-robust DER optimum from the 2026-06-25 sweep (bench/VAD_TUNING.md).
+    /// More speakers ⇒ more cross-talk/backchannel false-speech ⇒ a stricter gate
+    /// trims FA. Gains over a flat 0.5 are small (≤~0.1pp, within noise on clean
+    /// close-mic audio); the mapping just sits each setting on its measured min.
+    /// auto = unknown count ⇒ the safe global 0.5. (Has no effect on far-field,
+    /// which is heterogeneous — see VAD_TUNING.md.)
+    var vadProb: Double {
+        switch self {
+        case .auto, .one:        return 0.5
+        case .two:               return 0.65
+        case .three, .fourPlus:  return 0.8
         }
     }
 }

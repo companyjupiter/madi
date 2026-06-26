@@ -36,6 +36,7 @@ final class EngineProcess {
         var osd = true
         var languageTokenID: Int?   // nil = auto
         var maxSpeakers = 8
+        var vadProb: Double?        // per-speaker-count Silero gate; nil = engine default 0.5
         var voiceprintsDir: URL?
         var streamWavRoots: [URL] = []
         var fileURL: URL?           // set ⇒ native FILE mode (batched, fast); nil ⇒ live STREAM
@@ -55,6 +56,8 @@ final class EngineProcess {
         env["DIAR"] = config.diarize ? "1" : "0"
         env["OSD"] = config.osd ? "1" : "0"
         env["DIAR_MAXK"] = String(config.maxSpeakers)
+        // per-speaker-count speech-gate optimum (bench/VAD_TUNING.md)
+        if let p = config.vadProb { env["VAD_PROB"] = String(format: "%.2f", p) }
         if let lang = config.languageTokenID { env["WHISPER_LANG_ID"] = String(lang) }
 
         if let file = config.fileURL {

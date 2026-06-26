@@ -32,6 +32,7 @@ struct SovereignApp: App {
     @State private var downloader = ModelDownloader()
     @State private var session = SessionController()
     @State private var translateDownloader = TranslateModelDownloader()
+    @State private var dictation = DictationController()
     @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some Scene {
@@ -40,11 +41,28 @@ struct SovereignApp: App {
                 .frame(minWidth: Theme.Size.windowMinW, minHeight: Theme.Size.windowMinH)
                 .preferredColorScheme(appearance.colorScheme)
                 .task { downloader.ensureModel() }
+                .task { dictation.micBusy = { session.phase == .recording || session.phase == .paused } }
         }
         .windowStyle(.titleBar)
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1100, height: 720)
+        .commands {
+            // Replace the empty default Help menu with a link to the bundled
+            // user manual (sealed into Resources/manual/ by make_app.sh).
+            CommandGroup(replacing: .help) {
+                Button("Madi 사용자 매뉴얼") { Self.openManual() }
+                    .keyboardShortcut("?", modifiers: .command)
+            }
+        }
 
-        Settings { SettingsView(session: session, downloader: downloader, translateDownloader: translateDownloader) }
+        Settings { SettingsView(session: session, downloader: downloader, translateDownloader: translateDownloader, dictation: dictation) }
+    }
+
+    /// Open the bundled, self-contained user manual (Resources/manual/index.html)
+    /// in the default browser. Works fully offline.
+    private static func openManual() {
+        if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "manual") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }

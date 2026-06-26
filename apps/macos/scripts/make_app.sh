@@ -49,20 +49,27 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift
   "$APP_DIR"/Sovereign/Transcript/TranscriptArchive.swift
   "$APP_DIR"/Sovereign/Transcript/EnergyArc.swift
+  "$APP_DIR"/Sovereign/Transcript/MeetingMode.swift
+  "$APP_DIR"/Sovereign/Transcript/LiveCoach.swift
   "$APP_DIR"/Sovereign/Transcript/TitleGenerator.swift
   "$APP_DIR"/Sovereign/Transcript/PIIRedactor.swift
   "$APP_DIR"/Sovereign/Transcript/WorkspaceRetrieval.swift
   "$APP_DIR"/Sovereign/Transcript/PeopleAnalytics.swift
+  "$APP_DIR"/Sovereign/Transcript/PendingEnrollmentStore.swift
+  "$APP_DIR"/Sovereign/Transcript/VoiceprintStore.swift
   "$APP_DIR"/Sovereign/Transcript/LiveActionRail.swift
   "$APP_DIR"/Sovereign/Transcript/Retrieval.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryDeck.swift
   "$APP_DIR"/Sovereign/Transcript/OpenLoopsAggregator.swift
   "$APP_DIR"/Sovereign/Transcript/GlossaryStore.swift
   "$APP_DIR"/Sovereign/Transcript/PersonalVocabulary.swift
+  "$APP_DIR"/Sovereign/Transcript/InterimTranslationCache.swift
   "$APP_DIR"/Sovereign/Transcript/GistExtractor.swift
   "$APP_DIR"/Sovereign/Transcript/MeetingPrepBrief.swift
   "$APP_DIR"/Sovereign/Transcript/PrepBriefData.swift
   "$APP_DIR"/Sovereign/Transcript/ReviewController.swift
+  "$APP_DIR"/Sovereign/Dictation/DictationFormatting.swift
+  "$APP_DIR"/Sovereign/Dictation/DictationController.swift
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/CalendarBridge.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
@@ -71,10 +78,12 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/BrandLogo.swift
   "$APP_DIR"/Sovereign/UI/ContentView.swift
   "$APP_DIR"/Sovereign/UI/WorkspaceExplorer.swift
+  "$APP_DIR"/Sovereign/UI/VoiceprintManagementView.swift
   "$APP_DIR"/Sovereign/UI/OpenLoopsView.swift
   "$APP_DIR"/Sovereign/UI/GistView.swift
   "$APP_DIR"/Sovereign/UI/PrepBriefView.swift
   "$APP_DIR"/Sovereign/UI/ReviewControlView.swift
+  "$APP_DIR"/Sovereign/UI/GlossarySettingsView.swift
   "$APP_DIR"/Sovereign/UI/RecapCardView.swift
   "$APP_DIR"/Sovereign/UI/TimelineScrubberView.swift
   "$APP_DIR"/Sovereign/UI/EnergyArcView.swift
@@ -82,9 +91,11 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/CaptionOverlay.swift
   "$APP_DIR"/Sovereign/UI/PeopleDashboard.swift
   "$APP_DIR"/Sovereign/UI/LiveActionRailView.swift
+  "$APP_DIR"/Sovereign/UI/LiveCoachView.swift
   "$APP_DIR"/Sovereign/UI/TranscriptView.swift
   "$APP_DIR"/Sovereign/UI/ModelGateView.swift
   "$APP_DIR"/Sovereign/UI/SettingsView.swift
+  "$APP_DIR"/Sovereign/UI/DictationSettingsView.swift
 )
 swiftc -O -parse-as-library -target arm64-apple-macosx14.0 \
   "${SRCS[@]}" -o "$OUT/Madi"
@@ -111,6 +122,19 @@ for f in "${ASSETS[@]}"; do
     echo "  ⚠ missing asset: $f (engine degrades or fails — check gen_diar_assets.sh)"
   fi
 done
+
+# ── 2a. bundle the user manual (self-contained index.html) ──────────────────
+# Regenerate from the .md sources if node is available (best-effort), then seal
+# a copy into Resources/manual/ so Help → "Madi 사용자 매뉴얼" opens it offline.
+if command -v node >/dev/null 2>&1 && [ -f "$ROOT/docs/manual/build_index.mjs" ]; then
+  node "$ROOT/docs/manual/build_index.mjs" >/dev/null 2>&1 || true
+fi
+if [ -f "$ROOT/docs/manual/index.html" ]; then
+  mkdir -p "$BUNDLE/Contents/Resources/manual"
+  cp "$ROOT/docs/manual/index.html" "$BUNDLE/Contents/Resources/manual/index.html"
+else
+  echo "  ⚠ docs/manual/index.html missing — Help → 사용자 매뉴얼 will be unavailable"
+fi
 
 # ── 2b. optional: bundle the model INSIDE the .app (self-contained DMG) ──────
 # Must happen BEFORE signing so the 867 MB model is sealed by the bundle
