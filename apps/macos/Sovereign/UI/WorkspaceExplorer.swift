@@ -45,6 +45,8 @@ struct WorkspaceExplorer: View {
                     Text(m.label)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(mode == m ? .white : Theme.Colors.textSecondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .frame(maxWidth: .infinity)
                         .background {

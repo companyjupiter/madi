@@ -37,8 +37,10 @@ struct ContentView: View {
     @State private var showCommandPalette = false   // ⌘K fuzzy launcher overlay
     @State private var languagePickerOpen = false
     @State private var speakerCountPickerOpen = false
+    @State private var meetingModePickerOpen = false
     @State private var languagePickerWidth: CGFloat = 0
     @State private var speakerCountPickerWidth: CGFloat = 0
+    @State private var meetingModePickerWidth: CGFloat = 0
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
     private var flaggedWords: [(line: UUID, text: String)] {
@@ -80,9 +82,9 @@ struct ContentView: View {
                     // closes a pill dropdown when clicking the transcript pane too,
                     // while staying BEHIND this whole HStack's content so it never
                     // wins hit-testing over the dropdown rows themselves.
-                    if languagePickerOpen || speakerCountPickerOpen {
+                    if languagePickerOpen || speakerCountPickerOpen || meetingModePickerOpen {
                         Color.black.opacity(0.0001)
-                            .onTapGesture { languagePickerOpen = false; speakerCountPickerOpen = false }
+                            .onTapGesture { languagePickerOpen = false; speakerCountPickerOpen = false; meetingModePickerOpen = false }
                     }
                 }
             )
@@ -274,6 +276,34 @@ struct ContentView: View {
 
     // 내용/상세 toggle — keeps the clean reading view (default) free of the
     // editor/review detail. Persisted across launches via @AppStorage.
+    // Pill-shaped 내용/상세 switch — same shape language as WorkspaceExplorer's
+    // 파일/사람/열린 항목/음성 switcher (sliding accent capsule via matchedGeometryEffect).
+    @Namespace private var contentModeNS
+    private var contentModeSwitch: some View {
+        HStack(spacing: 1) {
+            ForEach([true, false], id: \.self) { isContent in
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { contentMode = isContent }
+                } label: {
+                    Text(isContent ? "내용" : "상세")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(contentMode == isContent ? .white : Theme.Colors.textSecondary)
+                        .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background {
+                            if contentMode == isContent {
+                                Capsule().fill(Theme.Colors.accent)
+                                    .matchedGeometryEffect(id: "contentModePill", in: contentModeNS)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(Theme.Colors.surfaceSunken))
+    }
+
     private var viewModeBar: some View {
         HStack(spacing: 10) {
             // #3 — new session: clear the transcript without the stop→start dance.
@@ -303,16 +333,11 @@ struct ContentView: View {
             Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
                 .buttonStyle(.plain).help("글자 크게")
             Spacer()
-            Picker("", selection: $contentMode) {
-                Text("내용").tag(true)
-                Text("상세").tag(false)
-            }
-            .pickerStyle(.segmented)
-            .fixedSize()
-            .help("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시")
+            contentModeSwitch
+                .help("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시")
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
-        .overlay(alignment: .bottom) { Divider() }
+        .padding(.top, 5)
     }
 
     // N2 review queue (상세 mode only): step through low-confidence words so the
@@ -350,7 +375,9 @@ struct ContentView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 7)
         .background(Theme.Colors.lowConf.opacity(0.07))
-        .overlay(alignment: .bottom) { Divider() }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .padding(.horizontal, Theme.Space.window)
+        .padding(.top, 5).padding(.bottom, 5)
     }
 
     // determinate file-transcription progress: filename + chunk bar (driven by
@@ -377,7 +404,12 @@ struct ContentView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
         .background(Theme.Colors.accent.opacity(0.07))
-        .overlay(alignment: .bottom) { Divider() }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .padding(.horizontal, Theme.Space.window)
+        // top gap matches the 12pt inset the side panels (explorer/control
+        // panel) start with from the window's top edge, so this card's top
+        // doesn't sit flush against the very top while its neighbors don't.
+        .padding(.top, 12).padding(.bottom, 5)
     }
 
     private var emptyState: some View {
@@ -395,7 +427,7 @@ struct ContentView: View {
                 ProgressView()
                 Text(phaseText).font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
             } else {
-                haloIcon("waveform")
+                OrbView()
                 VStack(spacing: 6) {
                     Text("기록할 준비가 되었어요")
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
@@ -484,6 +516,7 @@ struct ContentView: View {
             }
 
             field("회의 모드") { meetingModePicker }
+                .zIndex(meetingModePickerOpen ? 10 : 0)
 
             field("언어") { languagePicker }
                 .zIndex(languagePickerOpen ? 10 : 0)
@@ -519,14 +552,20 @@ struct ContentView: View {
                     }
                 }
                 .help("녹음 중 결정·할 일·질문을 실시간 추출합니다. 요약 모델(DNA3)을 전사와 동시 구동 — 메모리 사용이 크고, 같은 모델을 쓰는 ‘실시간 번역’은 이때 일시 중지됩니다. 녹음 전에 설정하세요.")
-            }
 
-            Toggle(isOn: $session.liveCoachEnabled) {
-                Label("라이브 코치", systemImage: "checklist").font(Theme.Fonts.status)
+                VStack(alignment: .leading, spacing: 1) {
+                    Toggle(isOn: $session.liveCoachEnabled) {
+                        Text("라이브 코치").font(.system(size: 12))
+                    }
+                    .toggleStyle(FigmaCheckboxToggleStyle())
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    Text("안건 처리 현황, 미답변 질문, 회의 흐름을 코치합니다.")
+                        .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 22)
+                }
+                .help("녹음 중 안건(지난 결정·미해결 액션) 처리 현황, 미답변 질문, 회의 흐름을 실시간으로 코치합니다. 모델 불필요 — 모든 기기에서 동작합니다.")
             }
-            .toggleStyle(.checkbox)
-            .foregroundStyle(Theme.Colors.textSecondary)
-            .help("녹음 중 안건(지난 결정·미해결 액션) 처리 현황, 미답변 질문, 회의 흐름을 실시간으로 코치합니다. 모델 불필요 — 모든 기기에서 동작합니다.")
 
             if !session.translateTargets.isEmpty {
                 Button { session.toggleCaptionOverlay() } label: {
@@ -576,9 +615,9 @@ struct ContentView: View {
                 // rows for hit-testing and swallows the tap instead of the row's
                 // own button action (only the close-on-outside-tap fired, the
                 // selection never landed).
-                if languagePickerOpen || speakerCountPickerOpen {
+                if languagePickerOpen || speakerCountPickerOpen || meetingModePickerOpen {
                     Color.black.opacity(0.0001)
-                        .onTapGesture { languagePickerOpen = false; speakerCountPickerOpen = false }
+                        .onTapGesture { languagePickerOpen = false; speakerCountPickerOpen = false; meetingModePickerOpen = false }
                 }
             }
         )
@@ -830,15 +869,15 @@ struct ContentView: View {
 
     private var meetingModePicker: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Picker("", selection: Binding(
-                get: { session.meetingMode },
-                set: { session.meetingMode = $0 }
-            )) {
+            pillDropdown(session.meetingMode.label, isOpen: $meetingModePickerOpen, width: $meetingModePickerWidth) {
                 ForEach(MeetingMode.allCases) { mode in
-                    Label(mode.label, systemImage: mode.sfSymbol).tag(mode)
+                    dropdownRow(mode.label, selected: mode == session.meetingMode) {
+                        session.meetingMode = mode; meetingModePickerOpen = false
+                    }
                 }
             }
-            .labelsHidden().disabled(isBusy || isRecordingLike)
+            .disabled(isBusy || isRecordingLike)
+            .zIndex(1)
             Text(session.meetingMode.config.mode.summaryDescription)
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
                 .lineLimit(1).truncationMode(.tail)

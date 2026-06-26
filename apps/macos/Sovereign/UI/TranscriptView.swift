@@ -44,6 +44,9 @@ struct TranscriptView: View {
     @State private var draftName: String = ""
     @State private var editingLine: UUID? = nil
     @State private var editDraft: String = ""
+    // TextEditor has no auto-grow — measured via an invisible Text twin so the
+    // box matches the wrapped content's height instead of scrolling internally.
+    @State private var editDraftHeight: CGFloat = 0
 
     private func canEdit(_ line: Line) -> Bool { onEdit != nil && line.id != lockedLineID }
     private func beginEdit(_ line: Line) {
@@ -157,6 +160,7 @@ struct TranscriptView: View {
             // double-click in the reading view flips to 상세 so the per-line edit
             // gesture is available (editing is line-granular; blocks join lines).
             Text(b.text).font(bodyFont)
+                .lineSpacing(fontSize * 0.3)
                 .onTapGesture(count: 2) { if onEdit != nil { onRequestDetailed?() } }
             ForEach(blockTranslations(b), id: \.0) { lang, text in
                 translationLine(lang, text)
@@ -235,15 +239,47 @@ struct TranscriptView: View {
                 }
             }
             if editingLine == line.id {
-                TextField("문장 편집", text: $editDraft, axis: .vertical)
-                    .font(bodyFont).textFieldStyle(.plain)
+                // TextField(axis: .vertical) silently ignores .lineSpacing() on macOS
+                // (NSTextField limitation) — TextEditor's NSTextView backing honors it,
+                // so editing now matches the read view's line-height. Trade-off: Return
+                // inserts a newline instead of submitting; save via button or ⌘-Return.
+                TextEditor(text: $editDraft)
+                    .font(bodyFont).lineSpacing(fontSize * 0.3)
+                    .scrollContentBackground(.hidden)
+                    .frame(height: max(fontSize * 1.8, editDraftHeight))
+                    .padding(.horizontal, -5)
+                    .padding(.top, 2)
+                    .overlay(
+                        // .fixedSize forces this Text to report its true wrapped
+                        // height even though the overlay slot it sits in is itself
+                        // height-constrained by the .frame() above — without it the
+                        // measurement is squeezed to fit the CURRENT height, so it
+                        // can never grow past the initial minimum (feedback loop).
+                        Text(editDraft.isEmpty ? " " : editDraft)
+                            .font(bodyFont).lineSpacing(fontSize * 0.3)
+                            .opacity(0)
+                            .padding(.vertical, 8)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .background(GeometryReader { geo in
+                                Color.clear
+                                    .onAppear { editDraftHeight = geo.size.height }
+                                    // React to geo.size itself (not just editDraft) —
+                                    // a window resize rewraps the text at the SAME
+                                    // content, which onChange(of: editDraft) misses,
+                                    // leaving the box stuck at the old height.
+                                    .onChange(of: geo.size) { _, newSize in editDraftHeight = newSize.height }
+                            })
+                            .allowsHitTesting(false)
+                    )
                     .onSubmit { commitEdit() }
-                HStack(spacing: 8) {
-                    Button("저장") { commitEdit() }.controlSize(.small).keyboardShortcut(.return)
+                HStack(spacing: 6) {
+                    Button("저장") { commitEdit() }.controlSize(.small).keyboardShortcut(.return, modifiers: .command)
                     Button("취소") { editingLine = nil }.controlSize(.small).keyboardShortcut(.cancelAction)
                 }
+                .padding(.top, -2)
             } else {
                 Text(attributed(line)).font(bodyFont)
+                    .lineSpacing(fontSize * 0.3)
                     .onTapGesture(count: 2) { beginEdit(line) }
             }
             ForEach(line.translations.keys.sorted(), id: \.self) { lang in
