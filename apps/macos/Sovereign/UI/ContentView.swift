@@ -308,36 +308,45 @@ struct ContentView: View {
     }
 
     private var viewModeBar: some View {
-        HStack(spacing: 10) {
-            // #3 — new session: clear the transcript without the stop→start dance.
-            // Only when not actively capturing (idle / done / error).
-            if !isBusy {
-                Button { session.reset() } label: {
-                    Label("초기화", systemImage: "arrow.counterclockwise").font(.system(size: 11))
-                }
-                .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
-                .help("전사 내용을 지우고 새 회의를 시작합니다")
-                Divider().frame(height: 14)
-                // on-device meeting summary + action items (local LLM)
-                if AssetManifest.translateAvailable {
-                    Button { session.summarize(); showSummary = true } label: {
-                        Label("요약", systemImage: "sparkles").font(.system(size: 11))
-                    }
-                    .buttonStyle(.plain).foregroundStyle(Theme.Colors.accent)
-                    .help("로컬 LLM으로 회의 요약·액션아이템 생성 (기기 밖으로 안 나감)")
-                    Divider().frame(height: 14)
-                }
+        // Three independent layers instead of one HStack so the pill tab can sit
+        // truly centered on the bar regardless of how wide the left/right groups
+        // are (an HStack + single Spacer would only center if both sides matched).
+        ZStack {
+            HStack(spacing: 10) {
+                // text-size: A− / current pt / A+
+                Button { fontSize = max(12, fontSize - 2) } label: { Text("A").font(.system(size: 11)) }
+                    .buttonStyle(.plain).help("글자 작게")
+                Text("\(Int(fontSize))").font(Theme.Fonts.status)
+                    .foregroundStyle(Theme.Colors.textTertiary).monospacedDigit()
+                Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
+                    .buttonStyle(.plain).help("글자 크게")
+                Spacer(minLength: 0)
             }
-            // text-size: A− / current pt / A+
-            Button { fontSize = max(12, fontSize - 2) } label: { Text("A").font(.system(size: 11)) }
-                .buttonStyle(.plain).help("글자 작게")
-            Text("\(Int(fontSize))").font(Theme.Fonts.status)
-                .foregroundStyle(Theme.Colors.textTertiary).monospacedDigit()
-            Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
-                .buttonStyle(.plain).help("글자 크게")
-            Spacer()
+
             contentModeSwitch
                 .help("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시")
+
+            HStack(spacing: 10) {
+                Spacer(minLength: 0)
+                // #3 — new session: clear the transcript without the stop→start dance.
+                // Only when not actively capturing (idle / done / error).
+                if !isBusy {
+                    Button { session.reset() } label: {
+                        Label("초기화", systemImage: "arrow.counterclockwise").font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(Theme.Colors.textSecondary)
+                    .help("전사 내용을 지우고 새 회의를 시작합니다")
+                    // on-device meeting summary + action items (local LLM)
+                    if AssetManifest.translateAvailable {
+                        Divider().frame(height: 14)
+                        Button { session.summarize(); showSummary = true } label: {
+                            Label("요약", systemImage: "sparkles").font(.system(size: 11))
+                        }
+                        .buttonStyle(.plain).foregroundStyle(Theme.Colors.accent)
+                        .help("로컬 LLM으로 회의 요약·액션아이템 생성 (기기 밖으로 안 나감)")
+                    }
+                }
+            }
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
         .padding(.top, 5)
@@ -477,6 +486,10 @@ struct ContentView: View {
     // MARK: right control panel
 
     private var sidePanel: some View {
+        // Header and footer stay pinned; only the middle (recording controls
+        // through energy arc) scrolls — otherwise a long speaker list or
+        // checkbox help text pushes the footer (저장 상태/내보내기) past the
+        // window's bottom edge with no way to reach it.
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 8) {
                 BrandLogo(width: 90)
@@ -492,6 +505,46 @@ struct ContentView: View {
             }
             .padding(.bottom, -5)
 
+            ScrollView {
+                sidePanelScrollContent
+            }
+            .scrollBounceBehavior(.basedOnSize)
+
+            if !session.transcript.lines.isEmpty, session.tightenStat.cuts > 0 { tightenStatView }
+            if let saved = session.lastAutoSaved { savedStatus(saved) }
+
+            HStack {
+                Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
+                Spacer()
+                exportMenu
+            }
+        }
+        .padding(Theme.Space.window)
+        .frame(width: Theme.Size.sidePanelW)
+        .background(
+            ZStack {
+                Theme.Colors.surface
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel).strokeBorder(Theme.Colors.separator, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 2)
+                // Tap-outside catcher for the pill dropdowns, painted in the SAME
+                // stacking context as the fields (a background of this VStack, not
+                // a sibling elsewhere) — otherwise it sits in front of the dropdown
+                // rows for hit-testing and swallows the tap instead of the row's
+                // own button action (only the close-on-outside-tap fired, the
+                // selection never landed).
+                if languagePickerOpen || speakerCountPickerOpen || meetingModePickerOpen {
+                    Color.black.opacity(0.0001)
+                        .onTapGesture { languagePickerOpen = false; speakerCountPickerOpen = false; meetingModePickerOpen = false }
+                }
+            }
+        )
+        .padding(.vertical, 12)
+        .padding(.leading, 12)
+    }
+
+    private var sidePanelScrollContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .trailing, spacing: 8) {
                 if session.sourceMediaURL != nil { loadedFileChip } else { dropZone }
                 recordButton
@@ -592,40 +645,7 @@ struct ContentView: View {
                     }
                 }
             }
-
-            Spacer(minLength: 8)
-
-            if !session.transcript.lines.isEmpty, session.tightenStat.cuts > 0 { tightenStatView }
-            if let saved = session.lastAutoSaved { savedStatus(saved) }
-
-            HStack {
-                Text(phaseText).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
-                Spacer()
-                exportMenu
-            }
         }
-        .padding(Theme.Space.window)
-        .frame(width: Theme.Size.sidePanelW)
-        .background(
-            ZStack {
-                Theme.Colors.surface
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel).strokeBorder(Theme.Colors.separator, lineWidth: 1))
-                    .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 2)
-                // Tap-outside catcher for the pill dropdowns, painted in the SAME
-                // stacking context as the fields (a background of this VStack, not
-                // a sibling elsewhere) — otherwise it sits in front of the dropdown
-                // rows for hit-testing and swallows the tap instead of the row's
-                // own button action (only the close-on-outside-tap fired, the
-                // selection never landed).
-                if languagePickerOpen || speakerCountPickerOpen || meetingModePickerOpen {
-                    Color.black.opacity(0.0001)
-                        .onTapGesture { languagePickerOpen = false; speakerCountPickerOpen = false; meetingModePickerOpen = false }
-                }
-            }
-        )
-        .padding(.vertical, 12)
-        .padding(.leading, 12)
     }
 
     // saved-confirmation only — the auto-save folder config lives in Settings.

@@ -25,11 +25,20 @@ struct OpenLoopsView: View {
 
     var body: some View {
         Group {
-            if loops.isEmpty {
+            if loops.isEmpty && session.liveRailItems.isEmpty {
                 emptyState
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Space.chipGap) {
+                        // The CURRENT meeting's live-extracted items, stacked above
+                        // the cross-meeting aggregation — same 결정/액션/질문 kinds,
+                        // but not yet a saved meeting so there's no age/follow-up
+                        // tracking for them yet (they fold into the aggregator's
+                        // 후속 필요 list once this meeting is saved and re-scanned).
+                        if !session.liveRailItems.isEmpty {
+                            sectionHeader("진행 중", count: session.liveRailItems.count)
+                            ForEach(session.liveRailItems) { liveRow($0) }
+                        }
                         if !unresolved.isEmpty {
                             sectionHeader("후속 필요", count: unresolved.count)
                             ForEach(unresolved) { row($0) }
@@ -121,6 +130,55 @@ struct OpenLoopsView: View {
             Button("회의록 열기") { openMeeting(item) }
         }
         .help(item.meetingName)
+    }
+
+    // MARK: a live (in-progress meeting) item row
+
+    private func liveRow(_ item: RailItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                liveBadge(item.kind)
+                if let owner = item.owner, !owner.isEmpty {
+                    Text(owner)
+                        .font(Theme.Fonts.speaker)
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text("진행 중")
+                    .font(Theme.Fonts.status)
+                    .foregroundStyle(Theme.Colors.accent)
+                    .lineLimit(1)
+            }
+            Text(item.text)
+                .font(Theme.Fonts.body)
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Theme.Space.cardPad)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.card)
+                .fill(Theme.Colors.accent.opacity(0.06))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card)
+                    .strokeBorder(Theme.Colors.accent.opacity(0.3), lineWidth: 1))
+        )
+    }
+
+    private func liveBadge(_ kind: RailItem.Kind) -> some View {
+        Text(kind.rawValue)
+            .font(Theme.Fonts.section)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(Capsule().fill(liveColor(for: kind)))
+    }
+
+    private func liveColor(for kind: RailItem.Kind) -> Color {
+        switch kind {
+        case .decision: return Theme.Colors.meterFill
+        case .action:   return Theme.Colors.accent
+        case .question: return Theme.Colors.overlapMarker
+        }
     }
 
     /// Kind badge — [결정] / [액션] / [질문] in a tinted pill.

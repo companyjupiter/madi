@@ -67,11 +67,12 @@ struct WorkspaceExplorer: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             modeSwitcher
-                .padding(.horizontal, 12).padding(.bottom, 8)
-            Divider().overlay(Theme.Colors.separator)
+                .padding(.horizontal, Theme.Space.window).padding(.bottom, 10.5)
             switch mode {
             case .files:
-                if session.workspace.nodes.isEmpty {
+                if session.workspace.isLoading {
+                    loadingState
+                } else if session.workspace.nodes.isEmpty {
                     emptyState
                 } else {
                     List {
@@ -81,6 +82,13 @@ struct WorkspaceExplorer: View {
                     }
                     .listStyle(.sidebar)
                     .scrollContentBackground(.hidden)
+                    // List's sidebar style keeps an internal top inset even with
+                    // contentMargins(.top, 0, for: .scrollContent) — that call alone
+                    // wasn't enough, so cancel the visible remainder directly with a
+                    // negative top padding (tuned against the rendered gap, not a
+                    // documented inset value).
+                    .contentMargins(.top, 0, for: .scrollContent)
+                    .padding(.top, -11)
                 }
             case .people:
                 PeopleDashboard(
@@ -164,7 +172,20 @@ struct WorkspaceExplorer: View {
         }
         .font(.system(size: 12))
         .foregroundStyle(Theme.Colors.textSecondary)
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        // Match sidePanel's inner inset (Theme.Space.window) so both panels'
+        // content starts the same distance from their card edges.
+        .padding(.horizontal, Theme.Space.window).padding(.top, Theme.Space.window).padding(.bottom, 10.5)
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            ProgressView().controlSize(.small)
+            Text("폴더를 읽는 중…")
+                .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 12)
     }
 
     private var emptyState: some View {
