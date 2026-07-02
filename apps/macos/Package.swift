@@ -43,6 +43,7 @@ let package = Package(
                 "Transcript/PrepBriefData.swift",
                 "Transcript/ReviewController.swift",
                 "Engine/EngineProtocol.swift",
+                "Engine/TranslateStreamParser.swift",
                 "Dictation/DictationFormatting.swift",
             ]
         ),

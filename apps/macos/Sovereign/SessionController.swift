@@ -147,7 +147,13 @@ final class SessionController: EngineProcessDelegate {
     /// 짧은 윈도는 원문 경계 오류가 많은데, 그 오류가 모든 대상 언어 번역으로
     /// 전파되므로 — 다중 번역에서는 가장 긴 문맥의 원문 품질이 우선이다. UI도 이
     /// 규칙을 노출(2개+ 선택 시 반응속도 picker를 잠그고 "정확"으로 표시).
-    var multiTranslateForcesAccurate: Bool { translateTargets.count >= 2 }
+    /// 예외 (T4, 2026-07-03): {한국어, X} 양방향 쌍은 per-line 스크립트 라우팅이
+    /// 라인당 실효 타깃을 1개로 줄이므로(KO줄→X만, X줄→KO만) 강제하지 않는다 —
+    /// 클리닉 대면 통역이 정확히 이 형태다.
+    var multiTranslateForcesAccurate: Bool {
+        translateTargets.count >= 2 &&
+            !(translateTargets.count == 2 && translateTargets.contains("Korean"))
+    }
     var effectiveWindowSeconds: Double { multiTranslateForcesAccurate ? 10 : liveWindowSeconds }
 
     /// Streaming preview: a 2nd engine decodes the in-progress window every ~1.5s
@@ -164,7 +170,11 @@ final class SessionController: EngineProcessDelegate {
     ///   PreviewEngine   — the still-open window's text (~1 s cadence)
     private(set) var livePartial: String = "" {
         didSet {
-            if livePartial.isEmpty { livePartialTranslations = [:]; interimInFlight = false }
+            // NOTE: translations are NOT auto-cleared here — on window commit the
+            // last interim translation stays on screen as a provisional caption
+            // (T1 carryover) until the committed line's real translation lands.
+            // Session reset/stop sites clear livePartialTranslations explicitly.
+            if livePartial.isEmpty { interimInFlight = false }
             else if livePartial != oldValue { scheduleInterimTranslate() }
         }
     }
@@ -192,7 +202,8 @@ final class SessionController: EngineProcessDelegate {
         }
     }
     private var translate: TranslateEngine?
-    private var translatedIDs: Set<UUID> = []
+    private var translatedHash: [UUID: Int] = [:]  // line id → translated text hash (re-queue on change)
+    private var tailGen = 0                        // tail-timeout generation (T2)
     /// O3 — reuse interim translations for the matching committed line instead of
     /// re-queuing a fresh DNA3 turn. Cleared on every session boundary to prevent
     /// cross-meeting bleed.
@@ -424,10 +435,28 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// English language name of the detected/selected source, to skip translating
-    /// a segment into its own language (50264=ko, 50259=en; others via the
-    /// engine's [lang] detection if added later).
+    /// a segment into its own language (whisper token order: en=50259, zh=50260,
+    /// ko=50264, ja=50266). Session-level FALLBACK — per-line script routing
+    /// (TranslateRouting.scriptLang) takes precedence in routedTargets(for:).
     private var sourceLangName: String? {
-        switch languageTokenID { case 50264: return "Korean"; case 50259: return "English"; default: return nil }
+        switch languageTokenID {
+        case 50264: return "Korean"; case 50259: return "English"
+        case 50266: return "Japanese"; case 50260: return "Chinese"
+        default: return nil
+        }
+    }
+
+    /// T4 direction routing: targets minus the TEXT's own language (Unicode
+    /// script detection; falls back to the session source language). In the
+    /// bidirectional clinic pair {Korean, Japanese}: a JA line → [Korean],
+    /// a KO line → [Japanese] — one turn per line instead of K.
+    private func routedTargets(for text: String) -> [String] {
+        let src = TranslateRouting.scriptLang(of: text) ?? sourceLangName
+        return translateTargets.subtracting([src].compactMap { $0 }).sorted()
+    }
+    /// Normalized per-session content hash for re-translate-on-change gating.
+    private func lineHash(_ text: String) -> Int {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).hashValue
     }
 
     /// Start the translate engine on demand (targets set + assets present).
@@ -437,7 +466,10 @@ final class SessionController: EngineProcessDelegate {
               AssetManifest.translateModelIsValid() else { return nil }
         if translate == nil {
             let t = TranslateEngine()
-            t.onResult = { [weak self] id, lang, text in
+            // caption display language first (T3): CaptionOverlay picks
+            // sorted().first — make the engine serve that language first too.
+            t.priorityLang = translateTargets.sorted().first
+            t.onResult = { [weak self] id, lang, text, source in
                 guard let self else { return }
                 if id == Self.interimID {
                     self.interimInFlight = false
@@ -450,6 +482,26 @@ final class SessionController: EngineProcessDelegate {
                     }
                     if self.livePartial != self.interimSource { self.scheduleInterimTranslate() }  // grew → refresh
                 } else {
+                    // stale-guard (T2): the line may have GROWN after this turn was
+                    // queued (merge). The hash gate already re-queued the new text —
+                    // don't let the old turn overwrite the fresher translation.
+                    if let line = self.transcript.lines.first(where: { $0.id == id }),
+                       self.lineHash(line.text) != self.lineHash(source) { return }
+                    self.transcript.setTranslation(id, lang: lang, text)
+                    // T1 carryover teardown: the real translation replaced the
+                    // provisional interim caption for the freshest content.
+                    if id == self.transcript.lines.last?.id, self.livePartial.isEmpty {
+                        self.livePartialTranslations = [:]
+                    }
+                }
+            }
+            // streaming partial (T5): the reply types itself onto the screen
+            // (~19 ms/token) instead of appearing whole ~0.5-0.9 s later.
+            t.onPartial = { [weak self] id, lang, text in
+                guard let self else { return }
+                if id == Self.interimID {
+                    if !self.livePartial.isEmpty { self.livePartialTranslations[lang] = text }
+                } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.transcript.setTranslation(id, lang: lang, text)
                 }
             }
@@ -472,7 +524,7 @@ final class SessionController: EngineProcessDelegate {
             try? await Task.sleep(for: .milliseconds(300))
             guard let self, gen == self.interimGen, !self.interimInFlight, !self.livePartial.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
-            let targets = self.translateTargets.subtracting([self.sourceLangName].compactMap { $0 }).sorted()
+            let targets = self.routedTargets(for: self.livePartial)
             guard !targets.isEmpty else { return }
             self.interimInFlight = true
             self.interimSource = self.livePartial
@@ -481,31 +533,60 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// Translate every stable line (all but the last, which may still grow) that
-    /// hasn't been translated yet, into all targets (minus the source language).
-    /// `includingLast` at finalize. FIFO via the engine.
+    /// hasn't been translated yet, into its routed targets. `includingLast` at
+    /// finalize.
+    ///
+    /// T2 (2026-07-03): this is now called on EVERY .word ingest — a line queues
+    /// the moment it loses last-line status instead of waiting for the NEXT
+    /// window boundary (the old .wordSectionBegin-only trigger left committed
+    /// lines untranslated for 10-20s+, or forever in a monologue). Idempotent
+    /// via the (id → text-hash) gate; a line that grows later (merge) re-queues
+    /// automatically because its hash changes.
     private func translateStableLines(includingLast: Bool = false) {
-        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
-        let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
-        guard !targets.isEmpty else { return }
+        guard !translateTargets.isEmpty else { return }
         let lines = transcript.lines
         let upTo = includingLast ? lines.count : max(0, lines.count - 1)
-        for i in 0..<upTo {
-            let line = lines[i]
-            if translatedIDs.contains(line.id) { continue }
-            translatedIDs.insert(line.id)
-            // O3: if this line's text was already translated as interim, reuse the
-            // cached translations and skip the DNA3 turn entirely. Only reuse the
-            // targets we actually have cached; queue the engine for any that miss.
-            if let cached = interimCache.get(line.text) {
-                let missing = targets.filter { cached[$0] == nil }
-                for tgt in targets where cached[tgt] != nil {
-                    transcript.setTranslation(line.id, lang: tgt, cached[tgt]!)
-                }
-                if missing.isEmpty { continue }
-                t.translate(line.text, into: missing, id: line.id)
-                continue
+        for i in 0..<upTo { translateLine(lines[i]) }
+    }
+
+    /// Queue one line (hash-gated, O3-cached, direction-routed).
+    private func translateLine(_ line: Line) {
+        let h = lineHash(line.text)
+        if translatedHash[line.id] == h { return }
+        guard let t = ensureTranslateEngine() else { return }
+        let targets = routedTargets(for: line.text)
+        guard !targets.isEmpty else { return }
+        translatedHash[line.id] = h
+        // O3: if this line's text was already translated as interim, reuse the
+        // cached translations and skip the DNA3 turn entirely. Only reuse the
+        // targets we actually have cached; queue the engine for any that miss.
+        if let cached = interimCache.get(line.text) {
+            let missing = targets.filter { cached[$0] == nil }
+            for tgt in targets where cached[tgt] != nil {
+                transcript.setTranslation(line.id, lang: tgt, cached[tgt]!)
             }
-            t.translate(line.text, into: targets, id: line.id)
+            if missing.isEmpty { return }
+            t.translate(line.text, into: missing, id: line.id)
+            return
+        }
+        t.translate(line.text, into: targets, id: line.id)
+    }
+
+    /// T2 tail timeout: the LAST line never loses last-status in a monologue —
+    /// translate it after 2 s without change (re-queues on growth via the hash
+    /// gate; the stale-guard in onResult drops superseded turns).
+    private func scheduleTailTranslate() {
+        guard !translateTargets.isEmpty else { return }
+        tailGen += 1
+        let gen = tailGen
+        let snapshot = transcript.lines.last.map { ($0.id, lineHash($0.text)) }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, gen == self.tailGen,
+                  let (id, h) = snapshot,
+                  let line = self.transcript.lines.last, line.id == id,
+                  self.lineHash(line.text) == h else { return }
+            self.translateLine(line)
         }
     }
 
@@ -767,11 +848,11 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedIDs.removeAll()
+        translatedHash.removeAll()
         interimCache.clear()
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
-        livePartial = ""
+        livePartial = ""; livePartialTranslations = [:]
         phase = .idle
     }
 
@@ -808,7 +889,7 @@ final class SessionController: EngineProcessDelegate {
         guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
         let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
         guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == id }) else { return }
-        translatedIDs.insert(id)
+        translatedHash[id] = lineHash(line.text)
         t.translate(line.text, into: targets, id: id)
     }
 
@@ -821,9 +902,13 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedIDs.removeAll()
+        translatedHash.removeAll()
         interimCache.clear()
         clearSummary()
+        // T11 prewarm: spawn the translate engine during the dead time between
+        // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
+        // first caption's translation doesn't pay the cold start.
+        _ = ensureTranslateEngine()
         // Prefill from the live calendar event. ContentView observes calendar.event.id
         // and calls ensurePrepBrief() on change, so we do NOT call it here too (that
         // double-ran the headless aggregation and raced two detached tasks).
@@ -858,7 +943,7 @@ final class SessionController: EngineProcessDelegate {
         // where auto-detect misfires (→ English). If the user picked a language,
         // start now; if auto, wait for the main engine's [lang] detection (see
         // .languageDetected below) so previews match the committed transcript.
-        livePartial = ""
+        livePartial = ""; livePartialTranslations = [:]
         if livePreviewEnabled {
             preview.onText = { [weak self] t in self?.livePartial = t }
             capture.onPreview = { [weak self] url in self?.preview.feed(wav: url) }
@@ -883,7 +968,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedIDs.removeAll()
+        translatedHash.removeAll()
         interimCache.clear()
         clearSummary()
         fileName = url.lastPathComponent
@@ -972,6 +1057,10 @@ final class SessionController: EngineProcessDelegate {
             // no Word exists yet, so no id/translation to disturb.
             let fixed = PersonalVocabulary.correctIncomingText(text, conf: conf, glossary)
             transcript.ingest(fixed == text ? event : .word(t0: t0, t1: t1, text: fixed, conf: conf))
+            // T2: queue a line the moment it stops being the last line (idempotent
+            // via the hash gate) + arm the tail timeout for the last line itself.
+            translateStableLines()
+            scheduleTailTranslate()
         case .partial(_, let text):
             // in-decode hypothesis of the closed segment — better context than
             // the preview engine's text and converges to the committed line, so
@@ -988,7 +1077,7 @@ final class SessionController: EngineProcessDelegate {
         // exit beats the FLUSH_END line (finalizeOnce is idempotent).
         if code == 0 { finalizeOnce(); return }
         if phase != .done, phase != .flushing {
-            preview.stop(); livePartial = ""
+            preview.stop(); livePartial = ""; livePartialTranslations = [:]
             phase = .error("engine exited (\(code))")
         }
     }
@@ -1013,7 +1102,7 @@ final class SessionController: EngineProcessDelegate {
         for p in pendingEnrollment.pending() { enrollVoiceprint(speaker: p.id, name: p.name) }
         pendingEnrollment.clear()
         engine = nil
-        preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
+        preview.stop(); livePartial = ""; livePartialTranslations = [:]   // tear down the 2nd engine + interim text
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
         interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
