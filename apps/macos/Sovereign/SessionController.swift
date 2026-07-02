@@ -841,7 +841,7 @@ final class SessionController: EngineProcessDelegate {
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
         let win = effectiveWindowSeconds   // 2개+ 번역 시 정확(10초) 강제
         capture.segmentSeconds = win
-        capture.firstSegmentSeconds = min(3, win)
+        capture.firstSegmentSeconds = min(1.5, win) // AudioCapture 기본과 동기 (AUDIO_CTX=auto로 짧은 창 디코드 ~0.3s)
         capture.overlapSeconds = min(3, max(1, win * 0.3))
         capture.onSegment = { [weak self] offset, url in
             self?.engine?.feed(offset: offset, wav: url)
