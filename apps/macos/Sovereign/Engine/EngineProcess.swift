@@ -71,6 +71,12 @@ final class EngineProcess {
             // live STREAM mode: model resident, segments fed on stdin
             process.arguments = [config.modelURL.path, "/dev/null", config.bpeURL.path]
             env["STREAM"] = "1"
+            // truncated encoder context (whisper.cpp audio_ctx pattern): a 10 s
+            // live segment only fills 500/1500 encoder rows — auto fits the
+            // window to the audio (+4.5 s EOT margin), cutting encoder latency
+            // ~2× per segment. FLEURS-ko CER-gated engine-side; file mode stays
+            // full-context.
+            env["AUDIO_CTX"] = "auto"
             if !config.streamWavRoots.isEmpty {
                 env["STREAM_WAV_ROOTS"] = EnginePathPolicy.pathList(config.streamWavRoots)
             }

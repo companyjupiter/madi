@@ -193,11 +193,13 @@ fn kCAbatched(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, B: u32
     const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U };
     try mtl.dispatch(K.cab, .{ B * NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
-// copy this layer's alignment-head scores into their per-head ca planes
+// copy this layer's alignment-head scores into their per-head ca planes.
+// seqlen = valid cols this pass (AUDIO_CTX may shrink it); the ca planes stay
+// allocated at [MAX_TOK][ENC_SEQ] so the row stride is fixed ENC_SEQ.
 fn kAccumulate(K: Kernels, ca: [*]f32, sc: [*]f32, tok: [*]u32, align_mask: u32, plane_base: u32, seqlen: u32) !void {
-    var a0 = ca; var a1 = sc; var a2 = tok; var am = align_mask; var pb = plane_base; var sl = seqlen; var nh = NH; var mt = MAX_TOK;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&am), P(&pb), P(&sl), P(&nh), P(&mt) };
-    const s = [_]usize{ PS, PS, PS, U, U, U, U, U };
+    var a0 = ca; var a1 = sc; var a2 = tok; var am = align_mask; var pb = plane_base; var sl = seqlen; var nh = NH; var mt = MAX_TOK; var cs = ENC_SEQ;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&am), P(&pb), P(&sl), P(&nh), P(&mt), P(&cs) };
+    const s = [_]usize{ PS, PS, PS, U, U, U, U, U, U };
     try mtl.dispatch(K.cacc, .{ 1, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn kExtract(K: Kernels, q: [*]f32, kc: [*]f16, ca: [*]f32, tok: [*]u32, head: u32, inv_n: f32, seqlen: u32) !void {
@@ -209,8 +211,10 @@ fn kExtract(K: Kernels, q: [*]f32, kc: [*]f16, ca: [*]f32, tok: [*]u32, head: u3
 
 /// One decoder block on the residual stream `x` (1 token, [D], modified in
 /// place). `skc`/`svc` are this layer's self KV caches [MAX_TOK][D]; `ckc`/`cvc`
-/// are this layer's precomputed cross KV [ENC_SEQ][D]. `pos` is a GPU u32 = the
-/// current token index. Synchronous per the reference's per-op model.
+/// are this layer's precomputed cross KV [enc_ctx][D] (enc_ctx ≤ ENC_SEQ —
+/// AUDIO_CTX truncation shrinks both the KV build AND this cross-attn read).
+/// `pos` is a GPU u32 = the current token index. Synchronous per the
+/// reference's per-op model.
 pub fn decodeBlock(
     K: Kernels,
     L: Layer,
@@ -222,6 +226,7 @@ pub fn decodeBlock(
     cvc: [*]f16,
     pos: [*]u32,
     ca: ?CaCtx,
+    enc_ctx: u32,
 ) !void {
     // Fully batched onto the active command buffer (caller drives begin/commit/
     // sync). Metal preserves encoder order within a command buffer, so every
@@ -240,9 +245,9 @@ pub fn decodeBlock(
     // them into the timestamp map — no separate QK/softmax recompute (extract).
     var align_mask: u32 = 0;
     if (ca) |c| for (c.heads) |h| { align_mask |= (@as(u32, 1) << @as(u5, @intCast(h))); };
-    try kCA(K, s.ao, s.q, ckc, cvc, ENC_SEQ, s.ca_sc, if (align_mask != 0) @as(u32, 1) else 0);
+    try kCA(K, s.ao, s.q, ckc, cvc, enc_ctx, s.ca_sc, if (align_mask != 0) @as(u32, 1) else 0);
     if (ca) |c| {
-        if (c.heads.len > 0) try kAccumulate(K, c.weights, s.ca_sc, c.tok, align_mask, c.head_base, ENC_SEQ);
+        if (c.heads.len > 0) try kAccumulate(K, c.weights, s.ca_sc, c.tok, align_mask, c.head_base, enc_ctx);
     }
     try kGemvQ8(K, s.mo, s.ao, L.cow, D, D);
     try kBRLN(K, x, s.mo, L.cob, s.xb, L.mln_w, L.mln_b, D);

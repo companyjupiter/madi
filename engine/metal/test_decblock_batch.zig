@@ -102,7 +102,7 @@ pub fn main() !void {
         const xb = (try mtl.allocSlice(f32, D)).ptr;
         @memcpy(xb[0..D], x0[b * D .. b * D + D]);
         try mtl.beginCommandBuffer();
-        try dec.decodeBlock(K, L, xb, ss, skc[b], svc[b], ckc + b * ENC_SEQ * D, cvc + b * ENC_SEQ * D, pos0, null);
+        try dec.decodeBlock(K, L, xb, ss, skc[b], svc[b], ckc + b * ENC_SEQ * D, cvc + b * ENC_SEQ * D, pos0, null, ENC_SEQ);
         try mtl.commitCommandBuffer(); try mtl.sync();
         @memcpy(xref.ptr[b * D .. b * D + D], xb[0..D]);
         // reset KV so batched run starts identical

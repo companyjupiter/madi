@@ -46,6 +46,30 @@ const TS0: u32 = 50365; // <|0.00|>; ids ≥ TS0 are timestamp tokens
 // reject Q4 cheaply if it tanks quality before building the real Q4 pipeline.
 var g_q4: bool = false;
 var g_qmax: f32 = 7.0; // clamp level: 4bit→7, 5bit→15, 6bit→31 (env QBITS)
+// AUDIO_CTX — whisper.cpp `audio_ctx` pattern (exp_n_audio_ctx; the stream
+// example ships it as -ac): run the encoder + cross-attn on only the leading
+// `actx` positions instead of the full zero-padded 1500. A live 10 s segment
+// occupies 500 rows — the other 1000 are silence padding the 32-layer encoder
+// grinds through for nothing (encoder cost is ~linear in rows; cross-KV
+// re-read per decoded token shrinks the same way). env:
+//   AUDIO_CTX unset/0 → off (full 1500, bit-exact legacy path)
+//   AUDIO_CTX=auto    → fit to this window's audio (+64-frame margin, ×64 round)
+//   AUDIO_CTX=N       → fixed clamp (whisper.cpp -ac N equivalent)
+// Only single-slot encodes shrink (stream mode is always nb=1; the batched
+// file path keeps ENC_SEQ — its slot stride is fixed).
+var g_actx_auto: bool = false;
+var g_actx_fixed: u32 = 0;
+fn audioCtx(got_samples: usize) u32 {
+    if (g_actx_fixed > 0) return @max(192, @min(ENC_SEQ, (g_actx_fixed + 63) / 64 * 64));
+    if (!g_actx_auto) return ENC_SEQ;
+    const frames: u32 = @intCast(@min((got_samples + 319) / 320, ENC_SEQ));
+    // Post-speech margin: audio that ends RIGHT at a speech boundary (VAD-cut
+    // live segments, TTS fixtures) needs silent tail context or the decode
+    // repeat-loops instead of emitting EOT. Measured on ko2 (768 audio frames):
+    // +64 → phrase ×9, +128 → ×3, +160 → clean. 224 (4.48 s) carries margin.
+    const padded: u32 = frames + 224;
+    return @max(192, @min(ENC_SEQ, (padded + 63) / 64 * 64));
+}
 // term biasing: <|startofprev|> + these tokens seed the decoder toward domain
 // vocabulary (names, jargon). Encoded once from env PROMPT. g_bias_words holds
 // the space-split prompt words for the seg event's bias_hits.
@@ -698,6 +722,13 @@ pub fn main() !void {
     evOpen(); // structured event stream (opt-in EVENTS_FILE) — frozen stdout text contract unaffected
     g_partials = std.posix.getenv("PARTIALS") != null; // streaming partial-hypothesis events (live)
     g_q4 = !std.mem.eql(u8, std.posix.getenv("Q4") orelse "0", "0"); // int4 quality probe
+    if (std.posix.getenv("AUDIO_CTX")) |ac| { // truncated encoder context (see audioCtx)
+        if (std.mem.eql(u8, ac, "auto")) {
+            g_actx_auto = true;
+        } else {
+            g_actx_fixed = std.fmt.parseInt(u32, ac, 10) catch 0;
+        }
+    }
     if (std.posix.getenv("QBITS")) |b| { // 4/5/6-bit sweep: levels = 2^(b-1)-1
         const nbits = std.fmt.parseInt(u6, b, 10) catch 4;
         g_qmax = @floatFromInt((@as(u32, 1) << @as(u5, @intCast(nbits - 1))) - 1);
@@ -1537,8 +1568,11 @@ pub fn main() !void {
         if (nb == 0) break;
 
         // ── Phase B: ONE batched encoder forward (weights + dequant amortized ×nb)
+        // Single-slot windows (stream mode is always nb=1) shrink to the audio's
+        // own rows under AUDIO_CTX; batched slots keep the fixed ENC_SEQ stride.
+        var actx: u32 = if (nb == 1) audioCtx(slot_got[0]) else ENC_SEQ;
         var et = try std.time.Timer.start();
-        try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, nb);
+        try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, nb, actx);
         const enc_ns_t = et.read();
         g_t_enc += enc_ns_t;
         const enc_ms = @as(f64, @floatFromInt(enc_ns_t)) / 1e6 / @as(f64, @floatFromInt(nb));
@@ -1650,14 +1684,19 @@ pub fn main() !void {
         const cchunk = slot_chunk[slot];
         const cgot = slot_got[slot];
         const eo16 = out_f16 + slot * @as(usize, ENC_SEQ) * D;
+        // cross-KV rows follow the (possibly AUDIO_CTX-shrunk) encoder rows;
+        // the ckc/cvc buffers stay allocated at ENC_SEQ so only counts change.
+        // Reset per slot: a rescue re-encode in the PREVIOUS slot may have
+        // shrunk actx to its seek window — this slot's KV must match its own.
+        actx = if (nb == 1) audioCtx(cgot) else ENC_SEQ;
         var ckvt = try std.time.Timer.start();
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
             try deqW16(f_deq, cross_wdq, ckw[l], D, D);
-            try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], ENC_SEQ, D, D);
+            try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], actx, D, D);
             try deqW16(f_deq, cross_wdq, cvw[l], D, D);
-            try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], ENC_SEQ, D, D);
-            try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
+            try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], actx, D, D);
+            try biasAdd16(f_bias16, cvc[l], cvb[l], actx * D, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
         }
@@ -1684,7 +1723,7 @@ pub fn main() !void {
             try residual(Kd, d_x, dec_pe, D); // pos-0 positional embedding
             for (0..dec.NL) |l| {
                 const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx, actx);
             }
             try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
             try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
@@ -1786,7 +1825,7 @@ pub fn main() !void {
                     try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
                     for (0..dec.NL) |l| {
                         const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx, actx);
                     }
                     try kStep(f_step, d_pos);
                 }
@@ -1805,7 +1844,7 @@ pub fn main() !void {
                     try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
                     for (0..dec.NL) |l| {
                         const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx, actx);
                     }
                     try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
                     try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
@@ -1894,14 +1933,17 @@ pub fn main() !void {
             try geluPos(f_geluPos, d_ex + slot * @as(usize, ENC_SEQ) * D, t2, c2b, enc_pe, ENC_SEQ * D, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
-            try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex + slot * @as(usize, ENC_SEQ) * D, eo16, enc_out + slot * @as(usize, ENC_SEQ) * D, escr, 1);
+            // seek window is always a single-slot encode → it can shrink to the
+            // remaining audio under AUDIO_CTX (rem < the original chunk).
+            actx = audioCtx(rem);
+            try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex + slot * @as(usize, ENC_SEQ) * D, eo16, enc_out + slot * @as(usize, ENC_SEQ) * D, escr, 1, actx);
             for (0..dec.NL) |l| {
                 try mtl.beginCommandBuffer();
                 try deqW16(f_deq, cross_wdq, ckw[l], D, D);
-                try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], ENC_SEQ, D, D);
+                try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], actx, D, D);
                 try deqW16(f_deq, cross_wdq, cvw[l], D, D);
-                try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], ENC_SEQ, D, D);
-                try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
+                try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], actx, D, D);
+                try biasAdd16(f_bias16, cvc[l], cvb[l], actx * D, D);
                 try mtl.commitCommandBuffer();
                 try mtl.sync();
             }
@@ -2484,6 +2526,22 @@ fn tokenCollapse(toks: []const u32) bool {
             if (toks[i] == toks[i - p]) {
                 run += 1;
                 if (run >= @max(16, 4 * p)) return true;
+            } else run = 0;
+        }
+    }
+    // sentence-length loops (STATUS backlog "repeat-loop hallucination"): a
+    // whole sentence (~9-48 BPE tokens) repeating verbatim escapes the short-
+    // period net above. Require run ≥ 2p = two EXTRA full periods (≥3 total
+    // occurrences) so a genuine once-repeated sentence is spared; a decode
+    // stuck in a loop repeats far more (FLEURS 1728: ~12×, escaped p≤8).
+    p = 9;
+    while (p <= 48) : (p += 1) {
+        if (toks.len < 3 * p) break;
+        var run: usize = 0;
+        for (p..toks.len) |i| {
+            if (toks[i] == toks[i - p]) {
+                run += 1;
+                if (run >= 2 * p) return true;
             } else run = 0;
         }
     }
