@@ -157,6 +157,11 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(livePreviewEnabled, forKey: "livePreviewEnabled") }
     }
     /// Interim "진행 중" text (cleared when the window's committed words land).
+    /// Fed by TWO provisional sources that overwrite each other (both cover the
+    /// freshest audio; life of a «partial» is ~0.5 s with AUDIO_CTX decode):
+    ///   «partial» lines — the closed segment's in-decode hypothesis (main
+    ///                     engine, PARTIALS=1) — converges to the committed text
+    ///   PreviewEngine   — the still-open window's text (~1 s cadence)
     private(set) var livePartial: String = "" {
         didSet {
             if livePartial.isEmpty { livePartialTranslations = [:]; interimInFlight = false }
@@ -454,15 +459,17 @@ final class SessionController: EngineProcessDelegate {
         return translate
     }
 
-    /// Debounced (≈0.6s, one in flight) translation of the in-progress interim text
+    /// Debounced (≈0.3s, one in flight) translation of the in-progress interim text
     /// so a PROVISIONAL caption appears right after you speak instead of waiting for
     /// the window to close. Best-effort + throwaway — the per-line translation wins.
+    /// (600→300ms 2026-07-02: 체감 지연 −300ms; DNA3 턴 증가는 interimInFlight
+    /// 단일-인플라이트 가드가 상한을 잡는다.)
     private func scheduleInterimTranslate() {
         guard !translateTargets.isEmpty else { return }
         interimGen += 1
         let gen = interimGen
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .milliseconds(300))
             guard let self, gen == self.interimGen, !self.interimInFlight, !self.livePartial.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
             let targets = self.translateTargets.subtracting([self.sourceLangName].compactMap { $0 }).sorted()
@@ -839,7 +846,7 @@ final class SessionController: EngineProcessDelegate {
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
         let win = effectiveWindowSeconds   // 2개+ 번역 시 정확(10초) 강제
         capture.segmentSeconds = win
-        capture.firstSegmentSeconds = min(3, win)
+        capture.firstSegmentSeconds = min(1.5, win) // AudioCapture 기본과 동기 (AUDIO_CTX=auto로 짧은 창 디코드 ~0.3s)
         capture.overlapSeconds = min(3, max(1, win * 0.3))
         capture.onSegment = { [weak self] offset, url in
             self?.engine?.feed(offset: offset, wav: url)
@@ -965,6 +972,11 @@ final class SessionController: EngineProcessDelegate {
             // no Word exists yet, so no id/translation to disturb.
             let fixed = PersonalVocabulary.correctIncomingText(text, conf: conf, glossary)
             transcript.ingest(fixed == text ? event : .word(t0: t0, t1: t1, text: fixed, conf: conf))
+        case .partial(_, let text):
+            // in-decode hypothesis of the closed segment — better context than
+            // the preview engine's text and converges to the committed line, so
+            // it may overwrite; the next preview/commit supersedes it.
+            if !text.isEmpty { livePartial = text }
         default: transcript.ingest(event)
         }
     }

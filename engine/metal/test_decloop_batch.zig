@@ -112,7 +112,7 @@ pub fn main() !void {
             @memcpy(x[0..D], xseq[(t * B + b) * D ..][0..D]);
             posb[0] = @intCast(t);
             try mtl.beginCommandBuffer();
-            for (0..NL) |l| try dec.decodeBlock(K, L[l], x, ss, skc[b][l], svc[b][l], ckc[l] + b * ENC_SEQ * D, cvc[l] + b * ENC_SEQ * D, posb, null);
+            for (0..NL) |l| try dec.decodeBlock(K, L[l], x, ss, skc[b][l], svc[b][l], ckc[l] + b * ENC_SEQ * D, cvc[l] + b * ENC_SEQ * D, posb, null, ENC_SEQ);
             try mtl.commitCommandBuffer(); try mtl.sync();
         }
         @memcpy(xref.ptr[b * D ..][0..D], x[0..D]); // final-step hidden

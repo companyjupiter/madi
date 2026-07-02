@@ -450,21 +450,22 @@ kernel void extract_ca_head_f16kv(
 // (OpenAI timing semantics). Scores come straight from the flash kernel — no
 // QK/softmax recompute. One thread per t, one row per (plane, tok) → no race.
 kernel void ca_accumulate(
-    device float*       ca       [[buffer(0)]],  // [NALIGN][MAX_TOK][seqlen] planes
+    device float*       ca       [[buffer(0)]],  // [NALIGN][MAX_TOK][ca_stride] planes
     device const float* sc       [[buffer(1)]],  // [nh][seqlen] normalized scores
     device const uint*  tok_ptr  [[buffer(2)]],
     constant uint&  align_mask [[buffer(3)]],    // bit h set → head h is an alignment head
     constant uint&  plane_base [[buffer(4)]],    // plane index of this layer's first align head
-    constant uint&  seqlen     [[buffer(5)]],
+    constant uint&  seqlen     [[buffer(5)]],    // valid cols this pass (AUDIO_CTX may shrink)
     constant uint&  nh         [[buffer(6)]],
     constant uint&  max_tok    [[buffer(7)]],
+    constant uint&  ca_stride  [[buffer(8)]],    // ca plane row stride (ENC_SEQ, fixed alloc)
     uint ltid [[thread_position_in_threadgroup]])
 {
     const uint tok = tok_ptr[0];
     uint plane = plane_base;
     for (uint h = 0; h < nh; h++) {
         if (!(align_mask & (1u << h))) continue;
-        device float*       row = ca + ((ulong)plane * max_tok + tok) * seqlen;
+        device float*       row = ca + ((ulong)plane * max_tok + tok) * ca_stride;
         device const float* src = sc + (ulong)h * seqlen;
         for (uint t = ltid; t < seqlen; t += 256) row[t] = src[t];
         plane++;

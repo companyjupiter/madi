@@ -26,6 +26,7 @@ enum EngineEvent: Equatable {
     case progressTotal(Int)           // file mode: total 30s chunks to process
     case progressChunk(Int)           // file mode: chunk K just finished
     case languageDetected(Int)        // auto-detect locked a language token id
+    case partial(t0: Double, text: String) // «partial <t0>» — in-decode hypothesis (PARTIALS=1)
     case other(String)                // unrecognized line (perf/log) — kept for diagnostics
 }
 
@@ -75,6 +76,16 @@ enum EngineProtocol {
                 if let sp = rest.firstIndex(of: " "), let id = Int(rest[..<sp]) {
                     let name = rest[rest.index(after: sp)...].trimmingCharacters(in: .whitespaces)
                     if !name.isEmpty { return .speakerName(id: id, name: name) }
+                }
+            }
+
+            // «partial <t0>» <text> — streaming in-decode hypothesis (engine env
+            // PARTIALS=1; live STREAM mode sets it). The text grows batch-by-
+            // batch and is superseded by the committed word section.
+            if line.hasPrefix("\u{00AB}partial ") {
+                let rest = line.dropFirst("\u{00AB}partial ".count)
+                if let close = rest.range(of: "\u{00BB} "), let t0 = Double(rest[..<close.lowerBound]) {
+                    return .partial(t0: t0, text: String(rest[close.upperBound...]))
                 }
             }
 
