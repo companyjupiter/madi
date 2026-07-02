@@ -59,6 +59,11 @@ var g_qmax: f32 = 7.0; // clamp level: 4bit→7, 5bit→15, 6bit→31 (env QBITS
 // file path keeps ENC_SEQ — its slot stride is fixed).
 var g_actx_auto: bool = false;
 var g_actx_fixed: u32 = 0;
+// DEC_INT4 — in-memory int4 decode weights (see repackQ4 / gemv_q4 kernels).
+// 1 = decoder-block GEMVs only (~92 MB/tok → ½; logit head stays Q8 — Q4 noise
+//     on the tied head can flip argmax, see keep_head note at tok_emb load).
+// 2 = blocks + logit/emb head (~158 MB/tok → ½; the INT4-1 full-model curve).
+var g_dec_int4: u8 = 0;
 fn audioCtx(got_samples: usize) u32 {
     if (g_actx_fixed > 0) return @max(192, @min(ENC_SEQ, (g_actx_fixed + 63) / 64 * 64));
     if (!g_actx_auto) return ENC_SEQ;
@@ -295,6 +300,40 @@ fn readQ8(sf: Sf, key: []const u8, qs: [*]i8, sc: [*]f16, q_off: usize, s_off: u
     const rs = sf.raw(ksc) orelse return error.MissingTensor;
     const ns = out_ch * (in_ch / 32) * 2; // f16 bytes
     @memcpy(@as([*]u8, @ptrCast(sc + s_off))[0..ns], rs[0..ns]);
+}
+
+/// DEC_INT4: repack a loaded Q8 weight into packed int4 nibbles (levels ±7,
+/// per-32 f16 scale — the INT4-1 measured quality curve; double-rounding
+/// through Q8 is negligible, the Q8 grid is 36× finer than int4). Row layout
+/// [rows][dim/2]: byte j = elements 2j (low nibble) | 2j+1 (high), signed.
+/// Frees the Q8 buffers — decode GEMV weight traffic halves.
+fn repackQ4(w: Q8, rows: usize, dim: usize) !Q8 {
+    const nb = dim / 32;
+    const p = try mtl.allocSlice(i8, rows * dim / 2);
+    const sc = try mtl.allocSlice(f16, rows * nb);
+    for (0..rows) |o| {
+        for (0..nb) |b| {
+            var mq: i32 = 0;
+            for (0..32) |i| {
+                const q: i32 = w.qs[o * dim + b * 32 + i];
+                const a = if (q < 0) -q else q;
+                if (a > mq) mq = a;
+            }
+            const s8: f32 = @floatCast(w.scales[o * nb + b]);
+            const s4: f32 = if (mq > 0) s8 * @as(f32, @floatFromInt(mq)) / 7.0 else 1.0;
+            sc[o * nb + b] = @floatCast(s4);
+            const r = s8 / s4; // q4 = clamp(round(q8·s8/s4))
+            var i: usize = 0;
+            while (i < 32) : (i += 2) {
+                const q0: i32 = @intFromFloat(std.math.clamp(@round(@as(f32, @floatFromInt(w.qs[o * dim + b * 32 + i])) * r), -7.0, 7.0));
+                const q1: i32 = @intFromFloat(std.math.clamp(@round(@as(f32, @floatFromInt(w.qs[o * dim + b * 32 + i + 1])) * r), -7.0, 7.0));
+                p[(o * dim + b * 32 + i) / 2] = @bitCast(@as(u8, @intCast(((q1 & 0xF) << 4) | (q0 & 0xF))));
+            }
+        }
+    }
+    mtl.free(w.qs);
+    mtl.free(w.scales);
+    return .{ .qs = p.ptr, .scales = sc.ptr };
 }
 
 fn upMatQ8(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize) !enc.Q8 {
@@ -729,6 +768,7 @@ pub fn main() !void {
             g_actx_fixed = std.fmt.parseInt(u32, ac, 10) catch 0;
         }
     }
+    if (std.posix.getenv("DEC_INT4")) |v| g_dec_int4 = std.fmt.parseInt(u8, v, 10) catch 0;
     if (std.posix.getenv("QBITS")) |b| { // 4/5/6-bit sweep: levels = 2^(b-1)-1
         const nbits = std.fmt.parseInt(u6, b, 10) catch 4;
         g_qmax = @floatFromInt((@as(u32, 1) << @as(u5, @intCast(nbits - 1))) - 1);
@@ -773,16 +813,16 @@ pub fn main() !void {
     const f_geluPos = try mtl.getFunction("gelu_pos");
     const Ke = try enc.Kernels.load();
     const Kd = try dec.Kernels.load();
-    const f_emb = try mtl.getFunction("gpu_emb_lookup_q8");
+    const f_emb = try mtl.getFunction(if (g_dec_int4 >= 2) "gpu_emb_lookup_q4" else "gpu_emb_lookup_q8");
     // GPU-resident decode-loop kernels (sync-free replay; from the SHARE build)
-    const f_emb_ind = try mtl.getFunction("emb_lookup_indirect_q8");
+    const f_emb_ind = try mtl.getFunction(if (g_dec_int4 >= 2) "emb_lookup_indirect_q4" else "emb_lookup_indirect_q8");
     const f_pe_ind = try mtl.getFunction("pos_embed_add_indirect");
     const f_step = try mtl.getFunction("step_advance");
     const f_argmax = try mtl.getFunction("argmax_conf"); // argmax + per-token confidence
     const f_filt_plain = try mtl.getFunction("logit_filter_indirect"); // no-ts greedy (default; best code-switch fidelity)
     const f_filt_ts = try mtl.getFunction("ts_rules_indirect"); // ts-token decode (collapse-rescue mode)
     const f_suppress = try mtl.getFunction("suppress_list");
-    const f_logit = try mtl.getFunction("logit_gemv_q8");
+    const f_logit = try mtl.getFunction(if (g_dec_int4 >= 2) "logit_gemv_q4" else "logit_gemv_q8");
     const f_bias16 = try mtl.getFunction("bias_add_f16");
     const f_deq = try mtl.getFunction("dequant_q8_f16");
     try out.print("[1] Metal + kernels ready\n", .{});
@@ -931,7 +971,7 @@ pub fn main() !void {
     // directly produces logits → Q4 noise flips argmax). Q4KEEPHEAD=1 probes this.
     const keep_head = g_q4 and !std.mem.eql(u8, std.posix.getenv("Q4KEEPHEAD") orelse "0", "0");
     if (keep_head) g_q4 = false;
-    const tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0
+    var tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0 (DEC_INT4=2: repacked below)
     // WHASH=1: prove the Q8-file load is bit-identical to F16-quantize at the
     // WEIGHT level (transcripts are nondeterministic via GPU FP, so the proof
     // must be on weights). Covers all 4 Q8 loaders: upVecQ8(tok_emb,ow),
@@ -1057,6 +1097,26 @@ pub fn main() !void {
         try deqW16(f_deq, bb_temb, q8(tok_emb), VOCAB, D); // [VOCAB][D] → [D][VOCAB] f16
         try mtl.commitCommandBuffer();
         try mtl.sync();
+    }
+
+    // ── DEC_INT4: repack decode GEMV weights to in-memory int4 ───────────────
+    // AFTER the WHASH hash (defined on Q8) and the batchdec WF16 dequant (its
+    // source is the Q8 buffers). Level 1 = decoder blocks (~92 MB/tok → ½);
+    // level 2 also repacks the tied embed/logit head (+66 MB → ½ — the Q4-
+    // flips-argmax risk documented at the tok_emb load, so it's a probe level).
+    // Decode is GEMV-bandwidth-bound (FUSE-2) — bytes, not launches, move it.
+    if (g_dec_int4 >= 1) {
+        var rq = try std.time.Timer.start();
+        for (0..dec.NL) |l| {
+            dlayers[l].qkvw = try repackQ4(dlayers[l].qkvw, 3 * @as(usize, D), D);
+            dlayers[l].ow = try repackQ4(dlayers[l].ow, D, D);
+            dlayers[l].cqw = try repackQ4(dlayers[l].cqw, D, D);
+            dlayers[l].cow = try repackQ4(dlayers[l].cow, D, D);
+            dlayers[l].m0w = try repackQ4(dlayers[l].m0w, MLP, D);
+            dlayers[l].m2w = try repackQ4(dlayers[l].m2w, D, MLP);
+        }
+        if (g_dec_int4 >= 2) tok_emb = try repackQ4(tok_emb, VOCAB, D);
+        try out.print("[dec-int4] level {d} repack ({d} ms) — decode GEMV bytes ½\n", .{ g_dec_int4, rq.read() / 1_000_000 });
     }
 
     // ── resident buffers + state (allocated ONCE; reused across stream jobs) ──

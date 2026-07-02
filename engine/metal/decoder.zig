@@ -43,6 +43,11 @@ pub const Kernels = struct {
     cvt16: mtl.Function, // f16→f32 (batched-decode projection outputs)
 
     pub fn load() mtl.Error!Kernels {
+        // DEC_INT4=1: swap the decode GEMV family to the packed-int4 twins
+        // (same buffer roles — the caller just repacks the weights; see
+        // transcribe.repackQ4). Decode is GEMV-bandwidth-bound (FUSE-2), so
+        // halving weight bytes is the lever fusion couldn't be.
+        const int4 = if (std.posix.getenv("DEC_INT4")) |v| v[0] != '0' else false; // 1(blocks)/2(+head) both swap the block GEMVs
         return .{
             .cvt32 = try mtl.getFunction("cvt_f32_f16"),
             .cvt16 = try mtl.getFunction("cvt_f16_f32"),
@@ -58,11 +63,11 @@ pub const Kernels = struct {
             .emb = try mtl.getFunction("gpu_emb_lookup"),
             .extract = try mtl.getFunction("extract_ca_head_f16kv"),
             .cacc = try mtl.getFunction("ca_accumulate"),
-            .gemv = try mtl.getFunction("gemv_q8"),
-            .gemv_bias = try mtl.getFunction("gemv_q8_bias"),
-            .gemv_bias_gelu = try mtl.getFunction("gemv_q8_bias_gelu"),
-            .gemv_bias_res = try mtl.getFunction("gemv_q8_bias_res"),
-            .qkv = try mtl.getFunction("gemv_q8_qkv"),
+            .gemv = try mtl.getFunction(if (int4) "gemv_q4" else "gemv_q8"),
+            .gemv_bias = try mtl.getFunction(if (int4) "gemv_q4_bias" else "gemv_q8_bias"),
+            .gemv_bias_gelu = try mtl.getFunction(if (int4) "gemv_q4_bias_gelu" else "gemv_q8_bias_gelu"),
+            .gemv_bias_res = try mtl.getFunction(if (int4) "gemv_q4_bias_res" else "gemv_q8_bias_res"),
+            .qkv = try mtl.getFunction(if (int4) "gemv_q4_qkv" else "gemv_q8_qkv"),
         };
     }
 };
