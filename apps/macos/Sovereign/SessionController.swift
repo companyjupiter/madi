@@ -454,15 +454,17 @@ final class SessionController: EngineProcessDelegate {
         return translate
     }
 
-    /// Debounced (≈0.6s, one in flight) translation of the in-progress interim text
+    /// Debounced (≈0.3s, one in flight) translation of the in-progress interim text
     /// so a PROVISIONAL caption appears right after you speak instead of waiting for
     /// the window to close. Best-effort + throwaway — the per-line translation wins.
+    /// (600→300ms 2026-07-02: 체감 지연 −300ms; DNA3 턴 증가는 interimInFlight
+    /// 단일-인플라이트 가드가 상한을 잡는다.)
     private func scheduleInterimTranslate() {
         guard !translateTargets.isEmpty else { return }
         interimGen += 1
         let gen = interimGen
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .milliseconds(300))
             guard let self, gen == self.interimGen, !self.interimInFlight, !self.livePartial.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
             let targets = self.translateTargets.subtracting([self.sourceLangName].compactMap { $0 }).sorted()

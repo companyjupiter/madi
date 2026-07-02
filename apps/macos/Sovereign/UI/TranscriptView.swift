@@ -106,7 +106,9 @@ struct TranscriptView: View {
             .textSelection(.enabled)
             .onChange(of: lines.count) { _, _ in
                 if let last = lines.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                    // 50ms: 기본(≈250ms) 스크롤 애니메이션이 새 줄 표시를 그만큼
+                    // 늦춰 보이게 한다 — 라이브 전사는 즉시성이 우선.
+                    withAnimation(.linear(duration: 0.05)) { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
             .onChange(of: scrollTick) { _, _ in
