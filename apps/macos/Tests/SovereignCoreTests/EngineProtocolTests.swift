@@ -31,4 +31,15 @@ final class EngineProtocolTests: XCTestCase {
             XCTFail("unrecognized non-progress lines should decode to .other")
         }
     }
+
+    func testDecodesPartialHypothesis() {
+        let d = EngineProtocol.Decoder()
+        // «partial <t0>» <text> — streaming in-decode hypothesis (PARTIALS=1)
+        XCTAssertEqual(d.decode(line: "«partial 12.50» 안녕하세요 오늘은"),
+                       .partial(t0: 12.5, text: "안녕하세요 오늘은"))
+        // malformed (no closing guillemet) must not crash → .other
+        if case .other = d.decode(line: "«partial 12.50 안녕") { } else {
+            XCTFail("malformed partial should decode to .other")
+        }
+    }
 }

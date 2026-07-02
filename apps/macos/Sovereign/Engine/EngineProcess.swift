@@ -77,6 +77,9 @@ final class EngineProcess {
             // ~2× per segment. FLEURS-ko CER-gated engine-side; file mode stays
             // full-context.
             env["AUDIO_CTX"] = "auto"
+            // «partial» in-decode hypothesis lines: the segment's text streams
+            // onto screen while it decodes instead of all-at-once at SEG_END.
+            env["PARTIALS"] = "1"
             if !config.streamWavRoots.isEmpty {
                 env["STREAM_WAV_ROOTS"] = EnginePathPolicy.pathList(config.streamWavRoots)
             }

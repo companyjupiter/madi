@@ -157,6 +157,11 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(livePreviewEnabled, forKey: "livePreviewEnabled") }
     }
     /// Interim "진행 중" text (cleared when the window's committed words land).
+    /// Fed by TWO provisional sources that overwrite each other (both cover the
+    /// freshest audio; life of a «partial» is ~0.5 s with AUDIO_CTX decode):
+    ///   «partial» lines — the closed segment's in-decode hypothesis (main
+    ///                     engine, PARTIALS=1) — converges to the committed text
+    ///   PreviewEngine   — the still-open window's text (~1 s cadence)
     private(set) var livePartial: String = "" {
         didSet {
             if livePartial.isEmpty { livePartialTranslations = [:]; interimInFlight = false }
@@ -967,6 +972,11 @@ final class SessionController: EngineProcessDelegate {
             // no Word exists yet, so no id/translation to disturb.
             let fixed = PersonalVocabulary.correctIncomingText(text, conf: conf, glossary)
             transcript.ingest(fixed == text ? event : .word(t0: t0, t1: t1, text: fixed, conf: conf))
+        case .partial(_, let text):
+            // in-decode hypothesis of the closed segment — better context than
+            // the preview engine's text and converges to the committed line, so
+            // it may overwrite; the next preview/commit supersedes it.
+            if !text.isEmpty { livePartial = text }
         default: transcript.ingest(event)
         }
     }

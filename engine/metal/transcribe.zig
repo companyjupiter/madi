@@ -1927,10 +1927,15 @@ pub fn main() !void {
                     if (tk == EOT) { done = true; break; }
                 }
                 n_text += bi;
-                // streaming partial: emit the in-progress text after this batch
+                // streaming partial: emit the in-progress text after this batch.
+                // PARTIALS=1 also mirrors it onto stdout as a «partial» line so
+                // the app renders the segment's text WHILE it decodes instead of
+                // all-at-once at SEG_END. Opt-in env → the frozen stdout text
+                // contract is untouched for every existing consumer.
                 if (g_partials and !dropped and n_text > 0) {
                     const ptext = bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]) catch "";
                     evPartial(t_off + pass_off, ptext);
+                    if (stream) try out.print("\u{00AB}partial {d:.2}\u{00BB} {s}\n", .{ t_off + pass_off, std.mem.trim(u8, ptext, " \n") });
                 }
             }
             n_tok_total += n_text;
