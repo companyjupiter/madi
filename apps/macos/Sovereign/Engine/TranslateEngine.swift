@@ -7,9 +7,9 @@
 //   launch: translate-engine <model.gguf> → prints READY
 //   stdin : ONE line = one chat turn (\n-delimited!). The chat template +
 //           tokenize + generate + DETOKENIZE happen inside; thinking is disabled.
-//   stdout: "> [chat] N tokens, prefilling..." / "[perf] prefill: …" / <reply text>
-//           / "[perf] generation: …" / "> ". The reply is the text between the
-//           prefill and generation [perf] lines; we strip "> "/[chat]/[perf]/etc.
+//   stdout: framed by TranslateStreamParser — the reply STREAMS token-by-token
+//           (~19 ms/tok measured), surfaced incrementally via onPartial and
+//           finalized on the "[perf] generation" line via onResult.
 //
 // CRITICAL: the prompt MUST be a single line (no '\n') or the engine splits it
 // into multiple turns — so the instruction + text are one line and any newline in
@@ -19,18 +19,26 @@ import Foundation
 
 @MainActor
 final class TranslateEngine {
-    /// (lineID, target language name, translated text) per completed turn, FIFO.
-    var onResult: ((UUID, String, String) -> Void)?
+    /// (lineID, target language name, translated text, source text) per completed turn.
+    var onResult: ((UUID, String, String, String) -> Void)?
+    /// Streaming in-progress translation (same keys; text = accumulated so far).
+    /// Echo-gated: not fired while the reply is still a prefix of the source, so a
+    /// verbatim echo (the 4B failure mode) never streams to the UI.
+    var onPartial: ((UUID, String, String) -> Void)?
+    /// Language written FIRST when several targets queue for one line — the
+    /// caption's display language. Without it, sorted-append + LIFO pop meant
+    /// the alphabetically-last language always translated first (T3).
+    var priorityLang: String?
 
     private let process = Process()
     private let stdinPipe = Pipe()
     private let stdoutPipe = Pipe()
     private let ioQueue = DispatchQueue(label: "sovereign.translate.io")
-    private var lineBuffer = Data()
+    private var parser = TranslateStreamParser()          // ioQueue-owned
+    private var lastPartialEmit = ContinuousClock.now     // ioQueue-owned throttle
 
     private struct Turn { let id: UUID; let lang: String; let source: String; let prompt: String; var retries: Int }
     private var ready = false
-    private var current = ""           // reply text accumulating for the in-flight turn
     // Live-priority scheduling: hold turns in a stack and write them NEWEST-FIRST,
     // one at a time. During a meeting the line you're looking at (the most recent)
     // gets translated before an older backlog; starved old turns drain at the next
@@ -46,6 +54,10 @@ final class TranslateEngine {
         // (not value), so even SOV_DEBUG=0 turns on the token-dump. Leave it unset.
         var env = ProcessInfo.processInfo.environment
         env.removeValue(forKey: "SOV_DEBUG")
+        // Runaway-tail guard (T10): the engine's default cap is 1024 tokens with
+        // no newline stop — a pathological generation blocks the single-inflight
+        // queue for ~23 s. Captions never legitimately need more than ~192.
+        env["SOV_NSTEPS"] = "192"
         process.environment = env
         process.standardInput = stdinPipe
         process.standardOutput = stdoutPipe
@@ -53,7 +65,7 @@ final class TranslateEngine {
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
             let chunk = h.availableData
             guard !chunk.isEmpty else { return }
-            self?.ioQueue.async { self?.ingest(chunk) }
+            self?.ioQueue.async { self?.pumpParser(chunk) }
         }
         do { try process.run(); return true } catch { return false }
     }
@@ -61,12 +73,12 @@ final class TranslateEngine {
     func stop() {
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
         if process.isRunning { process.terminate() }
-        ready = false; current = ""; pending.removeAll(); inflightTurn = nil
+        ready = false; pending.removeAll(); inflightTurn = nil
     }
 
     /// Queue a translation of `text` into each of `targets` (English language
     /// names, e.g. ["Japanese","English","Chinese"]) for `id`. Results arrive via
-    /// onResult per (id, lang), FIFO — the engine serializes the turns.
+    /// onResult per (id, lang) — the engine serializes the turns.
     // A one-word anchor in the TARGET language. DNA3.0-4B is Korean-centric and,
     // for longer Korean inputs, would "translate" KO→JA by just rephrasing in
     // Korean (verified via the engine CLI: 日 returned 한국어). A single in-target
@@ -80,7 +92,12 @@ final class TranslateEngine {
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !oneLine.isEmpty else { return }
-        for target in targets {
+        // priority language is appended LAST → popLast() serves it FIRST
+        var ordered = targets
+        if let p = priorityLang, let i = ordered.firstIndex(of: p) {
+            ordered.remove(at: i); ordered.append(p)
+        }
+        for target in ordered {
             let a = Self.anchor[target] ?? "Hello"
             let prompt = "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — Hello => \(a) . Now: \(oneLine) =>"
             pending.append(Turn(id: id, lang: target, source: oneLine, prompt: prompt, retries: 2))
@@ -101,58 +118,52 @@ final class TranslateEngine {
         ioQueue.async { [weak self] in try? self?.stdinPipe.fileHandleForWriting.write(contentsOf: data) }
     }
 
-    // MARK: stdout framing + parse
-    private func ingest(_ chunk: Data) {
-        lineBuffer.append(chunk)
-        while let nl = lineBuffer.firstIndex(of: 0x0A) {
-            let lineData = lineBuffer.subdata(in: lineBuffer.startIndex..<nl)
-            lineBuffer.removeSubrange(lineBuffer.startIndex...nl)
-            guard let raw = String(data: lineData, encoding: .utf8) else { continue }
-            Task { @MainActor in self.parse(raw) }
+    // MARK: stdout events (framing in TranslateStreamParser — pure, unit-tested)
+    private func pumpParser(_ chunk: Data) {
+        for event in parser.ingest(chunk) {
+            switch event {
+            case .ready:
+                Task { @MainActor in self.ready = true; self.pump() }
+            case .replyDelta(let text):
+                // throttle UI hops to ~12/s (tokens arrive every ~19 ms)
+                let now = ContinuousClock.now
+                guard now - lastPartialEmit > .milliseconds(80) else { continue }
+                lastPartialEmit = now
+                Task { @MainActor in self.emitPartial(text) }
+            case .turnComplete(let text):
+                Task { @MainActor in self.completeTurn(text) }
+            }
         }
     }
 
-    @MainActor
-    private func parse(_ raw: String) {
-        // strip leading "> " REPL prompt(s)
-        var s = raw
-        while s.hasPrefix(">") { s = String(s.dropFirst()).trimmingCharacters(in: .whitespaces) }
-        if s == "READY" {
-            ready = true
-            pump()
-            return
-        }
-        if s.hasPrefix("[perf] generation") {           // turn complete
-            let t = current.trimmingCharacters(in: .whitespacesAndNewlines)
-            current = ""
-            guard let turn = inflightTurn else { return }
-            inflightTurn = nil
-            defer { pump() }                             // start the next turn
-            // Failure mode: the 4B sometimes echoes the source verbatim instead of
-            // translating (a cross-turn sampling-state effect — see LIVE_TRANSLATE
-            // P4). Normalize-compare; retry, then SUPPRESS (don't show the source
-            // masquerading as a translation) rather than emit an echo.
-            func norm(_ x: String) -> String {
-                x.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n.。!?！？\"'"))
+    private func emitPartial(_ text: String) {
+        guard let turn = inflightTurn, !text.isEmpty else { return }
+        // echo gate: while the reply is still a (normalized) prefix of the source
+        // it may be a verbatim echo — hold streaming until it diverges. A real
+        // cross-script translation diverges at the first token.
+        if Self.norm(turn.source).hasPrefix(Self.norm(text)) { return }
+        onPartial?(turn.id, turn.lang, text)
+    }
+
+    private func completeTurn(_ text: String) {
+        guard let turn = inflightTurn else { return }
+        inflightTurn = nil
+        defer { pump() }                             // start the next turn
+        // Failure mode: the 4B sometimes echoes the source verbatim instead of
+        // translating (a cross-turn sampling-state effect — see LIVE_TRANSLATE
+        // P4). Normalize-compare; retry, then SUPPRESS (don't show the source
+        // masquerading as a translation) rather than emit an echo.
+        if !text.isEmpty, Self.norm(text) == Self.norm(turn.source) {
+            if turn.retries > 0 {
+                // retry next (push so the very next pump picks it up)
+                pending.append(Turn(id: turn.id, lang: turn.lang, source: turn.source, prompt: turn.prompt, retries: turn.retries - 1))
             }
-            if !t.isEmpty, norm(t) == norm(turn.source) {
-                if turn.retries > 0 {
-                    // retry next (push so the very next pump picks it up)
-                    pending.append(Turn(id: turn.id, lang: turn.lang, source: turn.source, prompt: turn.prompt, retries: turn.retries - 1))
-                }
-                return   // retry pending, or suppress the echo
-            }
-            if !t.isEmpty { onResult?(turn.id, turn.lang, t) }
-            return
+            return   // retry pending, or suppress the echo
         }
-        // control / banner / debug lines → ignore (token[…] = the SOV_DEBUG dump,
-        // defensively filtered even though we leave SOV_DEBUG unset)
-        if s.isEmpty || s.hasPrefix("[chat]") || s.hasPrefix("[perf]")
-            || s.hasPrefix("Loading") || s.hasPrefix("Initializing") || s.hasPrefix("[arch]")
-            || s.hasPrefix("token[") {
-            return
-        }
-        // reply text (may be multi-line) → accumulate
-        current += current.isEmpty ? s : " " + s
+        if !text.isEmpty { onResult?(turn.id, turn.lang, text, turn.source) }
+    }
+
+    private static func norm(_ x: String) -> String {
+        x.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n.。!?！？\"'"))
     }
 }

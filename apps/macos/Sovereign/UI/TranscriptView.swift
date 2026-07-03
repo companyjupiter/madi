@@ -91,7 +91,12 @@ struct TranscriptView: View {
                             .foregroundStyle(Theme.Colors.textSecondary)  // adaptive — readable on light & dark
                             .italic()
                             .id("interim")
-                        // provisional translation of the interim (replaced when the line commits)
+                    }
+                    // provisional translation of the interim. Rendered independently
+                    // of the interim TEXT (T1 carryover): on window commit the last
+                    // interim translation stays visible under the committed line
+                    // until its authoritative translation streams in.
+                    if !interimTranslations.isEmpty {
                         ForEach(interimTranslations.keys.sorted(), id: \.self) { lang in
                             Text(interimTranslations[lang] ?? "")
                                 .font(.system(size: max(12, fontSize - 4)))
