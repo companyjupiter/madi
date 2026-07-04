@@ -64,6 +64,17 @@ var g_actx_fixed: u32 = 0;
 //     on the tied head can flip argmax, see keep_head note at tok_emb load).
 // 2 = blocks + logit/emb head (~158 MB/tok → ½; the INT4-1 full-model curve).
 var g_dec_int4: u8 = 0;
+// T12 bidirectional language re-probe — LANG_CANDIDATES="50264,50266" (comma
+// token ids). The session-wide language LOCK exists to stop per-segment
+// flapping across 100 languages, but it makes a two-language conversation
+// (KO staff ↔ JA/ZH patient) impossible: the later language decodes with the
+// wrong seed token and collapses into transliteration. With a candidate
+// whitelist the SOT probe (1-token forward, ~2-4 ms — cross-KV is built per
+// chunk anyway) runs EVERY segment and picks the argmax among candidates
+// only, so flapping is structurally limited to the session's language pair.
+// Unset → legacy single-lock behavior, bit-exact.
+var g_lang_cands: [4]u32 = undefined;
+var g_lang_ncands: usize = 0;
 fn audioCtx(got_samples: usize) u32 {
     if (g_actx_fixed > 0) return @max(192, @min(ENC_SEQ, (g_actx_fixed + 63) / 64 * 64));
     if (!g_actx_auto) return ENC_SEQ;
@@ -73,7 +84,10 @@ fn audioCtx(got_samples: usize) u32 {
     // repeat-loops instead of emitting EOT. Measured on ko2 (768 audio frames):
     // +64 → phrase ×9, +128 → ×3, +160 → clean. 224 (4.48 s) carries margin.
     const padded: u32 = frames + 224;
-    return @max(192, @min(ENC_SEQ, (padded + 63) / 64 * 64));
+    // Floor 576: very short clips need proportionally MORE tail — a 4.0 s JA
+    // utterance repeated its last phrase at ctx 448/512 and cleaned up at 576
+    // (t1 sweep, 2026-07-05). 576 keeps short-segment encodes at ~38% of full.
+    return @max(576, @min(ENC_SEQ, (padded + 63) / 64 * 64));
 }
 // term biasing: <|startofprev|> + these tokens seed the decoder toward domain
 // vocabulary (names, jargon). Encoded once from env PROMPT. g_bias_words holds
@@ -769,6 +783,15 @@ pub fn main() !void {
         }
     }
     if (std.posix.getenv("DEC_INT4")) |v| g_dec_int4 = std.fmt.parseInt(u8, v, 10) catch 0;
+    if (std.posix.getenv("LANG_CANDIDATES")) |lc| { // T12 per-segment language whitelist
+        var lit = std.mem.splitScalar(u8, lc, ',');
+        while (lit.next()) |tokstr| {
+            if (g_lang_ncands >= g_lang_cands.len) break;
+            const v = std.fmt.parseInt(u32, std.mem.trim(u8, tokstr, " "), 10) catch continue;
+            if (v >= 50259 and v <= 50358) { g_lang_cands[g_lang_ncands] = v; g_lang_ncands += 1; }
+        }
+        if (g_lang_ncands == 1) g_lang_ncands = 0; // a single candidate is just a lock — use WHISPER_LANG_ID
+    }
     if (std.posix.getenv("QBITS")) |b| { // 4/5/6-bit sweep: levels = 2^(b-1)-1
         const nbits = std.fmt.parseInt(u6, b, 10) catch 4;
         g_qmax = @floatFromInt((@as(u32, 1) << @as(u5, @intCast(nbits - 1))) - 1);
@@ -1776,7 +1799,11 @@ pub fn main() !void {
         // (P(nospeech) was measured here and REFUTED: ≈1e-10 on pure music and
         // real speech alike — <|nospeech|> is dead in large-v3-turbo. The SOT
         // probe stays lang-detect-only; see PERF_LOG SV-2.)
-        if (lang_tok == 0) {
+        // T12: with a LANG_CANDIDATES whitelist the probe runs EVERY segment and
+        // this segment's seed language may differ from the session lock — a KO
+        // staff line and the JA patient's reply each decode with their own token.
+        var seg_lang: u32 = lang_tok;
+        if (lang_tok == 0 or g_lang_ncands > 0) {
             d_pos[0] = 0;
             try mtl.beginCommandBuffer();
             try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[0]);
@@ -1789,15 +1816,31 @@ pub fn main() !void {
             try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
-            var bl: u32 = 50259;
-            var bv: f32 = d_logits[50259];
-            var lt: u32 = 50259;
-            while (lt <= 50358) : (lt += 1) { if (d_logits[lt] > bv) { bv = d_logits[lt]; bl = lt; } }
-            lang_tok = bl;
-            try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+            if (g_lang_ncands > 0) {
+                var bl: u32 = g_lang_cands[0];
+                var bv: f32 = d_logits[g_lang_cands[0]];
+                for (g_lang_cands[1..g_lang_ncands]) |c| {
+                    if (d_logits[c] > bv) { bv = d_logits[c]; bl = c; }
+                }
+                seg_lang = bl;
+                if (lang_tok == 0) {
+                    lang_tok = bl; // session default (preview engine start etc.)
+                    try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+                } else if (seg_lang != lang_tok) {
+                    try out.print("[lang] seg token {d}\n", .{seg_lang});
+                }
+            } else {
+                var bl: u32 = 50259;
+                var bv: f32 = d_logits[50259];
+                var lt: u32 = 50259;
+                while (lt <= 50358) : (lt += 1) { if (d_logits[lt] > bv) { bv = d_logits[lt]; bl = lt; } }
+                lang_tok = bl;
+                seg_lang = bl;
+                try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+            }
         }
-        d_tokens[1] = lang_tok;
-        out_tokens[1] = lang_tok;
+        d_tokens[1] = seg_lang;
+        out_tokens[1] = seg_lang;
         d_tokens[2] = task_tok; // transcribe(50360) / translate(50359)
         out_tokens[2] = task_tok;
 
@@ -1865,7 +1908,7 @@ pub fn main() !void {
                 for (g_prompt) |t| { d_tokens[PL] = t; PL += 1; }
             }
             d_tokens[PL] = SEED[0]; // sot
-            d_tokens[PL + 1] = lang_tok;
+            d_tokens[PL + 1] = seg_lang; // per-segment language (== lang_tok unless LANG_CANDIDATES)
             d_tokens[PL + 2] = task_tok; // transcribe(50360) / translate(50359)
             PL += 3;
             if (!ts_mode) { d_tokens[PL] = 50364; PL += 1; } // <|notimestamps|>
