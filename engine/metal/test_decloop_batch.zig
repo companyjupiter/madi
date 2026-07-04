@@ -104,6 +104,7 @@ pub fn main() !void {
         .k = (try mtl.allocSlice(f32, D)).ptr, .v = (try mtl.allocSlice(f32, D)).ptr,
         .ao = (try mtl.allocSlice(f32, D)).ptr, .mo = (try mtl.allocSlice(f32, D)).ptr,
         .mh = (try mtl.allocSlice(f32, MLP)).ptr, .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr,
+        .ca_part = (try mtl.allocSlice(f32, dec.NH * dec.CA_NSPLIT * (2 + dec.HDD))).ptr,
     };
     const xref = try mtl.allocSlice(f32, B * D);
     for (0..B) |b| {

@@ -1025,6 +1025,7 @@ pub fn main() !void {
         .ao = (try mtl.allocSlice(f32, D)).ptr, .mo = (try mtl.allocSlice(f32, D)).ptr,
         .mh = (try mtl.allocSlice(f32, MLP)).ptr,
         .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr, // 20×1500 normalized scores
+        .ca_part = (try mtl.allocSlice(f32, dec.NH * dec.CA_NSPLIT * (2 + dec.HDD))).ptr, // split-attn partials (42 KB)
     };
     const skc = try alloc.alloc([*]f32, dec.NL);
     const svc = try alloc.alloc([*]f32, dec.NL);
