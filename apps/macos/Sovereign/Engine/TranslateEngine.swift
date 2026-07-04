@@ -87,6 +87,18 @@ final class TranslateEngine {
     // this = the 9B model — deferred A/B.)
     private static let anchor: [String: String] =
         ["Korean": "안녕하세요", "English": "Hello", "Japanese": "こんにちは", "Chinese": "你好"]
+    // Retry variant: the engine decodes GREEDILY with a per-turn state reset, so
+    // re-sending the IDENTICAL prompt after an echo re-produces the identical
+    // echo — the old retry only "worked" by cross-turn state accident. A retry
+    // must CHANGE the tokens: swap the one-shot example (different trajectory).
+    private static let anchor2: [String: String] =
+        ["Korean": "감사합니다", "English": "Thank you", "Japanese": "ありがとうございます", "Chinese": "谢谢"]
+
+    private static func prompt(for target: String, text: String, variant: Bool) -> String {
+        let a = (variant ? anchor2[target] : anchor[target]) ?? "Hello"
+        let ex = variant ? "Thank you" : "Hello"
+        return "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — \(ex) => \(a) . Now: \(text) =>"
+    }
 
     func translate(_ text: String, into targets: [String], id: UUID) {
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
@@ -98,9 +110,8 @@ final class TranslateEngine {
             ordered.remove(at: i); ordered.append(p)
         }
         for target in ordered {
-            let a = Self.anchor[target] ?? "Hello"
-            let prompt = "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — Hello => \(a) . Now: \(oneLine) =>"
-            pending.append(Turn(id: id, lang: target, source: oneLine, prompt: prompt, retries: 2))
+            pending.append(Turn(id: id, lang: target, source: oneLine,
+                                prompt: Self.prompt(for: target, text: oneLine, variant: false), retries: 1))
         }
         pump()
     }
@@ -155,8 +166,11 @@ final class TranslateEngine {
         // masquerading as a translation) rather than emit an echo.
         if !text.isEmpty, Self.norm(text) == Self.norm(turn.source) {
             if turn.retries > 0 {
-                // retry next (push so the very next pump picks it up)
-                pending.append(Turn(id: turn.id, lang: turn.lang, source: turn.source, prompt: turn.prompt, retries: turn.retries - 1))
+                // retry with the VARIANT prompt (different example tokens →
+                // different greedy trajectory); same-prompt retries are no-ops.
+                pending.append(Turn(id: turn.id, lang: turn.lang, source: turn.source,
+                                    prompt: Self.prompt(for: turn.lang, text: turn.source, variant: true),
+                                    retries: turn.retries - 1))
             }
             return   // retry pending, or suppress the echo
         }

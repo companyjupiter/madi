@@ -30,6 +30,8 @@ pub const Kernels = struct {
     store: mtl.Function,
     attn: mtl.Function,
     ca: mtl.Function,
+    ca_split: ?mtl.Function, // flash-decoding split (CA_SPLIT=0 → legacy 20-TG kernel)
+    ca_reduce: ?mtl.Function,
     cab: mtl.Function, // batched cross-attn (B slots, one dispatch) — P5
     emb: mtl.Function,
     extract: mtl.Function,
@@ -48,6 +50,10 @@ pub const Kernels = struct {
         // transcribe.repackQ4). Decode is GEMV-bandwidth-bound (FUSE-2), so
         // halving weight bytes is the lever fusion couldn't be.
         const int4 = if (std.posix.getenv("DEC_INT4")) |v| v[0] != '0' else false; // 1(blocks)/2(+head) both swap the block GEMVs
+        // flash-decoding split cross-attn: 20 TGs → 20×NSPLIT TGs (occupancy).
+        // Default ON (CA_SPLIT=0 = legacy rollback) — same log-sum-exp math,
+        // reassociated FP; gated by test_decoder + fixtures + WER.
+        const ca_split_on = if (std.posix.getenv("CA_SPLIT")) |v| v[0] != '0' else true;
         return .{
             .cvt32 = try mtl.getFunction("cvt_f32_f16"),
             .cvt16 = try mtl.getFunction("cvt_f16_f32"),
@@ -59,6 +65,8 @@ pub const Kernels = struct {
             .store = try mtl.getFunction("gpu_kv_store"),
             .attn = try mtl.getFunction("gpu_attention"),
             .ca = try mtl.getFunction("flash_cross_attn_f16kv"),
+            .ca_split = if (ca_split_on) mtl.getFunction("flash_cross_attn_split") catch null else null,
+            .ca_reduce = if (ca_split_on) mtl.getFunction("flash_cross_attn_reduce") catch null else null,
             .cab = try mtl.getFunction("flash_cross_attn_f16kv_batched"),
             .emb = try mtl.getFunction("gpu_emb_lookup"),
             .extract = try mtl.getFunction("extract_ca_head_f16kv"),
@@ -103,7 +111,10 @@ pub const Layer = struct {
 pub const Scratch = struct {
     xb: [*]f32, q: [*]f32, k: [*]f32, v: [*]f32, ao: [*]f32, mo: [*]f32, mh: [*]f32,
     ca_sc: [*]f32, // [NH][ENC_SEQ] normalized cross-attn scores (flash → ca_accumulate)
+    ca_part: [*]f32 = undefined, // [NH][CA_NSPLIT][2+HDD] split-attn partials (ca_split path only)
 };
+
+pub const CA_NSPLIT: u32 = 8; // seqlen chunks per head — 20 TG → 160 TG
 
 inline fn P(x: anytype) ?*const anyopaque {
     return @ptrCast(x);
@@ -189,6 +200,21 @@ fn kCA(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, seqlen: u32, 
     const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U, PS, U };
     try mtl.dispatch(K.ca, .{ NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
+// flash-decoding split cross-attn (pass 1 + pass 2) — see decoder_ops.metal
+fn kCASplit(f: mtl.Function, parts: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, seqlen: u32, sc_raw: [*]f32, write_sc: u32) !void {
+    var a0 = parts; var a1 = q; var a2 = kc; var a3 = vc; var sl = seqlen;
+    var hd = HDD; var kvd = D; var nkv = NH; var nh = NH; var ns = CA_NSPLIT; var a10 = sc_raw; var ws = write_sc;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sl), P(&hd), P(&kvd), P(&nkv), P(&nh), P(&ns), P(&a10), P(&ws) };
+    const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U, U, PS, U };
+    try mtl.dispatch(f, .{ NH * CA_NSPLIT, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+fn kCAReduce(f: mtl.Function, out: [*]f32, parts: [*]f32, sc: [*]f32, seqlen: u32, write_sc: u32) !void {
+    var a0 = out; var a1 = parts; var hd = HDD; var ns = CA_NSPLIT; var a4 = sc; var sl = seqlen; var ws = write_sc;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&hd), P(&ns), P(&a4), P(&sl), P(&ws) };
+    const s = [_]usize{ PS, PS, U, U, PS, U, U };
+    try mtl.dispatch(f, .{ NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+
 // batched cross-attn: B slots in one dispatch (grid B*NH). q/out contiguous
 // [B][D]; kc/vc contiguous [B][seqlen][D]. No sc_out (write_sc=0 path). — P5
 fn kCAbatched(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, B: u32, seqlen: u32) !void {
@@ -250,7 +276,16 @@ pub fn decodeBlock(
     // them into the timestamp map — no separate QK/softmax recompute (extract).
     var align_mask: u32 = 0;
     if (ca) |c| for (c.heads) |h| { align_mask |= (@as(u32, 1) << @as(u5, @intCast(h))); };
-    try kCA(K, s.ao, s.q, ckc, cvc, enc_ctx, s.ca_sc, if (align_mask != 0) @as(u32, 1) else 0);
+    const wsc: u32 = if (align_mask != 0) 1 else 0;
+    if (K.ca_split) |csf| {
+        // flash-decoding: 20 → 160 TGs (occupancy). Alignment scores are written
+        // raw in pass 1 and normalized in place by pass 2 — ca_accumulate sees
+        // the same normalized rows as the legacy kernel.
+        try kCASplit(csf, s.ca_part, s.q, ckc, cvc, enc_ctx, s.ca_sc, wsc);
+        try kCAReduce(K.ca_reduce.?, s.ao, s.ca_part, s.ca_sc, enc_ctx, wsc);
+    } else {
+        try kCA(K, s.ao, s.q, ckc, cvc, enc_ctx, s.ca_sc, wsc);
+    }
     if (ca) |c| {
         if (c.heads.len > 0) try kAccumulate(K, c.weights, s.ca_sc, c.tok, align_mask, c.head_base, enc_ctx);
     }

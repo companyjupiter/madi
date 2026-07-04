@@ -40,6 +40,10 @@ final class EngineProcess {
         var voiceprintsDir: URL?
         var streamWavRoots: [URL] = []
         var fileURL: URL?           // set ⇒ native FILE mode (batched, fast); nil ⇒ live STREAM
+        /// T12 bidirectional pair: whisper language token ids the engine may
+        /// re-probe between EVERY segment (e.g. [50264, 50266] for a KO staff ↔
+        /// JA patient conversation). Empty = session-locked single language.
+        var langCandidates: [Int] = []
     }
 
     private let config: Config
@@ -80,6 +84,10 @@ final class EngineProcess {
             // «partial» in-decode hypothesis lines: the segment's text streams
             // onto screen while it decodes instead of all-at-once at SEG_END.
             env["PARTIALS"] = "1"
+            // bidirectional language pair (T12): per-segment re-probe whitelist
+            if config.langCandidates.count >= 2 {
+                env["LANG_CANDIDATES"] = config.langCandidates.map(String.init).joined(separator: ",")
+            }
             if !config.streamWavRoots.isEmpty {
                 env["STREAM_WAV_ROOTS"] = EnginePathPolicy.pathList(config.streamWavRoots)
             }

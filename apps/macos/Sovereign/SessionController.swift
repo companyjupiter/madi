@@ -204,6 +204,10 @@ final class SessionController: EngineProcessDelegate {
     private var translate: TranslateEngine?
     private var translatedHash: [UUID: Int] = [:]  // line id → translated text hash (re-queue on change)
     private var tailGen = 0                        // tail-timeout generation (T2)
+    /// T8: disk-persistent pre-translated clinic phrase bank (0 ms on hit).
+    private let faqStore = FAQTranslationStore.load(
+        from: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Sovereign/faq_translations.json"))
     /// O3 — reuse interim translations for the matching committed line instead of
     /// re-queuing a fresh DNA3 turn. Cleared on every session boundary to prevent
     /// cross-meeting bleed.
@@ -549,7 +553,7 @@ final class SessionController: EngineProcessDelegate {
         for i in 0..<upTo { translateLine(lines[i]) }
     }
 
-    /// Queue one line (hash-gated, O3-cached, direction-routed).
+    /// Queue one line (hash-gated, FAQ/O3-cached, direction-routed).
     private func translateLine(_ line: Line) {
         let h = lineHash(line.text)
         if translatedHash[line.id] == h { return }
@@ -557,6 +561,18 @@ final class SessionController: EngineProcessDelegate {
         let targets = routedTargets(for: line.text)
         guard !targets.isEmpty else { return }
         translatedHash[line.id] = h
+        // T8: session-invariant FAQ bank first — a recurring clinic phrase costs
+        // 0 ms and no DNA3 turn. Conservative exact (normalized) match only.
+        if let faq = faqStore.lookup(line.text) {
+            var missing: [String] = []
+            for tgt in targets {
+                if let tr = faq[tgt] { transcript.setTranslation(line.id, lang: tgt, tr) }
+                else { missing.append(tgt) }
+            }
+            if missing.isEmpty { return }
+            t.translate(line.text, into: missing, id: line.id)
+            return
+        }
         // O3: if this line's text was already translated as interim, reuse the
         // cached translations and skip the DNA3 turn entirely. Only reuse the
         // targets we actually have cached; queue the engine for any that miss.
@@ -801,6 +817,17 @@ final class SessionController: EngineProcessDelegate {
 
     private var isError: Bool { if case .error = phase { return true }; return false }
 
+    /// T12: derive the bidirectional language pair from the translate targets —
+    /// a {Korean, X} target set IS the clinic conversation declaration (staff
+    /// speaks KO, patient speaks X). No extra UI: the pair unlocks per-segment
+    /// language re-probe in the engine so BOTH sides transcribe correctly.
+    private var langCandidatePair: [Int] {
+        guard translateTargets.count == 2, translateTargets.contains("Korean") else { return [] }
+        let tok: [String: Int] = ["English": 50259, "Chinese": 50260, "Korean": 50264, "Japanese": 50266]
+        let pair = translateTargets.compactMap { tok[$0] }
+        return pair.count == 2 ? pair.sorted() : []
+    }
+
     private func makeConfig() -> EngineProcess.Config {
         EngineProcess.Config(
             binaryURL: Bundle.main.bundleURL
@@ -811,7 +838,8 @@ final class SessionController: EngineProcessDelegate {
             diarize: diarize, osd: osd,
             languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers,
             vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
-            streamWavRoots: [capture.segmentDirectory])
+            streamWavRoots: [capture.segmentDirectory],
+            langCandidates: langCandidatePair)
     }
 
     // MARK: session lifecycle
