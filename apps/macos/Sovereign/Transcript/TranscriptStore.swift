@@ -81,6 +81,20 @@ final class TranscriptStore {
         if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].editedText = t }
     }
 
+    /// Replace a single word in a line (review flow). Word.text is immutable so
+    /// the word is rebuilt; conf → 1.0 clears its low-confidence flag. editedText
+    /// is refreshed to the new joinedText so exports/content-view stay in sync.
+    func editWord(_ lineID: UUID, index: Int, to newText: String) {
+        guard let li = lines.firstIndex(where: { $0.id == lineID }),
+              index >= 0, index < lines[li].words.count else { return }
+        let t = newText.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return }
+        let old = lines[li].words[index]
+        lines[li].words[index] = Word(t0: old.t0, t1: old.t1, text: t, conf: 1.0)
+        lines[li].editedText = lines[li].joinedText
+        editsByLine[lineID] = lines[li].editedText
+    }
+
     func reset() {
         lines.removeAll()
         merger = WordMerger()

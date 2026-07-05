@@ -18,6 +18,7 @@ struct WorkspaceExplorer: View {
     @State private var dragStartWidth: Double? = nil
     @State private var handleHovering = false
     @State private var mode: ExplorerMode = .files
+    @State private var showExportDialog = false
     private let minWidth = 180.0, maxWidth = 460.0
     private enum ExplorerMode: String, CaseIterable {
         case files, people, openLoops, voiceprints
@@ -36,22 +37,29 @@ struct WorkspaceExplorer: View {
     // matchedGeometryEffect instead of each segment owning its own fill.
     @Namespace private var modeSwitcherNS
 
+    // Redesign hides 열린 항목/음성 from the tab bar (features and views stay
+    // wired — restore by iterating allCases again).
+    private static let visibleModes: [ExplorerMode] = [.files, .people]
+
+    // rev.2 pill (Figma 188:761): gray track, WHITE sliding thumb with a soft
+    // drop shadow — matches the center 내용/상세 switch.
     private var modeSwitcher: some View {
         HStack(spacing: 1) {
-            ForEach(ExplorerMode.allCases, id: \.self) { m in
+            ForEach(Self.visibleModes, id: \.self) { m in
                 Button {
                     withAnimation(.snappy(duration: 0.25)) { mode = m }
                 } label: {
                     Text(m.label)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(mode == m ? .white : Theme.Colors.textSecondary)
+                        .foregroundStyle(mode == m ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .frame(maxWidth: .infinity)
                         .background {
                             if mode == m {
-                                Capsule().fill(Theme.Colors.accent)
+                                Capsule().fill(Color.white)
+                                    .shadow(color: .black.opacity(0.06), radius: 1, y: 2)
                                     .matchedGeometryEffect(id: "modeSwitcherPill", in: modeSwitcherNS)
                             }
                         }
@@ -63,32 +71,40 @@ struct WorkspaceExplorer: View {
         .background(Capsule().fill(Theme.Colors.surfaceSunken))
     }
 
+    // Right panel (Figma 188:734): pill tabs on top, a FLAT recent-transcript
+    // list (the folder tree/breadcrumb is gone — 변경 is the only folder
+    // control), and a pinned bottom block: 자동저장 toggle / 폴더 row / 내보내기.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
             modeSwitcher
-                .padding(.horizontal, Theme.Space.window).padding(.bottom, 10.5)
+                .padding(.horizontal, 17).padding(.top, 19)
             switch mode {
             case .files:
                 if session.workspace.isLoading {
                     loadingState
-                } else if session.workspace.nodes.isEmpty {
+                } else if recentTranscripts.isEmpty {
                     emptyState
                 } else {
-                    List {
-                        OutlineGroup(session.workspace.nodes, children: \.children) { node in
-                            row(node)
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(recentTranscripts, id: \.self) { url in
+                                Button { session.openArchived(url) } label: {
+                                    HStack(spacing: 7) {
+                                        SVGIcon(name: "content", size: 16)
+                                        Text(url.lastPathComponent)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(.black)
+                                            .lineLimit(1).truncationMode(.middle)
+                                        Spacer(minLength: 0)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .help(url.path)
+                            }
                         }
+                        .padding(.horizontal, 20).padding(.top, 22)
                     }
-                    .listStyle(.sidebar)
-                    .scrollContentBackground(.hidden)
-                    // List's sidebar style keeps an internal top inset even with
-                    // contentMargins(.top, 0, for: .scrollContent) — that call alone
-                    // wasn't enough, so cancel the visible remainder directly with a
-                    // negative top padding (tuned against the rendered gap, not a
-                    // documented inset value).
-                    .contentMargins(.top, 0, for: .scrollContent)
-                    .padding(.top, -11)
                 }
             case .people:
                 PeopleDashboard(
@@ -99,17 +115,107 @@ struct WorkspaceExplorer: View {
             case .voiceprints:
                 VoiceprintManagementView(session: session)
             }
+            Spacer(minLength: 0)
+            bottomBlock
         }
-        .frame(width: explorerWidth)
+        .frame(width: 267)
         .background(
-            Theme.Colors.surface
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel)
-                    .strokeBorder(Theme.Colors.separator, lineWidth: 1))
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .fill(Color.white)
+                .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
+                .shadow(color: .black.opacity(0.03), radius: 9, x: 4, y: 4)
         )
-        .overlay(alignment: .leading) { resizeHandle }
-        .padding(.vertical, 12)
-        .padding(.trailing, 12)
+        .padding(.vertical, 13)
+        .padding(.trailing, 13)
+    }
+
+    /// Newest transcripts across the workspace tree, flattened (modification
+    /// date order) — same shape as the start screen's 최근 항목.
+    private var recentTranscripts: [URL] {
+        var mds: [URL] = []
+        func walk(_ nodes: [FileNode]) {
+            for n in nodes {
+                if let kids = n.children { walk(kids) }
+                else if n.isTranscript { mds.append(n.url) }
+            }
+        }
+        walk(session.workspace.nodes)
+        let fm = FileManager.default
+        return mds
+            .compactMap { u -> (URL, Date)? in
+                guard let d = (try? fm.attributesOfItem(atPath: u.path))?[.modificationDate] as? Date
+                else { return nil }
+                return (u, d)
+            }
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
+    }
+
+    // MARK: pinned bottom block — 자동저장 / 폴더 / 내보내기 (Figma 188:742)
+
+    private var bottomBlock: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
+            HStack {
+                Text("자동저장")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                Spacer()
+                BlackToggle(isOn: $session.autoSaveEnabled)
+            }
+            HStack(spacing: 6) {
+                Text("폴더")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                Text(session.autoSaveFolder.lastPathComponent)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .help(session.autoSaveFolder.path)
+                Spacer()
+                Button("변경") { chooseFolder() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.accent)
+            }
+            exportButton
+        }
+        .padding(.horizontal, 19).padding(.bottom, 19)
+    }
+
+    // Outline pill (Figma 198:1328): a plain Button (not a Menu — .borderlessButton
+    // menu style collapses the label, dropping the full-width capsule) that opens
+    // the format picker via a confirmationDialog.
+    private var exportButton: some View {
+        Button { showExportDialog = true } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "square.and.arrow.up").font(.system(size: 12, weight: .semibold))
+                Text("내보내기").font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .frame(maxWidth: .infinity).frame(height: 36)
+            .background(Capsule().fill(Color.white))
+            .overlay(Capsule().strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(session.transcript.lines.isEmpty)
+        .opacity(session.transcript.lines.isEmpty ? 0.4 : 1)
+        .confirmationDialog("내보내기 형식", isPresented: $showExportDialog, titleVisibility: .visible) {
+            Button("Markdown (.md)") { export("md", session.exportMarkdown) }
+            Button("Subtitles (.srt)") { export("srt", session.exportSRT) }
+            Button("Subtitles (.vtt)") { export("vtt", session.exportVTT) }
+            Button("Plain text (.txt)") { export("txt", session.exportText) }
+            Button("JSON (.json)") { export("json", session.exportJSON) }
+            Button("취소", role: .cancel) { }
+        }
+    }
+
+    /// Save-panel export writer — mirrors ContentView's helper so the export
+    /// entry point can live in this panel per the redesign.
+    private func export(_ ext: String, _ writer: @escaping (URL) throws -> Void) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "transcript.\(ext)"
+        if panel.runModal() == .OK, let url = panel.url { try? writer(url) }
     }
 
     // A thin hit-zone on the leading edge (panel now sits on the right side of

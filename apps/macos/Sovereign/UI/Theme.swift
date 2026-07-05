@@ -40,11 +40,13 @@ enum Theme {
         static let textTertiary = Color(nsColor: .tertiaryLabelColor)
         static let overlapMarker = Color(red: 0.9490, green: 0.6000, blue: 0.2902, opacity: 1.0)
         static let lowConf = Color(red: 0.8510, green: 0.5137, blue: 0.1412, opacity: 1.0)
+        // First three overridden to the redesign's speaker palette
+        // (Figma 188:662: #6773EB / #97D0FF / #BF97FF).
         static let speakerPalette: [Color] = [
-            Color(red: 0.3529, green: 0.4039, blue: 0.8471, opacity: 1.0),  // indigo
-            Color(red: 0.1843, green: 0.6314, blue: 0.6588, opacity: 1.0),  // teal
-            Color(red: 0.8784, green: 0.6000, blue: 0.1647, opacity: 1.0),  // amber
-            Color(red: 0.8784, green: 0.3765, blue: 0.5412, opacity: 1.0),  // rose
+            Color(red: 103/255, green: 115/255, blue: 235/255, opacity: 1.0),  // indigo
+            Color(red: 151/255, green: 208/255, blue: 255/255, opacity: 1.0),  // light blue
+            Color(red: 191/255, green: 151/255, blue: 255/255, opacity: 1.0),  // light purple
+            Color(red: 107/255, green: 164/255, blue: 255/255, opacity: 1.0),  // blue (#6BA4FF)
             Color(red: 0.2627, green: 0.6471, blue: 0.4196, opacity: 1.0),  // green
             Color(red: 0.6078, green: 0.4235, blue: 0.8471, opacity: 1.0),  // violet
             Color(red: 0.8784, green: 0.4627, blue: 0.2980, opacity: 1.0),  // coral

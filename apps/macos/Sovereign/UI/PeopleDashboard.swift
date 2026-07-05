@@ -1,7 +1,7 @@
 // PeopleDashboard.swift — the "사람" view that swaps in for the file tree in the
-// workspace explorer. Renders one card per enrolled voiceprint person (initials
-// avatar in their speaker color, meeting count, total talk-time, and a bar scaled
-// to the busiest person) across every saved transcript.
+// workspace explorer. Renders one compact white card per enrolled voiceprint
+// person (initials avatar in their speaker color, meeting count, total talk-time)
+// across every saved transcript.
 //
 // Data is computed by SessionController.peopleAnalytics() (FileManager over the
 // voiceprints + the workspace .md files → PeopleAnalytics.aggregate). The view is
@@ -13,9 +13,6 @@ import SwiftUI
 struct PeopleDashboard: View {
     let people: [Person]
     var autoRecognizedNames: Set<String> = []
-
-    /// Largest total talk-time, for scaling the bars (≥1 to avoid /0).
-    private var maxTalk: Double { max(1, people.map(\.totalTalk).max() ?? 1) }
 
     var body: some View {
         if people.isEmpty {
@@ -50,41 +47,42 @@ struct PeopleDashboard: View {
         .padding(20)
     }
 
+    // Compact person row (matches the left panel's white-card style): avatar +
+    // name + meeting/talk-time summary, one line, no bar.
     @ViewBuilder
     private func card(_ person: Person, colorIndex: Int) -> some View {
         let color = Theme.Colors.speaker(colorIndex)
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                avatar(person.name, color: color)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(person.name)
-                            .font(Theme.Fonts.speaker)
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                            .lineLimit(1)
-                        if autoRecognizedNames.contains(person.name) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Theme.Colors.accent)
-                                .help("음성 인식됨")
-                        }
-                    }
-                    Text("\(person.meetings)개 회의 · \(timeText(person.totalTalk))")
-                        .font(Theme.Fonts.status)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+        HStack(spacing: 10) {
+            avatar(person.name, color: color)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(person.name)
+                        .font(Theme.Fonts.speaker)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                         .lineLimit(1)
+                    if autoRecognizedNames.contains(person.name) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.Colors.accent)
+                            .help("음성 인식됨")
+                    }
                 }
-                Spacer(minLength: 0)
+                Text("\(person.meetings)개 회의 · \(timeText(person.totalTalk))")
+                    .font(Theme.Fonts.status)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .lineLimit(1)
             }
-            bar(person.totalTalk, color: color)
+            Spacer(minLength: 0)
         }
-        .padding(Theme.Space.cardPad)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        // Soft elevated shadow — same as the left session panel card (sidePanel).
         .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.card)
-                .fill(Theme.Colors.surfaceSunken)
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card)
-                    .strokeBorder(Theme.Colors.separator, lineWidth: 1))
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .fill(Color.white)
         )
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+            .strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
+        .shadow(color: .black.opacity(0.03), radius: 9, x: 4, y: 4)
     }
 
     /// Up-to-two-character initials of the name in their speaker color.
@@ -94,20 +92,6 @@ struct PeopleDashboard: View {
             .foregroundStyle(.white)
             .frame(width: 34, height: 34)
             .background(Circle().fill(color))
-    }
-
-    private func bar(_ talk: Double, color: Color) -> some View {
-        GeometryReader { geo in
-            let frac = min(1, talk / maxTalk)
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: Theme.Radius.meter)
-                    .fill(Theme.Colors.meterTrack)
-                RoundedRectangle(cornerRadius: Theme.Radius.meter)
-                    .fill(color)
-                    .frame(width: max(talk > 0 ? 4 : 0, geo.size.width * frac))
-            }
-        }
-        .frame(height: Theme.Size.meterH)
     }
 
     /// First grapheme of up to the first two whitespace-split tokens (handles both

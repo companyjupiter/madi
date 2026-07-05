@@ -76,6 +76,8 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/Theme.swift
   "$APP_DIR"/Sovereign/UI/Theme+Conf.swift
   "$APP_DIR"/Sovereign/UI/BrandLogo.swift
+  "$APP_DIR"/Sovereign/UI/SVGIcon.swift
+  "$APP_DIR"/Sovereign/UI/BlackToggle.swift
   "$APP_DIR"/Sovereign/UI/OrbView.swift
   "$APP_DIR"/Sovereign/UI/ContentView.swift
   "$APP_DIR"/Sovereign/UI/WorkspaceExplorer.swift
@@ -109,6 +111,7 @@ cp "$OUT/Madi" "$BUNDLE/Contents/MacOS/Madi"
 cp "$APP_DIR/Sovereign/Info.plist" "$BUNDLE/Contents/Info.plist"
 cp "$APP_DIR/Sovereign/Resources/logo_madi.png" "$BUNDLE/Contents/Resources/logo_madi.png"
 cp "$APP_DIR/Sovereign/Resources/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns"
+cp "$APP_DIR"/Sovereign/Resources/*.svg "$BUNDLE/Contents/Resources/"
 cp "$ROOT/engine/metal/out/transcribe" "$BUNDLE/Contents/MacOS/transcribe"
 # engine @embedFile's the metallib; external copy is informational only —
 # Resources/ so it's sealed by the bundle signature, not treated as code
