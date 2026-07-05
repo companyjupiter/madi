@@ -219,6 +219,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             if case .processing = session.phase { progressBanner }
             if !session.transcript.lines.isEmpty { viewModeBar }
+            if session.reconciling || session.reconcileNote != nil { reconcileBar }
             if viewMode == .detailed && !flaggedWords.isEmpty { reviewBar }
             if !session.transcript.lines.isEmpty {
                 TimelineScrubberView(
@@ -326,6 +327,29 @@ struct ContentView: View {
 
     // N2 review queue (상세 mode only): step through low-confidence words so the
     // reviewer doesn't have to scan a long transcript for the amber ones.
+    /// Post-session AI correction status + one-tap undo of speaker changes.
+    private var reconcileBar: some View {
+        HStack(spacing: 10) {
+            if session.reconciling {
+                ProgressView().controlSize(.small)
+                Text("AI가 화자·언어를 검토하는 중…").font(.system(size: 12))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            } else if let note = session.reconcileNote {
+                Image(systemName: "wand.and.stars").font(.system(size: 12)).foregroundStyle(Theme.Colors.accent)
+                Text(note).font(.system(size: 12)).foregroundStyle(Theme.Colors.textPrimary)
+                Spacer()
+                if session.transcript.hasSpeakerCorrections {
+                    Button("화자 교정 되돌리기") { session.revertReconcile() }
+                        .controlSize(.small).buttonStyle(.plain).foregroundStyle(Theme.Colors.accent)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 7)
+        .background(Theme.Colors.accent.opacity(0.06))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
     private var reviewBar: some View {
         let flagged = flaggedWords
         let idx = min(reviewIndex, max(0, flagged.count - 1))

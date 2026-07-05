@@ -38,6 +38,7 @@ let package = Package(
                 "Transcript/GlossaryStore.swift",
                 "Transcript/PersonalVocabulary.swift",
                 "Transcript/InterimTranslationCache.swift",
+                "Transcript/TranscriptReconciler.swift",
                 "Transcript/FAQTranslationStore.swift",
                 "Transcript/GistExtractor.swift",
                 "Transcript/MeetingPrepBrief.swift",

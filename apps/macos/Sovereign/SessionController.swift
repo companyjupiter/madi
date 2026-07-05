@@ -252,6 +252,19 @@ final class SessionController: EngineProcessDelegate {
     private(set) var qaAnswer: String? = nil
     private(set) var qaAsking = false
 
+    // ── AI reconcile (post-session diarization/language correction) ──────────
+    /// Opt-in: after a session, let the on-device LLM read the dialogue and fix
+    /// obvious speaker splits/mislabels and wrong-language lines. Off by default.
+    var aiReconcileEnabled: Bool = (UserDefaults.standard.object(forKey: "aiReconcileEnabled") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(aiReconcileEnabled, forKey: "aiReconcileEnabled") }
+    }
+    private(set) var reconciling = false
+    /// One-line summary of what the reconcile pass changed (nil = nothing / not run).
+    private(set) var reconcileNote: String? = nil
+    /// Retained per-segment audio (live mode) so a wrong-language line can be
+    /// re-transcribed from its own clip. (offset seconds, wav url), in order.
+    private var segmentAudio: [(offset: Double, url: URL)] = []
+
     private var attributedLines: [String] {
         transcript.lines.map { "\(speakerNames[$0.speaker] ?? "화자\($0.speaker)"): \($0.text)" }
     }
@@ -305,6 +318,8 @@ final class SessionController: EngineProcessDelegate {
                         // (cheap, ≤ once per 18s rail tick), not per word event.
                         if added { self.recomputeCoach() }
                     }
+                case "reconcile":
+                    self.applyReconcile(text)
                 default: break
                 }
             }
@@ -914,6 +929,7 @@ final class SessionController: EngineProcessDelegate {
         fileName = ""; chunksDone = 0; chunksTotal = 0
         livePartial = ""; livePartialTranslations = [:]
         streamingTranslation = nil; translateQueueDepth = 0
+        segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
         phase = .idle
     }
 
@@ -967,6 +983,7 @@ final class SessionController: EngineProcessDelegate {
         interimCache.clear()
         clearSummary()
         streamingTranslation = nil; translateQueueDepth = 0; lastCommitAt = Date()
+        segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
         // T11 prewarm: spawn the translate engine during the dead time between
         // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
         // first caption's translation doesn't pay the cold start.
@@ -996,6 +1013,7 @@ final class SessionController: EngineProcessDelegate {
         capture.firstSegmentSeconds = min(1.5, win) // AudioCapture 기본과 동기 (AUDIO_CTX=auto로 짧은 창 디코드 ~0.3s)
         capture.overlapSeconds = min(3, max(1, win * 0.3))
         capture.onSegment = { [weak self] offset, url in
+            self?.segmentAudio.append((offset, url))   // retain for AI re-transcription
             self?.engine?.feed(offset: offset, wav: url)
         }
         capture.onLevel = { [weak self] lvl in self?.level = lvl }
@@ -1179,6 +1197,129 @@ final class SessionController: EngineProcessDelegate {
             s.generateTitle(lines: attributedLines)
         }
         if autoSaveSummary, autoSaveEnabled { autoSummarizeForSave() }   // 요약본 별개 저장
+        kickReconcile()   // opt-in: LLM reviews speaker/language after the session
+    }
+
+    // MARK: AI reconcile (post-session)
+
+    /// Kick off the post-session LLM correction pass (if enabled + model present +
+    /// enough dialogue to reason about). Runs after finalize when the recording
+    /// engine is gone, so the DNA3 model has the machine to itself.
+    private func kickReconcile() {
+        guard aiReconcileEnabled, transcript.lines.count >= 4,
+              Set(transcript.lines.map(\.speaker)).count >= 1,
+              let s = ensureSummaryEngine() else { return }
+        reconciling = true
+        reconcileNote = nil
+        let numbered = TranscriptReconciler.promptInput(
+            lines: transcript.lines.map { (speaker: $0.speaker, text: $0.text) },
+            speakerName: { [weak self] in self?.speakerNames[$0] ?? "화자 \($0)" })
+        s.reconcile(numbered: numbered)
+    }
+
+    /// Apply the parsed correction plan: speaker merges/relabels immediately
+    /// (reversible in one step via transcript.revertSpeakerCorrections), then
+    /// re-transcribe any wrong-language lines from their retained audio (Phase 2).
+    private func applyReconcile(_ reply: String?) {
+        reconciling = false
+        guard let reply else { reconcileNote = nil; return }
+        let speakers = Set(transcript.lines.map(\.speaker))
+        let plan = TranscriptReconciler.parse(reply, speakers: speakers, lineCount: transcript.lines.count)
+        guard !plan.isEmpty else { reconcileNote = nil; return }
+
+        var merged = 0, relabeled = 0
+        for c in plan.merges { if case let .merge(from, into) = c { transcript.mergeSpeaker(from: from, into: into); merged += 1 } }
+        for c in plan.relabels {
+            if case let .relabel(line, sp) = c, line < transcript.lines.count {
+                transcript.relabelSpeaker(lineID: transcript.lines[line].id, to: sp); relabeled += 1
+            }
+        }
+        // Phase 2: re-transcribe wrong-language lines from their own audio clips.
+        let langFlags: [(id: UUID, lang: String)] = plan.languageFlags.compactMap { c in
+            if case let .language(line, lang) = c, line < transcript.lines.count {
+                return (transcript.lines[line].id, lang)
+            }
+            return nil
+        }
+        reTranscribeLanguage(langFlags)
+
+        var parts: [String] = []
+        if merged > 0 { parts.append("화자 \(merged)건 병합") }
+        if relabeled > 0 { parts.append("화자 \(relabeled)건 재지정") }
+        if !langFlags.isEmpty { parts.append("언어 \(langFlags.count)줄 재전사") }
+        reconcileNote = parts.isEmpty ? nil : "AI 교정: " + parts.joined(separator: " · ")
+        if merged > 0 || relabeled > 0 {
+            calendar.matchToSpeakers(speakerNames)   // speaker set changed → rematch attendees
+            recomputeCoach()
+        }
+    }
+
+    /// Revert all AI speaker corrections in one step (UI "되돌리기").
+    func revertReconcile() {
+        transcript.revertSpeakerCorrections()
+        reconcileNote = nil
+        calendar.matchToSpeakers(speakerNames)
+    }
+
+    /// Phase 2: re-decode each wrong-language line's own audio clip with the
+    /// correct language forced, then replace the line text. Uses the retained
+    /// live-segment wavs (offset → covering segment); file-mode sessions have no
+    /// per-segment audio, so they are flagged only (no re-transcription).
+    /// Best-effort: a segment ≈ one utterance in the short-turn clinic case; a
+    /// multi-line segment yields the whole window's text for the flagged line.
+    private func reTranscribeLanguage(_ flags: [(id: UUID, lang: String)]) {
+        guard !flags.isEmpty, !segmentAudio.isEmpty else { return }
+        let bin = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/transcribe")
+        let model = AssetManifest.modelURL
+        let bpe = AssetManifest.bundledBPE
+        let assets = AssetManifest.bundledAssetsDir
+        let segs = segmentAudio
+        for f in flags {
+            guard let line = transcript.lines.first(where: { $0.id == f.id }),
+                  let tok = TranscriptReconciler.languageToken(f.lang),
+                  let seg = (segs.last(where: { $0.offset <= line.start + 0.05 }) ?? segs.first),
+                  FileManager.default.fileExists(atPath: seg.url.path) else { continue }
+            let id = f.id
+            Task.detached {
+                guard let text = Self.runOneShotTranscribe(
+                    bin: bin, model: model, wav: seg.url, bpe: bpe, assets: assets, langToken: tok),
+                    !text.isEmpty else { return }
+                await MainActor.run { [weak self] in self?.transcript.editLine(id, text) }
+            }
+        }
+    }
+
+    /// Run the bundled `transcribe` binary once on a single wav in plain FILE
+    /// mode with a forced language, and return the transcription text. Runs off
+    /// the main actor (blocking Process I/O).
+    nonisolated private static func runOneShotTranscribe(
+        bin: URL, model: URL, wav: URL, bpe: URL, assets: URL, langToken: Int) -> String? {
+        let p = Process()
+        p.executableURL = bin
+        p.arguments = [model.path, wav.path, bpe.path]
+        p.currentDirectoryURL = assets
+        var env = ProcessInfo.processInfo.environment
+        env["DIAR"] = "0"; env["AUDIO_CTX"] = "auto"; env["WHISPER_LANG_ID"] = String(langToken)
+        env.removeValue(forKey: "STREAM"); env.removeValue(forKey: "APP_FILE")
+        p.environment = env
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard let s = String(data: data, encoding: .utf8) else { return nil }
+        // Plain file mode prints "=== TRANSCRIPTION (...) ===" then the text lines.
+        let lines = s.components(separatedBy: "\n")
+        guard let start = lines.firstIndex(where: { $0.hasPrefix("=== TRANSCRIPTION") }) else { return nil }
+        var text = ""
+        for l in lines[(start + 1)...] {
+            if l.hasPrefix("===") || l.hasPrefix("[") { break }   // next section / perf line
+            let t = l.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty { if text.isEmpty { continue } else { break } }
+            text += (text.isEmpty ? "" : " ") + t
+        }
+        return text.trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: export
