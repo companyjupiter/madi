@@ -1,6 +1,14 @@
-// Theme.swift — GENERATED from design/tokens.json by design/gen_theme.py.
-// DO NOT EDIT BY HAND: edit tokens.json (or import the designer's Figma
-// token export) and run design/sync_tokens.sh.
+// Theme.swift — design tokens. HAND-MAINTAINED (was originally generated from
+// design/tokens.json by design/gen_theme.py, but the generator now (a) writes to
+// a stale path `app/…` — the app lives in `apps/macos/…` — and (b) cannot emit
+// the light/dark adaptive NSColor closures the redesign needs). Re-running it
+// would REGRESS these adaptive colors, so it is NOT part of the build. Edit this
+// file directly; keep tokens.json roughly in sync as the designer's reference.
+//
+// Dark-mode rule: any color used as a SURFACE (card/panel/track) or TEXT/ink must
+// resolve per-appearance — use the adaptive tokens below (surface, surfaceSunken,
+// textPrimary/Secondary/Tertiary, separator, inkStrong/inkStrongOn) rather than
+// Color.white / .black / RGB literals, which stay fixed and break in dark mode.
 
 import SwiftUI
 
@@ -40,6 +48,30 @@ enum Theme {
         static let textTertiary = Color(nsColor: .tertiaryLabelColor)
         static let overlapMarker = Color(red: 0.9490, green: 0.6000, blue: 0.2902, opacity: 1.0)
         static let lowConf = Color(red: 0.8510, green: 0.5137, blue: 0.1412, opacity: 1.0)
+        // Redesign's monochrome "selected chip / primary CTA" ink. Hand-authored
+        // (gen_theme.py can't emit light/dark closures). INVERTS for dark so a
+        // near-black chip on a light window becomes a near-white chip on a dark
+        // window instead of vanishing. Paired glyph/text color = inkStrongOn.
+        static let inkStrong = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(red: 0.9294, green: 0.9294, blue: 0.9451, alpha: 1.0)   // near-white (dark)
+                : NSColor(red: 0.0784, green: 0.0863, blue: 0.0863, alpha: 1.0)   // #141616 (light)
+        })
+        static let inkStrongOn = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(red: 0.0784, green: 0.0863, blue: 0.0863, alpha: 1.0)   // near-black (dark)
+                : NSColor.white                                                    // white (light)
+        })
+        // BlackToggle OFF track — a solid mid-gray capsule the white knob reads
+        // against in both modes (#cdd2d2 light / mid-dark gray dark). ON uses accent.
+        static let switchOffTrack = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(red: 0.2824, green: 0.2863, blue: 0.3020, alpha: 1.0)   // #48494D (dark)
+                : NSColor(red: 0.8039, green: 0.8235, blue: 0.8235, alpha: 1.0)   // #cdd2d2 (light)
+        })
         // First three overridden to the redesign's speaker palette
         // (Figma 188:662: #6773EB / #97D0FF / #BF97FF).
         static let speakerPalette: [Color] = [
