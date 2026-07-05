@@ -31,6 +31,10 @@ struct Line: Identifiable {
     var end: Double
     var words: [Word]                 // per-word, so the view can flag low-confidence words
     var overlapSpeakers: [Int] = []   // from SPKOV, rendered as interruption markers
+    /// Lowest acoustic speaker-margin of the label windows covering this line
+    /// (S2). < ~0.35 means "the engine wasn't sure who spoke" — the only lines
+    /// the LLM reconcile pass may relabel (S3 fusion gate).
+    var speakerMargin: Double = 1.0
     var translations: [String: String] = [:]   // targetLang → text (multi-target live translation)
     var editedText: String? = nil     // user edit (live or post); overrides the joined words
     /// Words joined with the engine's spacing convention.
@@ -81,39 +85,56 @@ final class TranscriptStore {
         if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].editedText = t }
     }
 
-    // ── AI reconcile (post-session speaker corrections) ─────────────────────
-    // A snapshot of each line's speaker id, taken before the LLM correction pass
-    // applies merges/relabels, so the whole pass is reversible in one step.
-    private var speakerSnapshot: [UUID: Int]?
+    // ── AI reconcile (speaker corrections as OVERLAYS) ──────────────────────
+    // Corrections are id/speaker-keyed overlays, NOT direct mutations: every
+    // .word/.speaker event rebuilds `lines` from the raw labels (rebuildLive),
+    // and finalize regroups from SPKFIX — a direct mutation would be erased
+    // within seconds (역검증 fusion-0). Overlays are re-applied after every
+    // (re)group, exactly like translations/edits, and reverting = clearing the
+    // overlays — which restores the CURRENT acoustic labels, not a stale
+    // mid-session snapshot (fusion-3).
+    private var speakerMerges: [Int: Int] = [:]      // from → into (LLM merge)
+    private var speakerOverrides: [UUID: Int] = [:]  // line id → speaker (LLM relabel)
 
-    /// Merge every line of speaker `from` into `into` (over-split fix). Snapshots
-    /// the pre-correction speaker ids on the first change so it can be reverted.
+    /// Merge every line of speaker `from` into `into` (over-split fix).
     func mergeSpeaker(from: Int, into: Int) {
-        if speakerSnapshot == nil { speakerSnapshot = Dictionary(uniqueKeysWithValues: lines.map { ($0.id, $0.speaker) }) }
-        for i in lines.indices where lines[i].speaker == from { lines[i].speaker = into }
+        speakerMerges[from] = into
+        applySpeakerOverlays()
     }
 
     /// Re-attribute one line to a different speaker (mislabel fix).
     func relabelSpeaker(lineID: UUID, to speaker: Int) {
-        if speakerSnapshot == nil { speakerSnapshot = Dictionary(uniqueKeysWithValues: lines.map { ($0.id, $0.speaker) }) }
-        if let i = lines.firstIndex(where: { $0.id == lineID }) { lines[i].speaker = speaker }
+        speakerOverrides[lineID] = speaker
+        applySpeakerOverlays()
     }
 
-    var hasSpeakerCorrections: Bool { speakerSnapshot != nil }
+    var hasSpeakerCorrections: Bool { !speakerMerges.isEmpty || !speakerOverrides.isEmpty }
 
-    /// Undo every speaker correction from the reconcile pass in one step.
+    /// Undo every AI speaker correction in one step (back to acoustic labels).
     func revertSpeakerCorrections() {
-        guard let snap = speakerSnapshot else { return }
-        for i in lines.indices { if let s = snap[lines[i].id] { lines[i].speaker = s } }
-        speakerSnapshot = nil
+        speakerMerges.removeAll(); speakerOverrides.removeAll()
+        rebuildFromCurrentLabels()
     }
+
+    private func applySpeakerOverlays() {
+        for i in lines.indices {
+            if let ov = speakerOverrides[lines[i].id] { lines[i].speaker = ov }
+            else if let mg = speakerMerges[lines[i].speaker] { lines[i].speaker = mg }
+        }
+    }
+    /// Regroup from whatever label set currently applies (live vs finalized).
+    private func rebuildFromCurrentLabels() {
+        if finalized { finalize() } else { rebuildLive() }
+    }
+    private var finalized = false
 
     func reset() {
         lines.removeAll()
         merger = WordMerger()
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
         translationsByLine.removeAll(); editsByLine.removeAll()
-        speakerSnapshot = nil
+        speakerMerges.removeAll(); speakerOverrides.removeAll()
+        finalized = false; diarNamespaceBroken = false
     }
 
     /// Replace the transcript with externally-parsed lines — re-opening an
@@ -130,6 +151,7 @@ final class TranscriptStore {
             if let tr = translationsByLine[lines[i].id] { lines[i].translations = tr }
             if let e = editsByLine[lines[i].id] { lines[i].editedText = e }
         }
+        applySpeakerOverlays()
     }
 
     func ingest(_ event: EngineEvent) {
@@ -141,16 +163,48 @@ final class TranscriptStore {
             merger.add(Word(t0: t0, t1: t1, text: text, conf: conf))
             rebuildLive()
         case .speaker(let l):        spk.append(l); rebuildLive()
-        case .speakerFix(let l):     spkFix.append(l)
+        case .speakerFix(let l):
+            // S4: mid-session recluster corrections arrive DURING recording —
+            // update the live label windows in place (so earlier lines fix on
+            // screen now) and buffer for finalize. At finalize the last write
+            // per window wins (see dedupe there).
+            spkFix.append(l)
+            // 근접 매칭만: containment는 3s 오버랩으로 시간이 겹치는 이웃 창의
+            // 라벨까지 뒤집는다 (역검증 watchdog-conc-7)
+            var touched = false
+            for i in spk.indices where abs(spk[i].time - l.time) < 0.11 {
+                spk[i] = SpeakerLabel(time: spk[i].time, id: l.id, dur: spk[i].dur, margin: l.margin)
+                touched = true
+            }
+            if touched { rebuildLive() }
         case .speakerOverlap(let l): spkOv.append(l)
         default: break
         }
     }
 
+    /// W2 engine restart happened mid-session: the new engine's speaker ids
+    /// start over and its FLUSH SPKFIX only covers the re-fed tail — using it
+    /// would destroy the pre-restart labels (역검증 app-state-6). When set,
+    /// finalize keeps the LIVE labels (which already absorbed mid-session
+    /// fixes in place).
+    private var diarNamespaceBroken = false
+    func markDiarNamespaceBroken() { diarNamespaceBroken = true }
+
     /// Called on <<FLUSH_END>>: produce the corrected, overlap-annotated transcript.
     func finalize() {
+        finalized = true
         merger.finish()
-        let labels = spkFix.isEmpty ? spk : spkFix
+        // dedupe SPKFIX by window time keeping the LAST entry — mid-session
+        // corrections are superseded by the FLUSH full re-emission.
+        var lastByTime: [Int: SpeakerLabel] = [:]
+        var order: [Int] = []
+        for l in spkFix {
+            let key = Int((l.time * 100).rounded())
+            if lastByTime[key] == nil { order.append(key) }
+            lastByTime[key] = l
+        }
+        let dedupedFix = order.compactMap { lastByTime[$0] }
+        let labels = (dedupedFix.isEmpty || diarNamespaceBroken) ? spk : dedupedFix
         lines = group(words: merger.committed, labels: labels)
         applyOverlays()
         for i in lines.indices {
@@ -187,16 +241,25 @@ final class TranscriptStore {
             return best
         }
 
+        func marginAt(_ t: Double) -> Double {
+            for l in sorted where t >= l.time && t <= l.time + l.dur { return l.margin }
+            return 1.0
+        }
+
         var out: [Line] = []
         for w in words.sorted(by: { $0.t0 < $1.t0 }) {
             let sp = speakerAt(w.t0)
+            let m = marginAt(w.t0)
             if var last = out.last, last.speaker == sp, w.t0 - last.end < lineBreakGap {
                 last.end = max(last.end, w.t1)
                 last.words.append(w)
+                last.speakerMargin = min(last.speakerMargin, m)
                 out[out.count - 1] = last
             } else {
                 // id = first word's id → stable across rebuilds (see Line.id note)
-                out.append(Line(id: w.id, speaker: sp, start: w.t0, end: w.t1, words: [w]))
+                var line = Line(id: w.id, speaker: sp, start: w.t0, end: w.t1, words: [w])
+                line.speakerMargin = m
+                out.append(line)
             }
         }
         return out

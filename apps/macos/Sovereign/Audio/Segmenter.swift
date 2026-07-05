@@ -69,6 +69,9 @@ struct Segmenter {
         let offset: Double
         let samples: [Int16]
         let bodyCount: Int   // samples excluding the prepended overlap (for assertions)
+        /// Whether any voiced hop was seen in this window (W1 coverage watchdog:
+        /// a segment WITH speech that yields zero words is a suspected miss).
+        var hadSpeech: Bool = true
     }
 
     /// Push converted frames; returns any full segments that closed.
@@ -132,7 +135,8 @@ struct Segmenter {
         let samples = overlapTail + body
         // offset = start time of the FIRST sample of this segment (incl. overlap)
         let offset = max(0, Double(emittedBody - overlapTail.count) / Double(sampleRate))
-        let seg = Segment(offset: offset, samples: samples, bodyCount: body.count)
+        let seg = Segment(offset: offset, samples: samples, bodyCount: body.count,
+                          hadSpeech: earlyFlushSilenceSeconds <= 0 || windowHadSpeech)
         emittedBody += body.count
         overlapTail = Array(body.suffix(overlapSamples))
         segmentsEmitted += 1
