@@ -116,18 +116,41 @@ kernel void logit_filter_indirect(
     constant uint& num_suppress       [[buffer(2)]],
     device const uint*  step_ptr      [[buffer(3)]],
     constant uint& sample_begin       [[buffer(4)]],
+    constant uint& no_repeat_ngram    [[buffer(5)]],
     uint i [[thread_position_in_grid]])
 {
     (void)num_suppress;
     const float NEG = -3.4e38f;
     const uint step = step_ptr[0];
 
-    // anti-loop (thread 0): if tokens[step-1]==tokens[step-2]==tokens[step-3], ban it
-    if (i == 0 && step >= 3) {
+    // anti-loop (thread 0): if tokens[step-1]==tokens[step-2]==tokens[step-3], ban
+    // it. sample_begin floor keeps seed/prompt tokens out of the history window.
+    if (i == 0 && step >= sample_begin + 3) {
         uint t1 = past_tokens[step - 1];
         uint t2 = past_tokens[step - 2];
         uint t3 = past_tokens[step - 3];
         if (t1 == t2 && t2 == t3) logits[t1] = NEG;
+    }
+    // no_repeat_ngram (thread 0): the single-token ×3 rule above misses multi-token
+    // phrase loops ("A B A B", "단어X 단어Y 단어X 단어Y"). If the last (n-1) tokens
+    // already appeared earlier followed by token c, ban c — so the same n-gram can't
+    // be completed twice (HF no_repeat_ngram_size / fairseq NGramRepeatBlock). n=0 =
+    // off (env NO_REPEAT_NGRAM), so the default path is bit-identical.
+    //   WINDOWED: only scan the last NRNG_WIN tokens. A hallucination loop repeats
+    //   ADJACENTLY (period 1-4, so the match sits within a few tokens); a GENUINE
+    //   verbatim sentence repeat sits >NRNG_WIN tokens back (jfk×3: 26 tok apart) and
+    //   is spared — that longer repeat is tokenCollapse's job, not this guard's.
+    if (i == 0 && no_repeat_ngram >= 2 && step >= sample_begin + no_repeat_ngram) {
+        const uint NRNG_WIN = 16;
+        uint n = no_repeat_ngram;
+        uint suf = step - (n - 1);            // start of the trailing (n-1)-gram
+        uint j0 = (step > sample_begin + NRNG_WIN) ? (step - NRNG_WIN) : sample_begin;
+        for (uint j = j0; j + n <= step; ++j) {
+            bool match = true;
+            for (uint k = 0; k + 1 < n; ++k)
+                if (past_tokens[j + k] != past_tokens[suf + k]) { match = false; break; }
+            if (match) logits[past_tokens[j + n - 1]] = NEG;
+        }
     }
     // ban specials/timestamps ≥ 50258 (strided by 256)
     for (uint t = i + 50258; t < VOCAB; t += 256) logits[t] = NEG;
@@ -158,6 +181,7 @@ kernel void ts_rules_indirect(
     constant uint& num_suppress       [[buffer(2)]],
     device const uint*  step_ptr      [[buffer(3)]],
     constant uint& sample_begin       [[buffer(4)]],
+    constant uint& no_repeat_ngram    [[buffer(5)]],
     uint i [[thread_position_in_threadgroup]])
 {
     (void)num_suppress;
@@ -173,6 +197,23 @@ kernel void ts_rules_indirect(
         uint t2 = past_tokens[step - 2];
         uint t3 = past_tokens[step - 3];
         if (t1 == t2 && t2 == t3) logits[t1] = NEG;
+    }
+    // R0b': no_repeat_ngram (windowed) — bans the token that would complete an
+    // n-gram seen in the last NRNG_WIN tokens (adjacent phrase loops the ×3 rule
+    // misses). Text tokens only (< TS0), so timestamp pairing R1-R4 is unaffected;
+    // a genuine >NRNG_WIN-apart repeat is spared. n=0 = off (bit-identical).
+    if (i == 0 && no_repeat_ngram >= 2 && step >= sample_begin + no_repeat_ngram) {
+        const uint NRNG_WIN = 16;
+        uint n = no_repeat_ngram;
+        uint suf = step - (n - 1);
+        uint j0 = (step > sample_begin + NRNG_WIN) ? (step - NRNG_WIN) : sample_begin;
+        for (uint j = j0; j + n <= step; ++j) {
+            bool match = true;
+            for (uint k = 0; k + 1 < n; ++k)
+                if (past_tokens[j + k] != past_tokens[suf + k]) { match = false; break; }
+            uint c = past_tokens[j + n - 1];
+            if (match && c < TS0) logits[c] = NEG;
+        }
     }
     // R0c: begin window — ban EOT + space for the first 4 generated steps
     if (step < sample_begin + 4) {

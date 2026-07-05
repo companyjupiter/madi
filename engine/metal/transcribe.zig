@@ -524,6 +524,12 @@ fn evReady() void {
 // streaming partial hypothesis: the in-progress text after each decode batch.
 // Live consumers render it immediately and replace it when the final seg lands.
 var g_partials = false;
+// no_repeat_ngram: bans the token that would repeat an already-seen n-gram during
+// decode (env NO_REPEAT_NGRAM). The in-decode ×3 single-token rule missed multi-
+// token phrase loops ("A B A B"); this catches them BEFORE they stream to screen.
+// n=3 (default) leaves genuine short repeats — backchannel "네 네", "very very" —
+// untouched (they aren't 3-grams). 0 = off (kernel path bit-identical).
+var g_no_repeat_ngram: u32 = 3;
 fn evPartial(t0: f32, text: []const u8) void {
     if (g_ev == null) return;
     var b: [8192]u8 = undefined;
@@ -798,6 +804,7 @@ pub fn main() !void {
     const out = std.io.getStdOut().writer();
     evOpen(); // structured event stream (opt-in EVENTS_FILE) — frozen stdout text contract unaffected
     g_partials = std.posix.getenv("PARTIALS") != null; // streaming partial-hypothesis events (live)
+    g_no_repeat_ngram = @intCast(envU("NO_REPEAT_NGRAM", 3)); // decode-time phrase-loop guard (0=off)
     g_q4 = !std.mem.eql(u8, std.posix.getenv("Q4") orelse "0", "0"); // int4 quality probe
     if (std.posix.getenv("AUDIO_CTX")) |ac| { // truncated encoder context (see audioCtx)
         if (std.mem.eql(u8, ac, "auto")) {
@@ -1861,7 +1868,7 @@ pub fn main() !void {
                     try dec.kCvt16(Kd, bb_logits, bb_l16, B * VOCAB);
                     for (0..B) |b| {
                         try kSuppress(f_suppress, bb_logits + b * @as(usize, VOCAB), d_suppress.ptr, n_suppress);
-                        try kFilt(f_filt_plain, bb_logits + b * @as(usize, VOCAB), bb_tokens.ptr + b * MAX_TOK, bb_pos, PLb);
+                        try kFilt(f_filt_plain, bb_logits + b * @as(usize, VOCAB), bb_tokens.ptr + b * MAX_TOK, bb_pos, PLb, g_no_repeat_ngram);
                     }
                     try kStep(f_step, bb_pos);
                     for (0..B) |b| try kArgmaxConf(f_argmax, bb_logits + b * @as(usize, VOCAB), bb_tokens.ptr + b * MAX_TOK, d_conf, bb_pos, MAX_TOK);
@@ -2082,7 +2089,7 @@ pub fn main() !void {
                     try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
                     try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
                     try kSuppress(f_suppress, d_logits, d_suppress.ptr, n_suppress);
-                    try kFilt(if (ts_mode) f_filt_ts else f_filt_plain, d_logits, d_tokens.ptr, d_pos, sample_begin);
+                    try kFilt(if (ts_mode) f_filt_ts else f_filt_plain, d_logits, d_tokens.ptr, d_pos, sample_begin, g_no_repeat_ngram);
                     try kStep(f_step, d_pos); // pos += 1
                     try kArgmaxConf(f_argmax, d_logits, d_tokens.ptr, d_conf, d_pos, MAX_TOK); // tokens[pos]=argmax, conf[pos]=prob
                 }
@@ -3271,10 +3278,10 @@ fn kArgmaxConf(f: mtl.Function, logits: [*]f32, toks: [*]u32, conf: [*]f32, pos:
     const s = [_]usize{ PS, PS, PS, PS, U };
     try mtl.dispatch(f, .{ 1, 1, 1 }, .{ 1024, 1, 1 }, &p, &s);
 }
-fn kFilt(f: mtl.Function, logits: [*]f32, toks: [*]u32, pos: [*]u32, sample_begin: u32) !void {
-    var a0 = logits; var a1 = toks; var ns: u32 = 0; var a3 = pos; var sb = sample_begin;
-    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&ns), P(&a3), P(&sb) };
-    const s = [_]usize{ PS, PS, U, PS, U };
+fn kFilt(f: mtl.Function, logits: [*]f32, toks: [*]u32, pos: [*]u32, sample_begin: u32, nrng: u32) !void {
+    var a0 = logits; var a1 = toks; var ns: u32 = 0; var a3 = pos; var sb = sample_begin; var nr = nrng;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&ns), P(&a3), P(&sb), P(&nr) };
+    const s = [_]usize{ PS, PS, U, PS, U, U };
     try mtl.dispatch(f, .{ 1, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 fn kSuppress(f: mtl.Function, logits: [*]f32, ids: [*]u32, n: u32) !void {

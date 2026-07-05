@@ -909,9 +909,9 @@ struct ContentView: View {
             .frame(maxWidth: .infinity)
             VStack(alignment: .leading, spacing: 20) {
                 setupBlock("언어") { languageChips }
-                // 요청 3: 라이브 번역을 첫 화면에 노출 — 모델이 실제로 유효할
-                // 때만. 상대 언어 하나를 고르면 한국어와 쌍이 되어(클리닉 양방향)
-                // Settings 없이 바로 시작할 수 있다.
+                // 라이브 번역을 첫 화면에 노출 (모델 유효할 때만) — 최대 3개
+                // 언어 동시 선택. {한국어, 상대} 2개면 클리닉 양방향이 자동으로
+                // 켜지고, Settings 없이 바로 시작할 수 있다.
                 if AssetManifest.translateAvailable {
                     setupBlock("자막·번역", optional: true) { translatePairChips }
                 }
@@ -965,23 +965,50 @@ struct ContentView: View {
         UserDefaults.standard.set(id ?? 0, forKey: "languageTokenID")
     }
 
-    /// 요청 3: first-screen live-translation picker. Single-axis "pick the OTHER
-    /// language" — Korean is auto-paired so `{Korean, X}` always holds, which is
-    /// exactly what langCandidatePair reads for clinic bidirectional captions.
-    /// (3+ simultaneous targets stay a Settings-only advanced case; those don't
-    /// light up here — the set-equality guard shows 없음 instead of a wrong chip.)
+    /// First-screen live-translation picker — MULTI-SELECT, up to 3 languages at
+    /// once (translateTargets is a Set; the source language is auto-excluded per
+    /// line). Picking exactly {한국어, X} keeps clinic bidirectional captions
+    /// (langCandidatePair); 3 targets = one utterance rendered into all of them.
+    private let maxTranslateTargets = 3
     private var translatePairChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                setupChip("없음", selected: session.translateTargets.isEmpty) {
-                    session.translateTargets = []
-                }
-                ForEach([("English", "English"), ("Japanese", "日本語"), ("Chinese", "中文")], id: \.0) { code, label in
-                    setupChip(label, selected: session.translateTargets == ["Korean", code]) {
-                        session.translateTargets = (session.translateTargets == ["Korean", code]) ? [] : ["Korean", code]
+        VStack(alignment: .leading, spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    setupChip("없음", selected: session.translateTargets.isEmpty) {
+                        session.translateTargets = []
+                    }
+                    ForEach(SessionController.translateLangLabels, id: \.code) { lang in
+                        let on = session.translateTargets.contains(lang.code)
+                        setupChip(lang.label, selected: on) { toggleTranslateTarget(lang.code) }
+                            // at the cap, un-selected chips dim to signal "remove one first".
+                            .opacity(!on && session.translateTargets.count >= maxTranslateTargets ? 0.4 : 1)
                     }
                 }
             }
+            Text(translateHint)
+                .font(Theme.Fonts.status)
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .lineLimit(1)
+                .padding(.horizontal, 3)
+                .animation(.snappy, value: session.translateTargets)
+        }
+    }
+
+    private func toggleTranslateTarget(_ code: String) {
+        var t = session.translateTargets
+        if t.contains(code) { t.remove(code) }
+        else if t.count < maxTranslateTargets { t.insert(code) }   // 최대 3개 동시 번역
+        session.translateTargets = t
+    }
+
+    private var translateHint: String {
+        switch session.translateTargets.count {
+        case 0: return "번역할 언어를 고르세요 (최대 \(maxTranslateTargets)개 동시)"
+        case maxTranslateTargets: return "최대 \(maxTranslateTargets)개까지 동시 번역돼요"
+        default:
+            return session.isBidirectionalKoPair
+                ? "한국어 ⇄ 상대 언어 양방향 통역"
+                : "선택한 언어로 동시 번역 · 원문 언어는 자동 제외"
         }
     }
 
