@@ -11,7 +11,7 @@ import SwiftUI
 ///   general users who just want the content. `.detailed` — the review/editor
 ///   view: per-turn rows with timecode, amber low-confidence words, overlap
 ///   markers. Editor features never intrude on the clean reading view.
-enum TranscriptViewMode { case content, detailed }
+enum TranscriptViewMode { case content, detailed, chat }
 
 struct TranscriptView: View {
     let lines: [Line]
@@ -27,6 +27,11 @@ struct TranscriptView: View {
     var interim: String = ""       // live streaming-preview text (gray "진행 중")
     var interimTranslations: [String: String] = [:]   // provisional translation of the interim
     var fontSize: CGFloat = 13     // transcript body text size (user-adjustable)
+    // A7: the (line, language) whose translation is currently streaming in — a
+    // blinking caret ▍ is appended so a half-arrived translation reads as "still
+    // typing" rather than a finished (truncated) sentence.
+    var streamingTransID: UUID? = nil
+    var streamingTransLang: String? = nil
     // #2 inline editing of committed lines (live or post). onEdit commits the new
     // text; lockedLineID is the in-progress last line during recording (not yet
     // safe to edit). onRequestDetailed flips content→detailed so the edit gesture
@@ -76,12 +81,16 @@ struct TranscriptView: View {
     }
     private var multiSpeaker: Bool { Set(lines.map { $0.speaker }).count > 1 }
 
+    private var firstSpeaker: Int? { lines.first?.speaker }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Theme.Space.lineGap) {
                     if mode == .content {
                         ForEach(blocks) { b in contentBlock(b).id(b.id) }
+                    } else if mode == .chat {
+                        ForEach(lines) { line in chatRow(line).id(line.id) }
                     } else {
                         ForEach(lines) { line in row(line).id(line.id) }
                     }
@@ -95,13 +104,12 @@ struct TranscriptView: View {
                     // provisional translation of the interim. Rendered independently
                     // of the interim TEXT (T1 carryover): on window commit the last
                     // interim translation stays visible under the committed line
-                    // until its authoritative translation streams in.
+                    // until its authoritative translation streams in. C16: same
+                    // language-tag chip as committed translations, so the jump from
+                    // provisional→committed doesn't change the visual grammar.
                     if !interimTranslations.isEmpty {
                         ForEach(interimTranslations.keys.sorted(), id: \.self) { lang in
-                            Text(interimTranslations[lang] ?? "")
-                                .font(.system(size: max(12, fontSize - 4)))
-                                .foregroundStyle(Theme.Colors.accent.opacity(0.7))
-                                .italic()
+                            interimTranslationLine(lang, interimTranslations[lang] ?? "")
                         }
                     }
                 }
@@ -166,7 +174,7 @@ struct TranscriptView: View {
             Text(b.text).font(bodyFont)
                 .onTapGesture(count: 2) { if onEdit != nil { onRequestDetailed?() } }
             ForEach(blockTranslations(b), id: \.0) { lang, text in
-                translationLine(lang, text)
+                translationLine(lang, text, speaker: b.speaker, lineID: b.id)
             }
         }
     }
@@ -180,15 +188,64 @@ struct TranscriptView: View {
         return byLang.keys.sorted().map { ($0, byLang[$0]!.joined(separator: " ")) }
     }
 
-    /// One translation line: a short language tag + the translated text, accent-muted.
-    private func translationLine(_ lang: String, _ text: String) -> some View {
-        let tag = ["Korean": "한", "English": "EN", "Japanese": "日", "Chinese": "中"][lang] ?? lang
+    private static let langTag = ["Korean": "한", "English": "EN", "Japanese": "日", "Chinese": "中"]
+
+    /// One translation line: a short language tag + the translated text. C15: the
+    /// tag chip carries the SOURCE speaker's color so a two-party conversation's
+    /// translations are attributable pre-attentively. A7: a caret ▍ trails the
+    /// text while this (line, lang) is still streaming in.
+    private func translationLine(_ lang: String, _ text: String, speaker: Int? = nil,
+                                 lineID: UUID? = nil) -> some View {
+        let tag = Self.langTag[lang] ?? lang
+        let tagColor = speaker.map { Theme.Colors.speaker($0) } ?? Theme.Colors.accent
+        let streaming = lineID != nil && lineID == streamingTransID && lang == streamingTransLang
         return HStack(alignment: .top, spacing: 6) {
             Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
-                .foregroundStyle(Theme.Colors.accent).opacity(0.7)
+                .foregroundStyle(tagColor).opacity(0.75)
+                .frame(width: fontSize * 1.4, alignment: .leading)
+            (Text(text) + (streaming ? Text(" ▍") : Text("")))
+                .font(.system(size: fontSize * 0.92))
+                .foregroundStyle(Theme.Colors.accent).opacity(0.85)
+        }
+    }
+
+    /// Interim (provisional) translation — italic + gray, but the SAME tag chip as
+    /// the committed translationLine (C16).
+    private func interimTranslationLine(_ lang: String, _ text: String) -> some View {
+        let tag = Self.langTag[lang] ?? lang
+        return HStack(alignment: .top, spacing: 6) {
+            Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
+                .foregroundStyle(Theme.Colors.accent).opacity(0.55)
                 .frame(width: fontSize * 1.4, alignment: .leading)
             Text(text).font(.system(size: fontSize * 0.92))
-                .foregroundStyle(Theme.Colors.accent).opacity(0.85)
+                .foregroundStyle(Theme.Colors.accent.opacity(0.7)).italic()
+        }
+    }
+
+    /// C18: two-party chat layout — the first speaker leads (left), the other
+    /// trails (right), like a messenger. Each bubble carries the speaker color +
+    /// name, the text, and its translations underneath.
+    private func chatRow(_ line: Line) -> some View {
+        let side = ChatLayout.side(for: line.speaker, firstSpeaker: firstSpeaker)
+        let color = Theme.Colors.speaker(line.speaker)
+        return HStack {
+            if side == .trailing { Spacer(minLength: 40) }
+            VStack(alignment: side == .leading ? .leading : .trailing, spacing: 3) {
+                Text(name(line.speaker)).font(Theme.Fonts.speaker).foregroundStyle(color)
+                Text(line.text).font(bodyFont)
+                    .frame(maxWidth: .infinity, alignment: side == .leading ? .leading : .trailing)
+                    .multilineTextAlignment(side == .leading ? .leading : .trailing)
+                ForEach(line.translations.keys.sorted(), id: \.self) { lang in
+                    translationLine(lang, line.translations[lang]!, speaker: line.speaker, lineID: line.id)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.08)))
+            .overlay(alignment: side == .leading ? .leading : .trailing) {
+                Rectangle().fill(color).frame(width: 2).cornerRadius(1)
+            }
+            .frame(maxWidth: 520, alignment: side == .leading ? .leading : .trailing)
+            if side == .leading { Spacer(minLength: 40) }
         }
     }
 
@@ -254,7 +311,7 @@ struct TranscriptView: View {
                     .onTapGesture(count: 2) { beginEdit(line) }
             }
             ForEach(line.translations.keys.sorted(), id: \.self) { lang in
-                translationLine(lang, line.translations[lang]!)
+                translationLine(lang, line.translations[lang]!, speaker: line.speaker, lineID: line.id)
             }
         }
         .padding(.horizontal, 6).padding(.vertical, 4)

@@ -37,15 +37,40 @@ final class SessionController: EngineProcessDelegate {
     /// Always-on-top live-translation caption overlay (floats over the call app).
     private let captionOverlay = CaptionOverlayController()
     private(set) var captionOverlayOn = false
+    /// Persisted caption sizing / patient-panel config (clinic display batch).
+    var captionSettings = CaptionSettings.load() {
+        didSet { captionSettings.save(); if captionOverlayOn { refreshCaptionOverlay() } }
+    }
     func toggleCaptionOverlay() {
         captionOverlayOn.toggle()
-        if captionOverlayOn {
-            captionOverlay.show(CaptionView(session: self) { [weak self] in self?.hideCaptionOverlay() })
-        } else {
-            captionOverlay.hide()
-        }
+        if captionOverlayOn { refreshCaptionOverlay() } else { captionOverlay.hide() }
+    }
+    private func refreshCaptionOverlay() {
+        // staff caption (main screen) + optional large patient panel (external).
+        captionOverlay.show(staff: CaptionView(session: self, audience: .staff) { [weak self] in self?.hideCaptionOverlay() },
+                            patient: captionSettings.patientPanelEnabled ? CaptionView(session: self, audience: .patient) : nil,
+                            settings: captionSettings)
     }
     private func hideCaptionOverlay() { captionOverlayOn = false; captionOverlay.hide() }
+
+    // ── clinic display state exposed to the caption/transcript views ─────────
+    /// The (line, language) whose translation is CURRENTLY streaming in — drives
+    /// the typing caret (A7). Set on the first diverged partial, cleared on the
+    /// final result. Struct so SwiftUI diffs it cheaply.
+    struct TranslationRef: Equatable { let id: UUID; let lang: String }
+    private(set) var streamingTranslation: TranslationRef?
+    /// Pending translation turns (queued + in-flight) — the "N줄 대기" status (D20).
+    private(set) var translateQueueDepth = 0
+    /// Wall-clock of the last committed line — the commit-cadence ring reads it
+    /// against effectiveWindowSeconds to show progress toward the next commit (D19).
+    private(set) var lastCommitAt = Date()
+    /// The patient-facing caption language: explicit override, else the non-Korean
+    /// side of the translate pair, else the first target.
+    var patientCaptionLang: String? {
+        if let o = captionSettings.patientLangOverride { return o }
+        let nonKo = translateTargets.subtracting(["Korean"]).sorted()
+        return nonKo.first ?? translateTargets.sorted().first
+    }
 
     // ── live action rail scheduling ──
     /// Start the throttled extraction loop for a live recording (no-op unless the
@@ -486,6 +511,10 @@ final class SessionController: EngineProcessDelegate {
                     }
                     if self.livePartial != self.interimSource { self.scheduleInterimTranslate() }  // grew → refresh
                 } else {
+                    // A7: this turn finished streaming — drop the caret.
+                    if self.streamingTranslation == TranslationRef(id: id, lang: lang) {
+                        self.streamingTranslation = nil
+                    }
                     // stale-guard (T2): the line may have GROWN after this turn was
                     // queued (merge). The hash gate already re-queued the new text —
                     // don't let the old turn overwrite the fresher translation.
@@ -506,9 +535,12 @@ final class SessionController: EngineProcessDelegate {
                 if id == Self.interimID {
                     if !self.livePartial.isEmpty { self.livePartialTranslations[lang] = text }
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
+                    self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
                     self.transcript.setTranslation(id, lang: lang, text)
                 }
             }
+            // queue depth (D20) — the engine reports queued + in-flight turns.
+            t.onQueueChange = { [weak self] depth in self?.translateQueueDepth = depth }
             _ = t.start(engine: eng, model: AssetManifest.translateModelURL)
             translate = t
         }
@@ -881,6 +913,7 @@ final class SessionController: EngineProcessDelegate {
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
         livePartial = ""; livePartialTranslations = [:]
+        streamingTranslation = nil; translateQueueDepth = 0
         phase = .idle
     }
 
@@ -933,6 +966,7 @@ final class SessionController: EngineProcessDelegate {
         translatedHash.removeAll()
         interimCache.clear()
         clearSummary()
+        streamingTranslation = nil; translateQueueDepth = 0; lastCommitAt = Date()
         // T11 prewarm: spawn the translate engine during the dead time between
         // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
         // first caption's translation doesn't pay the cold start.
@@ -1069,6 +1103,7 @@ final class SessionController: EngineProcessDelegate {
         case .progressChunk(let k): chunksDone = max(chunksDone, k)
         case .wordSectionBegin:
             livePartial = ""; transcript.ingest(event)  // committed → drop interim
+            lastCommitAt = Date()                        // D19 commit-cadence ring
             translateStableLines()                       // translate now-stable prior lines
         case .languageDetected(let tok):
             // auto-detect locked → start the preview engine in THAT language

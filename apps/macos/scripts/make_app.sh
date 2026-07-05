@@ -75,6 +75,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/CalendarBridge.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
+  "$APP_DIR"/Sovereign/UI/ClinicDisplaySupport.swift
   "$APP_DIR"/Sovereign/UI/Theme.swift
   "$APP_DIR"/Sovereign/UI/Theme+Conf.swift
   "$APP_DIR"/Sovereign/UI/ContentView.swift
