@@ -37,18 +37,93 @@ struct TranscriptView: View {
     // safe to edit). onRequestDetailed flips content→detailed so the edit gesture
     // works from the reading view too.
     var onEdit: ((UUID, String) -> Void)? = nil
+    // Review flow: replace one low-confidence word (lineID, word index, new text).
+    var onEditWord: ((UUID, Int, String) -> Void)? = nil
     var lockedLineID: UUID? = nil
     var onRequestDetailed: (() -> Void)? = nil
     // Click-to-play: when set, each line shows a play button that hears that
     // moment of the source media. playingLine drives the play/pause icon.
     var onPlay: ((Line) -> Void)? = nil
     var playingLine: UUID? = nil
+    // Reports whether the content is scrolled down from the very top, so the
+    // caller can show its top fade only while earlier text is hidden above.
+    var onScrolledFromTopChange: ((Bool) -> Void)? = nil
     private var bodyFont: Font { .system(size: fontSize) }
+
+    private struct ScrollTopKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+    }
 
     @State private var editingSpeaker: Int? = nil
     @State private var draftName: String = ""
     @State private var editingLine: UUID? = nil
     @State private var editDraft: String = ""
+    // Word-review popover: index into `flaggedRefs` currently being edited (nil =
+    // closed), plus the draft text for that word.
+    @State private var reviewRefIndex: Int? = nil
+    @State private var reviewDraft: String = ""
+
+    /// Every low-confidence word in transcript order, with the location needed to
+    /// edit it (line id + word index). Drives the click-to-edit review popover.
+    private var flaggedRefs: [(lineID: UUID, wordIndex: Int, text: String)] {
+        var out: [(UUID, Int, String)] = []
+        for line in lines {
+            for (i, w) in line.words.enumerated() where w.conf < Theme.confThreshold {
+                let t = w.text.trimmingCharacters(in: .whitespaces)
+                if !t.isEmpty { out.append((line.id, i, t)) }
+            }
+        }
+        return out
+    }
+
+    private var currentReviewRef: (lineID: UUID, wordIndex: Int, text: String)? {
+        guard let idx = reviewRefIndex, idx >= 0, idx < flaggedRefs.count else { return nil }
+        return flaggedRefs[idx]
+    }
+
+    /// A tapped low-confidence word carries a `madi-review://w/<lineUUID>/<index>`
+    /// link; open its editor by finding the matching flagged ref.
+    private func openReview(_ url: URL) {
+        guard url.scheme == "madi-review",
+              url.host == "w" else { return }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count == 2, let wi = Int(parts[1]) else { return }
+        let lineID = parts[0]
+        if let idx = flaggedRefs.firstIndex(where: { $0.lineID.uuidString == lineID && $0.wordIndex == wi }) {
+            reviewRefIndex = idx
+            reviewDraft = flaggedRefs[idx].text
+        }
+    }
+
+    private func moveReview(_ delta: Int) {
+        let refs = flaggedRefs
+        guard !refs.isEmpty, let idx = reviewRefIndex else { return }
+        let next = ((idx + delta) % refs.count + refs.count) % refs.count
+        reviewRefIndex = next
+        reviewDraft = refs[next].text
+    }
+
+    private func applyReview() {
+        // Capture the list BEFORE editing: this View is a struct, so a deferred
+        // read of `flaggedRefs` would see the pre-edit snapshot. Compute the next
+        // word synchronously from `old` instead (the edited item drops out).
+        let old = flaggedRefs
+        guard let idx = reviewRefIndex, idx < old.count else { return }
+        let ref = old[idx]
+        onEditWord?(ref.lineID, ref.wordIndex, reviewDraft)
+        let newCount = old.count - 1
+        if newCount <= 0 { reviewRefIndex = nil; return }
+        let ni = min(idx, newCount - 1)
+        // Position ni after removing index idx maps back to old[ni] (before idx)
+        // or old[ni+1] (at/after idx).
+        let sourceIdx = ni < idx ? ni : ni + 1
+        reviewRefIndex = ni
+        reviewDraft = old[sourceIdx].text
+    }
+    // TextEditor has no auto-grow — measured via an invisible Text twin so the
+    // box matches the wrapped content's height instead of scrolling internally.
+    @State private var editDraftHeight: CGFloat = 0
 
     private func canEdit(_ line: Line) -> Bool { onEdit != nil && line.id != lockedLineID }
     private func beginEdit(_ line: Line) {
@@ -81,14 +156,28 @@ struct TranscriptView: View {
     }
     private var multiSpeaker: Bool { Set(lines.map { $0.speaker }).count > 1 }
 
+    /// Scroll id for a content-mode block — a String so it can't collide with the
+    /// UUID scroll ids the detailed rows use (see the mode branch in body).
+    private func blockScrollID(_ id: UUID) -> String { "block-\(id.uuidString)" }
+
+    /// Does this line contain a low-confidence (clickable review) word?
+    private func lineHasFlagged(_ line: Line) -> Bool {
+        line.words.contains { $0.conf < Theme.confThreshold }
+    }
+
     private var firstSpeaker: Int? { lines.first?.speaker }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: Theme.Space.lineGap) {
+                LazyVStack(alignment: .leading, spacing: 22) {   // Figma 195:866 block gap
                     if mode == .content {
-                        ForEach(blocks) { b in contentBlock(b).id(b.id) }
+                        // Distinct id namespace from the detailed rows: a content
+                        // block's id would otherwise equal its last line's id, which
+                        // collides with that line's row id and makes LazyVStack keep
+                        // the merged-paragraph view alongside the rows after a mode
+                        // switch (the whole transcript rendered a second time).
+                        ForEach(blocks) { b in contentBlock(b).id(blockScrollID(b.id)) }
                     } else if mode == .chat {
                         ForEach(lines) { line in chatRow(line).id(line.id) }
                     } else {
@@ -112,25 +201,55 @@ struct TranscriptView: View {
                             interimTranslationLine(lang, interimTranslations[lang] ?? "")
                         }
                     }
+                    // Clearance below the newest line: auto-scroll anchors THIS
+                    // tail to the bottom, so the live/interim line lands ~50pt
+                    // above the window edge — clear of the bottom fade instead of
+                    // hidden under it. (Also gives a static transcript's last line
+                    // breathing room above the fade.)
+                    Color.clear.frame(height: 50).id("liveTail")
                 }
                 .padding(Theme.Space.window)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: ScrollTopKey.self,
+                        value: geo.frame(in: .named("transcriptScroll")).minY)
+                })
+            }
+            .coordinateSpace(name: "transcriptScroll")
+            .onPreferenceChange(ScrollTopKey.self) { minY in
+                onScrolledFromTopChange?(minY < -2)
             }
             // mouse-drag selection + ⌘C copy across the whole transcript
             .textSelection(.enabled)
-            .onChange(of: lines.count) { _, _ in
-                if let last = lines.last {
-                    // 50ms: 기본(≈250ms) 스크롤 애니메이션이 새 줄 표시를 그만큼
-                    // 늦춰 보이게 한다 — 라이브 전사는 즉시성이 우선.
-                    withAnimation(.linear(duration: 0.05)) { proxy.scrollTo(last.id, anchor: .bottom) }
+            // Intercept taps on low-confidence-word links → open the review popover
+            // instead of trying to open a URL.
+            .environment(\.openURL, OpenURLAction { url in
+                openReview(url); return .handled
+            })
+            // Keep the word being reviewed on screen as 이전/다음 moves through them.
+            .onChange(of: reviewRefIndex) { _, _ in
+                if let ref = currentReviewRef {
+                    withAnimation { proxy.scrollTo(ref.lineID, anchor: .center) }
                 }
             }
+            .onChange(of: lines.count) { _, _ in
+                // 50ms: 기본(≈250ms) 스크롤 애니메이션이 새 줄 표시를 그만큼
+                // 늦춰 보이게 한다 — 라이브 전사는 즉시성이 우선.
+                withAnimation(.linear(duration: 0.05)) { proxy.scrollTo("liveTail", anchor: .bottom) }
+            }
             .onChange(of: scrollTick) { _, _ in
-                if let t = scrollTarget {
+                guard let t = scrollTarget else { return }
+                // In content mode the line's row doesn't exist — scroll to the
+                // merged block that contains it instead.
+                if mode == .content {
+                    if let blk = blocks.first(where: { $0.lineIDs.contains(t) }) {
+                        withAnimation { proxy.scrollTo(blockScrollID(blk.id), anchor: .center) }
+                    }
+                } else {
                     withAnimation { proxy.scrollTo(t, anchor: .center) }
                 }
             }
             .onChange(of: interim) { _, v in
-                if !v.isEmpty { proxy.scrollTo("interim", anchor: .bottom) }
+                if !v.isEmpty { withAnimation { proxy.scrollTo("liveTail", anchor: .bottom) } }
             }
             .alert("화자 이름", isPresented: Binding(
                 get: { editingSpeaker != nil },
@@ -148,15 +267,17 @@ struct TranscriptView: View {
     /// Clean reading block: just speaker name (only when >1 speaker) + content.
     /// No timecode, no amber, no overlap markers — pure meeting content.
     private func contentBlock(_ b: SpeakerBlock) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Space.lineInner) {
+        VStack(alignment: .leading, spacing: 9) {   // Figma 188:663 header→body gap
             if multiSpeaker {
                 Button {
                     draftName = names[b.speaker] ?? ""
                     editingSpeaker = b.speaker
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(name(b.speaker)).font(Theme.Fonts.speaker)
-                            .foregroundStyle(Theme.Colors.speaker(b.speaker))
+                    HStack(spacing: 6) {
+                        Circle().fill(Theme.Colors.speaker(b.speaker))
+                            .frame(width: 6, height: 6)
+                        Text(name(b.speaker)).font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
                         if autoRecognizedSpeakers.contains(b.speaker) {
                             Label("음성 인식됨", systemImage: "checkmark.seal.fill")
                                 .labelStyle(.iconOnly)
@@ -172,6 +293,7 @@ struct TranscriptView: View {
             // double-click in the reading view flips to 상세 so the per-line edit
             // gesture is available (editing is line-granular; blocks join lines).
             Text(b.text).font(bodyFont)
+                .lineSpacing(fontSize * 0.3)
                 .onTapGesture(count: 2) { if onEdit != nil { onRequestDetailed?() } }
             ForEach(blockTranslations(b), id: \.0) { lang, text in
                 translationLine(lang, text, speaker: b.speaker, lineID: b.id)
@@ -250,10 +372,10 @@ struct TranscriptView: View {
     }
 
     private func row(_ line: Line) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Space.lineInner) {
-            HStack(spacing: Theme.Space.chipGap) {
+        VStack(alignment: .leading, spacing: 9) {   // Figma 188:663 header→body gap
+            HStack(spacing: 6) {
                 Circle().fill(Theme.Colors.speaker(line.speaker))
-                    .frame(width: Theme.Size.speakerDot, height: Theme.Size.speakerDot)
+                    .frame(width: 6, height: 6)
                 // click the speaker chip to give them a name (applies to all
                 // their lines). A Button (not onTapGesture) so the tap wins over
                 // the transcript's .textSelection.
@@ -262,8 +384,8 @@ struct TranscriptView: View {
                     editingSpeaker = line.speaker
                 } label: {
                     HStack(spacing: 4) {
-                        Text(name(line.speaker)).font(Theme.Fonts.speaker)
-                            .foregroundStyle(Theme.Colors.speaker(line.speaker))
+                        Text(name(line.speaker)).font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
                         if autoRecognizedSpeakers.contains(line.speaker) {
                             Label("음성 인식됨", systemImage: "checkmark.seal.fill")
                                 .labelStyle(.iconOnly)
@@ -299,16 +421,57 @@ struct TranscriptView: View {
                 }
             }
             if editingLine == line.id {
-                TextField("문장 편집", text: $editDraft, axis: .vertical)
-                    .font(bodyFont).textFieldStyle(.plain)
+                // TextField(axis: .vertical) silently ignores .lineSpacing() on macOS
+                // (NSTextField limitation) — TextEditor's NSTextView backing honors it,
+                // so editing now matches the read view's line-height. Trade-off: Return
+                // inserts a newline instead of submitting; save via button or ⌘-Return.
+                TextEditor(text: $editDraft)
+                    .font(bodyFont).lineSpacing(fontSize * 0.3)
+                    .scrollContentBackground(.hidden)
+                    .frame(height: max(fontSize * 1.8, editDraftHeight))
+                    .padding(.horizontal, -5)
+                    .padding(.top, 2)
+                    .overlay(
+                        // .fixedSize forces this Text to report its true wrapped
+                        // height even though the overlay slot it sits in is itself
+                        // height-constrained by the .frame() above — without it the
+                        // measurement is squeezed to fit the CURRENT height, so it
+                        // can never grow past the initial minimum (feedback loop).
+                        Text(editDraft.isEmpty ? " " : editDraft)
+                            .font(bodyFont).lineSpacing(fontSize * 0.3)
+                            .opacity(0)
+                            .padding(.vertical, 8)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .background(GeometryReader { geo in
+                                Color.clear
+                                    .onAppear { editDraftHeight = geo.size.height }
+                                    // React to geo.size itself (not just editDraft) —
+                                    // a window resize rewraps the text at the SAME
+                                    // content, which onChange(of: editDraft) misses,
+                                    // leaving the box stuck at the old height.
+                                    .onChange(of: geo.size) { _, newSize in editDraftHeight = newSize.height }
+                            })
+                            .allowsHitTesting(false)
+                    )
                     .onSubmit { commitEdit() }
-                HStack(spacing: 8) {
-                    Button("저장") { commitEdit() }.controlSize(.small).keyboardShortcut(.return)
+                HStack(spacing: 6) {
+                    Button("저장") { commitEdit() }.controlSize(.small).keyboardShortcut(.return, modifiers: .command)
                     Button("취소") { editingLine = nil }.controlSize(.small).keyboardShortcut(.cancelAction)
                 }
+                .padding(.top, -2)
             } else {
-                Text(attributed(line)).font(bodyFont)
+                let body = Text(attributed(line)).font(bodyFont)
+                    .lineSpacing(fontSize * 0.3)
                     .onTapGesture(count: 2) { beginEdit(line) }
+                // On a line WITH review links, disable text selection so the low-
+                // confidence words read as clickable (pointer cursor, single-click
+                // opens the editor) instead of fighting the drag-select I-beam.
+                // Lines without links stay selectable (inherit the ScrollView's).
+                if lineHasFlagged(line) {
+                    body.textSelection(.disabled)
+                } else {
+                    body
+                }
             }
             ForEach(line.translations.keys.sorted(), id: \.self) { lang in
                 translationLine(lang, line.translations[lang]!, speaker: line.speaker, lineID: line.id)
@@ -317,8 +480,49 @@ struct TranscriptView: View {
         .padding(.horizontal, 6).padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(focusedLine == line.id ? Theme.Colors.lowConf.opacity(0.14) : .clear)
+                .fill(reviewHighlight(line) ? Theme.Colors.lowConf.opacity(0.14) : .clear)
         )
+        // Word-review popover anchors to the row holding the current flagged word.
+        .popover(isPresented: Binding(
+            get: { currentReviewRef?.lineID == line.id },
+            set: { if !$0 { reviewRefIndex = nil } }
+        ), arrowEdge: .top) {
+            reviewPopover
+        }
+    }
+
+    /// Highlight the row while its word is being reviewed (or on a review jump).
+    private func reviewHighlight(_ line: Line) -> Bool {
+        focusedLine == line.id || currentReviewRef?.lineID == line.id
+    }
+
+    @ViewBuilder
+    private var reviewPopover: some View {
+        if let idx = reviewRefIndex, idx < flaggedRefs.count {
+            let total = flaggedRefs.count
+            VStack(alignment: .leading, spacing: 12) {
+                Text("검토 \(idx + 1) / \(total)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                TextField("수정할 단어", text: $reviewDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 14))
+                    .frame(width: 240)
+                    .onSubmit { applyReview() }
+                HStack(spacing: 8) {
+                    Button { moveReview(-1) } label: { Image(systemName: "chevron.left") }
+                        .help("이전")
+                    Button { moveReview(1) } label: { Image(systemName: "chevron.right") }
+                        .help("다음")
+                    Spacer()
+                    Button("적용 후 다음") { applyReview() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.return, modifiers: [])
+                }
+            }
+            .padding(14)
+            .frame(minWidth: 260)
+        }
     }
 
     private func attributed(_ line: Line) -> AttributedString {
@@ -332,10 +536,13 @@ struct TranscriptView: View {
             if w.conf < Theme.confThreshold {
                 // low confidence: amber + underline + slight fade — the user's eye
                 // lands on exactly the words to double-check (validated: real errors
-                // like 섹스→색스, 빛공예→빛공해 fall here).
-                run.foregroundColor = Theme.Colors.lowConf
+                // like 섹스→색스, 빛공예→빛공해 fall here). Also a tappable link that
+                // opens the word-review popover (handled via the openURL override).
                 run.underlineStyle = .single
                 run.foregroundColor = Theme.Colors.lowConf.opacity(0.85)
+                if let url = URL(string: "madi-review://w/\(line.id.uuidString)/\(i)") {
+                    run.link = url
+                }
             }
             s += run
         }
@@ -348,7 +555,9 @@ struct TranscriptView: View {
         return s
     }
 
-    private func name(_ id: Int) -> String { names[id] ?? "화자 \(id)" }
+    // "Speaker N" (1-based) matches the redesign's side-panel share list, so the
+    // same person carries one label across transcript and stats.
+    private func name(_ id: Int) -> String { names[id] ?? "Speaker \(id + 1)" }
     private func timecode(_ t: Double) -> String {
         String(format: "%02d:%02d", Int(t) / 60, Int(t) % 60)
     }

@@ -27,6 +27,7 @@ struct ModelGateView: View {
                     ProgressView(value: p) {
                         Text("음성 모델 다운로드 중 (\(Int(p * 100))%)")
                     }
+                    .tint(Theme.Colors.accent)
                     .frame(width: Theme.Size.gateProgressW)
                     Text("~\(ByteCountFormatter.string(fromByteCount: AssetManifest.model.sizeBytes, countStyle: .file)) · 최초 1회").font(Theme.Fonts.status)
                         .foregroundStyle(Theme.Colors.textSecondary)

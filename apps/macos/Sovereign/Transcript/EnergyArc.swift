@@ -17,14 +17,18 @@ enum EnergyArc {
     ///   - lines: diarized transcript lines (uses each line's start/end and
     ///            overlapSpeakers; empty/degenerate input → []).
     ///   - buckets: number of time bins to emit (clamped to ≥ 1).
+    ///   - spanEnd: optional live "now" (same clock as line offsets). During a
+    ///              recording this extends the span past the last committed line
+    ///              so the graph grows in real time — ongoing silence shows as a
+    ///              low tail instead of the graph freezing at the last commit.
     /// - Returns: `buckets` values in 0...1, or [] when there is no usable span.
-    static func compute(lines: [Line], buckets: Int = 30) -> [Double] {
+    static func compute(lines: [Line], buckets: Int = 30, spanEnd: Double? = nil) -> [Double] {
         let n = max(1, buckets)
         guard !lines.isEmpty else { return [] }
 
-        // Meeting span from the earliest onset to the latest offset.
+        // Meeting span from the earliest onset to the latest offset (or live now).
         let t0 = lines.map(\.start).min() ?? 0
-        let t1 = lines.map(\.end).max() ?? 0
+        let t1 = max(lines.map(\.end).max() ?? 0, spanEnd ?? 0)
         let span = t1 - t0
         guard span > 0 else { return [] }
 
@@ -34,6 +38,19 @@ enum EnergyArc {
         // Raw energy accumulators per bucket.
         var speech = [Double](repeating: 0, count: n)   // seconds of speech in bucket
         var overlap = [Double](repeating: 0, count: n)  // overlap-weighted speech events
+        var turns = [Double](repeating: 0, count: n)    // rapid speaker hand-offs (back-and-forth)
+
+        // Turn-taking energy: a speaker change with only a short gap is lively
+        // discussion; the SAME density of continuous monologue is not — so a
+        // continuously-busy meeting still shows flow (rapid exchange vs. one
+        // person holding the floor). Counting only sub-2s hand-offs also means a
+        // lone line after a long silence adds no energy (keeps "silence → 0").
+        for i in 1..<lines.count {
+            guard lines[i].speaker != lines[i - 1].speaker else { continue }
+            guard lines[i].start - lines[i - 1].end < 2.0 else { continue }
+            let b = min(max(Int((lines[i].start - t0) / bucketDur), 0), n - 1)
+            turns[b] += 1
+        }
 
         for l in lines {
             let s = max(t0, l.start)
@@ -58,13 +75,14 @@ enum EnergyArc {
             }
         }
 
-        // Per-bucket raw score: speaking density (0...1) plus overlap pressure.
+        // Per-bucket raw score: speaking density + rapid turn-taking + overlap.
         // Silence is implicit — a bucket with little speech scores low.
         var raw = [Double](repeating: 0, count: n)
         for b in 0..<n {
             let density = min(1.0, speech[b] / bucketDur)             // 0 = silent
+            let turnNorm = min(1.0, turns[b] / 2.0)                   // 2+ hand-offs = full
             let ov = bucketDur > 0 ? min(1.0, overlap[b] / bucketDur) : 0
-            raw[b] = density + 0.5 * ov
+            raw[b] = 0.55 * density + 0.30 * turnNorm + 0.15 * ov
         }
 
         // Normalize to 0...1 by the busiest bucket so the arc fills the gamut.

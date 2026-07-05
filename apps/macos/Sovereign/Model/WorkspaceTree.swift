@@ -36,9 +36,20 @@ struct FileNode: Identifiable, Hashable {
 final class WorkspaceTree {
     private(set) var root: URL
     private(set) var nodes: [FileNode] = []
+    /// True while a (re)scan is in flight — the explorer shows a loading state
+    /// instead of the empty state so a big folder doesn't look like "no files".
+    private(set) var isLoading = false
 
-    /// Cap the walk so pointing the workspace at a deep tree can't hang.
+    /// Cap the walk so pointing the workspace at a deep OR wide tree can't hang —
+    /// depth bounds how far down it goes, item count bounds how much it reads in
+    /// any single directory (e.g. autoSaveFolder accidentally set to a folder
+    /// full of large repos).
     private let maxDepth = 4
+    private let maxItemsPerDir = 2000
+
+    /// Monotonic token so a stale scan (root changed again before it finished)
+    /// can't clobber nodes/isLoading after a newer scan already landed.
+    private var generation = 0
 
     init(root: URL) {
         self.root = root
@@ -51,24 +62,37 @@ final class WorkspaceTree {
         reload()
     }
 
-    /// Re-walk the current root. Cheap for a transcripts folder; call after a
-    /// session auto-saves so the new .md appears.
+    /// Re-walk the current root off the main thread so a huge/deep folder can't
+    /// hang the UI; call after a session auto-saves so the new .md appears.
     func reload() {
-        nodes = Self.children(of: root, depth: 0, maxDepth: maxDepth)
+        generation += 1
+        let gen = generation
+        let scanRoot = root
+        let maxDepth = self.maxDepth
+        let maxItems = self.maxItemsPerDir
+        isLoading = true
+        Task.detached(priority: .userInitiated) {
+            let result = Self.children(of: scanRoot, depth: 0, maxDepth: maxDepth, maxItems: maxItems)
+            await MainActor.run {
+                guard gen == self.generation else { return }   // a newer scan already won
+                self.nodes = result
+                self.isLoading = false
+            }
+        }
     }
 
-    private static func children(of dir: URL, depth: Int, maxDepth: Int) -> [FileNode] {
+    private nonisolated static func children(of dir: URL, depth: Int, maxDepth: Int, maxItems: Int) -> [FileNode] {
         guard depth < maxDepth else { return [] }
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]) else { return [] }
 
-        let mapped: [FileNode] = items.compactMap { url in
+        let mapped: [FileNode] = items.prefix(maxItems).compactMap { url in
             let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             if isDir {
                 return FileNode(url: url, isDir: true,
-                                children: children(of: url, depth: depth + 1, maxDepth: maxDepth))
+                                children: children(of: url, depth: depth + 1, maxDepth: maxDepth, maxItems: maxItems))
             }
             return FileNode(url: url, isDir: false, children: nil)
         }

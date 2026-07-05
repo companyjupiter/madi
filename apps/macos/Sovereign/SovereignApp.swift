@@ -38,14 +38,15 @@ struct SovereignApp: App {
     var body: some Scene {
         WindowGroup("Madi") {
             ContentView(session: session, downloader: downloader)
-                .frame(minWidth: Theme.Size.windowMinW, minHeight: Theme.Size.windowMinH)
                 .preferredColorScheme(appearance.colorScheme)
                 .task { downloader.ensureModel() }
                 .task { dictation.micBusy = { session.phase == .recording || session.phase == .paused } }
         }
         .windowStyle(.titleBar)
-        .windowResizability(.contentMinSize)
-        .defaultSize(width: 1100, height: 720)
+        // ContentView drives the window size imperatively (compact "Set to start"
+        // frame ↔ expanded working layout), so leave resizing automatic here.
+        .windowResizability(.automatic)
+        .defaultSize(width: 500, height: 900)
         .commands {
             // Replace the empty default Help menu with a link to the bundled
             // user manual (sealed into Resources/manual/ by make_app.sh).

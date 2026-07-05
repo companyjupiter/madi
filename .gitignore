@@ -64,3 +64,4 @@ apps/macos/DerivedData/
 engine/metal/bench/wer_runs/
 engine/metal/bench/runs/*
 !engine/metal/bench/runs/README.md
+.claude/scheduled_tasks.lock

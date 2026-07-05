@@ -18,33 +18,93 @@ struct WorkspaceExplorer: View {
     @State private var dragStartWidth: Double? = nil
     @State private var handleHovering = false
     @State private var mode: ExplorerMode = .files
+    @State private var showExportDialog = false
     private let minWidth = 180.0, maxWidth = 460.0
-    private enum ExplorerMode: String, CaseIterable { case files, people, openLoops, voiceprints }
+    private enum ExplorerMode: String, CaseIterable {
+        case files, people, openLoops, voiceprints
+        var label: String {
+            switch self {
+            case .files: return "파일"
+            case .people: return "사람"
+            case .openLoops: return "열린 항목"
+            case .voiceprints: return "음성"
+            }
+        }
+    }
 
+    // Pill-shaped segmented switch (Figma node 26:14) — replaces the native
+    // .segmented Picker. A single accent capsule slides between segments via
+    // matchedGeometryEffect instead of each segment owning its own fill.
+    @Namespace private var modeSwitcherNS
+
+    // Redesign hides 열린 항목/음성 from the tab bar (features and views stay
+    // wired — restore by iterating allCases again).
+    private static let visibleModes: [ExplorerMode] = [.files, .people]
+
+    // rev.2 pill (Figma 188:761): gray track, WHITE sliding thumb with a soft
+    // drop shadow — matches the center 내용/상세 switch.
+    private var modeSwitcher: some View {
+        HStack(spacing: 1) {
+            ForEach(Self.visibleModes, id: \.self) { m in
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { mode = m }
+                } label: {
+                    Text(m.label)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(mode == m ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                        .background {
+                            if mode == m {
+                                Capsule().fill(Color.white)
+                                    .shadow(color: .black.opacity(0.06), radius: 1, y: 2)
+                                    .matchedGeometryEffect(id: "modeSwitcherPill", in: modeSwitcherNS)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(Theme.Colors.surfaceSunken))
+    }
+
+    // Right panel (Figma 188:734): pill tabs on top, a FLAT recent-transcript
+    // list (the folder tree/breadcrumb is gone — 변경 is the only folder
+    // control), and a pinned bottom block: 자동저장 toggle / 폴더 row / 내보내기.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            Picker("", selection: $mode) {
-                Text("파일").tag(ExplorerMode.files)
-                Text("사람").tag(ExplorerMode.people)
-                Text("열린 항목").tag(ExplorerMode.openLoops)
-                Text("음성").tag(ExplorerMode.voiceprints)
-            }
-            .pickerStyle(.segmented).labelsHidden()
-            .padding(.horizontal, 12).padding(.bottom, 8)
-            Divider().overlay(Theme.Colors.separator)
+            modeSwitcher
+                .padding(.horizontal, 17).padding(.top, 19)
             switch mode {
             case .files:
-                if session.workspace.nodes.isEmpty {
+                if session.workspace.isLoading {
+                    loadingState
+                } else if recentTranscripts.isEmpty {
                     emptyState
                 } else {
-                    List {
-                        OutlineGroup(session.workspace.nodes, children: \.children) { node in
-                            row(node)
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(recentTranscripts, id: \.self) { url in
+                                Button { session.openArchived(url) } label: {
+                                    HStack(spacing: 7) {
+                                        SVGIcon(name: "content", size: 16)
+                                        Text(url.lastPathComponent)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(.black)
+                                            .lineLimit(1).truncationMode(.middle)
+                                        Spacer(minLength: 0)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .help(url.path)
+                            }
                         }
+                        .padding(.horizontal, 20).padding(.top, 22)
                     }
-                    .listStyle(.sidebar)
-                    .scrollContentBackground(.hidden)
                 }
             case .people:
                 PeopleDashboard(
@@ -55,21 +115,112 @@ struct WorkspaceExplorer: View {
             case .voiceprints:
                 VoiceprintManagementView(session: session)
             }
+            Spacer(minLength: 0)
+            bottomBlock
         }
-        .frame(width: explorerWidth)
+        .frame(width: 267)
         .background(
-            Theme.Colors.surface
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.panel)
-                    .strokeBorder(Theme.Colors.separator, lineWidth: 1))
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .fill(Color.white)
+                .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
+                .shadow(color: .black.opacity(0.03), radius: 9, x: 4, y: 4)
         )
-        .overlay(alignment: .trailing) { resizeHandle }
-        .padding(.vertical, 12)
-        .padding(.leading, 12)
+        .padding(.vertical, 13)
+        .padding(.trailing, 13)
     }
 
-    // A thin hit-zone on the trailing edge: drag to resize, hover shows the
-    // left-right resize cursor. Width is clamped to [min,max] and persisted.
+    /// Newest transcripts across the workspace tree, flattened (modification
+    /// date order) — same shape as the start screen's 최근 항목.
+    private var recentTranscripts: [URL] {
+        var mds: [URL] = []
+        func walk(_ nodes: [FileNode]) {
+            for n in nodes {
+                if let kids = n.children { walk(kids) }
+                else if n.isTranscript { mds.append(n.url) }
+            }
+        }
+        walk(session.workspace.nodes)
+        let fm = FileManager.default
+        return mds
+            .compactMap { u -> (URL, Date)? in
+                guard let d = (try? fm.attributesOfItem(atPath: u.path))?[.modificationDate] as? Date
+                else { return nil }
+                return (u, d)
+            }
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
+    }
+
+    // MARK: pinned bottom block — 자동저장 / 폴더 / 내보내기 (Figma 188:742)
+
+    private var bottomBlock: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
+            HStack {
+                Text("자동저장")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                Spacer()
+                BlackToggle(isOn: $session.autoSaveEnabled)
+            }
+            HStack(spacing: 6) {
+                Text("폴더")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                Text(session.autoSaveFolder.lastPathComponent)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .help(session.autoSaveFolder.path)
+                Spacer()
+                Button("변경") { chooseFolder() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.accent)
+            }
+            exportButton
+        }
+        .padding(.horizontal, 19).padding(.bottom, 19)
+    }
+
+    // Outline pill (Figma 198:1328): a plain Button (not a Menu — .borderlessButton
+    // menu style collapses the label, dropping the full-width capsule) that opens
+    // the format picker via a confirmationDialog.
+    private var exportButton: some View {
+        Button { showExportDialog = true } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "square.and.arrow.up").font(.system(size: 12, weight: .semibold))
+                Text("내보내기").font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .frame(maxWidth: .infinity).frame(height: 36)
+            .background(Capsule().fill(Color.white))
+            .overlay(Capsule().strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(session.transcript.lines.isEmpty)
+        .opacity(session.transcript.lines.isEmpty ? 0.4 : 1)
+        .confirmationDialog("내보내기 형식", isPresented: $showExportDialog, titleVisibility: .visible) {
+            Button("Markdown (.md)") { export("md", session.exportMarkdown) }
+            Button("Subtitles (.srt)") { export("srt", session.exportSRT) }
+            Button("Subtitles (.vtt)") { export("vtt", session.exportVTT) }
+            Button("Plain text (.txt)") { export("txt", session.exportText) }
+            Button("JSON (.json)") { export("json", session.exportJSON) }
+            Button("취소", role: .cancel) { }
+        }
+    }
+
+    /// Save-panel export writer — mirrors ContentView's helper so the export
+    /// entry point can live in this panel per the redesign.
+    private func export(_ ext: String, _ writer: @escaping (URL) throws -> Void) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "transcript.\(ext)"
+        if panel.runModal() == .OK, let url = panel.url { try? writer(url) }
+    }
+
+    // A thin hit-zone on the leading edge (panel now sits on the right side of
+    // the window): drag to resize, hover shows the left-right resize cursor.
+    // Width is clamped to [min,max] and persisted.
     private var resizeHandle: some View {
         Rectangle()
             .fill(Color.clear)
@@ -93,7 +244,10 @@ struct WorkspaceExplorer: View {
                     .onChanged { v in
                         let start = dragStartWidth ?? explorerWidth
                         if dragStartWidth == nil { dragStartWidth = explorerWidth }
-                        explorerWidth = min(maxWidth, max(minWidth, start + v.translation.width))
+                        // Panel is now on the right: dragging the leading edge LEFT
+                        // (negative translation) grows it, so the sign flips vs. the
+                        // old left-side layout.
+                        explorerWidth = min(maxWidth, max(minWidth, start - v.translation.width))
                     }
                     .onEnded { _ in dragStartWidth = nil }
             )
@@ -119,12 +273,25 @@ struct WorkspaceExplorer: View {
                 .buttonStyle(.plain).help("새로고침")
             Button { chooseFolder() } label: { Image(systemName: "folder.badge.gearshape") }
                 .buttonStyle(.plain).help("작업 폴더 변경…")
-            Button { isVisible = false } label: { Image(systemName: "sidebar.left") }
+            Button { isVisible = false } label: { Image(systemName: "sidebar.right") }
                 .buttonStyle(.plain).help("탐색기 닫기")
         }
         .font(.system(size: 12))
         .foregroundStyle(Theme.Colors.textSecondary)
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        // Match sidePanel's inner inset (Theme.Space.window) so both panels'
+        // content starts the same distance from their card edges.
+        .padding(.horizontal, Theme.Space.window).padding(.top, Theme.Space.window).padding(.bottom, 10.5)
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            ProgressView().controlSize(.small)
+            Text("폴더를 읽는 중…")
+                .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(.horizontal, 12)
     }
 
     private var emptyState: some View {

@@ -14,11 +14,20 @@ struct SettingsView: View {
     // VAD/confidence threshold — same key Theme.confThreshold reads (Theme.confKey).
     @AppStorage("vadConfThreshold") private var vadThreshold = 0.55
 
+    /// Translation needs the DNA3 engine binary in the bundle (make_app.sh only
+    /// copies it when TRANSLATE_ENGINE is set). Without it the tab would invite a
+    /// 2.6 GB model download that can never run — hide the whole tab instead.
+    private var translateEngineBundled: Bool {
+        Bundle.main.url(forAuxiliaryExecutable: "translate-engine") != nil
+    }
+
     var body: some View {
         TabView {
             recording.tabItem { Label("녹음", systemImage: "mic") }
             editor.tabItem { Label("편집·저장", systemImage: "scissors") }
-            translate.tabItem { Label("번역", systemImage: "character.bubble") }
+            if translateEngineBundled {
+                translate.tabItem { Label("번역", systemImage: "character.bubble") }
+            }
             GlossarySettingsView(session: session).tabItem { Label("단어장", systemImage: "character.book.closed") }
             model.tabItem { Label("모델", systemImage: "shippingbox") }
             DictationSettingsView(dictation: dictation).tabItem { Label("받아쓰기", systemImage: "keyboard") }
