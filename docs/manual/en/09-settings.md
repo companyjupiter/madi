@@ -33,6 +33,16 @@ Sets how audio is captured, how live transcription behaves, and how things are d
 
 - **외관 (Appearance)** — pick the System / Light / Dark theme.
 
+### 자막 오버레이 (Caption overlay — Clinic)
+
+Sizing for the face-to-face interpreting captions and a second (patient) screen.
+
+- **직원 자막 크기 (Staff caption size)** — main-screen caption text (14–48pt).
+- **환자용 대형 자막 (Large patient caption, separate screen)** — floats a second panel in the patient's language, in large type for distance reading. When on, these appear:
+  - **환자 자막 크기 (Patient caption size)** — 24–96pt.
+  - **환자 화면 (Patient screen)** — which display to use when you have more than one.
+  - **환자 언어 (Patient language)** — automatic (the other side's language) or a fixed language.
+
 ### Auto-save
 
 The auto-save folder setting lives on the **편집·저장 (Editing·Save)** tab (below).
