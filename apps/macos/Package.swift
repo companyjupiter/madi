@@ -28,7 +28,6 @@ let package = Package(
                 "Transcript/MeetingMode.swift",
                 "Transcript/LiveCoach.swift",
                 "Transcript/TitleGenerator.swift",
-                "Transcript/PIIRedactor.swift",
                 "Transcript/WorkspaceRetrieval.swift",
                 "Transcript/PeopleAnalytics.swift",
                 "Transcript/PendingEnrollmentStore.swift",
