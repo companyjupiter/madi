@@ -104,6 +104,7 @@ pub fn main() !void {
         .k = (try mtl.allocSlice(f32, D)).ptr, .v = (try mtl.allocSlice(f32, D)).ptr,
         .ao = (try mtl.allocSlice(f32, D)).ptr, .mo = (try mtl.allocSlice(f32, D)).ptr,
         .mh = (try mtl.allocSlice(f32, MLP)).ptr, .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr,
+        .ca_part = (try mtl.allocSlice(f32, dec.NH * dec.CA_NSPLIT * (2 + dec.HDD))).ptr,
     };
     const xref = try mtl.allocSlice(f32, B * D);
     for (0..B) |b| {
@@ -112,7 +113,7 @@ pub fn main() !void {
             @memcpy(x[0..D], xseq[(t * B + b) * D ..][0..D]);
             posb[0] = @intCast(t);
             try mtl.beginCommandBuffer();
-            for (0..NL) |l| try dec.decodeBlock(K, L[l], x, ss, skc[b][l], svc[b][l], ckc[l] + b * ENC_SEQ * D, cvc[l] + b * ENC_SEQ * D, posb, null);
+            for (0..NL) |l| try dec.decodeBlock(K, L[l], x, ss, skc[b][l], svc[b][l], ckc[l] + b * ENC_SEQ * D, cvc[l] + b * ENC_SEQ * D, posb, null, ENC_SEQ);
             try mtl.commitCommandBuffer(); try mtl.sync();
         }
         @memcpy(xref.ptr[b * D ..][0..D], x[0..D]); // final-step hidden

@@ -27,17 +27,22 @@ final class AudioCapture {
     /// SEG/OVERLAP mirror the runner defaults; user-tunable in Settings.
     var segmentSeconds: Double = 10 { didSet { segmenter.segmentSeconds = segmentSeconds } }
     var overlapSeconds: Double = 3 { didSet { segmenter.overlapSeconds = overlapSeconds } }
-    /// Short first window so the first transcript paints in ~3 s instead of ~10 s
+    /// Short first window so the first transcript paints in ~1.5 s instead of ~10 s
     /// (later windows keep the full `segmentSeconds` context — no accuracy loss).
-    var firstSegmentSeconds: Double = 3 { didSet { segmenter.firstSegmentSeconds = firstSegmentSeconds } }
+    /// 3→1.5 s (2026-07-02): with the engine's AUDIO_CTX=auto truncated encoder a
+    /// 1.5 s window decodes in ~0.3 s, and the 3 s overlap + WordMerger re-cover
+    /// the boundary — first committed text ~3.5 s → ~1.8 s.
+    var firstSegmentSeconds: Double = 1.5 { didSet { segmenter.firstSegmentSeconds = firstSegmentSeconds } }
 
-    /// (global start offset seconds, segment wav url)
-    var onSegment: ((Double, URL) -> Void)?
+    /// (global start offset seconds, segment wav url, window had speech)
+    var onSegment: ((Double, URL, Bool) -> Void)?
     /// Streaming preview: the in-progress window written to a wav, emitted every
     /// ~previewSeconds of new audio so a separate engine can decode interim text
     /// before the window closes. nil = previews off.
     var onPreview: ((URL) -> Void)?
-    var previewSeconds: Double = 1.5
+    /// 1.5→1.0 s (2026-07-02): AUDIO_CTX=auto cut the preview decode ~2× — the
+    /// extra preview turns fit inside the freed GPU budget, interim text −0.5 s.
+    var previewSeconds: Double = 1.0
     /// 0…1 input level for the meter.
     var onLevel: ((Float) -> Void)?
     /// Specific input device (nil = system default).
@@ -208,7 +213,7 @@ final class AudioCapture {
         segIndex += 1
         do {
             try WavWriter.write(samples: seg.samples, to: url)
-            onSegment?(seg.offset, url)
+            onSegment?(seg.offset, url, seg.hadSpeech)
         } catch { NSLog("WAV write failed: \(error)") }
     }
 

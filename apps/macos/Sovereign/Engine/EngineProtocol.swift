@@ -26,6 +26,8 @@ enum EngineEvent: Equatable {
     case progressTotal(Int)           // file mode: total 30s chunks to process
     case progressChunk(Int)           // file mode: chunk K just finished
     case languageDetected(Int)        // auto-detect locked a language token id
+    case partial(t0: Double, text: String) // «partial <t0>» — in-decode hypothesis (PARTIALS=1)
+    case segmentEnd                   // <<SEG_END>> — one stream job finished (watchdog heartbeat)
     case other(String)                // unrecognized line (perf/log) — kept for diagnostics
 }
 
@@ -33,6 +35,9 @@ struct SpeakerLabel: Equatable {
     let time: Double      // global seconds
     let id: Int
     let dur: Double       // window duration; defaults to 1.5 when engine omits it
+    /// Acoustic confidence: best−second centroid cosine margin (S2). 1.0 = the
+    /// engine had no competing speaker (or an old engine without the field).
+    var margin: Double = 1.0
 }
 
 enum EngineProtocol {
@@ -46,6 +51,7 @@ enum EngineProtocol {
 
             if line.hasPrefix("[stream] ready") { return .ready }
             if line == "<<FLUSH_END>>" { return .flushEnd }
+            if line == "<<SEG_END>>" { return .segmentEnd }
 
             // file-mode progress: "[8] audio: … → N chunk(s) …" / "[perf] chunk K: …"
             if line.hasPrefix("[8] audio:"), let arrow = line.range(of: "→ ") {
@@ -78,6 +84,16 @@ enum EngineProtocol {
                 }
             }
 
+            // «partial <t0>» <text> — streaming in-decode hypothesis (engine env
+            // PARTIALS=1; live STREAM mode sets it). The text grows batch-by-
+            // batch and is superseded by the committed word section.
+            if line.hasPrefix("\u{00AB}partial ") {
+                let rest = line.dropFirst("\u{00AB}partial ".count)
+                if let close = rest.range(of: "\u{00BB} "), let t0 = Double(rest[..<close.lowerBound]) {
+                    return .partial(t0: t0, text: String(rest[close.upperBound...]))
+                }
+            }
+
             if let lbl = EngineProtocol.parseSpeaker(line, tag: "SPKFIX") { return .speakerFix(lbl) }
             if let lbl = EngineProtocol.parseSpeaker(line, tag: "SPKOV")  { return .speakerOverlap(lbl) }
             if let lbl = EngineProtocol.parseSpeaker(line, tag: "SPK")    { return .speaker(lbl) }
@@ -97,7 +113,8 @@ enum EngineProtocol {
               let t = Double(parts[0]),
               let id = Int(parts[1]) else { return nil }
         let dur = parts.count >= 3 ? (Double(parts[2]) ?? 1.5) : 1.5
-        return SpeakerLabel(time: t, id: id, dur: dur)
+        let margin = parts.count >= 4 ? (Double(parts[3]) ?? 1.0) : 1.0
+        return SpeakerLabel(time: t, id: id, dur: dur, margin: margin)
     }
 
     /// `[<t0>s-<t1>s] <word>`  (engine already globalized the times)

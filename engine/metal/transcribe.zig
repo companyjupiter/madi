@@ -46,6 +46,49 @@ const TS0: u32 = 50365; // <|0.00|>; ids ≥ TS0 are timestamp tokens
 // reject Q4 cheaply if it tanks quality before building the real Q4 pipeline.
 var g_q4: bool = false;
 var g_qmax: f32 = 7.0; // clamp level: 4bit→7, 5bit→15, 6bit→31 (env QBITS)
+// AUDIO_CTX — whisper.cpp `audio_ctx` pattern (exp_n_audio_ctx; the stream
+// example ships it as -ac): run the encoder + cross-attn on only the leading
+// `actx` positions instead of the full zero-padded 1500. A live 10 s segment
+// occupies 500 rows — the other 1000 are silence padding the 32-layer encoder
+// grinds through for nothing (encoder cost is ~linear in rows; cross-KV
+// re-read per decoded token shrinks the same way). env:
+//   AUDIO_CTX unset/0 → off (full 1500, bit-exact legacy path)
+//   AUDIO_CTX=auto    → fit to this window's audio (+64-frame margin, ×64 round)
+//   AUDIO_CTX=N       → fixed clamp (whisper.cpp -ac N equivalent)
+// Only single-slot encodes shrink (stream mode is always nb=1; the batched
+// file path keeps ENC_SEQ — its slot stride is fixed).
+var g_actx_auto: bool = false;
+var g_actx_fixed: u32 = 0;
+// DEC_INT4 — in-memory int4 decode weights (see repackQ4 / gemv_q4 kernels).
+// 1 = decoder-block GEMVs only (~92 MB/tok → ½; logit head stays Q8 — Q4 noise
+//     on the tied head can flip argmax, see keep_head note at tok_emb load).
+// 2 = blocks + logit/emb head (~158 MB/tok → ½; the INT4-1 full-model curve).
+var g_dec_int4: u8 = 0;
+// T12 bidirectional language re-probe — LANG_CANDIDATES="50264,50266" (comma
+// token ids). The session-wide language LOCK exists to stop per-segment
+// flapping across 100 languages, but it makes a two-language conversation
+// (KO staff ↔ JA/ZH patient) impossible: the later language decodes with the
+// wrong seed token and collapses into transliteration. With a candidate
+// whitelist the SOT probe (1-token forward, ~2-4 ms — cross-KV is built per
+// chunk anyway) runs EVERY segment and picks the argmax among candidates
+// only, so flapping is structurally limited to the session's language pair.
+// Unset → legacy single-lock behavior, bit-exact.
+var g_lang_cands: [4]u32 = undefined;
+var g_lang_ncands: usize = 0;
+fn audioCtx(got_samples: usize) u32 {
+    if (g_actx_fixed > 0) return @max(192, @min(ENC_SEQ, (g_actx_fixed + 63) / 64 * 64));
+    if (!g_actx_auto) return ENC_SEQ;
+    const frames: u32 = @intCast(@min((got_samples + 319) / 320, ENC_SEQ));
+    // Post-speech margin: audio that ends RIGHT at a speech boundary (VAD-cut
+    // live segments, TTS fixtures) needs silent tail context or the decode
+    // repeat-loops instead of emitting EOT. Measured on ko2 (768 audio frames):
+    // +64 → phrase ×9, +128 → ×3, +160 → clean. 224 (4.48 s) carries margin.
+    const padded: u32 = frames + 224;
+    // Floor 576: very short clips need proportionally MORE tail — a 4.0 s JA
+    // utterance repeated its last phrase at ctx 448/512 and cleaned up at 576
+    // (t1 sweep, 2026-07-05). 576 keeps short-segment encodes at ~38% of full.
+    return @max(576, @min(ENC_SEQ, (padded + 63) / 64 * 64));
+}
 // term biasing: <|startofprev|> + these tokens seed the decoder toward domain
 // vocabulary (names, jargon). Encoded once from env PROMPT. g_bias_words holds
 // the space-split prompt words for the seg event's bias_hits.
@@ -271,6 +314,40 @@ fn readQ8(sf: Sf, key: []const u8, qs: [*]i8, sc: [*]f16, q_off: usize, s_off: u
     const rs = sf.raw(ksc) orelse return error.MissingTensor;
     const ns = out_ch * (in_ch / 32) * 2; // f16 bytes
     @memcpy(@as([*]u8, @ptrCast(sc + s_off))[0..ns], rs[0..ns]);
+}
+
+/// DEC_INT4: repack a loaded Q8 weight into packed int4 nibbles (levels ±7,
+/// per-32 f16 scale — the INT4-1 measured quality curve; double-rounding
+/// through Q8 is negligible, the Q8 grid is 36× finer than int4). Row layout
+/// [rows][dim/2]: byte j = elements 2j (low nibble) | 2j+1 (high), signed.
+/// Frees the Q8 buffers — decode GEMV weight traffic halves.
+fn repackQ4(w: Q8, rows: usize, dim: usize) !Q8 {
+    const nb = dim / 32;
+    const p = try mtl.allocSlice(i8, rows * dim / 2);
+    const sc = try mtl.allocSlice(f16, rows * nb);
+    for (0..rows) |o| {
+        for (0..nb) |b| {
+            var mq: i32 = 0;
+            for (0..32) |i| {
+                const q: i32 = w.qs[o * dim + b * 32 + i];
+                const a = if (q < 0) -q else q;
+                if (a > mq) mq = a;
+            }
+            const s8: f32 = @floatCast(w.scales[o * nb + b]);
+            const s4: f32 = if (mq > 0) s8 * @as(f32, @floatFromInt(mq)) / 7.0 else 1.0;
+            sc[o * nb + b] = @floatCast(s4);
+            const r = s8 / s4; // q4 = clamp(round(q8·s8/s4))
+            var i: usize = 0;
+            while (i < 32) : (i += 2) {
+                const q0: i32 = @intFromFloat(std.math.clamp(@round(@as(f32, @floatFromInt(w.qs[o * dim + b * 32 + i])) * r), -7.0, 7.0));
+                const q1: i32 = @intFromFloat(std.math.clamp(@round(@as(f32, @floatFromInt(w.qs[o * dim + b * 32 + i + 1])) * r), -7.0, 7.0));
+                p[(o * dim + b * 32 + i) / 2] = @bitCast(@as(u8, @intCast(((q1 & 0xF) << 4) | (q0 & 0xF))));
+            }
+        }
+    }
+    mtl.free(w.qs);
+    mtl.free(w.scales);
+    return .{ .qs = p.ptr, .scales = sc.ptr };
 }
 
 fn upMatQ8(sf: Sf, key: []const u8, out_ch: usize, in_ch: usize) !enc.Q8 {
@@ -528,13 +605,20 @@ fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
 // voice keeps the SAME id for the whole session without an external process or
 // state file. centroid direction = normalize(sum of L2-normalized embeddings).
 const DiarCentroid = struct { count: u32, sum: [diar.EMB]f32 };
-fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k: u32) !usize {
+/// Online assignment result: the id AND the cosine MARGIN (best − second-best
+/// similarity). The margin is the app's acoustic-confidence signal — a low
+/// margin means "this window could be either speaker", which is exactly where
+/// the LLM's dialogue-context correction is allowed to override (S2/S3 fusion).
+const DiarAssign = struct { id: usize, margin: f32 };
+fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k: u32, anchor_n: usize, anchor_sim: f32) !DiarAssign {
     var s: f64 = 0;
     for (v) |x| s += @as(f64, x) * x;
     const nrm: f32 = @floatCast(@sqrt(s) + 1e-9);
     for (v) |*x| x.* /= nrm; // unit-length
     var best: f32 = -2;
+    var second: f32 = -2;
     var best_i: usize = 0;
+    var second_i: usize = 0;
     for (cents.items, 0..) |*c, i| {
         var dot: f64 = 0;
         var cs: f64 = 0;
@@ -543,19 +627,36 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
             cs += @as(f64, c.sum[k]) * c.sum[k];
         }
         const sim: f32 = @floatCast(dot / (@sqrt(cs) + 1e-9));
-        if (sim > best) { best = sim; best_i = i; }
+        if (sim > best) { second = best; second_i = best_i; best = sim; best_i = i; } else if (sim > second) { second = sim; second_i = i; }
     }
-    if (cents.items.len == 0 or (best < sim_thr and cents.items.len < max_k)) {
+    // 앵커 거절 폴백 (engine-diar-3a): best가 앵커인데 검증 문턱 미달이면,
+    // 신규 출생 전에 두 번째 후보(비앵커, 일반 문턱 통과)를 먼저 취한다 —
+    // 기존 화자 B의 창이 앵커에 살짝 더 가깝다는 이유로 B의 복제 id가
+    // 태어나는 것을 방지.
+    if (cents.items.len >= 2 and best_i < anchor_n and best < anchor_sim and
+        second_i >= anchor_n and second >= sim_thr)
+    {
+        var c2 = &cents.items[second_i];
+        for (0..diar.EMB) |k| c2.sum[k] += v[k];
+        c2.count += 1;
+        return .{ .id = second_i, .margin = second - best };
+    }
+    // S1: an ANCHORED centroid (enrolled voiceprint, ids < anchor_n) demands a
+    // HIGHER similarity to claim a window — "if it isn't clearly the enrolled
+    // voice, it's someone else". Without this, a second voice merely CLOSE to
+    // the anchor (best ≥ sim_thr) gets absorbed and never births its own id.
+    const eff_thr: f32 = if (best_i < anchor_n) @max(sim_thr, anchor_sim) else sim_thr;
+    if (cents.items.len == 0 or (best < eff_thr and cents.items.len < max_k)) {
         const spk = cents.items.len; // birth a new speaker
         var c: DiarCentroid = .{ .count = 1, .sum = undefined };
         for (0..diar.EMB) |k| c.sum[k] = v[k];
         try cents.append(c);
-        return spk;
+        return .{ .id = spk, .margin = 1.0 };
     }
     var c = &cents.items[best_i];
     for (0..diar.EMB) |k| c.sum[k] += v[k];
     c.count += 1;
-    return best_i;
+    return .{ .id = best_i, .margin = if (cents.items.len >= 2) best - second else 1.0 };
 }
 
 // Periodic live re-clustering: batch k-means + silhouette auto-K over the
@@ -698,6 +799,23 @@ pub fn main() !void {
     evOpen(); // structured event stream (opt-in EVENTS_FILE) — frozen stdout text contract unaffected
     g_partials = std.posix.getenv("PARTIALS") != null; // streaming partial-hypothesis events (live)
     g_q4 = !std.mem.eql(u8, std.posix.getenv("Q4") orelse "0", "0"); // int4 quality probe
+    if (std.posix.getenv("AUDIO_CTX")) |ac| { // truncated encoder context (see audioCtx)
+        if (std.mem.eql(u8, ac, "auto")) {
+            g_actx_auto = true;
+        } else {
+            g_actx_fixed = std.fmt.parseInt(u32, ac, 10) catch 0;
+        }
+    }
+    if (std.posix.getenv("DEC_INT4")) |v| g_dec_int4 = std.fmt.parseInt(u8, v, 10) catch 0;
+    if (std.posix.getenv("LANG_CANDIDATES")) |lc| { // T12 per-segment language whitelist
+        var lit = std.mem.splitScalar(u8, lc, ',');
+        while (lit.next()) |tokstr| {
+            if (g_lang_ncands >= g_lang_cands.len) break;
+            const v = std.fmt.parseInt(u32, std.mem.trim(u8, tokstr, " "), 10) catch continue;
+            if (v >= 50259 and v <= 50358) { g_lang_cands[g_lang_ncands] = v; g_lang_ncands += 1; }
+        }
+        if (g_lang_ncands == 1) g_lang_ncands = 0; // a single candidate is just a lock — use WHISPER_LANG_ID
+    }
     if (std.posix.getenv("QBITS")) |b| { // 4/5/6-bit sweep: levels = 2^(b-1)-1
         const nbits = std.fmt.parseInt(u6, b, 10) catch 4;
         g_qmax = @floatFromInt((@as(u32, 1) << @as(u5, @intCast(nbits - 1))) - 1);
@@ -742,16 +860,16 @@ pub fn main() !void {
     const f_geluPos = try mtl.getFunction("gelu_pos");
     const Ke = try enc.Kernels.load();
     const Kd = try dec.Kernels.load();
-    const f_emb = try mtl.getFunction("gpu_emb_lookup_q8");
+    const f_emb = try mtl.getFunction(if (g_dec_int4 >= 2) "gpu_emb_lookup_q4" else "gpu_emb_lookup_q8");
     // GPU-resident decode-loop kernels (sync-free replay; from the SHARE build)
-    const f_emb_ind = try mtl.getFunction("emb_lookup_indirect_q8");
+    const f_emb_ind = try mtl.getFunction(if (g_dec_int4 >= 2) "emb_lookup_indirect_q4" else "emb_lookup_indirect_q8");
     const f_pe_ind = try mtl.getFunction("pos_embed_add_indirect");
     const f_step = try mtl.getFunction("step_advance");
     const f_argmax = try mtl.getFunction("argmax_conf"); // argmax + per-token confidence
     const f_filt_plain = try mtl.getFunction("logit_filter_indirect"); // no-ts greedy (default; best code-switch fidelity)
     const f_filt_ts = try mtl.getFunction("ts_rules_indirect"); // ts-token decode (collapse-rescue mode)
     const f_suppress = try mtl.getFunction("suppress_list");
-    const f_logit = try mtl.getFunction("logit_gemv_q8");
+    const f_logit = try mtl.getFunction(if (g_dec_int4 >= 2) "logit_gemv_q4" else "logit_gemv_q8");
     const f_bias16 = try mtl.getFunction("bias_add_f16");
     const f_deq = try mtl.getFunction("dequant_q8_f16");
     try out.print("[1] Metal + kernels ready\n", .{});
@@ -900,7 +1018,7 @@ pub fn main() !void {
     // directly produces logits → Q4 noise flips argmax). Q4KEEPHEAD=1 probes this.
     const keep_head = g_q4 and !std.mem.eql(u8, std.posix.getenv("Q4KEEPHEAD") orelse "0", "0");
     if (keep_head) g_q4 = false;
-    const tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0
+    var tok_emb = try upVecQ8(sf, "model.decoder.embed_tokens.weight", VOCAB, D); // Q8_0 (DEC_INT4=2: repacked below)
     // WHASH=1: prove the Q8-file load is bit-identical to F16-quantize at the
     // WEIGHT level (transcripts are nondeterministic via GPU FP, so the proof
     // must be on weights). Covers all 4 Q8 loaders: upVecQ8(tok_emb,ow),
@@ -931,6 +1049,7 @@ pub fn main() !void {
         .ao = (try mtl.allocSlice(f32, D)).ptr, .mo = (try mtl.allocSlice(f32, D)).ptr,
         .mh = (try mtl.allocSlice(f32, MLP)).ptr,
         .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr, // 20×1500 normalized scores
+        .ca_part = (try mtl.allocSlice(f32, dec.NH * dec.CA_NSPLIT * (2 + dec.HDD))).ptr, // split-attn partials (42 KB)
     };
     const skc = try alloc.alloc([*]f32, dec.NL);
     const svc = try alloc.alloc([*]f32, dec.NL);
@@ -1026,6 +1145,26 @@ pub fn main() !void {
         try deqW16(f_deq, bb_temb, q8(tok_emb), VOCAB, D); // [VOCAB][D] → [D][VOCAB] f16
         try mtl.commitCommandBuffer();
         try mtl.sync();
+    }
+
+    // ── DEC_INT4: repack decode GEMV weights to in-memory int4 ───────────────
+    // AFTER the WHASH hash (defined on Q8) and the batchdec WF16 dequant (its
+    // source is the Q8 buffers). Level 1 = decoder blocks (~92 MB/tok → ½);
+    // level 2 also repacks the tied embed/logit head (+66 MB → ½ — the Q4-
+    // flips-argmax risk documented at the tok_emb load, so it's a probe level).
+    // Decode is GEMV-bandwidth-bound (FUSE-2) — bytes, not launches, move it.
+    if (g_dec_int4 >= 1) {
+        var rq = try std.time.Timer.start();
+        for (0..dec.NL) |l| {
+            dlayers[l].qkvw = try repackQ4(dlayers[l].qkvw, 3 * @as(usize, D), D);
+            dlayers[l].ow = try repackQ4(dlayers[l].ow, D, D);
+            dlayers[l].cqw = try repackQ4(dlayers[l].cqw, D, D);
+            dlayers[l].cow = try repackQ4(dlayers[l].cow, D, D);
+            dlayers[l].m0w = try repackQ4(dlayers[l].m0w, MLP, D);
+            dlayers[l].m2w = try repackQ4(dlayers[l].m2w, D, MLP);
+        }
+        if (g_dec_int4 >= 2) tok_emb = try repackQ4(tok_emb, VOCAB, D);
+        try out.print("[dec-int4] level {d} repack ({d} ms) — decode GEMV bytes ½\n", .{ g_dec_int4, rq.read() / 1_000_000 });
     }
 
     // ── resident buffers + state (allocated ONCE; reused across stream jobs) ──
@@ -1124,6 +1263,26 @@ pub fn main() !void {
             try out.print("[stream] {d} voiceprint(s) loaded from {s}\n", .{ vp_vecs.items.len, vd });
         } else |_| {}
     }
+    // S1: ANCHOR mode (DIAR_ANCHOR=1) — seed the centroid set from the enrolled
+    // voiceprints BEFORE any audio, so a known voice (clinic staff) is matched
+    // against a fixed reference instead of being re-discovered by clustering.
+    // "Who is speaking" becomes verification, not estimation: the anchored id
+    // exists from t=0, is claimed (name announced immediately), and counts into
+    // the recluster K lower bound so auto-K can never merge it away.
+    var n_anchor: usize = 0;
+    if (std.posix.getenv("DIAR_ANCHOR") != null and vp_vecs.items.len > 0) {
+        const aw: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
+        for (vp_vecs.items, 0..) |v, vi| {
+            var c: DiarCentroid = .{ .count = @intFromFloat(aw), .sum = undefined };
+            for (0..diar.EMB) |k| c.sum[k] = v[k] * aw; // scaled: direction unchanged, weight = aw windows
+            try cents.append(c);
+            vp_claimed.items[vi] = true;
+            try spk_named.append(true);
+            try out.print("SPKNAME {d} {s}\n", .{ vi, vp_names.items[vi] });
+        }
+        n_anchor = vp_vecs.items.len;
+        try out.print("[stream] {d} anchored voiceprint speaker(s)\n", .{n_anchor});
+    }
     // hallucination guard: Whisper invents words ("Oh my", "Okay okay") in near-
     // silent / ambient stretches. Drop a segment's text when the loudest 1 s
     // window is below HALLU_RMS — a *strong* utterance (shouting "아아아") has
@@ -1164,8 +1323,25 @@ pub fn main() !void {
                 const mwin = live_emb.items.len / diar.EMB;
                 if (mwin >= 8 and cents.items.len > 0) {
                     var nclaim: usize = 0;
-                    for (vp_claimed.items) |c| { if (c) nclaim += 1; }
+                    for (vp_claimed.items, 0..) |c, ci| {
+                        if (!c) continue;
+                        // 부재 앵커는 K 하한에서 제외 — 등록만 되고 발화가 없는
+                        // 프린트가 kmin을 부풀리면 k-means가 강제 과분할된다
+                        // (역검증 engine-diar-0). 앵커는 시드 가중(aw)보다 실제
+                        // 윈도가 쌓였을 때만 센다.
+                        if (ci < n_anchor) {
+                            const aw_seed: u32 = @intCast(envU("DIAR_ANCHOR_W", 4));
+                            if (ci >= cents.items.len or cents.items[ci].count <= aw_seed) continue;
+                        }
+                        nclaim += 1;
+                    }
                     try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
+                    if (n_anchor > 0) {
+                        const awf: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
+                        for (0..@min(n_anchor, cents.items.len)) |vi| {
+                            for (0..diar.EMB) |kf| cents.items[vi].sum[kf] += vp_vecs.items[vi][kf] * awf;
+                        }
+                    }
                     // normalized centroid directions; reassign against ALL ids —
                     // restricting to final-kmeans ids was reverse-verified worse
                     // (stale centroids absorb coherent subsets; md-eval -3.7pt)
@@ -1183,14 +1359,15 @@ pub fn main() !void {
                     for (0..mwin) |i| {
                         const v = live_emb.items[i * diar.EMB ..][0 .. diar.EMB];
                         var best: f32 = -2;
+                        var second: f32 = -2;
                         var bs: usize = 0;
                         for (0..nc) |sidx| {
                             var dt: f32 = 0;
                             for (0..diar.EMB) |d| dt += v[d] * dirs[sidx * diar.EMB + d];
-                            if (dt > best) { best = dt; bs = sidx; }
+                            if (dt > best) { second = best; best = dt; bs = sidx; } else if (dt > second) second = dt;
                         }
                         fix_ids[i] = @intCast(bs);
-                        try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(bs));
+                        try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(bs), if (nc >= 2) best - second else 1.0);
                     }
                     // overlap rows for the saved transcript: same local-track
                     // identity as diarizeEmb, against the RELABELED windows
@@ -1413,13 +1590,16 @@ pub fn main() !void {
                         const gt = t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC;
                         // once re-clustering owns K, suppress online births
                         // (new speakers enter via the next k-means auto-K bump)
-                        const eff_max: u32 = if (recl_done) @intCast(cents.items.len) else diar_max;
-                        const spk = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max);
+                        // 앵커 모드: recl_done 후에도 출생 허용 — 봉쇄하면 늦게
+                        // 등장한 앵커-근접 화자가 앵커에 흡수·명명된다 (engine-diar-1)
+                        const eff_max: u32 = if (recl_done and n_anchor == 0) @intCast(cents.items.len) else diar_max;
+                        const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
+                        const spk = ar.id;
                         // far-field silence inside the 1.5 s grid window was
                         // the live FA driver (live 44.7% vs file 18.8%) —
                         // emit silero-clipped pieces; extra duration field is
                         // ignored by the runner's awk (backward compatible)
-                        try emitClippedSpk(out, "SPK", gt, @intCast(spk));
+                        try emitClippedSpk(out, "SPK", gt, @intCast(spk), ar.margin);
                         // voiceprint match: once a speaker's centroid has ≥2
                         // windows, compare to unclaimed prints; announce once.
                         while (spk_named.items.len < cents.items.len) try spk_named.append(false);
@@ -1456,9 +1636,73 @@ pub fn main() !void {
                             if ((!recl_done and acc_total >= 8) or live_since >= recluster_every) {
                                 live_since = 0;
                                 var nclaim: usize = 0;
-                                for (vp_claimed.items) |c| { if (c) nclaim += 1; }
+                                for (vp_claimed.items, 0..) |c, ci| {
+                                    if (!c) continue;
+                                    if (ci < n_anchor) { // 부재 앵커 제외 (engine-diar-0)
+                                        const aw_seed: u32 = @intCast(envU("DIAR_ANCHOR_W", 4));
+                                        if (ci >= cents.items.len or cents.items[ci].count <= aw_seed) continue;
+                                    }
+                                    nclaim += 1;
+                                }
                                 try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
                                 recl_done = true;
+                                // S1: re-inject anchor directions after recluster so the
+                                // enrolled reference never washes out of its centroid.
+                                if (n_anchor > 0) {
+                                    const aw2: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
+                                    for (0..@min(n_anchor, cents.items.len)) |vi| {
+                                        for (0..diar.EMB) |k2| cents.items[vi].sum[k2] += vp_vecs.items[vi][k2] * aw2;
+                                    }
+                                    // 유령 흡수 (engine-diar-3b): 채널 미스매치로
+                                    // 태어난 등록자 본인의 중복 id를 앵커로 회수
+                                    const gsim = envF("DIAR_ANCHOR_SIM", 0.70);
+                                    for (n_anchor..cents.items.len) |gi| {
+                                        for (0..n_anchor) |vi2| {
+                                            var gd: f32 = 0;
+                                            var gc: f32 = 0;
+                                            for (0..diar.EMB) |gk| { gd += cents.items[gi].sum[gk] * vp_vecs.items[vi2][gk]; gc += cents.items[gi].sum[gk] * cents.items[gi].sum[gk]; }
+                                            const gs2 = gd / (@sqrt(gc) + 1e-9);
+                                            if (gs2 >= gsim) {
+                                                for (0..diar.EMB) |gk| { cents.items[vi2].sum[gk] += cents.items[gi].sum[gk]; cents.items[gi].sum[gk] = 0; }
+                                                cents.items[vi2].count += cents.items[gi].count;
+                                                cents.items[gi].count = 0;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                // S4: re-emit corrected labels for PAST windows so the
+                                // app fixes earlier lines DURING the session, not only at
+                                // FLUSH. Changed labels only (bounded output). DIAR_LIVEFIX=0
+                                // disables.
+                                if (!std.mem.eql(u8, std.posix.getenv("DIAR_LIVEFIX") orelse "1", "0")) {
+                                    const ncl = cents.items.len;
+                                    if (ncl > 0) {
+                                        const dirsl = try alloc.alloc(f32, ncl * diar.EMB);
+                                        defer alloc.free(dirsl);
+                                        for (cents.items, 0..) |*c, sidx| {
+                                            var ss2: f32 = 0;
+                                            for (c.sum) |x| ss2 += x * x;
+                                            const inv2 = 1.0 / (@sqrt(ss2) + 1e-9);
+                                            for (0..diar.EMB) |dd| dirsl[sidx * diar.EMB + dd] = c.sum[dd] * inv2;
+                                        }
+                                        for (0..acc_total) |wi| {
+                                            const v = live_emb.items[wi * diar.EMB ..][0..diar.EMB];
+                                            var b1: f32 = -2;
+                                            var b2: f32 = -2;
+                                            var bs: usize = 0;
+                                            for (0..ncl) |sidx| {
+                                                var dt: f32 = 0;
+                                                for (0..diar.EMB) |dd| dt += v[dd] * dirsl[sidx * diar.EMB + dd];
+                                                if (dt > b1) { b2 = b1; b1 = dt; bs = sidx; } else if (dt > b2) b2 = dt;
+                                            }
+                                            if (bs != live_ids.items[wi]) {
+                                                live_ids.items[wi] = @intCast(@min(bs, 255));
+                                                try emitClippedSpk(out, "SPKFIX", live_t0.items[wi], @intCast(bs), if (ncl >= 2) b1 - b2 else 1.0);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1537,8 +1781,11 @@ pub fn main() !void {
         if (nb == 0) break;
 
         // ── Phase B: ONE batched encoder forward (weights + dequant amortized ×nb)
+        // Single-slot windows (stream mode is always nb=1) shrink to the audio's
+        // own rows under AUDIO_CTX; batched slots keep the fixed ENC_SEQ stride.
+        var actx: u32 = if (nb == 1) audioCtx(slot_got[0]) else ENC_SEQ;
         var et = try std.time.Timer.start();
-        try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, nb);
+        try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, nb, actx);
         const enc_ns_t = et.read();
         g_t_enc += enc_ns_t;
         const enc_ms = @as(f64, @floatFromInt(enc_ns_t)) / 1e6 / @as(f64, @floatFromInt(nb));
@@ -1650,14 +1897,19 @@ pub fn main() !void {
         const cchunk = slot_chunk[slot];
         const cgot = slot_got[slot];
         const eo16 = out_f16 + slot * @as(usize, ENC_SEQ) * D;
+        // cross-KV rows follow the (possibly AUDIO_CTX-shrunk) encoder rows;
+        // the ckc/cvc buffers stay allocated at ENC_SEQ so only counts change.
+        // Reset per slot: a rescue re-encode in the PREVIOUS slot may have
+        // shrunk actx to its seek window — this slot's KV must match its own.
+        actx = if (nb == 1) audioCtx(cgot) else ENC_SEQ;
         var ckvt = try std.time.Timer.start();
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
             try deqW16(f_deq, cross_wdq, ckw[l], D, D);
-            try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], ENC_SEQ, D, D);
+            try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], actx, D, D);
             try deqW16(f_deq, cross_wdq, cvw[l], D, D);
-            try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], ENC_SEQ, D, D);
-            try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
+            try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], actx, D, D);
+            try biasAdd16(f_bias16, cvc[l], cvb[l], actx * D, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
         }
@@ -1677,28 +1929,48 @@ pub fn main() !void {
         // (P(nospeech) was measured here and REFUTED: ≈1e-10 on pure music and
         // real speech alike — <|nospeech|> is dead in large-v3-turbo. The SOT
         // probe stays lang-detect-only; see PERF_LOG SV-2.)
-        if (lang_tok == 0) {
+        // T12: with a LANG_CANDIDATES whitelist the probe runs EVERY segment and
+        // this segment's seed language may differ from the session lock — a KO
+        // staff line and the JA patient's reply each decode with their own token.
+        var seg_lang: u32 = lang_tok;
+        if (lang_tok == 0 or g_lang_ncands > 0) {
             d_pos[0] = 0;
             try mtl.beginCommandBuffer();
             try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[0]);
             try residual(Kd, d_x, dec_pe, D); // pos-0 positional embedding
             for (0..dec.NL) |l| {
                 const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx, actx);
             }
             try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
             try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
-            var bl: u32 = 50259;
-            var bv: f32 = d_logits[50259];
-            var lt: u32 = 50259;
-            while (lt <= 50358) : (lt += 1) { if (d_logits[lt] > bv) { bv = d_logits[lt]; bl = lt; } }
-            lang_tok = bl;
-            try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+            if (g_lang_ncands > 0) {
+                var bl: u32 = g_lang_cands[0];
+                var bv: f32 = d_logits[g_lang_cands[0]];
+                for (g_lang_cands[1..g_lang_ncands]) |c| {
+                    if (d_logits[c] > bv) { bv = d_logits[c]; bl = c; }
+                }
+                seg_lang = bl;
+                if (lang_tok == 0) {
+                    lang_tok = bl; // session default (preview engine start etc.)
+                    try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+                } else if (seg_lang != lang_tok) {
+                    try out.print("[lang] seg token {d}\n", .{seg_lang});
+                }
+            } else {
+                var bl: u32 = 50259;
+                var bv: f32 = d_logits[50259];
+                var lt: u32 = 50259;
+                while (lt <= 50358) : (lt += 1) { if (d_logits[lt] > bv) { bv = d_logits[lt]; bl = lt; } }
+                lang_tok = bl;
+                seg_lang = bl;
+                try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+            }
         }
-        d_tokens[1] = lang_tok;
-        out_tokens[1] = lang_tok;
+        d_tokens[1] = seg_lang;
+        out_tokens[1] = seg_lang;
         d_tokens[2] = task_tok; // transcribe(50360) / translate(50359)
         out_tokens[2] = task_tok;
 
@@ -1766,7 +2038,7 @@ pub fn main() !void {
                 for (g_prompt) |t| { d_tokens[PL] = t; PL += 1; }
             }
             d_tokens[PL] = SEED[0]; // sot
-            d_tokens[PL + 1] = lang_tok;
+            d_tokens[PL + 1] = seg_lang; // per-segment language (== lang_tok unless LANG_CANDIDATES)
             d_tokens[PL + 2] = task_tok; // transcribe(50360) / translate(50359)
             PL += 3;
             if (!ts_mode) { d_tokens[PL] = 50364; PL += 1; } // <|notimestamps|>
@@ -1786,7 +2058,7 @@ pub fn main() !void {
                     try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
                     for (0..dec.NL) |l| {
                         const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx, actx);
                     }
                     try kStep(f_step, d_pos);
                 }
@@ -1805,7 +2077,7 @@ pub fn main() !void {
                     try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
                     for (0..dec.NL) |l| {
                         const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx);
+                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx, actx);
                     }
                     try layerNorm(Kd, d_x, dscr.xb, dln_w, dln_b, D);
                     try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
@@ -1828,10 +2100,15 @@ pub fn main() !void {
                     if (tk == EOT) { done = true; break; }
                 }
                 n_text += bi;
-                // streaming partial: emit the in-progress text after this batch
+                // streaming partial: emit the in-progress text after this batch.
+                // PARTIALS=1 also mirrors it onto stdout as a «partial» line so
+                // the app renders the segment's text WHILE it decodes instead of
+                // all-at-once at SEG_END. Opt-in env → the frozen stdout text
+                // contract is untouched for every existing consumer.
                 if (g_partials and !dropped and n_text > 0) {
                     const ptext = bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]) catch "";
                     evPartial(t_off + pass_off, ptext);
+                    if (stream) try out.print("\u{00AB}partial {d:.2}\u{00BB} {s}\n", .{ t_off + pass_off, std.mem.trim(u8, ptext, " \n") });
                 }
             }
             n_tok_total += n_text;
@@ -1894,14 +2171,17 @@ pub fn main() !void {
             try geluPos(f_geluPos, d_ex + slot * @as(usize, ENC_SEQ) * D, t2, c2b, enc_pe, ENC_SEQ * D, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
-            try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex + slot * @as(usize, ENC_SEQ) * D, eo16, enc_out + slot * @as(usize, ENC_SEQ) * D, escr, 1);
+            // seek window is always a single-slot encode → it can shrink to the
+            // remaining audio under AUDIO_CTX (rem < the original chunk).
+            actx = audioCtx(rem);
+            try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex + slot * @as(usize, ENC_SEQ) * D, eo16, enc_out + slot * @as(usize, ENC_SEQ) * D, escr, 1, actx);
             for (0..dec.NL) |l| {
                 try mtl.beginCommandBuffer();
                 try deqW16(f_deq, cross_wdq, ckw[l], D, D);
-                try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], ENC_SEQ, D, D);
+                try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], actx, D, D);
                 try deqW16(f_deq, cross_wdq, cvw[l], D, D);
-                try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], ENC_SEQ, D, D);
-                try biasAdd16(f_bias16, cvc[l], cvb[l], ENC_SEQ * D, D);
+                try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], actx, D, D);
+                try biasAdd16(f_bias16, cvc[l], cvb[l], actx * D, D);
                 try mtl.commitCommandBuffer();
                 try mtl.sync();
             }
@@ -2373,16 +2653,19 @@ fn emitOverlapRow(rttm: *std.ArrayList(u8), file_id: []const u8, a: f32, b: f32,
 
 // Emit "<tag> <t> <id> <dur>" for each silero speech piece of the 1.5 s diar
 // window at gt; falls back to the whole window when no VAD intervals exist.
-fn emitClippedSpk(out: anytype, tag: []const u8, gt: f32, id: u32) !void {
+fn emitClippedSpk(out: anytype, tag: []const u8, gt: f32, id: u32, margin: f32) !void {
+    // 5th field = acoustic margin (best−second centroid cosine) — the app's
+    // fusion gate (S3): only low-margin lines may be relabeled by the LLM.
+    // Extra fields are ignored by the runner's awk (backward compatible).
     if (g_vad_iv.items.len == 0) {
-        try out.print("{s} {d:.2} {d} 1.50\n", .{ tag, gt, id });
+        try out.print("{s} {d:.2} {d} 1.50 {d:.2}\n", .{ tag, gt, id, margin });
         return;
     }
     for (g_vad_iv.items) |iv| {
         const lo = @max(gt, iv[0]);
         const hi = @min(gt + 1.5, iv[1]);
         if (hi - lo >= 0.1)
-            try out.print("{s} {d:.2} {d} {d:.2}\n", .{ tag, lo, id, hi - lo });
+            try out.print("{s} {d:.2} {d} {d:.2} {d:.2}\n", .{ tag, lo, id, hi - lo, margin });
     }
 }
 
@@ -2484,6 +2767,22 @@ fn tokenCollapse(toks: []const u32) bool {
             if (toks[i] == toks[i - p]) {
                 run += 1;
                 if (run >= @max(16, 4 * p)) return true;
+            } else run = 0;
+        }
+    }
+    // sentence-length loops (STATUS backlog "repeat-loop hallucination"): a
+    // whole sentence (~9-48 BPE tokens) repeating verbatim escapes the short-
+    // period net above. Require run ≥ 2p = two EXTRA full periods (≥3 total
+    // occurrences) so a genuine once-repeated sentence is spared; a decode
+    // stuck in a loop repeats far more (FLEURS 1728: ~12×, escaped p≤8).
+    p = 9;
+    while (p <= 48) : (p += 1) {
+        if (toks.len < 3 * p) break;
+        var run: usize = 0;
+        for (p..toks.len) |i| {
+            if (toks[i] == toks[i - p]) {
+                run += 1;
+                if (run >= 2 * p) return true;
             } else run = 0;
         }
     }

@@ -61,15 +61,40 @@ final class SessionController: EngineProcessDelegate {
     /// Always-on-top live-translation caption overlay (floats over the call app).
     private let captionOverlay = CaptionOverlayController()
     private(set) var captionOverlayOn = false
+    /// Persisted caption sizing / patient-panel config (clinic display batch).
+    var captionSettings = CaptionSettings.load() {
+        didSet { captionSettings.save(); if captionOverlayOn { refreshCaptionOverlay() } }
+    }
     func toggleCaptionOverlay() {
         captionOverlayOn.toggle()
-        if captionOverlayOn {
-            captionOverlay.show(CaptionView(session: self) { [weak self] in self?.hideCaptionOverlay() })
-        } else {
-            captionOverlay.hide()
-        }
+        if captionOverlayOn { refreshCaptionOverlay() } else { captionOverlay.hide() }
+    }
+    private func refreshCaptionOverlay() {
+        // staff caption (main screen) + optional large patient panel (external).
+        captionOverlay.show(staff: CaptionView(session: self, audience: .staff) { [weak self] in self?.hideCaptionOverlay() },
+                            patient: captionSettings.patientPanelEnabled ? CaptionView(session: self, audience: .patient) : nil,
+                            settings: captionSettings)
     }
     private func hideCaptionOverlay() { captionOverlayOn = false; captionOverlay.hide() }
+
+    // ── clinic display state exposed to the caption/transcript views ─────────
+    /// The (line, language) whose translation is CURRENTLY streaming in — drives
+    /// the typing caret (A7). Set on the first diverged partial, cleared on the
+    /// final result. Struct so SwiftUI diffs it cheaply.
+    struct TranslationRef: Equatable { let id: UUID; let lang: String }
+    private(set) var streamingTranslation: TranslationRef?
+    /// Pending translation turns (queued + in-flight) — the "N줄 대기" status (D20).
+    private(set) var translateQueueDepth = 0
+    /// Wall-clock of the last committed line — the commit-cadence ring reads it
+    /// against effectiveWindowSeconds to show progress toward the next commit (D19).
+    private(set) var lastCommitAt = Date()
+    /// The patient-facing caption language: explicit override, else the non-Korean
+    /// side of the translate pair, else the first target.
+    var patientCaptionLang: String? {
+        if let o = captionSettings.patientLangOverride { return o }
+        let nonKo = translateTargets.subtracting(["Korean"]).sorted()
+        return nonKo.first ?? translateTargets.sorted().first
+    }
 
     // ── live action rail scheduling ──
     /// Start the throttled extraction loop for a live recording (no-op unless the
@@ -171,7 +196,13 @@ final class SessionController: EngineProcessDelegate {
     /// 짧은 윈도는 원문 경계 오류가 많은데, 그 오류가 모든 대상 언어 번역으로
     /// 전파되므로 — 다중 번역에서는 가장 긴 문맥의 원문 품질이 우선이다. UI도 이
     /// 규칙을 노출(2개+ 선택 시 반응속도 picker를 잠그고 "정확"으로 표시).
-    var multiTranslateForcesAccurate: Bool { translateTargets.count >= 2 }
+    /// 예외 (T4, 2026-07-03): {한국어, X} 양방향 쌍은 per-line 스크립트 라우팅이
+    /// 라인당 실효 타깃을 1개로 줄이므로(KO줄→X만, X줄→KO만) 강제하지 않는다 —
+    /// 클리닉 대면 통역이 정확히 이 형태다.
+    var multiTranslateForcesAccurate: Bool {
+        translateTargets.count >= 2 &&
+            !(translateTargets.count == 2 && translateTargets.contains("Korean"))
+    }
     var effectiveWindowSeconds: Double { multiTranslateForcesAccurate ? 10 : liveWindowSeconds }
 
     /// Streaming preview: a 2nd engine decodes the in-progress window every ~1.5s
@@ -181,9 +212,18 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(livePreviewEnabled, forKey: "livePreviewEnabled") }
     }
     /// Interim "진행 중" text (cleared when the window's committed words land).
+    /// Fed by TWO provisional sources that overwrite each other (both cover the
+    /// freshest audio; life of a «partial» is ~0.5 s with AUDIO_CTX decode):
+    ///   «partial» lines — the closed segment's in-decode hypothesis (main
+    ///                     engine, PARTIALS=1) — converges to the committed text
+    ///   PreviewEngine   — the still-open window's text (~1 s cadence)
     private(set) var livePartial: String = "" {
         didSet {
-            if livePartial.isEmpty { livePartialTranslations = [:]; interimInFlight = false }
+            // NOTE: translations are NOT auto-cleared here — on window commit the
+            // last interim translation stays on screen as a provisional caption
+            // (T1 carryover) until the committed line's real translation lands.
+            // Session reset/stop sites clear livePartialTranslations explicitly.
+            if livePartial.isEmpty { interimInFlight = false }
             else if livePartial != oldValue { scheduleInterimTranslate() }
         }
     }
@@ -211,7 +251,12 @@ final class SessionController: EngineProcessDelegate {
         }
     }
     private var translate: TranslateEngine?
-    private var translatedIDs: Set<UUID> = []
+    private var translatedHash: [UUID: Int] = [:]  // line id → translated text hash (re-queue on change)
+    private var tailGen = 0                        // tail-timeout generation (T2)
+    /// T8: disk-persistent pre-translated clinic phrase bank (0 ms on hit).
+    private let faqStore = FAQTranslationStore.load(
+        from: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Sovereign/faq_translations.json"))
     /// O3 — reuse interim translations for the matching committed line instead of
     /// re-queuing a fresh DNA3 turn. Cleared on every session boundary to prevent
     /// cross-meeting bleed.
@@ -230,6 +275,37 @@ final class SessionController: EngineProcessDelegate {
     // transcript Q&A — "ask the meeting" (grounded in the transcript, on-device)
     private(set) var qaAnswer: String? = nil
     private(set) var qaAsking = false
+
+    // ── AI reconcile (post-session diarization/language correction) ──────────
+    /// Opt-in: after a session, let the on-device LLM read the dialogue and fix
+    /// obvious speaker splits/mislabels and wrong-language lines. Off by default.
+    var aiReconcileEnabled: Bool = (UserDefaults.standard.object(forKey: "aiReconcileEnabled") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(aiReconcileEnabled, forKey: "aiReconcileEnabled") }
+    }
+    private(set) var reconciling = false
+    /// One-line summary of what the reconcile pass changed (nil = nothing / not run).
+    private(set) var reconcileNote: String? = nil
+    /// Retained per-segment audio (live mode) so a wrong-language line can be
+    /// re-transcribed from its own clip. (offset seconds, wav url), in order.
+    private var segmentAudio: [(offset: Double, url: URL)] = []
+
+    // ── watchdog (W1 coverage / W2 hang / W3 HUD) ─────────────────────────────
+    private struct SegJob { let offset: Double; let url: URL; let hadSpeech: Bool; var retried: Bool; var fedAt: Date }
+    private var segQueue: [SegJob] = []          // fed to the engine, awaiting <<SEG_END>>
+    /// Segments the engine is still transcribing (W3 HUD "전사 N").
+    private(set) var segmentsInFlight = 0
+    private var wordsSinceSegStart = 0           // words seen since the previous SEG_END
+    /// Offsets (s) of segments that had speech but produced no words even after a
+    /// retry — surfaced as "누락 의심" so the user knows something was missed.
+    private(set) var coverageGaps: [Double] = []
+    /// Engine hang recoveries this session (W2) — nonzero means the engine was
+    /// restarted and pending segments were re-fed (no audio lost).
+    private(set) var hangRecoveries = 0
+    private var watchdogTimer: Timer?
+    // B1: continuous mid-session reconcile (≥16GB, opt-in with AI 교정)
+    private var midReconcileTimer: Timer?
+    private var reconcileSnapshot: [UUID] = []   // prompt line order → line ids
+    private var reconcileIsMid = false
 
     private var attributedLines: [String] {
         transcript.lines.map { "\(speakerNames[$0.speaker] ?? "화자\($0.speaker)"): \($0.text)" }
@@ -284,6 +360,8 @@ final class SessionController: EngineProcessDelegate {
                         // (cheap, ≤ once per 18s rail tick), not per word event.
                         if added { self.recomputeCoach() }
                     }
+                case "reconcile":
+                    self.applyReconcile(text)
                 default: break
                 }
             }
@@ -443,10 +521,28 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// English language name of the detected/selected source, to skip translating
-    /// a segment into its own language (50264=ko, 50259=en; others via the
-    /// engine's [lang] detection if added later).
+    /// a segment into its own language (whisper token order: en=50259, zh=50260,
+    /// ko=50264, ja=50266). Session-level FALLBACK — per-line script routing
+    /// (TranslateRouting.scriptLang) takes precedence in routedTargets(for:).
     private var sourceLangName: String? {
-        switch languageTokenID { case 50264: return "Korean"; case 50259: return "English"; default: return nil }
+        switch languageTokenID {
+        case 50264: return "Korean"; case 50259: return "English"
+        case 50266: return "Japanese"; case 50260: return "Chinese"
+        default: return nil
+        }
+    }
+
+    /// T4 direction routing: targets minus the TEXT's own language (Unicode
+    /// script detection; falls back to the session source language). In the
+    /// bidirectional clinic pair {Korean, Japanese}: a JA line → [Korean],
+    /// a KO line → [Japanese] — one turn per line instead of K.
+    private func routedTargets(for text: String) -> [String] {
+        let src = TranslateRouting.scriptLang(of: text) ?? sourceLangName
+        return translateTargets.subtracting([src].compactMap { $0 }).sorted()
+    }
+    /// Normalized per-session content hash for re-translate-on-change gating.
+    private func lineHash(_ text: String) -> Int {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).hashValue
     }
 
     /// Start the translate engine on demand (targets set + assets present).
@@ -456,7 +552,10 @@ final class SessionController: EngineProcessDelegate {
               AssetManifest.translateModelIsValid() else { return nil }
         if translate == nil {
             let t = TranslateEngine()
-            t.onResult = { [weak self] id, lang, text in
+            // caption display language first (T3): CaptionOverlay picks
+            // sorted().first — make the engine serve that language first too.
+            t.priorityLang = translateTargets.sorted().first
+            t.onResult = { [weak self] id, lang, text, source in
                 guard let self else { return }
                 if id == Self.interimID {
                     self.interimInFlight = false
@@ -469,27 +568,56 @@ final class SessionController: EngineProcessDelegate {
                     }
                     if self.livePartial != self.interimSource { self.scheduleInterimTranslate() }  // grew → refresh
                 } else {
+                    // A7: this turn finished streaming — drop the caret.
+                    if self.streamingTranslation == TranslationRef(id: id, lang: lang) {
+                        self.streamingTranslation = nil
+                    }
+                    // stale-guard (T2): the line may have GROWN after this turn was
+                    // queued (merge). The hash gate already re-queued the new text —
+                    // don't let the old turn overwrite the fresher translation.
+                    if let line = self.transcript.lines.first(where: { $0.id == id }),
+                       self.lineHash(line.text) != self.lineHash(source) { return }
+                    self.transcript.setTranslation(id, lang: lang, text)
+                    // T1 carryover teardown: the real translation replaced the
+                    // provisional interim caption for the freshest content.
+                    if id == self.transcript.lines.last?.id, self.livePartial.isEmpty {
+                        self.livePartialTranslations = [:]
+                    }
+                }
+            }
+            // streaming partial (T5): the reply types itself onto the screen
+            // (~19 ms/token) instead of appearing whole ~0.5-0.9 s later.
+            t.onPartial = { [weak self] id, lang, text in
+                guard let self else { return }
+                if id == Self.interimID {
+                    if !self.livePartial.isEmpty { self.livePartialTranslations[lang] = text }
+                } else if self.transcript.lines.contains(where: { $0.id == id }) {
+                    self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
                     self.transcript.setTranslation(id, lang: lang, text)
                 }
             }
+            // queue depth (D20) — the engine reports queued + in-flight turns.
+            t.onQueueChange = { [weak self] depth in self?.translateQueueDepth = depth }
             _ = t.start(engine: eng, model: AssetManifest.translateModelURL)
             translate = t
         }
         return translate
     }
 
-    /// Debounced (≈0.6s, one in flight) translation of the in-progress interim text
+    /// Debounced (≈0.3s, one in flight) translation of the in-progress interim text
     /// so a PROVISIONAL caption appears right after you speak instead of waiting for
     /// the window to close. Best-effort + throwaway — the per-line translation wins.
+    /// (600→300ms 2026-07-02: 체감 지연 −300ms; DNA3 턴 증가는 interimInFlight
+    /// 단일-인플라이트 가드가 상한을 잡는다.)
     private func scheduleInterimTranslate() {
         guard !translateTargets.isEmpty else { return }
         interimGen += 1
         let gen = interimGen
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .milliseconds(300))
             guard let self, gen == self.interimGen, !self.interimInFlight, !self.livePartial.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
-            let targets = self.translateTargets.subtracting([self.sourceLangName].compactMap { $0 }).sorted()
+            let targets = self.routedTargets(for: self.livePartial)
             guard !targets.isEmpty else { return }
             self.interimInFlight = true
             self.interimSource = self.livePartial
@@ -498,31 +626,72 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// Translate every stable line (all but the last, which may still grow) that
-    /// hasn't been translated yet, into all targets (minus the source language).
-    /// `includingLast` at finalize. FIFO via the engine.
+    /// hasn't been translated yet, into its routed targets. `includingLast` at
+    /// finalize.
+    ///
+    /// T2 (2026-07-03): this is now called on EVERY .word ingest — a line queues
+    /// the moment it loses last-line status instead of waiting for the NEXT
+    /// window boundary (the old .wordSectionBegin-only trigger left committed
+    /// lines untranslated for 10-20s+, or forever in a monologue). Idempotent
+    /// via the (id → text-hash) gate; a line that grows later (merge) re-queues
+    /// automatically because its hash changes.
     private func translateStableLines(includingLast: Bool = false) {
-        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
-        let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
-        guard !targets.isEmpty else { return }
+        guard !translateTargets.isEmpty else { return }
         let lines = transcript.lines
         let upTo = includingLast ? lines.count : max(0, lines.count - 1)
-        for i in 0..<upTo {
-            let line = lines[i]
-            if translatedIDs.contains(line.id) { continue }
-            translatedIDs.insert(line.id)
-            // O3: if this line's text was already translated as interim, reuse the
-            // cached translations and skip the DNA3 turn entirely. Only reuse the
-            // targets we actually have cached; queue the engine for any that miss.
-            if let cached = interimCache.get(line.text) {
-                let missing = targets.filter { cached[$0] == nil }
-                for tgt in targets where cached[tgt] != nil {
-                    transcript.setTranslation(line.id, lang: tgt, cached[tgt]!)
-                }
-                if missing.isEmpty { continue }
-                t.translate(line.text, into: missing, id: line.id)
-                continue
+        for i in 0..<upTo { translateLine(lines[i]) }
+    }
+
+    /// Queue one line (hash-gated, FAQ/O3-cached, direction-routed).
+    private func translateLine(_ line: Line) {
+        let h = lineHash(line.text)
+        if translatedHash[line.id] == h { return }
+        guard let t = ensureTranslateEngine() else { return }
+        let targets = routedTargets(for: line.text)
+        guard !targets.isEmpty else { return }
+        translatedHash[line.id] = h
+        // T8: session-invariant FAQ bank first — a recurring clinic phrase costs
+        // 0 ms and no DNA3 turn. Conservative exact (normalized) match only.
+        if let faq = faqStore.lookup(line.text) {
+            var missing: [String] = []
+            for tgt in targets {
+                if let tr = faq[tgt] { transcript.setTranslation(line.id, lang: tgt, tr) }
+                else { missing.append(tgt) }
             }
-            t.translate(line.text, into: targets, id: line.id)
+            if missing.isEmpty { return }
+            t.translate(line.text, into: missing, id: line.id)
+            return
+        }
+        // O3: if this line's text was already translated as interim, reuse the
+        // cached translations and skip the DNA3 turn entirely. Only reuse the
+        // targets we actually have cached; queue the engine for any that miss.
+        if let cached = interimCache.get(line.text) {
+            let missing = targets.filter { cached[$0] == nil }
+            for tgt in targets where cached[tgt] != nil {
+                transcript.setTranslation(line.id, lang: tgt, cached[tgt]!)
+            }
+            if missing.isEmpty { return }
+            t.translate(line.text, into: missing, id: line.id)
+            return
+        }
+        t.translate(line.text, into: targets, id: line.id)
+    }
+
+    /// T2 tail timeout: the LAST line never loses last-status in a monologue —
+    /// translate it after 2 s without change (re-queues on growth via the hash
+    /// gate; the stale-guard in onResult drops superseded turns).
+    private func scheduleTailTranslate() {
+        guard !translateTargets.isEmpty else { return }
+        tailGen += 1
+        let gen = tailGen
+        let snapshot = transcript.lines.last.map { ($0.id, lineHash($0.text)) }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, gen == self.tailGen,
+                  let (id, h) = snapshot,
+                  let line = self.transcript.lines.last, line.id == id,
+                  self.lineHash(line.text) == h else { return }
+            self.translateLine(line)
         }
     }
 
@@ -770,6 +939,17 @@ final class SessionController: EngineProcessDelegate {
 
     private var isError: Bool { if case .error = phase { return true }; return false }
 
+    /// T12: derive the bidirectional language pair from the translate targets —
+    /// a {Korean, X} target set IS the clinic conversation declaration (staff
+    /// speaks KO, patient speaks X). No extra UI: the pair unlocks per-segment
+    /// language re-probe in the engine so BOTH sides transcribe correctly.
+    private var langCandidatePair: [Int] {
+        guard translateTargets.count == 2, translateTargets.contains("Korean") else { return [] }
+        let tok: [String: Int] = ["English": 50259, "Chinese": 50260, "Korean": 50264, "Japanese": 50266]
+        let pair = translateTargets.compactMap { tok[$0] }
+        return pair.count == 2 ? pair.sorted() : []
+    }
+
     private func makeConfig() -> EngineProcess.Config {
         EngineProcess.Config(
             binaryURL: Bundle.main.bundleURL
@@ -780,7 +960,15 @@ final class SessionController: EngineProcessDelegate {
             diarize: diarize, osd: osd,
             languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers,
             vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
-            streamWavRoots: [capture.segmentDirectory])
+            streamWavRoots: [capture.segmentDirectory],
+            langCandidates: langCandidatePair,
+            anchorVoiceprints: !langCandidatePair.isEmpty && hasEnrolledVoiceprints)
+    }
+
+    /// Any enrolled .vec voiceprints on disk? (S1 anchor precondition)
+    private var hasEnrolledVoiceprints: Bool {
+        guard let items = try? FileManager.default.contentsOfDirectory(atPath: voiceprintsDir.path) else { return false }
+        return items.contains { $0.hasSuffix(".vec") }
     }
 
     // MARK: session lifecycle
@@ -860,11 +1048,14 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedIDs.removeAll()
+        translatedHash.removeAll()
         interimCache.clear()
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
-        livePartial = ""
+        livePartial = ""; livePartialTranslations = [:]
+        streamingTranslation = nil; translateQueueDepth = 0
+        segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
+        stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0
         phase = .idle
     }
 
@@ -910,7 +1101,7 @@ final class SessionController: EngineProcessDelegate {
         guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
         let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
         guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == lineID }) else { return }
-        translatedIDs.insert(lineID)
+        translatedHash[lineID] = lineHash(line.text)
         t.translate(line.text, into: targets, id: lineID)
     }
 
@@ -930,7 +1121,7 @@ final class SessionController: EngineProcessDelegate {
         guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
         let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
         guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == id }) else { return }
-        translatedIDs.insert(id)
+        translatedHash[id] = lineHash(line.text)
         t.translate(line.text, into: targets, id: id)
     }
 
@@ -943,9 +1134,15 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedIDs.removeAll()
+        translatedHash.removeAll()
         interimCache.clear()
         clearSummary()
+        streamingTranslation = nil; translateQueueDepth = 0; lastCommitAt = Date()
+        segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
+        // T11 prewarm: spawn the translate engine during the dead time between
+        // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
+        // first caption's translation doesn't pay the cold start.
+        _ = ensureTranslateEngine()
         // Prefill from the live calendar event. ContentView observes calendar.event.id
         // and calls ensurePrepBrief() on change, so we do NOT call it here too (that
         // double-ran the headless aggregation and raced two detached tasks).
@@ -968,10 +1165,14 @@ final class SessionController: EngineProcessDelegate {
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
         let win = effectiveWindowSeconds   // 2개+ 번역 시 정확(10초) 강제
         capture.segmentSeconds = win
-        capture.firstSegmentSeconds = min(3, win)
+        capture.firstSegmentSeconds = min(1.5, win) // AudioCapture 기본과 동기 (AUDIO_CTX=auto로 짧은 창 디코드 ~0.3s)
         capture.overlapSeconds = min(3, max(1, win * 0.3))
-        capture.onSegment = { [weak self] offset, url in
-            self?.engine?.feed(offset: offset, wav: url)
+        capture.onSegment = { [weak self] offset, url, hadSpeech in
+            guard let self else { return }
+            self.segmentAudio.append((offset, url))   // retain for AI re-transcription
+            self.segQueue.append(SegJob(offset: offset, url: url, hadSpeech: hadSpeech, retried: false, fedAt: Date()))
+            self.segmentsInFlight = self.segQueue.count
+            self.engine?.feed(offset: offset, wav: url)
         }
         capture.onLevel = { [weak self] lvl in
             guard let self else { return }
@@ -984,13 +1185,16 @@ final class SessionController: EngineProcessDelegate {
             let release = Float(exp(-dt / 0.5))
             self.meterLevel = max(lvl, self.meterLevel * release)
         }
+        segQueue.removeAll(); segmentsInFlight = 0; wordsSinceSegStart = 0
+        coverageGaps.removeAll(); hangRecoveries = 0
+        startWatchdog()
 
         // streaming preview (interim text before a window closes). The preview
         // engine MUST run with a forced language — it decodes tiny ~1.5s clips
         // where auto-detect misfires (→ English). If the user picked a language,
         // start now; if auto, wait for the main engine's [lang] detection (see
         // .languageDetected below) so previews match the committed transcript.
-        livePartial = ""
+        livePartial = ""; livePartialTranslations = [:]
         if livePreviewEnabled {
             preview.onText = { [weak self] t in self?.livePartial = t }
             capture.onPreview = { [weak self] url in self?.preview.feed(wav: url) }
@@ -1028,7 +1232,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedIDs.removeAll()
+        translatedHash.removeAll()
         interimCache.clear()
         clearSummary()
         fileName = url.lastPathComponent
@@ -1095,6 +1299,10 @@ final class SessionController: EngineProcessDelegate {
     // live mic path only (file mode never emits `[stream] ready`)
     func engineDidBecomeReady() {
         engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
+        // W2 재시작 엔진의 ready는 무시 — capture.start() 재진입은 installTap
+        // 중복 크래시 + 세그먼터 타임라인/파일 리셋을 일으킨다 (역검증
+        // app-state-1/watchdog-conc-0). 캡처는 최초 기동에서만 시작.
+        guard phase == .engineStarting || phase == .ready else { return }
         phase = .ready
         do {
             try capture.start()
@@ -1132,11 +1340,13 @@ final class SessionController: EngineProcessDelegate {
     }
 
     func engine(didEmit event: EngineEvent) {
+        lastEngineActivityAt = Date()   // W2 하트비트 (모든 엔진 이벤트 = 진행 증거)
         switch event {
         case .progressTotal(let n): chunksTotal = n
         case .progressChunk(let k): chunksDone = max(chunksDone, k)
         case .wordSectionBegin:
             livePartial = ""; transcript.ingest(event)  // committed → drop interim
+            lastCommitAt = Date()                        // D19 commit-cadence ring
             translateStableLines()                       // translate now-stable prior lines
         case .languageDetected(let tok):
             // auto-detect locked → start the preview engine in THAT language
@@ -1153,6 +1363,37 @@ final class SessionController: EngineProcessDelegate {
             // no Word exists yet, so no id/translation to disturb.
             let fixed = PersonalVocabulary.correctIncomingText(text, conf: conf, glossary)
             transcript.ingest(fixed == text ? event : .word(t0: t0, t1: t1, text: fixed, conf: conf))
+            wordsSinceSegStart += 1                      // W1 coverage signal
+            // T2: queue a line the moment it stops being the last line (idempotent
+            // via the hash gate) + arm the tail timeout for the last line itself.
+            translateStableLines()
+            scheduleTailTranslate()
+        case .segmentEnd:
+            // W1: one stream job finished. A segment that HAD speech but produced
+            // zero words is a suspected miss — retry it once from its retained
+            // wav; if it stays empty, surface a 누락 의심 marker.
+            if !segQueue.isEmpty {
+                let job = segQueue.removeFirst()
+                if job.hadSpeech, wordsSinceSegStart == 0 {
+                    // 백로그가 있으면 재시도는 무의미: 뒤 세그먼트가 먼저 커밋해
+                    // WordMerger 워터마크가 이 구간을 지나가 복구 단어가 전량
+                    // 폐기된다 (역검증 watchdog-conc-2). 그 경우 즉시 갭 기록.
+                    if !job.retried, segQueue.isEmpty {
+                        var retry = job; retry.retried = true; retry.fedAt = Date()
+                        segQueue.append(retry)
+                        engine?.feed(offset: job.offset, wav: job.url)
+                    } else {
+                        coverageGaps.append(job.offset)
+                    }
+                }
+            }
+            wordsSinceSegStart = 0
+            segmentsInFlight = segQueue.count
+        case .partial(_, let text):
+            // in-decode hypothesis of the closed segment — better context than
+            // the preview engine's text and converges to the committed line, so
+            // it may overwrite; the next preview/commit supersedes it.
+            if !text.isEmpty { livePartial = text }
         default: transcript.ingest(event)
         }
     }
@@ -1164,7 +1405,7 @@ final class SessionController: EngineProcessDelegate {
         // exit beats the FLUSH_END line (finalizeOnce is idempotent).
         if code == 0 { finalizeOnce(); return }
         if phase != .done, phase != .flushing {
-            preview.stop(); livePartial = ""
+            preview.stop(); livePartial = ""; livePartialTranslations = [:]
             phase = .error("전사 엔진이 예기치 않게 종료되었어요 (코드 \(code)). 다시 시도해주세요.")
         }
     }
@@ -1193,11 +1434,13 @@ final class SessionController: EngineProcessDelegate {
         for p in pendingEnrollment.pending() { enrollVoiceprint(speaker: p.id, name: p.name) }
         pendingEnrollment.clear()
         engine = nil
-        preview.stop(); livePartial = ""   // tear down the 2nd engine + interim text
+        preview.stop(); livePartial = ""; livePartialTranslations = [:]   // tear down the 2nd engine + interim text
         phase = .done
         translateStableLines(includingLast: true)  // translate the final line(s) too
         interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
         stopLiveRail()       // recording ended — keep the accumulated rail for review
+        stopWatchdog()
+        segQueue.removeAll(); segmentsInFlight = 0
         stopLiveCoach(); recomputeCoach()   // stop the 1Hz loop, snapshot the final transcript once
         calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
@@ -1207,6 +1450,226 @@ final class SessionController: EngineProcessDelegate {
             s.generateTitle(lines: attributedLines)
         }
         if autoSaveSummary, autoSaveEnabled { autoSummarizeForSave() }   // 요약본 별개 저장
+        kickReconcile()   // opt-in: LLM reviews speaker/language after the session
+    }
+
+    // MARK: AI reconcile (post-session)
+
+    /// Kick off the post-session LLM correction pass (if enabled + model present +
+    /// enough dialogue to reason about). Runs after finalize when the recording
+    /// engine is gone, so the DNA3 model has the machine to itself.
+    /// Acoustic margin below which a line counts as "uncertain" — the ONLY lines
+    /// the LLM may relabel (S3 fusion). Engine margins: confident ≈ 0.4-1.0,
+    /// ambiguous windows measured 0.22-0.32 on the clinic fixture.
+    private static let uncertainMargin = 0.35
+
+    /// W2/W1/B1 timers — armed while recording, torn down at finalize/reset.
+    private func startWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickWatchdog() }
+        }
+        if Self.liveRailCapable, aiReconcileEnabled {
+            midReconcileTimer?.invalidate()
+            midReconcileTimer = Timer.scheduledTimer(withTimeInterval: 45, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.phase == .recording, !self.reconciling else { return }
+                    self.kickReconcile(mid: true)   // B1: correct the stable prefix continuously
+                }
+            }
+        }
+    }
+    private func stopWatchdog() {
+        watchdogTimer?.invalidate(); watchdogTimer = nil
+        midReconcileTimer?.invalidate(); midReconcileTimer = nil
+    }
+
+    /// W2: the oldest fed segment has produced no <<SEG_END>> for 45 s — the
+    /// engine is hung. Restart it and re-feed every pending segment (their wavs
+    /// are retained, so no audio is lost).
+    private var lastEngineActivityAt = Date()
+
+    private func tickWatchdog() {
+        // A8: 정지 직후(.flushing)는 부하가 가장 큰 순간 — 여기서 행이면
+        // FLUSH_END가 영영 안 와 세션이 '정리 중'에 갇힌다. 활동 없이 45s면
+        // 라이브 라벨로 강제 마감 (역검증 watchdog-conc-5).
+        if phase == .flushing {
+            if Date().timeIntervalSince(lastEngineActivityAt) > 45 {
+                engine?.delegate = nil
+                engine?.terminate()
+                transcript.markDiarNamespaceBroken()
+                engineDidFlush()
+            }
+            return
+        }
+        guard phase == .recording || phase == .paused, let oldest = segQueue.first else { return }
+        // A6: 진행(엔진 활동) 기준 — 큐가 밀렸어도 SEG_END/단어가 나오고 있으면
+        // 건강한 엔진이다. 큐 대기시간으로 재면 백로그에서 오재시작·연쇄 발산
+        // (역검증 app-state-5).
+        let lastProgress = max(oldest.fedAt, lastEngineActivityAt)
+        guard Date().timeIntervalSince(lastProgress) > 45 else { return }
+        hangRecoveries += 1
+        engine?.delegate = nil   // 구엔진의 didTerminate(SIGTERM)가 세션을 error로 죽이지 않게 (watchdog-conc-1)
+        engine?.terminate()
+        transcript.markDiarNamespaceBroken()   // 새 엔진 화자 id는 0부터 — FLUSH 라벨 대체 금지 (app-state-6)
+        let e = EngineProcess(config: makeConfig())
+        e.delegate = self
+        engine = e
+        do { try e.start() } catch { phase = .error("엔진 재시작 실패: \(error.localizedDescription)"); return }
+        for i in segQueue.indices { segQueue[i].fedAt = Date() }
+        for job in segQueue { e.feed(offset: job.offset, wav: job.url) }
+    }
+
+    private var pendingFinalReconcile = false
+
+    private func kickReconcile(mid: Bool = false) {
+        // mid 응답 대기 중 final 킥이 스냅샷을 덮으면 mid 응답이 final로 오적용
+        // 된다 (역검증 fusion-1/watchdog-conc-4) — in-flight면 final을 예약.
+        if reconciling { if !mid { pendingFinalReconcile = true }; return }
+        guard aiReconcileEnabled, transcript.lines.count >= 4,
+              let s = ensureSummaryEngine() else { return }
+        // B1 mid-session: only the STABLE prefix (the last 2 lines may still grow)
+        let lines = mid ? Array(transcript.lines.dropLast(2)) : transcript.lines
+        guard lines.count >= 4 else { return }
+        reconciling = true
+        if !mid { reconcileNote = nil }
+        reconcileIsMid = mid
+        reconcileSnapshot = lines.map(\.id)
+        let uncertain = Set(lines.enumerated().compactMap { i, l in
+            l.speakerMargin < Self.uncertainMargin ? i : nil
+        })
+        let numbered = TranscriptReconciler.promptInput(
+            lines: lines.map { (speaker: $0.speaker, text: $0.text) },
+            speakerName: { [weak self] in self?.speakerNames[$0] ?? "화자 \($0)" },
+            uncertain: uncertain)
+        s.reconcile(numbered: numbered)
+    }
+
+    /// Apply the parsed correction plan: speaker merges/relabels immediately
+    /// (reversible in one step via transcript.revertSpeakerCorrections), then
+    /// re-transcribe any wrong-language lines from their retained audio (Phase 2).
+    private func applyReconcile(_ reply: String?) {
+        reconciling = false
+        let mid = reconcileIsMid
+        guard let reply else { if !mid { reconcileNote = nil }; return }
+        let snapshot = reconcileSnapshot
+        let speakers = Set(transcript.lines.map(\.speaker))
+        // S3 fusion gate: RELABEL is only accepted for acoustically-uncertain
+        // lines (margin < threshold at snapshot indices, resolved to live lines).
+        var allowed = Set<Int>()
+        for (i, id) in snapshot.enumerated() {
+            if let line = transcript.lines.first(where: { $0.id == id }),
+               line.speakerMargin < Self.uncertainMargin { allowed.insert(i) }
+        }
+        let plan = TranscriptReconciler.parse(reply, speakers: speakers, lineCount: snapshot.count,
+                                              relabelAllowed: allowed)
+        guard !plan.isEmpty else { if !mid { reconcileNote = nil }; return }
+
+        var merged = 0, relabeled = 0
+        // mid-session: merges are deferred to the final pass (a wrong merge
+        // mid-meeting is disruptive; relabels are line-local and gated).
+        if !mid {
+            for c in plan.merges { if case let .merge(from, into) = c { transcript.mergeSpeaker(from: from, into: into); merged += 1 } }
+        }
+        for c in plan.relabels {
+            if case let .relabel(line, sp) = c, line < snapshot.count {
+                transcript.relabelSpeaker(lineID: snapshot[line], to: sp); relabeled += 1
+            }
+        }
+        // Phase 2: re-transcribe wrong-language lines from their own audio clips.
+        let langFlags: [(id: UUID, lang: String)] = plan.languageFlags.compactMap { c in
+            if case let .language(line, lang) = c, line < snapshot.count {
+                return (snapshot[line], lang)
+            }
+            return nil
+        }
+        reTranscribeLanguage(langFlags)
+
+        var parts: [String] = []
+        if merged > 0 { parts.append("화자 \(merged)건 병합") }
+        if relabeled > 0 { parts.append("화자 \(relabeled)건 재지정") }
+        if !langFlags.isEmpty { parts.append("언어 \(langFlags.count)줄 재전사") }
+        if !parts.isEmpty {
+            reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ") + parts.joined(separator: " · ")
+        } else if !mid {
+            reconcileNote = nil
+        }
+        if merged > 0 || relabeled > 0 {
+            calendar.matchToSpeakers(speakerNames)   // speaker set changed → rematch attendees
+            recomputeCoach()
+        }
+        if pendingFinalReconcile {
+            pendingFinalReconcile = false
+            kickReconcile()
+        }
+    }
+
+    /// Revert all AI speaker corrections in one step (UI "되돌리기").
+    func revertReconcile() {
+        transcript.revertSpeakerCorrections()
+        reconcileNote = nil
+        calendar.matchToSpeakers(speakerNames)
+    }
+
+    /// Phase 2: re-decode each wrong-language line's own audio clip with the
+    /// correct language forced, then replace the line text. Uses the retained
+    /// live-segment wavs (offset → covering segment); file-mode sessions have no
+    /// per-segment audio, so they are flagged only (no re-transcription).
+    /// Best-effort: a segment ≈ one utterance in the short-turn clinic case; a
+    /// multi-line segment yields the whole window's text for the flagged line.
+    private func reTranscribeLanguage(_ flags: [(id: UUID, lang: String)]) {
+        guard !flags.isEmpty, !segmentAudio.isEmpty else { return }
+        let bin = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/transcribe")
+        let model = AssetManifest.modelURL
+        let bpe = AssetManifest.bundledBPE
+        let assets = AssetManifest.bundledAssetsDir
+        let segs = segmentAudio
+        for f in flags {
+            guard let line = transcript.lines.first(where: { $0.id == f.id }),
+                  let tok = TranscriptReconciler.languageToken(f.lang),
+                  let seg = (segs.last(where: { $0.offset <= line.start + 0.05 }) ?? segs.first),
+                  FileManager.default.fileExists(atPath: seg.url.path) else { continue }
+            let id = f.id
+            Task.detached {
+                guard let text = Self.runOneShotTranscribe(
+                    bin: bin, model: model, wav: seg.url, bpe: bpe, assets: assets, langToken: tok),
+                    !text.isEmpty else { return }
+                await MainActor.run { [weak self] in self?.transcript.editLine(id, text) }
+            }
+        }
+    }
+
+    /// Run the bundled `transcribe` binary once on a single wav in plain FILE
+    /// mode with a forced language, and return the transcription text. Runs off
+    /// the main actor (blocking Process I/O).
+    nonisolated private static func runOneShotTranscribe(
+        bin: URL, model: URL, wav: URL, bpe: URL, assets: URL, langToken: Int) -> String? {
+        let p = Process()
+        p.executableURL = bin
+        p.arguments = [model.path, wav.path, bpe.path]
+        p.currentDirectoryURL = assets
+        var env = ProcessInfo.processInfo.environment
+        env["DIAR"] = "0"; env["AUDIO_CTX"] = "auto"; env["WHISPER_LANG_ID"] = String(langToken)
+        env.removeValue(forKey: "STREAM"); env.removeValue(forKey: "APP_FILE")
+        p.environment = env
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard let s = String(data: data, encoding: .utf8) else { return nil }
+        // Plain file mode prints "=== TRANSCRIPTION (...) ===" then the text lines.
+        let lines = s.components(separatedBy: "\n")
+        guard let start = lines.firstIndex(where: { $0.hasPrefix("=== TRANSCRIPTION") }) else { return nil }
+        var text = ""
+        for l in lines[(start + 1)...] {
+            if l.hasPrefix("===") || l.hasPrefix("[") { break }   // next section / perf line
+            let t = l.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty { if text.isEmpty { continue } else { break } }
+            text += (text.isEmpty ? "" : " ") + t
+        }
+        return text.trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: export

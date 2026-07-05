@@ -29,6 +29,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Engine/EngineProtocol.swift
   "$APP_DIR"/Sovereign/Engine/EngineProcess.swift
   "$APP_DIR"/Sovereign/Engine/PreviewEngine.swift
+  "$APP_DIR"/Sovereign/Engine/TranslateStreamParser.swift
   "$APP_DIR"/Sovereign/Engine/TranslateEngine.swift
   "$APP_DIR"/Sovereign/Engine/SummaryEngine.swift
   "$APP_DIR"/Sovereign/Audio/WavWriter.swift
@@ -64,6 +65,8 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/GlossaryStore.swift
   "$APP_DIR"/Sovereign/Transcript/PersonalVocabulary.swift
   "$APP_DIR"/Sovereign/Transcript/InterimTranslationCache.swift
+  "$APP_DIR"/Sovereign/Transcript/TranscriptReconciler.swift
+  "$APP_DIR"/Sovereign/Transcript/FAQTranslationStore.swift
   "$APP_DIR"/Sovereign/Transcript/GistExtractor.swift
   "$APP_DIR"/Sovereign/Transcript/MeetingPrepBrief.swift
   "$APP_DIR"/Sovereign/Transcript/PrepBriefData.swift
@@ -73,6 +76,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/CalendarBridge.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
+  "$APP_DIR"/Sovereign/UI/ClinicDisplaySupport.swift
   "$APP_DIR"/Sovereign/UI/Theme.swift
   "$APP_DIR"/Sovereign/UI/Theme+Conf.swift
   "$APP_DIR"/Sovereign/UI/BrandLogo.swift

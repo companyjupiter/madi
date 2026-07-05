@@ -31,4 +31,30 @@ final class EngineProtocolTests: XCTestCase {
             XCTFail("unrecognized non-progress lines should decode to .other")
         }
     }
+
+    func testSpeakerLabelWithMarginField() {
+        // S2: 5th field = acoustic margin; older engines omit it (default 1.0)
+        XCTAssertEqual(EngineProtocol.parseSpeaker("SPK 12.50 1 1.50 0.27", tag: "SPK"),
+                       SpeakerLabel(time: 12.5, id: 1, dur: 1.5, margin: 0.27))
+        XCTAssertEqual(EngineProtocol.parseSpeaker("SPK 12.50 1 1.50", tag: "SPK"),
+                       SpeakerLabel(time: 12.5, id: 1, dur: 1.5, margin: 1.0))
+        XCTAssertEqual(EngineProtocol.parseSpeaker("SPKFIX 3.00 0 0.80 0.44", tag: "SPKFIX"),
+                       SpeakerLabel(time: 3.0, id: 0, dur: 0.8, margin: 0.44))
+    }
+
+    func testDecodesSegmentEnd() {
+        let d = EngineProtocol.Decoder()
+        XCTAssertEqual(d.decode(line: "<<SEG_END>>"), .segmentEnd)
+    }
+
+    func testDecodesPartialHypothesis() {
+        let d = EngineProtocol.Decoder()
+        // «partial <t0>» <text> — streaming in-decode hypothesis (PARTIALS=1)
+        XCTAssertEqual(d.decode(line: "«partial 12.50» 안녕하세요 오늘은"),
+                       .partial(t0: 12.5, text: "안녕하세요 오늘은"))
+        // malformed (no closing guillemet) must not crash → .other
+        if case .other = d.decode(line: "«partial 12.50 안녕") { } else {
+            XCTFail("malformed partial should decode to .other")
+        }
+    }
 }

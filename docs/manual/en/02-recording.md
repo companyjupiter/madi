@@ -12,6 +12,11 @@ Madi transcribes meetings live as people speak, and it can also transcribe audio
 
 **Note**
 - Set **회의 모드** (Meeting mode) and **화자 수** (Speaker count) *before* you start — see below. They lock while recording is in progress.
+- The **input level bar** at the top shows your mic level; it drops to 0 while paused.
+
+### Captions appear as soon as you stop talking
+
+Madi doesn't wait for a window to fill up. When you **pause and go quiet for a moment**, it closes that window early and emits the transcript right away — cutting the wait noticeably in short back-and-forth conversations (like a consultation). Quiet, far-field voices aren't clipped: the threshold adapts automatically.
 
 ## System audio capture (Zoom / Teams / video)
 
@@ -67,6 +72,7 @@ Use the toggle at the top of the window to switch between two views.
 
 - **내용** (Content) — A clean, minutes-style reading view (the default). Best for reading.
 - **상세** (Detailed) — Shows timecodes, low-confidence words (highlighted in amber), and overlap markers when two people talk at once. Best for reviewing and editing.
+- **대화** (Chat) — Appears only when exactly two people are present. Puts the first speaker on the left and the other on the right in message bubbles — good for reading back-and-forth interpreting or a consultation.
 
 Adjust the font size with the **+ / −** buttons.
 

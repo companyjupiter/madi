@@ -160,6 +160,12 @@ fn kCvt(K: Kernels, dst: [*]f32, src: [*]f16, n: u32) !void {
 /// Run the encoder. `x` (F32 residual, pos-emb already added) in/out; final
 /// ln_post written F16 into `out_f16` then converted to F32 `enc_out`.
 /// One batched command buffer per layer, single sync at the layer boundary.
+///
+/// `seq` — encoder positions per batch slot (≤ ENC_SEQ). The whisper.cpp
+/// `audio_ctx` pattern: a short live segment only occupies its leading rows
+/// (row r = t·0.02 s), so running the layers on `seq` rows skips the zero-pad
+/// tail entirely. Callers pass ENC_SEQ for the exact full-window path; with
+/// batch_count > 1 the d_ex slot stride is ENC_SEQ so seq MUST be ENC_SEQ.
 pub fn forward(
     K: Kernels,
     layers: []const Layer,
@@ -170,8 +176,10 @@ pub fn forward(
     enc_out: [*]f32,
     s: Scratch,
     batch_count: u32,
+    seq: u32,
 ) !void {
-    const M = batch_count * ENC_SEQ;
+    std.debug.assert(seq == ENC_SEQ or batch_count == 1);
+    const M = batch_count * seq;
     const q = s.qkv;
     const k = s.qkv + @as(usize, M) * D;
     const v = s.qkv + 2 * @as(usize, M) * D;
@@ -204,8 +212,8 @@ pub fn forward(
             try kBias(K, v, L.v_b, M * D, D);
         }
         for (0..batch_count) |bi| {
-            const off = bi * ENC_SEQ * D;
-            try kFlash(K, s.ao + off, q + off, k + off, v + off, ENC_SEQ);
+            const off = bi * seq * D;
+            try kFlash(K, s.ao + off, q + off, k + off, v + off, seq);
         }
         try kDeq(K, s.wdq, L.o_w, D, D);
         if (K.m4_nn) |m4| {

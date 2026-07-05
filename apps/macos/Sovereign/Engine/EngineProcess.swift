@@ -40,6 +40,14 @@ final class EngineProcess {
         var voiceprintsDir: URL?
         var streamWavRoots: [URL] = []
         var fileURL: URL?           // set ⇒ native FILE mode (batched, fast); nil ⇒ live STREAM
+        /// T12 bidirectional pair: whisper language token ids the engine may
+        /// re-probe between EVERY segment (e.g. [50264, 50266] for a KO staff ↔
+        /// JA patient conversation). Empty = session-locked single language.
+        var langCandidates: [Int] = []
+        /// S1 anchor mode: seed diarization centroids from the enrolled
+        /// voiceprints, so a known voice (clinic staff) is VERIFIED against a
+        /// fixed reference instead of re-discovered by clustering.
+        var anchorVoiceprints = false
     }
 
     private let config: Config
@@ -71,6 +79,21 @@ final class EngineProcess {
             // live STREAM mode: model resident, segments fed on stdin
             process.arguments = [config.modelURL.path, "/dev/null", config.bpeURL.path]
             env["STREAM"] = "1"
+            // truncated encoder context (whisper.cpp audio_ctx pattern): a 10 s
+            // live segment only fills 500/1500 encoder rows — auto fits the
+            // window to the audio (+4.5 s EOT margin), cutting encoder latency
+            // ~2× per segment. FLEURS-ko CER-gated engine-side; file mode stays
+            // full-context.
+            env["AUDIO_CTX"] = "auto"
+            // «partial» in-decode hypothesis lines: the segment's text streams
+            // onto screen while it decodes instead of all-at-once at SEG_END.
+            env["PARTIALS"] = "1"
+            // bidirectional language pair (T12): per-segment re-probe whitelist
+            if config.langCandidates.count >= 2 {
+                env["LANG_CANDIDATES"] = config.langCandidates.map(String.init).joined(separator: ",")
+            }
+            // S1: anchored diarization — enrolled voice = fixed reference
+            if config.anchorVoiceprints { env["DIAR_ANCHOR"] = "1" }
             if !config.streamWavRoots.isEmpty {
                 env["STREAM_WAV_ROOTS"] = EnginePathPolicy.pathList(config.streamWavRoots)
             }

@@ -78,6 +78,14 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Section("AI 교정 (세션 종료 후)") {
+                Toggle("화자·언어 자동 교정", isOn: $session.aiReconcileEnabled)
+                    .disabled(!AssetManifest.translateAvailable)
+                Text(AssetManifest.translateAvailable
+                     ? "녹음이 끝나면 온디바이스 LLM이 대화를 읽고 명백한 화자 오분리·잘못된 언어 줄을 보수적으로 바로잡습니다. 화자 교정은 한 번에 되돌릴 수 있습니다."
+                     : "번역·요약 모델(DNA3.0-4B)이 있어야 사용할 수 있습니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .onAppear { translateDownloader.refresh() }
@@ -138,9 +146,52 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
             }
+            captionSection
         }
         .formStyle(.grouped)
         .disabled(session.phase == .recording || session.phase == .paused)
+    }
+
+    /// Clinic caption panel sizing + patient (second) display. Edits go through
+    /// a local copy so the didSet-driven overlay refresh fires once on commit.
+    private var captionSection: some View {
+        Section("자막 오버레이 (진료실)") {
+            let s = session.captionSettings
+            LabeledContent("직원 자막 크기") {
+                Slider(value: bind(\.staffFontSize), in: 14...48, step: 2)
+                Text("\(Int(s.staffFontSize))pt").monospacedDigit().foregroundStyle(.secondary)
+            }
+            Toggle("환자용 대형 자막 (별도 화면)", isOn: bind(\.patientPanelEnabled))
+                .help("두 번째 패널을 환자 언어로, 원거리 판독용 큰 글씨로 띄웁니다")
+            if s.patientPanelEnabled {
+                LabeledContent("환자 자막 크기") {
+                    Slider(value: bind(\.patientFontSize), in: 24...96, step: 2)
+                    Text("\(Int(s.patientFontSize))pt").monospacedDigit().foregroundStyle(.secondary)
+                }
+                if NSScreen.screens.count > 1 {
+                    Picker("환자 화면", selection: bindOpt(\.patientScreenIndex)) {
+                        Text("주 화면").tag(Int?.none)
+                        ForEach(Array(NSScreen.screens.enumerated()), id: \.offset) { i, sc in
+                            Text("화면 \(i + 1) (\(Int(sc.frame.width))×\(Int(sc.frame.height)))").tag(Int?.some(i))
+                        }
+                    }
+                }
+                Picker("환자 언어", selection: bindOpt(\.patientLangOverride)) {
+                    Text("자동 (상대 언어)").tag(String?.none)
+                    ForEach(["Japanese", "Chinese", "English", "Korean"], id: \.self) {
+                        Text($0).tag(String?.some($0))
+                    }
+                }
+            }
+        }
+    }
+    private func bind<V>(_ kp: WritableKeyPath<CaptionSettings, V>) -> Binding<V> {
+        Binding(get: { session.captionSettings[keyPath: kp] },
+                set: { var c = session.captionSettings; c[keyPath: kp] = $0; session.captionSettings = c.clamped })
+    }
+    private func bindOpt<V: Equatable>(_ kp: WritableKeyPath<CaptionSettings, V>) -> Binding<V> {
+        Binding(get: { session.captionSettings[keyPath: kp] },
+                set: { var c = session.captionSettings; c[keyPath: kp] = $0; session.captionSettings = c })
     }
 
     // MARK: 편집·저장 — editor analysis thresholds + auto-save

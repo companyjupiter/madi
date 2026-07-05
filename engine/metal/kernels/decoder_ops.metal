@@ -324,6 +324,138 @@ kernel void flash_cross_attn_f16kv(
         out_buf[h * hdd + od] = (s_part[od] + s_part[64 + od]) + (s_part[128 + od] + s_part[192 + od]);
 }
 
+// ── SPLIT cross-attention (flash-decoding, 2026-07-05) ──────────────────────
+// The monolithic kernel runs ONE threadgroup per head = 20 TGs — the GPU is
+// ~19% occupied (measured 52 GB/s effective vs 273 peak; D1/D2 established the
+// decode is occupancy/latency-bound, not bandwidth-bound). Split the seqlen
+// into `nsplit` chunks — grid nh×nsplit TGs — each computing a PARTIAL flash
+// (per-chunk max m, exp-sum s, unnormalized output o = Σe·v); a second tiny
+// kernel recombines exactly via log-sum-exp. Same math, reassociated FP.
+//
+// Alignment layers (write_sc=1) write RAW scores in pass 1; pass 2 normalizes
+// them in place with the global (m, s) so ca_accumulate sees identical
+// normalized rows.
+kernel void flash_cross_attn_split(
+    device float*       part    [[buffer(0)]],  // [nh][nsplit][2+hdd]: m, s, o[hdd]
+    device const float* q_buf   [[buffer(1)]],
+    device const half*  kc      [[buffer(2)]],
+    device const half*  vc      [[buffer(3)]],
+    constant uint& seqlen [[buffer(4)]],
+    constant uint& hdd    [[buffer(5)]],
+    constant uint& kvd    [[buffer(6)]],
+    constant uint& nkv    [[buffer(7)]],
+    constant uint& nh     [[buffer(8)]],
+    constant uint& nsplit [[buffer(9)]],
+    device float*       sc_raw  [[buffer(10)]], // [nh][seqlen] RAW scores (write_sc)
+    constant uint&      write_sc [[buffer(11)]],
+    uint tgid [[threadgroup_position_in_grid]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    threadgroup float scores[192];  // chunk ≤ ceil(1500/8)=188
+    threadgroup float s8[8];
+    threadgroup float s_part[256];
+    threadgroup float s_qh[64];
+    const uint h = tgid / nsplit;
+    const uint c = tgid % nsplit;
+    const uint csz = (seqlen + nsplit - 1) / nsplit;
+    const uint t0 = c * csz;
+    const uint t1 = min(t0 + csz, seqlen);
+    device float* my = part + ((ulong)h * nsplit + c) * (2 + hdd);
+    if (t0 >= t1) {                       // empty tail chunk (tiny seqlen)
+        if (ltid == 0) { my[0] = -INFINITY; my[1] = 0.0f; }
+        for (uint d = ltid; d < hdd; d += 256) my[2 + d] = 0.0f;
+        return;
+    }
+    const uint kvh = (h * nkv) / nh;
+    const float rsq = rsqrt((float)hdd);
+    const float LOG2E = 1.4426950408889634f;
+    for (uint d = ltid; d < hdd; d += 256) s_qh[d] = q_buf[h * hdd + d];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    threadgroup const float4* q4 = (threadgroup const float4*)s_qh;
+    const uint d4n = hdd >> 2;
+    for (uint t = t0 + ltid; t < t1; t += 256) {
+        device const half4* k4 = (device const half4*)(kc + (ulong)t * kvd + kvh * hdd);
+        float sum = 0.0f;
+        for (uint i = 0; i < d4n; i++) {
+            const half4 kv = k4[i];
+            const float4 qv = q4[i];
+            sum += qv.x * (float)kv.x + qv.y * (float)kv.y + qv.z * (float)kv.z + qv.w * (float)kv.w;
+        }
+        const float sc = sum * rsq;
+        scores[t - t0] = sc;
+        if (write_sc) sc_raw[(ulong)h * seqlen + t] = sc;  // raw — pass 2 normalizes
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    const uint n = t1 - t0;
+    float lmax = -INFINITY;
+    for (uint t = ltid; t < n; t += 256) lmax = max(lmax, scores[t]);
+    float mx = block_max(s8, lmax, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lsum = 0.0f;
+    for (uint t = ltid; t < n; t += 256) { float e = exp2((scores[t] - mx) * LOG2E); scores[t] = e; lsum += e; }
+    float ssum = block_sum(s8, lsum, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    // unnormalized partial output: 64 dims × 4 t-partitions over the chunk
+    const uint od = ltid & 63;
+    const uint op = ltid >> 6;
+    const uint p0 = (op * n) / 4;
+    const uint p1 = ((op + 1) * n) / 4;
+    float psum = 0.0f;
+    for (uint t = p0; t < p1; t++)
+        psum += scores[t] * (float)vc[(ulong)(t0 + t) * kvd + kvh * hdd + od];
+    s_part[op * 64 + od] = psum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (op == 0) {
+        my[2 + od] = (s_part[od] + s_part[64 + od]) + (s_part[128 + od] + s_part[192 + od]);
+        if (od == 0) { my[0] = mx; my[1] = ssum; }
+    }
+}
+
+// pass 2: log-sum-exp recombination of the partials (+ in-place score
+// normalization for alignment layers). Grid = nh TGs.
+kernel void flash_cross_attn_reduce(
+    device float*       out_buf [[buffer(0)]],
+    device const float* part    [[buffer(1)]],
+    constant uint& hdd    [[buffer(2)]],
+    constant uint& nsplit [[buffer(3)]],
+    device float*       sc_out  [[buffer(4)]],  // raw in / normalized out
+    constant uint& seqlen [[buffer(5)]],
+    constant uint& write_sc [[buffer(6)]],
+    uint tgid [[threadgroup_position_in_grid]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    threadgroup float g2[2];   // [gm, gs]
+    const uint h = tgid;
+    const float LOG2E = 1.4426950408889634f;
+    device const float* hp = part + (ulong)h * nsplit * (2 + hdd);
+    if (ltid == 0) {
+        float gm = -INFINITY;
+        for (uint c = 0; c < nsplit; c++) gm = max(gm, hp[c * (2 + hdd)]);
+        float gs = 0.0f;
+        for (uint c = 0; c < nsplit; c++) {
+            const float m = hp[c * (2 + hdd)];
+            if (m > -INFINITY) gs += hp[c * (2 + hdd) + 1] * exp2((m - gm) * LOG2E);
+        }
+        g2[0] = gm; g2[1] = gs;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    const float gm = g2[0];
+    const float inv = 1.0f / g2[1];
+    for (uint d = ltid; d < hdd; d += 256) {
+        float acc = 0.0f;
+        for (uint c = 0; c < nsplit; c++) {
+            const float m = hp[c * (2 + hdd)];
+            if (m > -INFINITY) acc += hp[c * (2 + hdd) + 2 + d] * exp2((m - gm) * LOG2E);
+        }
+        out_buf[h * hdd + d] = acc * inv;
+    }
+    if (write_sc) {
+        device float* sr = sc_out + (ulong)h * seqlen;
+        for (uint t = ltid; t < seqlen; t += 256)
+            sr[t] = exp2((sr[t] - gm) * LOG2E) * inv;
+    }
+}
+
 // ── BATCHED cross-attention (P5): B slots in ONE dispatch ───────────────────
 // Multi-chunk batched decode runs B in-flight chunks; each attends to its OWN
 // cross-KV. The per-slot kCA loop launches B low-occupancy dispatches (NH=20
@@ -450,21 +582,22 @@ kernel void extract_ca_head_f16kv(
 // (OpenAI timing semantics). Scores come straight from the flash kernel — no
 // QK/softmax recompute. One thread per t, one row per (plane, tok) → no race.
 kernel void ca_accumulate(
-    device float*       ca       [[buffer(0)]],  // [NALIGN][MAX_TOK][seqlen] planes
+    device float*       ca       [[buffer(0)]],  // [NALIGN][MAX_TOK][ca_stride] planes
     device const float* sc       [[buffer(1)]],  // [nh][seqlen] normalized scores
     device const uint*  tok_ptr  [[buffer(2)]],
     constant uint&  align_mask [[buffer(3)]],    // bit h set → head h is an alignment head
     constant uint&  plane_base [[buffer(4)]],    // plane index of this layer's first align head
-    constant uint&  seqlen     [[buffer(5)]],
+    constant uint&  seqlen     [[buffer(5)]],    // valid cols this pass (AUDIO_CTX may shrink)
     constant uint&  nh         [[buffer(6)]],
     constant uint&  max_tok    [[buffer(7)]],
+    constant uint&  ca_stride  [[buffer(8)]],    // ca plane row stride (ENC_SEQ, fixed alloc)
     uint ltid [[thread_position_in_threadgroup]])
 {
     const uint tok = tok_ptr[0];
     uint plane = plane_base;
     for (uint h = 0; h < nh; h++) {
         if (!(align_mask & (1u << h))) continue;
-        device float*       row = ca + ((ulong)plane * max_tok + tok) * seqlen;
+        device float*       row = ca + ((ulong)plane * max_tok + tok) * ca_stride;
         device const float* src = sc + (ulong)h * seqlen;
         for (uint t = ltid; t < seqlen; t += 256) row[t] = src[t];
         plane++;

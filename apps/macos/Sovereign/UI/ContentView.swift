@@ -13,7 +13,14 @@ struct ContentView: View {
     // Default to the clean reading view — general users just want the content.
     // The detailed (timecode + confidence + overlap) view is one tap away.
     @AppStorage("transcriptViewMode") private var contentMode = true
-    private var viewMode: TranscriptViewMode { contentMode ? .content : .detailed }
+    // C18: opt-in two-party chat layout (staff left / patient right). Only
+    // meaningful with exactly two speakers — the toggle hides otherwise.
+    @AppStorage("transcriptChatLayout") private var chatLayout = false
+    private var twoSpeakers: Bool { Set(session.transcript.lines.map { $0.speaker }).count == 2 }
+    private var viewMode: TranscriptViewMode {
+        if chatLayout && twoSpeakers { return .chat }
+        return contentMode ? .content : .detailed
+    }
     // Transcript text size (pt) — readable default, A−/A+ in the bar. Persisted.
     @AppStorage("transcriptFontSize") private var fontSize = 18.0
     // IDE-style workspace explorer (save folder as a file tree) on the right.
@@ -337,6 +344,13 @@ struct ContentView: View {
             if case .processing = session.phase { progressBanner }
             if session.micSilent { silenceBanner }
             if !session.transcript.lines.isEmpty { viewModeBar }
+            // W3: pipeline status chips — what the invisible stages are doing
+            // RIGHT NOW. Same row grammar/insets as viewModeBar above.
+            if isRecordingLike {
+                pipelineHUD
+                    .padding(.leading, 21).padding(.trailing, 16).padding(.vertical, 4)
+            }
+            if session.reconciling || session.reconcileNote != nil { reconcileBar }
             if viewMode == .detailed && !flaggedWords.isEmpty { reviewBar }
             // (Speaker timeline moved into the left panel's sequence bar —
             // Figma 188:662 has no timeline card above the transcript.)
@@ -353,6 +367,8 @@ struct ContentView: View {
                                    interim: session.livePartial,
                                    interimTranslations: session.livePartialTranslations,
                                    fontSize: fontSize,
+                                   streamingTransID: session.streamingTranslation?.id,
+                                   streamingTransLang: session.streamingTranslation?.lang,
                                    onEdit: { session.editLine($0, to: $1) },
                                    onEditWord: { session.editWord($0, index: $1, to: $2) },
                                    lockedLineID: isRecordingLike ? session.transcript.lines.last?.id : nil,
@@ -488,8 +504,37 @@ struct ContentView: View {
                 .foregroundStyle(Theme.Colors.textTertiary).monospacedDigit()
             Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
                 .buttonStyle(.plain).help("글자 크게")
+            // D20: translation backlog — distinguishes "밀림" from "고장".
+            if isRecordingLike, session.translateQueueDepth > 0 {
+                Label("\(session.translateQueueDepth)줄 번역 대기", systemImage: "hourglass")
+                    .font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
+                    .help("대기 중인 번역 턴 수 (엔진이 한 번에 하나씩 처리)")
+            }
             Spacer(minLength: 0)
+            // A5/B9: floating live-translation caption overlay (Zoom·Teams 위,
+            // 클리닉 이중 패널 포함) — translate targets picked in Settings.
+            if !session.translateTargets.isEmpty {
+                Button { session.toggleCaptionOverlay() } label: {
+                    Image(systemName: session.captionOverlayOn ? "captions.bubble.fill" : "captions.bubble")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(session.captionOverlayOn ? Theme.Colors.accent : Theme.Colors.textSecondary)
+                .help(session.captionOverlayOn ? "자막 오버레이 끄기" : "자막 오버레이 — 화면 위 실시간 번역 자막 창")
+            }
+            // C18: chat layout toggle (two-party only)
+            if twoSpeakers {
+                Button { chatLayout.toggle() } label: {
+                    Image(systemName: chatLayout ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(chatLayout ? Theme.Colors.accent : Theme.Colors.textSecondary)
+                .help("대화 레이아웃 (직원 왼쪽 · 환자 오른쪽)")
+            }
             contentModeSwitch
+                .disabled(chatLayout && twoSpeakers)
+                .opacity(chatLayout && twoSpeakers ? 0.45 : 1)
                 .help("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시")
         }
         .padding(.leading, 21).padding(.trailing, 16).padding(.vertical, 8)
@@ -498,6 +543,56 @@ struct ContentView: View {
 
     // N2 review queue (상세 mode only): step through low-confidence words so the
     // reviewer doesn't have to scan a long transcript for the amber ones.
+    /// W3: pipeline status chips (recording only).
+    @ViewBuilder private var pipelineHUD: some View {
+        HStack(spacing: 5) {
+            if session.level > 0.02 {
+                HUDChip(icon: "waveform", text: "듣는 중", tint: Theme.Colors.meterFill)
+            }
+            if session.segmentsInFlight > 0 {
+                HUDChip(icon: "text.viewfinder", text: "전사 \(session.segmentsInFlight)", tint: Theme.Colors.accent, pulsing: true)
+            }
+            if session.translateQueueDepth > 0 {
+                HUDChip(icon: "globe", text: "번역 \(session.translateQueueDepth)", tint: Theme.Colors.accent, pulsing: true)
+            }
+            if session.reconciling {
+                HUDChip(icon: "wand.and.stars", text: "AI 검토", tint: Theme.Colors.accent, pulsing: true)
+            }
+            if !session.coverageGaps.isEmpty {
+                HUDChip(icon: "exclamationmark.triangle", text: "누락 의심 \(session.coverageGaps.count)", tint: Theme.Colors.lowConf)
+                    .help("음성이 있었는데 전사가 비어 재시도 후에도 실패한 구간")
+            }
+            if session.hangRecoveries > 0 {
+                HUDChip(icon: "arrow.clockwise", text: "복구 \(session.hangRecoveries)", tint: Theme.Colors.lowConf)
+                    .help("엔진이 멈춰 자동 재시작·재공급한 횟수 (오디오 무손실)")
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Post-session AI correction status + one-tap undo of speaker changes.
+    private var reconcileBar: some View {
+        HStack(spacing: 10) {
+            if session.reconciling {
+                ProgressView().controlSize(.small)
+                Text("AI가 화자·언어를 검토하는 중…").font(.system(size: 12))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            } else if let note = session.reconcileNote {
+                Image(systemName: "wand.and.stars").font(.system(size: 12)).foregroundStyle(Theme.Colors.accent)
+                Text(note).font(.system(size: 12)).foregroundStyle(Theme.Colors.textPrimary)
+                Spacer()
+                if session.transcript.hasSpeakerCorrections {
+                    Button("화자 교정 되돌리기") { session.revertReconcile() }
+                        .controlSize(.small).buttonStyle(.plain).foregroundStyle(Theme.Colors.accent)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 7)
+        .background(Theme.Colors.accent.opacity(0.06))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
     private var reviewBar: some View {
         let flagged = flaggedWords
         let idx = min(reviewIndex, max(0, flagged.count - 1))
@@ -1322,6 +1417,13 @@ struct ContentView: View {
                 Text("총 시간")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.Colors.textSecondary)
+                // D19: progress toward the next expected commit — turns the
+                // "왜 멈춰있지?" wait into a predictable one (translate mode).
+                if session.phase == .recording, !session.translateTargets.isEmpty {
+                    CommitCadenceRing(since: session.lastCommitAt,
+                                      window: session.effectiveWindowSeconds)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                }
             }
         }
     }
@@ -1832,6 +1934,26 @@ struct FigmaCheckboxToggleStyle: ToggleStyle {
     }
 }
 
+/// W3: one-line pipeline status — listening / transcribing / translating /
+/// AI-reviewing / suspected misses / hang recoveries. Turns the invisible
+/// background stages into a glanceable answer to "지금 뭘 하는 중이지?".
+private struct HUDChip: View {
+    let icon: String
+    let text: String
+    var tint: Color = Theme.Colors.textSecondary
+    var pulsing = false
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 9))
+            Text(text).font(.system(size: 10, weight: .medium))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Capsule().fill(tint.opacity(0.1)))
+        .opacity(pulsing ? 0.85 : 1)
+    }
+}
+
 struct LevelMeter: View {
     let level: Float
     var body: some View {
@@ -1898,6 +2020,28 @@ private struct CountdownRingView: View {
         withTransaction(reset) { sweep = 0 }
         DispatchQueue.main.async {
             withAnimation(.linear(duration: 1.0)) { sweep = 1 }
+        }
+    }
+}
+
+/// D19: a small ring filling toward the next expected commit (elapsed since the
+/// last commit / window length). TimelineView animates it without a manual timer;
+/// it saturates at 1.0 and holds (a decode may run past the nominal window).
+struct CommitCadenceRing: View {
+    let since: Date
+    let window: Double
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
+            let elapsed = ctx.date.timeIntervalSince(since)
+            let p = window > 0 ? min(1.0, max(0.0, elapsed / window)) : 0
+            ZStack {
+                Circle().stroke(Theme.Colors.meterTrack, lineWidth: 2)
+                Circle().trim(from: 0, to: p)
+                    .stroke(Theme.Colors.accent.opacity(0.8), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 14, height: 14)
+            .help("다음 확정까지 진행도")
         }
     }
 }
