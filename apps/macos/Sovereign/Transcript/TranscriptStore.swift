@@ -81,11 +81,39 @@ final class TranscriptStore {
         if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].editedText = t }
     }
 
+    // ── AI reconcile (post-session speaker corrections) ─────────────────────
+    // A snapshot of each line's speaker id, taken before the LLM correction pass
+    // applies merges/relabels, so the whole pass is reversible in one step.
+    private var speakerSnapshot: [UUID: Int]?
+
+    /// Merge every line of speaker `from` into `into` (over-split fix). Snapshots
+    /// the pre-correction speaker ids on the first change so it can be reverted.
+    func mergeSpeaker(from: Int, into: Int) {
+        if speakerSnapshot == nil { speakerSnapshot = Dictionary(uniqueKeysWithValues: lines.map { ($0.id, $0.speaker) }) }
+        for i in lines.indices where lines[i].speaker == from { lines[i].speaker = into }
+    }
+
+    /// Re-attribute one line to a different speaker (mislabel fix).
+    func relabelSpeaker(lineID: UUID, to speaker: Int) {
+        if speakerSnapshot == nil { speakerSnapshot = Dictionary(uniqueKeysWithValues: lines.map { ($0.id, $0.speaker) }) }
+        if let i = lines.firstIndex(where: { $0.id == lineID }) { lines[i].speaker = speaker }
+    }
+
+    var hasSpeakerCorrections: Bool { speakerSnapshot != nil }
+
+    /// Undo every speaker correction from the reconcile pass in one step.
+    func revertSpeakerCorrections() {
+        guard let snap = speakerSnapshot else { return }
+        for i in lines.indices { if let s = snap[lines[i].id] { lines[i].speaker = s } }
+        speakerSnapshot = nil
+    }
+
     func reset() {
         lines.removeAll()
         merger = WordMerger()
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
         translationsByLine.removeAll(); editsByLine.removeAll()
+        speakerSnapshot = nil
     }
 
     /// Replace the transcript with externally-parsed lines — re-opening an

@@ -69,6 +69,14 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Section("AI 교정 (세션 종료 후)") {
+                Toggle("화자·언어 자동 교정", isOn: $session.aiReconcileEnabled)
+                    .disabled(!AssetManifest.translateAvailable)
+                Text(AssetManifest.translateAvailable
+                     ? "녹음이 끝나면 온디바이스 LLM이 대화를 읽고 명백한 화자 오분리·잘못된 언어 줄을 보수적으로 바로잡습니다. 화자 교정은 한 번에 되돌릴 수 있습니다."
+                     : "번역·요약 모델(DNA3.0-4B)이 있어야 사용할 수 있습니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .onAppear { translateDownloader.refresh() }

@@ -99,6 +99,17 @@ final class SummaryEngine {
         enqueue("live-rail", LiveActionRail.prompt(String(t.suffix(chunkChars))))
     }
 
+    /// POST-SESSION diarization/language reconcile — the model reads the numbered,
+    /// speaker-labeled transcript and proposes conservative speaker merges /
+    /// relabels / wrong-language flags. Reply is parsed caller-side by
+    /// TranscriptReconciler.parse. "reconcile" tag. `numbered` is the full prompt
+    /// input from TranscriptReconciler.promptInput.
+    func reconcile(numbered: String) {
+        let body = String(numbered.suffix(chunkChars))
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { onResult?("reconcile", nil); return }
+        enqueue("reconcile", TranscriptReconciler.instruction() + "\n" + body)
+    }
+
     // The final-format prompt (single fitting text → the user-facing output).
     private func finalPrompt(_ tag: String, _ t: String) -> String {
         switch tag {
