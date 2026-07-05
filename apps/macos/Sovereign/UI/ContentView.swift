@@ -327,6 +327,33 @@ struct ContentView: View {
 
     // N2 review queue (상세 mode only): step through low-confidence words so the
     // reviewer doesn't have to scan a long transcript for the amber ones.
+    /// W3: pipeline status chips (recording only).
+    @ViewBuilder private var pipelineHUD: some View {
+        HStack(spacing: 5) {
+            if session.level > 0.02 {
+                HUDChip(icon: "waveform", text: "듣는 중", tint: Theme.Colors.meterFill)
+            }
+            if session.segmentsInFlight > 0 {
+                HUDChip(icon: "text.viewfinder", text: "전사 \(session.segmentsInFlight)", tint: Theme.Colors.accent, pulsing: true)
+            }
+            if session.translateQueueDepth > 0 {
+                HUDChip(icon: "globe", text: "번역 \(session.translateQueueDepth)", tint: Theme.Colors.accent, pulsing: true)
+            }
+            if session.reconciling {
+                HUDChip(icon: "wand.and.stars", text: "AI 검토", tint: Theme.Colors.accent, pulsing: true)
+            }
+            if !session.coverageGaps.isEmpty {
+                HUDChip(icon: "exclamationmark.triangle", text: "누락 의심 \(session.coverageGaps.count)", tint: Theme.Colors.lowConf)
+                    .help("음성이 있었는데 전사가 비어 재시도 후에도 실패한 구간")
+            }
+            if session.hangRecoveries > 0 {
+                HUDChip(icon: "arrow.clockwise", text: "복구 \(session.hangRecoveries)", tint: Theme.Colors.lowConf)
+                    .help("엔진이 멈춰 자동 재시작·재공급한 횟수 (오디오 무손실)")
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
     /// Post-session AI correction status + one-tap undo of speaker changes.
     private var reconcileBar: some View {
         HStack(spacing: 10) {
@@ -505,6 +532,7 @@ struct ContentView: View {
                         }
                     }
                     .opacity(session.phase == .paused ? 0.4 : 1)
+                    pipelineHUD   // W3: what is the pipeline doing RIGHT NOW
                 }
             }
 
@@ -888,6 +916,26 @@ struct ContentView: View {
         case .done: "완료"
         case .error(let m): "오류: \(m)"
         }
+    }
+}
+
+/// W3: one-line pipeline status — listening / transcribing / translating /
+/// AI-reviewing / suspected misses / hang recoveries. Turns the invisible
+/// background stages into a glanceable answer to "지금 뭘 하는 중이지?".
+private struct HUDChip: View {
+    let icon: String
+    let text: String
+    var tint: Color = Theme.Colors.textSecondary
+    var pulsing = false
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon).font(.system(size: 9))
+            Text(text).font(.system(size: 10, weight: .medium))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Capsule().fill(tint.opacity(0.1)))
+        .opacity(pulsing ? 0.85 : 1)
     }
 }
 

@@ -34,8 +34,8 @@ final class AudioCapture {
     /// the boundary — first committed text ~3.5 s → ~1.8 s.
     var firstSegmentSeconds: Double = 1.5 { didSet { segmenter.firstSegmentSeconds = firstSegmentSeconds } }
 
-    /// (global start offset seconds, segment wav url)
-    var onSegment: ((Double, URL) -> Void)?
+    /// (global start offset seconds, segment wav url, window had speech)
+    var onSegment: ((Double, URL, Bool) -> Void)?
     /// Streaming preview: the in-progress window written to a wav, emitted every
     /// ~previewSeconds of new audio so a separate engine can decode interim text
     /// before the window closes. nil = previews off.
@@ -213,7 +213,7 @@ final class AudioCapture {
         segIndex += 1
         do {
             try WavWriter.write(samples: seg.samples, to: url)
-            onSegment?(seg.offset, url)
+            onSegment?(seg.offset, url, seg.hadSpeech)
         } catch { NSLog("WAV write failed: \(error)") }
     }
 

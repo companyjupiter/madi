@@ -59,6 +59,24 @@ final class TranscriptReconcilerParseTests: XCTestCase {
         XCTAssertEqual(plan.languageFlags, [.language(line: 3, lang: "Japanese")])
     }
 
+    func testRelabelGateOnlyUncertainLines(){
+        // S3 fusion: acoustically-confident lines cannot be flipped by the LLM
+        let gated = TranscriptReconciler.parse("RELABEL 2 1\nRELABEL 5 2", speakers: speakers,
+                                               lineCount: lineCount, relabelAllowed: [4])
+        XCTAssertEqual(gated.relabels, [.relabel(line: 4, speaker: 2)])   // line 2(idx1) dropped
+        // nil gate = legacy behavior (all lines allowed)
+        let open = TranscriptReconciler.parse("RELABEL 2 1", speakers: speakers, lineCount: lineCount)
+        XCTAssertEqual(open.relabels, [.relabel(line: 1, speaker: 1)])
+    }
+
+    func testUncertainMarkInPrompt() {
+        let input = TranscriptReconciler.promptInput(
+            lines: [(0, "안녕하세요"), (1, "네 맞아요")],
+            speakerName: { "화자 \($0)" }, uncertain: [1])
+        XCTAssertTrue(input.contains("1 [S0"))
+        XCTAssertTrue(input.contains("2△ [S1"))
+    }
+
     func testLanguageTokens() {
         XCTAssertEqual(TranscriptReconciler.languageToken("Japanese"), 50266)
         XCTAssertEqual(TranscriptReconciler.languageToken("Korean"), 50264)

@@ -39,7 +39,8 @@ spk = {}     # piece start -> (id, dur); re-emitted overlap pieces keep the LATE
 spkfix = {}
 spkov = []   # overlap 2nd-speaker rows (start, id, dur)
 for line in out.splitlines():
-    m = re.match(r'(SPKFIX|SPKOV|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?$', line)
+    # 5th field (S2 acoustic margin) is ignored by the scorer
+    m = re.match(r'(SPKFIX|SPKOV|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?(?: [0-9.]+)?$', line)
     if m:
         if m.group(1) == 'SPKOV':
             spkov.append((float(m.group(2)), int(m.group(3)), float(m.group(4) or 1.5)))

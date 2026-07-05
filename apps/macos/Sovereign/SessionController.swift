@@ -265,6 +265,24 @@ final class SessionController: EngineProcessDelegate {
     /// re-transcribed from its own clip. (offset seconds, wav url), in order.
     private var segmentAudio: [(offset: Double, url: URL)] = []
 
+    // ── watchdog (W1 coverage / W2 hang / W3 HUD) ─────────────────────────────
+    private struct SegJob { let offset: Double; let url: URL; let hadSpeech: Bool; var retried: Bool; var fedAt: Date }
+    private var segQueue: [SegJob] = []          // fed to the engine, awaiting <<SEG_END>>
+    /// Segments the engine is still transcribing (W3 HUD "전사 N").
+    private(set) var segmentsInFlight = 0
+    private var wordsSinceSegStart = 0           // words seen since the previous SEG_END
+    /// Offsets (s) of segments that had speech but produced no words even after a
+    /// retry — surfaced as "누락 의심" so the user knows something was missed.
+    private(set) var coverageGaps: [Double] = []
+    /// Engine hang recoveries this session (W2) — nonzero means the engine was
+    /// restarted and pending segments were re-fed (no audio lost).
+    private(set) var hangRecoveries = 0
+    private var watchdogTimer: Timer?
+    // B1: continuous mid-session reconcile (≥16GB, opt-in with AI 교정)
+    private var midReconcileTimer: Timer?
+    private var reconcileSnapshot: [UUID] = []   // prompt line order → line ids
+    private var reconcileIsMid = false
+
     private var attributedLines: [String] {
         transcript.lines.map { "\(speakerNames[$0.speaker] ?? "화자\($0.speaker)"): \($0.text)" }
     }
@@ -886,7 +904,14 @@ final class SessionController: EngineProcessDelegate {
             languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers,
             vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
             streamWavRoots: [capture.segmentDirectory],
-            langCandidates: langCandidatePair)
+            langCandidates: langCandidatePair,
+            anchorVoiceprints: !langCandidatePair.isEmpty && hasEnrolledVoiceprints)
+    }
+
+    /// Any enrolled .vec voiceprints on disk? (S1 anchor precondition)
+    private var hasEnrolledVoiceprints: Bool {
+        guard let items = try? FileManager.default.contentsOfDirectory(atPath: voiceprintsDir.path) else { return false }
+        return items.contains { $0.hasSuffix(".vec") }
     }
 
     // MARK: session lifecycle
@@ -930,6 +955,7 @@ final class SessionController: EngineProcessDelegate {
         livePartial = ""; livePartialTranslations = [:]
         streamingTranslation = nil; translateQueueDepth = 0
         segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
+        stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0
         phase = .idle
     }
 
@@ -1012,11 +1038,17 @@ final class SessionController: EngineProcessDelegate {
         capture.segmentSeconds = win
         capture.firstSegmentSeconds = min(1.5, win) // AudioCapture 기본과 동기 (AUDIO_CTX=auto로 짧은 창 디코드 ~0.3s)
         capture.overlapSeconds = min(3, max(1, win * 0.3))
-        capture.onSegment = { [weak self] offset, url in
-            self?.segmentAudio.append((offset, url))   // retain for AI re-transcription
-            self?.engine?.feed(offset: offset, wav: url)
+        capture.onSegment = { [weak self] offset, url, hadSpeech in
+            guard let self else { return }
+            self.segmentAudio.append((offset, url))   // retain for AI re-transcription
+            self.segQueue.append(SegJob(offset: offset, url: url, hadSpeech: hadSpeech, retried: false, fedAt: Date()))
+            self.segmentsInFlight = self.segQueue.count
+            self.engine?.feed(offset: offset, wav: url)
         }
         capture.onLevel = { [weak self] lvl in self?.level = lvl }
+        segQueue.removeAll(); segmentsInFlight = 0; wordsSinceSegStart = 0
+        coverageGaps.removeAll(); hangRecoveries = 0
+        startWatchdog()
 
         // streaming preview (interim text before a window closes). The preview
         // engine MUST run with a forced language — it decodes tiny ~1.5s clips
@@ -1110,12 +1142,17 @@ final class SessionController: EngineProcessDelegate {
 
     // live mic path only (file mode never emits `[stream] ready`)
     func engineDidBecomeReady() {
+        // W2 재시작 엔진의 ready는 무시 — capture.start() 재진입은 installTap
+        // 중복 크래시 + 세그먼터 타임라인/파일 리셋을 일으킨다 (역검증
+        // app-state-1/watchdog-conc-0). 캡처는 최초 기동에서만 시작.
+        guard phase == .engineStarting || phase == .ready else { return }
         phase = .ready
         do { try capture.start(); phase = .recording }
         catch { phase = .error("mic start failed: \(error.localizedDescription)") }
     }
 
     func engine(didEmit event: EngineEvent) {
+        lastEngineActivityAt = Date()   // W2 하트비트 (모든 엔진 이벤트 = 진행 증거)
         switch event {
         case .progressTotal(let n): chunksTotal = n
         case .progressChunk(let k): chunksDone = max(chunksDone, k)
@@ -1138,10 +1175,32 @@ final class SessionController: EngineProcessDelegate {
             // no Word exists yet, so no id/translation to disturb.
             let fixed = PersonalVocabulary.correctIncomingText(text, conf: conf, glossary)
             transcript.ingest(fixed == text ? event : .word(t0: t0, t1: t1, text: fixed, conf: conf))
+            wordsSinceSegStart += 1                      // W1 coverage signal
             // T2: queue a line the moment it stops being the last line (idempotent
             // via the hash gate) + arm the tail timeout for the last line itself.
             translateStableLines()
             scheduleTailTranslate()
+        case .segmentEnd:
+            // W1: one stream job finished. A segment that HAD speech but produced
+            // zero words is a suspected miss — retry it once from its retained
+            // wav; if it stays empty, surface a 누락 의심 marker.
+            if !segQueue.isEmpty {
+                let job = segQueue.removeFirst()
+                if job.hadSpeech, wordsSinceSegStart == 0 {
+                    // 백로그가 있으면 재시도는 무의미: 뒤 세그먼트가 먼저 커밋해
+                    // WordMerger 워터마크가 이 구간을 지나가 복구 단어가 전량
+                    // 폐기된다 (역검증 watchdog-conc-2). 그 경우 즉시 갭 기록.
+                    if !job.retried, segQueue.isEmpty {
+                        var retry = job; retry.retried = true; retry.fedAt = Date()
+                        segQueue.append(retry)
+                        engine?.feed(offset: job.offset, wav: job.url)
+                    } else {
+                        coverageGaps.append(job.offset)
+                    }
+                }
+            }
+            wordsSinceSegStart = 0
+            segmentsInFlight = segQueue.count
         case .partial(_, let text):
             // in-decode hypothesis of the closed segment — better context than
             // the preview engine's text and converges to the committed line, so
@@ -1188,6 +1247,8 @@ final class SessionController: EngineProcessDelegate {
         translateStableLines(includingLast: true)  // translate the final line(s) too
         interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
         stopLiveRail()       // recording ended — keep the accumulated rail for review
+        stopWatchdog()
+        segQueue.removeAll(); segmentsInFlight = 0
         stopLiveCoach(); recomputeCoach()   // stop the 1Hz loop, snapshot the final transcript once
         calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
@@ -1205,15 +1266,90 @@ final class SessionController: EngineProcessDelegate {
     /// Kick off the post-session LLM correction pass (if enabled + model present +
     /// enough dialogue to reason about). Runs after finalize when the recording
     /// engine is gone, so the DNA3 model has the machine to itself.
-    private func kickReconcile() {
+    /// Acoustic margin below which a line counts as "uncertain" — the ONLY lines
+    /// the LLM may relabel (S3 fusion). Engine margins: confident ≈ 0.4-1.0,
+    /// ambiguous windows measured 0.22-0.32 on the clinic fixture.
+    private static let uncertainMargin = 0.35
+
+    /// W2/W1/B1 timers — armed while recording, torn down at finalize/reset.
+    private func startWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickWatchdog() }
+        }
+        if Self.liveRailCapable, aiReconcileEnabled {
+            midReconcileTimer?.invalidate()
+            midReconcileTimer = Timer.scheduledTimer(withTimeInterval: 45, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.phase == .recording, !self.reconciling else { return }
+                    self.kickReconcile(mid: true)   // B1: correct the stable prefix continuously
+                }
+            }
+        }
+    }
+    private func stopWatchdog() {
+        watchdogTimer?.invalidate(); watchdogTimer = nil
+        midReconcileTimer?.invalidate(); midReconcileTimer = nil
+    }
+
+    /// W2: the oldest fed segment has produced no <<SEG_END>> for 45 s — the
+    /// engine is hung. Restart it and re-feed every pending segment (their wavs
+    /// are retained, so no audio is lost).
+    private var lastEngineActivityAt = Date()
+
+    private func tickWatchdog() {
+        // A8: 정지 직후(.flushing)는 부하가 가장 큰 순간 — 여기서 행이면
+        // FLUSH_END가 영영 안 와 세션이 '정리 중'에 갇힌다. 활동 없이 45s면
+        // 라이브 라벨로 강제 마감 (역검증 watchdog-conc-5).
+        if phase == .flushing {
+            if Date().timeIntervalSince(lastEngineActivityAt) > 45 {
+                engine?.delegate = nil
+                engine?.terminate()
+                transcript.markDiarNamespaceBroken()
+                engineDidFlush()
+            }
+            return
+        }
+        guard phase == .recording || phase == .paused, let oldest = segQueue.first else { return }
+        // A6: 진행(엔진 활동) 기준 — 큐가 밀렸어도 SEG_END/단어가 나오고 있으면
+        // 건강한 엔진이다. 큐 대기시간으로 재면 백로그에서 오재시작·연쇄 발산
+        // (역검증 app-state-5).
+        let lastProgress = max(oldest.fedAt, lastEngineActivityAt)
+        guard Date().timeIntervalSince(lastProgress) > 45 else { return }
+        hangRecoveries += 1
+        engine?.delegate = nil   // 구엔진의 didTerminate(SIGTERM)가 세션을 error로 죽이지 않게 (watchdog-conc-1)
+        engine?.terminate()
+        transcript.markDiarNamespaceBroken()   // 새 엔진 화자 id는 0부터 — FLUSH 라벨 대체 금지 (app-state-6)
+        let e = EngineProcess(config: makeConfig())
+        e.delegate = self
+        engine = e
+        do { try e.start() } catch { phase = .error("엔진 재시작 실패: \(error.localizedDescription)"); return }
+        for i in segQueue.indices { segQueue[i].fedAt = Date() }
+        for job in segQueue { e.feed(offset: job.offset, wav: job.url) }
+    }
+
+    private var pendingFinalReconcile = false
+
+    private func kickReconcile(mid: Bool = false) {
+        // mid 응답 대기 중 final 킥이 스냅샷을 덮으면 mid 응답이 final로 오적용
+        // 된다 (역검증 fusion-1/watchdog-conc-4) — in-flight면 final을 예약.
+        if reconciling { if !mid { pendingFinalReconcile = true }; return }
         guard aiReconcileEnabled, transcript.lines.count >= 4,
-              Set(transcript.lines.map(\.speaker)).count >= 1,
               let s = ensureSummaryEngine() else { return }
+        // B1 mid-session: only the STABLE prefix (the last 2 lines may still grow)
+        let lines = mid ? Array(transcript.lines.dropLast(2)) : transcript.lines
+        guard lines.count >= 4 else { return }
         reconciling = true
-        reconcileNote = nil
+        if !mid { reconcileNote = nil }
+        reconcileIsMid = mid
+        reconcileSnapshot = lines.map(\.id)
+        let uncertain = Set(lines.enumerated().compactMap { i, l in
+            l.speakerMargin < Self.uncertainMargin ? i : nil
+        })
         let numbered = TranscriptReconciler.promptInput(
-            lines: transcript.lines.map { (speaker: $0.speaker, text: $0.text) },
-            speakerName: { [weak self] in self?.speakerNames[$0] ?? "화자 \($0)" })
+            lines: lines.map { (speaker: $0.speaker, text: $0.text) },
+            speakerName: { [weak self] in self?.speakerNames[$0] ?? "화자 \($0)" },
+            uncertain: uncertain)
         s.reconcile(numbered: numbered)
     }
 
@@ -1222,22 +1358,36 @@ final class SessionController: EngineProcessDelegate {
     /// re-transcribe any wrong-language lines from their retained audio (Phase 2).
     private func applyReconcile(_ reply: String?) {
         reconciling = false
-        guard let reply else { reconcileNote = nil; return }
+        let mid = reconcileIsMid
+        guard let reply else { if !mid { reconcileNote = nil }; return }
+        let snapshot = reconcileSnapshot
         let speakers = Set(transcript.lines.map(\.speaker))
-        let plan = TranscriptReconciler.parse(reply, speakers: speakers, lineCount: transcript.lines.count)
-        guard !plan.isEmpty else { reconcileNote = nil; return }
+        // S3 fusion gate: RELABEL is only accepted for acoustically-uncertain
+        // lines (margin < threshold at snapshot indices, resolved to live lines).
+        var allowed = Set<Int>()
+        for (i, id) in snapshot.enumerated() {
+            if let line = transcript.lines.first(where: { $0.id == id }),
+               line.speakerMargin < Self.uncertainMargin { allowed.insert(i) }
+        }
+        let plan = TranscriptReconciler.parse(reply, speakers: speakers, lineCount: snapshot.count,
+                                              relabelAllowed: allowed)
+        guard !plan.isEmpty else { if !mid { reconcileNote = nil }; return }
 
         var merged = 0, relabeled = 0
-        for c in plan.merges { if case let .merge(from, into) = c { transcript.mergeSpeaker(from: from, into: into); merged += 1 } }
+        // mid-session: merges are deferred to the final pass (a wrong merge
+        // mid-meeting is disruptive; relabels are line-local and gated).
+        if !mid {
+            for c in plan.merges { if case let .merge(from, into) = c { transcript.mergeSpeaker(from: from, into: into); merged += 1 } }
+        }
         for c in plan.relabels {
-            if case let .relabel(line, sp) = c, line < transcript.lines.count {
-                transcript.relabelSpeaker(lineID: transcript.lines[line].id, to: sp); relabeled += 1
+            if case let .relabel(line, sp) = c, line < snapshot.count {
+                transcript.relabelSpeaker(lineID: snapshot[line], to: sp); relabeled += 1
             }
         }
         // Phase 2: re-transcribe wrong-language lines from their own audio clips.
         let langFlags: [(id: UUID, lang: String)] = plan.languageFlags.compactMap { c in
-            if case let .language(line, lang) = c, line < transcript.lines.count {
-                return (transcript.lines[line].id, lang)
+            if case let .language(line, lang) = c, line < snapshot.count {
+                return (snapshot[line], lang)
             }
             return nil
         }
@@ -1247,10 +1397,18 @@ final class SessionController: EngineProcessDelegate {
         if merged > 0 { parts.append("화자 \(merged)건 병합") }
         if relabeled > 0 { parts.append("화자 \(relabeled)건 재지정") }
         if !langFlags.isEmpty { parts.append("언어 \(langFlags.count)줄 재전사") }
-        reconcileNote = parts.isEmpty ? nil : "AI 교정: " + parts.joined(separator: " · ")
+        if !parts.isEmpty {
+            reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ") + parts.joined(separator: " · ")
+        } else if !mid {
+            reconcileNote = nil
+        }
         if merged > 0 || relabeled > 0 {
             calendar.matchToSpeakers(speakerNames)   // speaker set changed → rematch attendees
             recomputeCoach()
+        }
+        if pendingFinalReconcile {
+            pendingFinalReconcile = false
+            kickReconcile()
         }
     }
 

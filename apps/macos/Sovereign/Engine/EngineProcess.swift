@@ -44,6 +44,10 @@ final class EngineProcess {
         /// re-probe between EVERY segment (e.g. [50264, 50266] for a KO staff ↔
         /// JA patient conversation). Empty = session-locked single language.
         var langCandidates: [Int] = []
+        /// S1 anchor mode: seed diarization centroids from the enrolled
+        /// voiceprints, so a known voice (clinic staff) is VERIFIED against a
+        /// fixed reference instead of re-discovered by clustering.
+        var anchorVoiceprints = false
     }
 
     private let config: Config
@@ -88,6 +92,8 @@ final class EngineProcess {
             if config.langCandidates.count >= 2 {
                 env["LANG_CANDIDATES"] = config.langCandidates.map(String.init).joined(separator: ",")
             }
+            // S1: anchored diarization — enrolled voice = fixed reference
+            if config.anchorVoiceprints { env["DIAR_ANCHOR"] = "1" }
             if !config.streamWavRoots.isEmpty {
                 env["STREAM_WAV_ROOTS"] = EnginePathPolicy.pathList(config.streamWavRoots)
             }

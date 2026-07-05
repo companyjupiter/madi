@@ -42,11 +42,15 @@ enum TranscriptReconciler {
 
     /// The numbered, speaker-labeled transcript the model reads. `speakerName`
     /// maps a speaker id to its display name (e.g. "화자 1" or "김부장").
+    /// `uncertain` marks lines whose acoustic speaker-margin was low (S2) —
+    /// they get a △ so the model knows which attributions are fair game.
     static func promptInput(lines: [(speaker: Int, text: String)],
-                            speakerName: (Int) -> String) -> String {
+                            speakerName: (Int) -> String,
+                            uncertain: Set<Int> = []) -> String {
         var out = ""
         for (i, l) in lines.enumerated() {
-            out += "\(i + 1) [S\(l.speaker)·\(speakerName(l.speaker))] \(l.text)\n"
+            let mark = uncertain.contains(i) ? "△" : ""
+            out += "\(i + 1)\(mark) [S\(l.speaker)·\(speakerName(l.speaker))] \(l.text)\n"
         }
         return out
     }
@@ -54,7 +58,7 @@ enum TranscriptReconciler {
     /// The single-line instruction wrapping the transcript. Kept terse and
     /// example-anchored so the 4B follows the command grammar.
     static func instruction() -> String {
-        return "다음은 화자별로 라벨된 대화 전사다. 명백히 잘못된 것만 아래 문법으로 한 줄씩 교정하라. "
+        return "다음은 화자별로 라벨된 대화 전사다. △ 표시 줄은 화자 판정이 불확실한 줄이다. 명백히 잘못된 것만 아래 문법으로 한 줄씩 교정하라. "
             + "확실하지 않으면 아무것도 출력하지 마라. 문법: "
             + "MERGE <화자A> <화자B> (같은 사람이면 B를 A로 합침) / "
             + "RELABEL <줄번호> <화자> (그 줄이 다른 화자면) / "
@@ -67,8 +71,11 @@ enum TranscriptReconciler {
     /// number of transcript lines. Out-of-range or malformed commands are dropped.
     /// `maxCorrections` caps the total accepted (a sane bound against a model that
     /// tries to rewrite everything).
+    /// `relabelAllowed` (S3 fusion gate): when non-nil, RELABEL is accepted ONLY
+    /// for these 0-based line indices — the acoustically-confident lines cannot
+    /// be flipped by dialogue context alone.
     static func parse(_ reply: String, speakers: Set<Int>, lineCount: Int,
-                      maxCorrections: Int = 24) -> ReconcilePlan {
+                      maxCorrections: Int = 24, relabelAllowed: Set<Int>? = nil) -> ReconcilePlan {
         var plan = ReconcilePlan()
         var mergedAway = Set<Int>()   // ids already merged into another (avoid chains/cycles)
         var relabeled = Set<Int>()    // line indices already relabeled (first wins)
@@ -99,7 +106,8 @@ enum TranscriptReconciler {
             case "RELABEL":
                 guard let n = Int(toks[1]), let sp = Int(toks[2]),
                       n >= 1, n <= lineCount, speakers.contains(sp),
-                      !relabeled.contains(n - 1) else { continue }
+                      !relabeled.contains(n - 1),
+                      relabelAllowed?.contains(n - 1) ?? true else { continue }
                 relabeled.insert(n - 1)
                 plan.relabels.append(.relabel(line: n - 1, speaker: sp))
                 accepted += 1

@@ -605,13 +605,20 @@ fn keyL(buf: []u8, comptime fmt: []const u8, l: usize) []const u8 {
 // voice keeps the SAME id for the whole session without an external process or
 // state file. centroid direction = normalize(sum of L2-normalized embeddings).
 const DiarCentroid = struct { count: u32, sum: [diar.EMB]f32 };
-fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k: u32) !usize {
+/// Online assignment result: the id AND the cosine MARGIN (best − second-best
+/// similarity). The margin is the app's acoustic-confidence signal — a low
+/// margin means "this window could be either speaker", which is exactly where
+/// the LLM's dialogue-context correction is allowed to override (S2/S3 fusion).
+const DiarAssign = struct { id: usize, margin: f32 };
+fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k: u32, anchor_n: usize, anchor_sim: f32) !DiarAssign {
     var s: f64 = 0;
     for (v) |x| s += @as(f64, x) * x;
     const nrm: f32 = @floatCast(@sqrt(s) + 1e-9);
     for (v) |*x| x.* /= nrm; // unit-length
     var best: f32 = -2;
+    var second: f32 = -2;
     var best_i: usize = 0;
+    var second_i: usize = 0;
     for (cents.items, 0..) |*c, i| {
         var dot: f64 = 0;
         var cs: f64 = 0;
@@ -620,19 +627,36 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
             cs += @as(f64, c.sum[k]) * c.sum[k];
         }
         const sim: f32 = @floatCast(dot / (@sqrt(cs) + 1e-9));
-        if (sim > best) { best = sim; best_i = i; }
+        if (sim > best) { second = best; second_i = best_i; best = sim; best_i = i; } else if (sim > second) { second = sim; second_i = i; }
     }
-    if (cents.items.len == 0 or (best < sim_thr and cents.items.len < max_k)) {
+    // 앵커 거절 폴백 (engine-diar-3a): best가 앵커인데 검증 문턱 미달이면,
+    // 신규 출생 전에 두 번째 후보(비앵커, 일반 문턱 통과)를 먼저 취한다 —
+    // 기존 화자 B의 창이 앵커에 살짝 더 가깝다는 이유로 B의 복제 id가
+    // 태어나는 것을 방지.
+    if (cents.items.len >= 2 and best_i < anchor_n and best < anchor_sim and
+        second_i >= anchor_n and second >= sim_thr)
+    {
+        var c2 = &cents.items[second_i];
+        for (0..diar.EMB) |k| c2.sum[k] += v[k];
+        c2.count += 1;
+        return .{ .id = second_i, .margin = second - best };
+    }
+    // S1: an ANCHORED centroid (enrolled voiceprint, ids < anchor_n) demands a
+    // HIGHER similarity to claim a window — "if it isn't clearly the enrolled
+    // voice, it's someone else". Without this, a second voice merely CLOSE to
+    // the anchor (best ≥ sim_thr) gets absorbed and never births its own id.
+    const eff_thr: f32 = if (best_i < anchor_n) @max(sim_thr, anchor_sim) else sim_thr;
+    if (cents.items.len == 0 or (best < eff_thr and cents.items.len < max_k)) {
         const spk = cents.items.len; // birth a new speaker
         var c: DiarCentroid = .{ .count = 1, .sum = undefined };
         for (0..diar.EMB) |k| c.sum[k] = v[k];
         try cents.append(c);
-        return spk;
+        return .{ .id = spk, .margin = 1.0 };
     }
     var c = &cents.items[best_i];
     for (0..diar.EMB) |k| c.sum[k] += v[k];
     c.count += 1;
-    return best_i;
+    return .{ .id = best_i, .margin = if (cents.items.len >= 2) best - second else 1.0 };
 }
 
 // Periodic live re-clustering: batch k-means + silhouette auto-K over the
@@ -1239,6 +1263,26 @@ pub fn main() !void {
             try out.print("[stream] {d} voiceprint(s) loaded from {s}\n", .{ vp_vecs.items.len, vd });
         } else |_| {}
     }
+    // S1: ANCHOR mode (DIAR_ANCHOR=1) — seed the centroid set from the enrolled
+    // voiceprints BEFORE any audio, so a known voice (clinic staff) is matched
+    // against a fixed reference instead of being re-discovered by clustering.
+    // "Who is speaking" becomes verification, not estimation: the anchored id
+    // exists from t=0, is claimed (name announced immediately), and counts into
+    // the recluster K lower bound so auto-K can never merge it away.
+    var n_anchor: usize = 0;
+    if (std.posix.getenv("DIAR_ANCHOR") != null and vp_vecs.items.len > 0) {
+        const aw: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
+        for (vp_vecs.items, 0..) |v, vi| {
+            var c: DiarCentroid = .{ .count = @intFromFloat(aw), .sum = undefined };
+            for (0..diar.EMB) |k| c.sum[k] = v[k] * aw; // scaled: direction unchanged, weight = aw windows
+            try cents.append(c);
+            vp_claimed.items[vi] = true;
+            try spk_named.append(true);
+            try out.print("SPKNAME {d} {s}\n", .{ vi, vp_names.items[vi] });
+        }
+        n_anchor = vp_vecs.items.len;
+        try out.print("[stream] {d} anchored voiceprint speaker(s)\n", .{n_anchor});
+    }
     // hallucination guard: Whisper invents words ("Oh my", "Okay okay") in near-
     // silent / ambient stretches. Drop a segment's text when the loudest 1 s
     // window is below HALLU_RMS — a *strong* utterance (shouting "아아아") has
@@ -1279,8 +1323,25 @@ pub fn main() !void {
                 const mwin = live_emb.items.len / diar.EMB;
                 if (mwin >= 8 and cents.items.len > 0) {
                     var nclaim: usize = 0;
-                    for (vp_claimed.items) |c| { if (c) nclaim += 1; }
+                    for (vp_claimed.items, 0..) |c, ci| {
+                        if (!c) continue;
+                        // 부재 앵커는 K 하한에서 제외 — 등록만 되고 발화가 없는
+                        // 프린트가 kmin을 부풀리면 k-means가 강제 과분할된다
+                        // (역검증 engine-diar-0). 앵커는 시드 가중(aw)보다 실제
+                        // 윈도가 쌓였을 때만 센다.
+                        if (ci < n_anchor) {
+                            const aw_seed: u32 = @intCast(envU("DIAR_ANCHOR_W", 4));
+                            if (ci >= cents.items.len or cents.items[ci].count <= aw_seed) continue;
+                        }
+                        nclaim += 1;
+                    }
                     try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
+                    if (n_anchor > 0) {
+                        const awf: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
+                        for (0..@min(n_anchor, cents.items.len)) |vi| {
+                            for (0..diar.EMB) |kf| cents.items[vi].sum[kf] += vp_vecs.items[vi][kf] * awf;
+                        }
+                    }
                     // normalized centroid directions; reassign against ALL ids —
                     // restricting to final-kmeans ids was reverse-verified worse
                     // (stale centroids absorb coherent subsets; md-eval -3.7pt)
@@ -1298,14 +1359,15 @@ pub fn main() !void {
                     for (0..mwin) |i| {
                         const v = live_emb.items[i * diar.EMB ..][0 .. diar.EMB];
                         var best: f32 = -2;
+                        var second: f32 = -2;
                         var bs: usize = 0;
                         for (0..nc) |sidx| {
                             var dt: f32 = 0;
                             for (0..diar.EMB) |d| dt += v[d] * dirs[sidx * diar.EMB + d];
-                            if (dt > best) { best = dt; bs = sidx; }
+                            if (dt > best) { second = best; best = dt; bs = sidx; } else if (dt > second) second = dt;
                         }
                         fix_ids[i] = @intCast(bs);
-                        try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(bs));
+                        try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(bs), if (nc >= 2) best - second else 1.0);
                     }
                     // overlap rows for the saved transcript: same local-track
                     // identity as diarizeEmb, against the RELABELED windows
@@ -1528,13 +1590,16 @@ pub fn main() !void {
                         const gt = t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC;
                         // once re-clustering owns K, suppress online births
                         // (new speakers enter via the next k-means auto-K bump)
-                        const eff_max: u32 = if (recl_done) @intCast(cents.items.len) else diar_max;
-                        const spk = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max);
+                        // 앵커 모드: recl_done 후에도 출생 허용 — 봉쇄하면 늦게
+                        // 등장한 앵커-근접 화자가 앵커에 흡수·명명된다 (engine-diar-1)
+                        const eff_max: u32 = if (recl_done and n_anchor == 0) @intCast(cents.items.len) else diar_max;
+                        const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
+                        const spk = ar.id;
                         // far-field silence inside the 1.5 s grid window was
                         // the live FA driver (live 44.7% vs file 18.8%) —
                         // emit silero-clipped pieces; extra duration field is
                         // ignored by the runner's awk (backward compatible)
-                        try emitClippedSpk(out, "SPK", gt, @intCast(spk));
+                        try emitClippedSpk(out, "SPK", gt, @intCast(spk), ar.margin);
                         // voiceprint match: once a speaker's centroid has ≥2
                         // windows, compare to unclaimed prints; announce once.
                         while (spk_named.items.len < cents.items.len) try spk_named.append(false);
@@ -1571,9 +1636,73 @@ pub fn main() !void {
                             if ((!recl_done and acc_total >= 8) or live_since >= recluster_every) {
                                 live_since = 0;
                                 var nclaim: usize = 0;
-                                for (vp_claimed.items) |c| { if (c) nclaim += 1; }
+                                for (vp_claimed.items, 0..) |c, ci| {
+                                    if (!c) continue;
+                                    if (ci < n_anchor) { // 부재 앵커 제외 (engine-diar-0)
+                                        const aw_seed: u32 = @intCast(envU("DIAR_ANCHOR_W", 4));
+                                        if (ci >= cents.items.len or cents.items[ci].count <= aw_seed) continue;
+                                    }
+                                    nclaim += 1;
+                                }
                                 try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
                                 recl_done = true;
+                                // S1: re-inject anchor directions after recluster so the
+                                // enrolled reference never washes out of its centroid.
+                                if (n_anchor > 0) {
+                                    const aw2: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
+                                    for (0..@min(n_anchor, cents.items.len)) |vi| {
+                                        for (0..diar.EMB) |k2| cents.items[vi].sum[k2] += vp_vecs.items[vi][k2] * aw2;
+                                    }
+                                    // 유령 흡수 (engine-diar-3b): 채널 미스매치로
+                                    // 태어난 등록자 본인의 중복 id를 앵커로 회수
+                                    const gsim = envF("DIAR_ANCHOR_SIM", 0.70);
+                                    for (n_anchor..cents.items.len) |gi| {
+                                        for (0..n_anchor) |vi2| {
+                                            var gd: f32 = 0;
+                                            var gc: f32 = 0;
+                                            for (0..diar.EMB) |gk| { gd += cents.items[gi].sum[gk] * vp_vecs.items[vi2][gk]; gc += cents.items[gi].sum[gk] * cents.items[gi].sum[gk]; }
+                                            const gs2 = gd / (@sqrt(gc) + 1e-9);
+                                            if (gs2 >= gsim) {
+                                                for (0..diar.EMB) |gk| { cents.items[vi2].sum[gk] += cents.items[gi].sum[gk]; cents.items[gi].sum[gk] = 0; }
+                                                cents.items[vi2].count += cents.items[gi].count;
+                                                cents.items[gi].count = 0;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                // S4: re-emit corrected labels for PAST windows so the
+                                // app fixes earlier lines DURING the session, not only at
+                                // FLUSH. Changed labels only (bounded output). DIAR_LIVEFIX=0
+                                // disables.
+                                if (!std.mem.eql(u8, std.posix.getenv("DIAR_LIVEFIX") orelse "1", "0")) {
+                                    const ncl = cents.items.len;
+                                    if (ncl > 0) {
+                                        const dirsl = try alloc.alloc(f32, ncl * diar.EMB);
+                                        defer alloc.free(dirsl);
+                                        for (cents.items, 0..) |*c, sidx| {
+                                            var ss2: f32 = 0;
+                                            for (c.sum) |x| ss2 += x * x;
+                                            const inv2 = 1.0 / (@sqrt(ss2) + 1e-9);
+                                            for (0..diar.EMB) |dd| dirsl[sidx * diar.EMB + dd] = c.sum[dd] * inv2;
+                                        }
+                                        for (0..acc_total) |wi| {
+                                            const v = live_emb.items[wi * diar.EMB ..][0..diar.EMB];
+                                            var b1: f32 = -2;
+                                            var b2: f32 = -2;
+                                            var bs: usize = 0;
+                                            for (0..ncl) |sidx| {
+                                                var dt: f32 = 0;
+                                                for (0..diar.EMB) |dd| dt += v[dd] * dirsl[sidx * diar.EMB + dd];
+                                                if (dt > b1) { b2 = b1; b1 = dt; bs = sidx; } else if (dt > b2) b2 = dt;
+                                            }
+                                            if (bs != live_ids.items[wi]) {
+                                                live_ids.items[wi] = @intCast(@min(bs, 255));
+                                                try emitClippedSpk(out, "SPKFIX", live_t0.items[wi], @intCast(bs), if (ncl >= 2) b1 - b2 else 1.0);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -2524,16 +2653,19 @@ fn emitOverlapRow(rttm: *std.ArrayList(u8), file_id: []const u8, a: f32, b: f32,
 
 // Emit "<tag> <t> <id> <dur>" for each silero speech piece of the 1.5 s diar
 // window at gt; falls back to the whole window when no VAD intervals exist.
-fn emitClippedSpk(out: anytype, tag: []const u8, gt: f32, id: u32) !void {
+fn emitClippedSpk(out: anytype, tag: []const u8, gt: f32, id: u32, margin: f32) !void {
+    // 5th field = acoustic margin (best−second centroid cosine) — the app's
+    // fusion gate (S3): only low-margin lines may be relabeled by the LLM.
+    // Extra fields are ignored by the runner's awk (backward compatible).
     if (g_vad_iv.items.len == 0) {
-        try out.print("{s} {d:.2} {d} 1.50\n", .{ tag, gt, id });
+        try out.print("{s} {d:.2} {d} 1.50 {d:.2}\n", .{ tag, gt, id, margin });
         return;
     }
     for (g_vad_iv.items) |iv| {
         const lo = @max(gt, iv[0]);
         const hi = @min(gt + 1.5, iv[1]);
         if (hi - lo >= 0.1)
-            try out.print("{s} {d:.2} {d} {d:.2}\n", .{ tag, lo, id, hi - lo });
+            try out.print("{s} {d:.2} {d} {d:.2} {d:.2}\n", .{ tag, lo, id, hi - lo, margin });
     }
 }
 
