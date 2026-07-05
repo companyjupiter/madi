@@ -29,6 +29,8 @@ final class TranslateEngine {
     /// caption's display language. Without it, sorted-append + LIFO pop meant
     /// the alphabetically-last language always translated first (T3).
     var priorityLang: String?
+    /// Queued + in-flight turn count, fired whenever it changes (D20 status).
+    var onQueueChange: ((Int) -> Void)?
 
     private let process = Process()
     private let stdinPipe = Pipe()
@@ -114,7 +116,10 @@ final class TranslateEngine {
                                 prompt: Self.prompt(for: target, text: oneLine, variant: false), retries: 1))
         }
         pump()
+        reportQueue()
     }
+
+    private func reportQueue() { onQueueChange?(pending.count + (inflightTurn != nil ? 1 : 0)) }
 
     /// Write the NEXT turn (newest pending) iff the engine is free. One turn in
     /// flight at a time — the DNA3 REPL generates one reply per prompt.
@@ -159,7 +164,7 @@ final class TranslateEngine {
     private func completeTurn(_ text: String) {
         guard let turn = inflightTurn else { return }
         inflightTurn = nil
-        defer { pump() }                             // start the next turn
+        defer { pump(); reportQueue() }              // start the next turn
         // Failure mode: the 4B sometimes echoes the source verbatim instead of
         // translating (a cross-turn sampling-state effect — see LIVE_TRANSLATE
         // P4). Normalize-compare; retry, then SUPPRESS (don't show the source

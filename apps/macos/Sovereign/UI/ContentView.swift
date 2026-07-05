@@ -12,7 +12,14 @@ struct ContentView: View {
     // Default to the clean reading view — general users just want the content.
     // The detailed (timecode + confidence + overlap) view is one tap away.
     @AppStorage("transcriptViewMode") private var contentMode = true
-    private var viewMode: TranscriptViewMode { contentMode ? .content : .detailed }
+    // C18: opt-in two-party chat layout (staff left / patient right). Only
+    // meaningful with exactly two speakers — the toggle hides otherwise.
+    @AppStorage("transcriptChatLayout") private var chatLayout = false
+    private var twoSpeakers: Bool { Set(session.transcript.lines.map { $0.speaker }).count == 2 }
+    private var viewMode: TranscriptViewMode {
+        if chatLayout && twoSpeakers { return .chat }
+        return contentMode ? .content : .detailed
+    }
     // Transcript text size (pt) — readable default, A−/A+ in the bar. Persisted.
     @AppStorage("transcriptFontSize") private var fontSize = 18.0
     // IDE-style workspace explorer (save folder as a file tree) on the right.
@@ -235,6 +242,8 @@ struct ContentView: View {
                                    interim: session.livePartial,
                                    interimTranslations: session.livePartialTranslations,
                                    fontSize: fontSize,
+                                   streamingTransID: session.streamingTranslation?.id,
+                                   streamingTransLang: session.streamingTranslation?.lang,
                                    onEdit: { session.editLine($0, to: $1) },
                                    lockedLineID: isRecordingLike ? session.transcript.lines.last?.id : nil,
                                    onRequestDetailed: { contentMode = false },
@@ -285,13 +294,30 @@ struct ContentView: View {
                 .foregroundStyle(Theme.Colors.textTertiary).monospacedDigit()
             Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
                 .buttonStyle(.plain).help("글자 크게")
+            // D20: translation backlog — distinguishes "밀림" from "고장".
+            if isRecordingLike, session.translateQueueDepth > 0 {
+                Label("\(session.translateQueueDepth)줄 번역 대기", systemImage: "hourglass")
+                    .font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
+                    .help("대기 중인 번역 턴 수 (엔진이 한 번에 하나씩 처리)")
+            }
             Spacer()
+            // C18: chat layout toggle (two-party only)
+            if twoSpeakers {
+                Button { chatLayout.toggle() } label: {
+                    Image(systemName: chatLayout ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(chatLayout ? Theme.Colors.accent : Theme.Colors.textSecondary)
+                .help("대화 레이아웃 (직원 왼쪽 · 환자 오른쪽)")
+            }
             Picker("", selection: $contentMode) {
                 Text("내용").tag(true)
                 Text("상세").tag(false)
             }
             .pickerStyle(.segmented)
             .fixedSize()
+            .disabled(chatLayout && twoSpeakers)
             .help("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시")
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
@@ -444,8 +470,17 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 10) {
                 recordButton
                 if session.phase == .recording || session.phase == .paused {
-                    LevelMeter(level: session.level).frame(height: Theme.Size.meterH)
-                        .opacity(session.phase == .paused ? 0.4 : 1)
+                    HStack(spacing: 10) {
+                        LevelMeter(level: session.level).frame(height: Theme.Size.meterH)
+                        // D19: progress toward the next expected commit — a
+                        // filling ring turns the "왜 멈춰있지?" wait into a
+                        // predictable one (esp. the forced-10s translate mode).
+                        if session.phase == .recording, session.translateTargets.isEmpty == false {
+                            CommitCadenceRing(since: session.lastCommitAt,
+                                              window: session.effectiveWindowSeconds)
+                        }
+                    }
+                    .opacity(session.phase == .paused ? 0.4 : 1)
                 }
             }
 
@@ -841,6 +876,28 @@ struct LevelMeter: View {
                 Capsule().fill(Theme.Colors.meterFill)
                     .frame(width: geo.size.width * CGFloat(min(1, level)))
             }
+        }
+    }
+}
+
+/// D19: a small ring filling toward the next expected commit (elapsed since the
+/// last commit / window length). TimelineView animates it without a manual timer;
+/// it saturates at 1.0 and holds (a decode may run past the nominal window).
+struct CommitCadenceRing: View {
+    let since: Date
+    let window: Double
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
+            let elapsed = ctx.date.timeIntervalSince(since)
+            let p = window > 0 ? min(1.0, max(0.0, elapsed / window)) : 0
+            ZStack {
+                Circle().stroke(Theme.Colors.meterTrack, lineWidth: 2)
+                Circle().trim(from: 0, to: p)
+                    .stroke(Theme.Colors.accent.opacity(0.8), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 14, height: 14)
+            .help("다음 확정까지 진행도")
         }
     }
 }
