@@ -9,10 +9,16 @@ struct BrandLogo: View {
     var body: some View {
         if let url = Bundle.main.url(forResource: "logo_madi", withExtension: "png"),
            let image = NSImage(contentsOf: url) {
-            Image(nsImage: image)
+            // The wordmark PNG is solid black on transparent — render it as a
+            // template tinted by textPrimary so it stays black in light mode but
+            // turns near-white in dark (a raw black PNG vanishes on a dark card).
+            let templ = { image.isTemplate = true; return image }()
+            Image(nsImage: templ)
+                .renderingMode(.template)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: width)
+                .foregroundStyle(Theme.Colors.textPrimary)
         } else {
             Text("madi").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.brandMark)
         }

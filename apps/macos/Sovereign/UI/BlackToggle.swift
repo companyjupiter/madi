@@ -8,8 +8,11 @@ import SwiftUI
 struct BlackToggle: View {
     @Binding var isOn: Bool
 
-    private static let onFill = Color(red: 0x14 / 255, green: 0x16 / 255, blue: 0x16 / 255)   // #141616
-    private static let offFill = Color(red: 0xcd / 255, green: 0xd2 / 255, blue: 0xd2 / 255)   // #cdd2d2
+    // ON = accent (adaptive indigo/sky) so the white knob reads in both modes; a
+    // monochrome near-black track would vanish on a dark window. OFF = adaptive
+    // mid-gray track. (Was hardcoded #141616 / #cdd2d2 light-mode literals.)
+    private static let onFill = Theme.Colors.accent
+    private static let offFill = Theme.Colors.switchOffTrack
 
     var body: some View {
         Button { isOn.toggle() } label: {

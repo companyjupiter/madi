@@ -78,7 +78,7 @@ struct PeopleDashboard: View {
         // Soft elevated shadow — same as the left session panel card (sidePanel).
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                .fill(Color.white)
+                .fill(Theme.Colors.surface)
         )
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
             .strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))

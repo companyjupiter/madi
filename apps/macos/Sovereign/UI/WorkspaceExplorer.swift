@@ -58,7 +58,7 @@ struct WorkspaceExplorer: View {
                         .frame(maxWidth: .infinity)
                         .background {
                             if mode == m {
-                                Capsule().fill(Color.white)
+                                Capsule().fill(Theme.Colors.surface)
                                     .shadow(color: .black.opacity(0.06), radius: 1, y: 2)
                                     .matchedGeometryEffect(id: "modeSwitcherPill", in: modeSwitcherNS)
                             }
@@ -93,7 +93,7 @@ struct WorkspaceExplorer: View {
                                         SVGIcon(name: "content", size: 16)
                                         Text(url.lastPathComponent)
                                             .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(.black)
+                                            .foregroundStyle(Theme.Colors.textPrimary)
                                             .lineLimit(1).truncationMode(.middle)
                                         Spacer(minLength: 0)
                                     }
@@ -121,7 +121,7 @@ struct WorkspaceExplorer: View {
         .frame(width: 267)
         .background(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
-                .fill(Color.white)
+                .fill(Theme.Colors.surface)
                 .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous)
                     .strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
                 .shadow(color: .black.opacity(0.03), radius: 9, x: 4, y: 4)
@@ -159,13 +159,13 @@ struct WorkspaceExplorer: View {
             Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
             HStack {
                 Text("자동저장")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 BlackToggle(isOn: $session.autoSaveEnabled)
             }
             HStack(spacing: 6) {
                 Text("폴더")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Text(session.autoSaveFolder.lastPathComponent)
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -193,7 +193,7 @@ struct WorkspaceExplorer: View {
             }
             .foregroundStyle(Theme.Colors.textPrimary)
             .frame(maxWidth: .infinity).frame(height: 36)
-            .background(Capsule().fill(Color.white))
+            .background(Capsule().fill(Theme.Colors.surface))
             .overlay(Capsule().strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
             .contentShape(Capsule())
         }

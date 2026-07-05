@@ -81,7 +81,7 @@ struct EnergyArcView: View {
                                 let t = rows > 1 ? Double(r) / Double(rows - 1) : 1
                                 ctx.fill(dot, with: .color(Theme.Colors.accent.opacity(0.30 + 0.70 * t)))
                             } else {
-                                ctx.fill(dot, with: .color(Color.black.opacity(0.12)))
+                                ctx.fill(dot, with: .color(Theme.Colors.textTertiary))
                             }
                         }
                     }

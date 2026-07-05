@@ -479,7 +479,7 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity)
                         .background {
                             if contentMode == isContent {
-                                Capsule().fill(Color.white)
+                                Capsule().fill(Theme.Colors.surface)
                                     .shadow(color: .black.opacity(0.06), radius: 1, y: 2)
                                     .matchedGeometryEffect(id: "contentModePill", in: contentModeNS)
                             }
@@ -749,14 +749,15 @@ struct ContentView: View {
 
     // MARK: — Set to start (Figma 113:391) — pre-start config card
 
-    // #141616 control/selected, #0a0d0f surface/inverse, #cdd2d2 dashed border,
-    // #d94e00 brand/700 (the *Optional accent) — design tokens not yet in Theme.
-    private static let chipSelected = Color(red: 20/255, green: 22/255, blue: 22/255)
-    private static let ctaFill = Color(red: 10/255, green: 13/255, blue: 15/255)
-    private static let optionalOrange = Color(red: 217/255, green: 78/255, blue: 0/255)
-    private static let dashBorder = Color(red: 205/255, green: 210/255, blue: 210/255)
-    private static let dropZoneGray = Color(red: 112/255, green: 120/255, blue: 120/255)   // neutral/500
-    private static let controlSubtle = Color(red: 243/255, green: 244/255, blue: 244/255)  // control/subtle
+    // Redesign chip/CTA/track colors, now routed through adaptive Theme tokens so
+    // dark mode works (was hardcoded light-mode literals). chipInk = the monochrome
+    // selected-chip / primary-CTA fill (inverts for dark); chipInkOn = its glyph.
+    private static let chipInk = Theme.Colors.inkStrong
+    private static let chipInkOn = Theme.Colors.inkStrongOn
+    private static let optionalOrange = Color(red: 217/255, green: 78/255, blue: 0/255)  // brand/700, reads on both
+    private static let dashBorder = Theme.Colors.separator      // dashed drop-zone border
+    private static let dropZoneGray = Theme.Colors.textSecondary // file-size subtitle / drop icon
+    private static let controlSubtle = Theme.Colors.surfaceSunken // sunken control fill (파일 선택 pill)
 
     // Two-column "Set to start" (Figma 113:391, rev.2): 최근 항목 (recent
     // transcripts, tap to reopen) | divider | 시작하기 (chips + file + CTA).
@@ -783,7 +784,7 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white)
+        .background(Theme.Colors.surface)
         .dropDestination(for: URL.self) { urls, _ in
             guard let u = urls.first(where: isMediaFile) else { return false }
             stagedFile = u; return true
@@ -793,7 +794,7 @@ struct ContentView: View {
     private var recentColumn: some View {
         VStack(spacing: 40) {
             Text("최근 항목")
-                .font(.system(size: 17, weight: .bold)).foregroundStyle(.black)
+                .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.Colors.textPrimary)
                 .frame(maxWidth: .infinity)
             VStack(spacing: 0) {
                 VStack(spacing: 18) {
@@ -808,7 +809,7 @@ struct ContentView: View {
                                     SVGIcon(name: "content", size: 18)
                                     Text(item.url.lastPathComponent)
                                         .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(Self.chipSelected)
+                                        .foregroundStyle(Theme.Colors.textPrimary)
                                         .lineLimit(1).truncationMode(.middle)
                                     Spacer(minLength: 8)
                                     Text(relativeAge(item.date))
@@ -839,13 +840,13 @@ struct ContentView: View {
             Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
             HStack {
                 Text("자동저장")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 autoSaveToggle
             }
             HStack(spacing: 6) {
                 Text("폴더")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Text(session.autoSaveFolder.lastPathComponent)
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -882,7 +883,7 @@ struct ContentView: View {
         VStack(spacing: 24) {
             VStack(spacing: 10) {
                 Text("시작하기")
-                    .font(.system(size: 17, weight: .bold)).foregroundStyle(.black)
+                    .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.Colors.textPrimary)
                 Text("회의 정보를 설정하면 더 정확한 결과를 얻을 수 있어요")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -945,7 +946,7 @@ struct ContentView: View {
     private func setupBlock<V: View>(_ title: String, optional: Bool = false, @ViewBuilder _ content: () -> V) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 3) {
-                Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.black)
+                Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 if optional {
                     Text("*Optional").font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Self.optionalOrange)
@@ -982,11 +983,11 @@ struct ContentView: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 12, weight: selected ? .semibold : .medium))
-                .foregroundStyle(selected ? .white : Self.chipSelected)
+                .foregroundStyle(selected ? Self.chipInkOn : Theme.Colors.textPrimary)
                 .padding(.horizontal, 14).padding(.vertical, 7)
-                .background(Capsule().fill(selected ? Self.chipSelected : Color.white))
+                .background(Capsule().fill(selected ? Self.chipInk : Theme.Colors.surface))
                 .overlay(Capsule().strokeBorder(
-                    selected ? Self.chipSelected : Theme.Colors.surfaceSunken, lineWidth: 1))
+                    selected ? Self.chipInk : Theme.Colors.surfaceSunken, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -998,11 +999,11 @@ struct ContentView: View {
             // close (times) button top-right to clear the staged file.
             ZStack(alignment: .topTrailing) {
                 VStack(spacing: 4) {
-                    SVGIcon(name: "folder", size: 24)
+                    SVGIcon(name: "folder", size: 24, tint: nil)   // baked indigo (#5A67D8)
                     VStack(spacing: 1) {
                         Text(f.lastPathComponent)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color.black.opacity(0.85))
+                            .foregroundStyle(Theme.Colors.textPrimary)
                             .lineLimit(1).truncationMode(.middle)
                         Text(fileSizeLabel(f))
                             .font(.system(size: 10, weight: .medium))
@@ -1022,10 +1023,10 @@ struct ContentView: View {
             .frame(maxWidth: .infinity).frame(height: 125)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white)
+                    .fill(Theme.Colors.surface)
                     .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
             )
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.black.opacity(0.02), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.Colors.separator, lineWidth: 1))
         } else {
             // Before upload (Figma 216:1827): dashed box, folder-plus prompt + pill.
             VStack(spacing: 12) {
@@ -1033,11 +1034,11 @@ struct ContentView: View {
                     SVGIcon(name: "folder-plus", size: 24)
                     Text("파일 드래그 앤 드롭")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.black.opacity(0.85))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                 }
                 Button { chooseStagedFile() } label: {
                     Text("파일 선택")
-                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(Self.chipSelected)
+                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                         .padding(.horizontal, 14).padding(.vertical, 6)
                         .background(Capsule().fill(Self.controlSubtle))
                 }.buttonStyle(.plain).disabled(!canDrop)
@@ -1077,11 +1078,11 @@ struct ContentView: View {
         Button { if enabled { action() } } label: {
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(enabled ? Self.chipInkOn : .white)
                 .frame(maxWidth: .infinity).frame(height: 40)
                 // disabled = solid meterTrack gray fill (10% ghost swallowed the
                 // white label; this keeps the text visible on a grayed button).
-                .background(Capsule().fill(enabled ? Self.ctaFill : Theme.Colors.meterTrack))
+                .background(Capsule().fill(enabled ? Self.chipInk : Theme.Colors.meterTrack))
         }
         .buttonStyle(.plain)
         // .allowsHitTesting (not .disabled) so the white label keeps full opacity —
@@ -1177,7 +1178,7 @@ struct ContentView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .frame(width: 267)
-        .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Color.white))
+        .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Theme.Colors.surface))
         // Clip content to the card shape so the edge-to-edge speaker bar (and its
         // left fade) slide under the card edge instead of painting over the
         // border; the border is then re-drawn ON TOP so it always stays crisp.
@@ -1260,11 +1261,11 @@ struct ContentView: View {
     private var fileCard: some View {
         ZStack(alignment: .topTrailing) {
             VStack(spacing: 4) {
-                SVGIcon(name: "folder", size: 24)
+                SVGIcon(name: "folder", size: 24, tint: nil)   // baked indigo (#5A67D8)
                 VStack(spacing: 1) {
                     Text(fileCardName)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.black.opacity(0.85))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                         .lineLimit(1).truncationMode(.middle)
                     Text(fileCardSubtitle)
                         .font(.system(size: 10, weight: .medium))
@@ -1285,10 +1286,10 @@ struct ContentView: View {
         .frame(maxWidth: .infinity).frame(height: 118)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.white)
+                .fill(Theme.Colors.surface)
                 .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
         )
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.black.opacity(0.02), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.Colors.separator, lineWidth: 1))
         .confirmationDialog("저장되지 않은 기록이 있어요", isPresented: $showDiscardConfirm, titleVisibility: .visible) {
             Button("삭제하고 닫기", role: .destructive) { session.reset() }
             Button("취소", role: .cancel) {}
@@ -1378,9 +1379,9 @@ struct ContentView: View {
             .frame(maxWidth: .infinity).frame(height: 106)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white)
+                    .fill(Theme.Colors.surface)
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.02), lineWidth: 1))
+                        .strokeBorder(Theme.Colors.separator, lineWidth: 1))
                     .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8))
@@ -1397,9 +1398,9 @@ struct ContentView: View {
         .frame(maxWidth: .infinity).frame(height: 106)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white)
+                .fill(Theme.Colors.surface)
                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.02), lineWidth: 1))
+                    .strokeBorder(Theme.Colors.separator, lineWidth: 1))
                 .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
         )
     }
@@ -1496,7 +1497,7 @@ struct ContentView: View {
             // the bar overflows (the newest turns stay pinned at the right).
             .overlay(alignment: .leading) {
                 if overflowing {
-                    LinearGradient(colors: [Color.white, Color.white.opacity(0)],
+                    LinearGradient(colors: [Theme.Colors.surface, Theme.Colors.surface.opacity(0)],
                                    startPoint: .leading, endPoint: .trailing)
                         .frame(width: 22)
                         .allowsHitTesting(false)
@@ -1542,7 +1543,7 @@ struct ContentView: View {
                         .foregroundStyle(Theme.Colors.textTertiary)
                     Text("\(Int((entry.value / total * 100).rounded()))%")
                         .font(.system(size: 13, weight: .semibold)).monospacedDigit()
-                        .foregroundStyle(.black)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                         .lineLimit(1).fixedSize()
                         .frame(minWidth: 38, alignment: .trailing)
                         .padding(.leading, 3)   // Figma 188:689 time↔percent gap
@@ -1688,7 +1689,7 @@ struct ContentView: View {
     private func pillDropdown(_ text: String, isOpen: Binding<Bool>, width: Binding<CGFloat>, @ViewBuilder options: @escaping () -> some View) -> some View {
         Button { isOpen.wrappedValue.toggle() } label: {
             HStack(spacing: 4) {
-                Text(text).font(.system(size: 11, weight: .semibold)).foregroundStyle(.black)
+                Text(text).font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -1710,7 +1711,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 0) { options() }
                     .padding(.vertical, 5)
                     .frame(width: width.wrappedValue, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(.white))
+                    .background(RoundedRectangle(cornerRadius: 7).fill(Theme.Colors.surface))
                     .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.black.opacity(0.04)))
                     .shadow(color: Color.black.opacity(0.02), radius: 1.75, x: 0, y: 4)
                     .offset(y: 27)
@@ -1723,7 +1724,7 @@ struct ContentView: View {
     private func dropdownRow(_ text: String, selected: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Text(text).font(.system(size: 10, weight: .semibold)).foregroundStyle(.black)
+                Text(text).font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer(minLength: 0)
                 if selected {
                     Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
@@ -1993,7 +1994,7 @@ private struct CountdownRingView: View {
     var body: some View {
         VStack(spacing: 22) {
             ZStack {
-                Circle().stroke(Color.black.opacity(0.06), lineWidth: 5)
+                Circle().stroke(Theme.Colors.separator, lineWidth: 5)
                 Circle()
                     .trim(from: 0, to: sweep)
                     .stroke(Theme.Colors.accent,
@@ -2001,7 +2002,7 @@ private struct CountdownRingView: View {
                     .rotationEffect(.degrees(-90))   // start the lap at 12 o'clock
                 Text("\(n)")
                     .font(.system(size: 38, weight: .semibold))
-                    .foregroundStyle(Color.black.opacity(0.85))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                     .monospacedDigit()
                     .contentTransition(.numericText(countsDown: true))
                     .animation(.snappy(duration: 0.3), value: n)
