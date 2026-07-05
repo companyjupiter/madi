@@ -781,12 +781,6 @@ final class SessionController: EngineProcessDelegate {
     var autoSaveSummary: Bool = (UserDefaults.standard.object(forKey: "autoSaveSummary") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(autoSaveSummary, forKey: "autoSaveSummary") }
     }
-    /// 개인정보 마스킹 — when on, exports run PIIRedactor over the rendered text so
-    /// emails/전화/주민번호 become category tags before the file is written (the
-    /// on-screen transcript is untouched). Default off; persisted.
-    var piiRedactionEnabled: Bool = (UserDefaults.standard.object(forKey: "piiRedactionEnabled") as? Bool) ?? false {
-        didSet { UserDefaults.standard.set(piiRedactionEnabled, forKey: "piiRedactionEnabled") }
-    }
     /// Resolved auto-save folder: persisted choice, else Documents, else home.
     /// Static so both `autoSaveFolder` and `workspace` can seed from it without
     /// a self-reference during stored-property init.
@@ -1675,13 +1669,9 @@ final class SessionController: EngineProcessDelegate {
     // MARK: export
 
     func exportMarkdown(to url: URL) throws {
-        try applyPII(Exporters.markdown(transcript.lines, names: speakerNames, summary: meetingSummary))
+        try Exporters.markdown(transcript.lines, names: speakerNames, summary: meetingSummary)
             .write(to: url, atomically: true, encoding: .utf8)
     }
-
-    /// Mask PII in an about-to-be-exported string when 개인정보 마스킹 is on. The
-    /// live transcript is never mutated — redaction is export-only.
-    private func applyPII(_ s: String) -> String { piiRedactionEnabled ? PIIRedactor.redact(s) : s }
 
     /// Smart auto-title: rename the just-saved transcript .md (and its companion
     /// summary file, if already written) to the AI-generated title. The save was
@@ -1725,27 +1715,27 @@ final class SessionController: EngineProcessDelegate {
         catch { return nil }
     }
     func exportSRT(to url: URL) throws {
-        try applyPII(Exporters.srt(transcript.lines, names: speakerNames))
+        try Exporters.srt(transcript.lines, names: speakerNames)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportVTT(to url: URL) throws {
-        try applyPII(Exporters.vtt(transcript.lines, names: speakerNames))
+        try Exporters.vtt(transcript.lines, names: speakerNames)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportText(to url: URL) throws {
-        try applyPII(Exporters.plainText(transcript.lines, names: speakerNames))
+        try Exporters.plainText(transcript.lines, names: speakerNames)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportJSON(to url: URL) throws {
-        try applyPII(Exporters.json(transcript.lines, names: speakerNames, settings: editorSettings))
+        try Exporters.json(transcript.lines, names: speakerNames, settings: editorSettings)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportCutList(to url: URL) throws {
-        try applyPII(Exporters.cutListCSV(transcript.lines, settings: editorSettings))
+        try Exporters.cutListCSV(transcript.lines, settings: editorSettings)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     func exportChapters(to url: URL) throws {
-        try applyPII(Exporters.youtubeChapters(transcript.lines, settings: editorSettings))
+        try Exporters.youtubeChapters(transcript.lines, settings: editorSettings)
             .write(to: url, atomically: true, encoding: .utf8)
     }
     /// (cut count, removable seconds) for the tighten stat — honors the toggles.

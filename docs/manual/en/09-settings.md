@@ -57,7 +57,6 @@ Controls post-transcription analysis (tighten, chapters, etc.) and how files are
 
 - **완료 시 .md 자동저장 (Auto-save .md when finished)** — saves a Markdown file automatically when transcription completes.
 - **폴더 / 변경… (Folder / Change…)** — choose the save folder.
-- **내보내기 시 개인정보 마스킹 (Redact PII on export)** — masks emails, phone numbers, and ID numbers as `[tags]`, but only in shareable files made via "내보내기 (Export)". The auto-saved original and the on-screen transcript are left intact.
 
 ### 음성 인식 (Speech recognition)
 

@@ -53,7 +53,6 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/MeetingMode.swift
   "$APP_DIR"/Sovereign/Transcript/LiveCoach.swift
   "$APP_DIR"/Sovereign/Transcript/TitleGenerator.swift
-  "$APP_DIR"/Sovereign/Transcript/PIIRedactor.swift
   "$APP_DIR"/Sovereign/Transcript/WorkspaceRetrieval.swift
   "$APP_DIR"/Sovereign/Transcript/PeopleAnalytics.swift
   "$APP_DIR"/Sovereign/Transcript/PendingEnrollmentStore.swift
