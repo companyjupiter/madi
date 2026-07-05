@@ -97,6 +97,12 @@ enum Theme {
         static let body = Font.system(size: 14, weight: .regular)
         static let status = Font.system(size: 11, weight: .regular)
         static let overlap = Font.system(size: 11, weight: .regular).italic()
+        // Start-screen typography — rounded to match the "human companion" house
+        // voice (raw .system literals on the first screen bypassed design:.rounded).
+        static let startHeader = Font.system(size: 17, weight: .bold, design: .rounded)
+        static let startTagline = Font.system(size: 13, weight: .medium, design: .rounded)
+        static let label = Font.system(size: 12, weight: .semibold, design: .rounded)
+        static let cta = Font.system(size: 12, weight: .semibold, design: .rounded)
     }
     enum Space {
         static let window: CGFloat = 20
