@@ -205,10 +205,11 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(liveWindowSeconds, forKey: "liveWindowSeconds") }
     }
 
-    /// 2개 이상으로 번역할 때는 반응속도와 무관하게 "정확"(10초) 윈도를 강제한다.
-    /// 짧은 윈도는 원문 경계 오류가 많은데, 그 오류가 모든 대상 언어 번역으로
-    /// 전파되므로 — 다중 번역에서는 가장 긴 문맥의 원문 품질이 우선이다. UI도 이
-    /// 규칙을 노출(2개+ 선택 시 반응속도 picker를 잠그고 "정확"으로 표시).
+    /// 2개 이상으로 번역할 때는 반응속도 하한을 "보통"(7초)으로 둔다 — 5초만 막고
+    /// 7·10초는 자유(2026-07-07 완화, 기존엔 10초 강제였음). 짧은 윈도는 원문
+    /// 경계 오류가 많은데 그 오류가 모든 대상 언어 번역으로 전파되므로, 다중 번역
+    /// 에서는 5초가 위험하다 — 다만 7초는 충분한 문맥이라 허용. UI도 이 규칙을
+    /// 노출(2개+ 선택 시 5초를 고르면 7초로 스냅).
     /// 예외 (T4, 2026-07-03): {한국어, X} 양방향 쌍은 per-line 스크립트 라우팅이
     /// 라인당 실효 타깃을 1개로 줄이므로(KO줄→X만, X줄→KO만) 강제하지 않는다 —
     /// 클리닉 대면 통역이 정확히 이 형태다.
@@ -216,7 +217,11 @@ final class SessionController: EngineProcessDelegate {
         translateTargets.count >= 2 &&
             !(translateTargets.count == 2 && translateTargets.contains("Korean"))
     }
-    var effectiveWindowSeconds: Double { multiTranslateForcesAccurate ? 10 : liveWindowSeconds }
+    /// Multi-target: floor the window at 7 s (short windows leak boundary errors
+    /// into every language) but allow 7 or 10 — no longer pinned to 10.
+    var effectiveWindowSeconds: Double {
+        multiTranslateForcesAccurate ? max(7, liveWindowSeconds) : liveWindowSeconds
+    }
 
     /// Streaming preview: a 2nd engine decodes the in-progress window every ~1.5s
     /// for instant interim text — NO accuracy cost (committed text is unchanged).
