@@ -506,10 +506,23 @@ struct ContentView: View {
             Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
                 .buttonStyle(.plain).help("글자 크게")
             // D20: translation backlog — distinguishes "밀림" from "고장".
+            // (count is translation turns = 라인×대상언어, so label it "건" not "줄")
             if isRecordingLike, session.translateQueueDepth > 0 {
-                Label("\(session.translateQueueDepth)줄 번역 대기", systemImage: "hourglass")
+                Label("번역 대기 \(session.translateQueueDepth)건", systemImage: "hourglass")
                     .font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
-                    .help("대기 중인 번역 턴 수 (엔진이 한 번에 하나씩 처리)")
+                    .help("대기 중인 번역 턴 수 (라인 × 대상 언어, 엔진이 한 번에 하나씩 처리)")
+            }
+            if isRecordingLike, session.translateBacklog > 0 {
+                Label("\(session.translateBacklog)줄 종료 후 채움", systemImage: "clock.arrow.circlepath")
+                    .font(.system(size: 11)).foregroundStyle(Theme.Colors.lowConf)
+                    .help("말이 빨라 실시간 번역이 밀린 줄 — 정지하면 자동으로 번역해 채웁니다")
+            }
+            // Post-stop backfill progress — shows in .done (isRecordingLike is false
+            // there), so the user knows translations are still filling in.
+            if session.backfillRemaining > 0 {
+                Label("번역 채우는 중 \(session.backfillRemaining)줄", systemImage: "clock.arrow.circlepath")
+                    .font(.system(size: 11)).foregroundStyle(Theme.Colors.lowConf)
+                    .help("정지 후 밀렸던 번역을 채우는 중 — 다 채우면 사라집니다")
             }
             Spacer(minLength: 0)
             // A5/B9: floating live-translation caption overlay (Zoom·Teams 위,
@@ -555,6 +568,10 @@ struct ContentView: View {
             }
             if session.translateQueueDepth > 0 {
                 HUDChip(icon: "globe", text: "번역 \(session.translateQueueDepth)", tint: Theme.Colors.accent, pulsing: true)
+            }
+            if session.translateBacklog > 0 {
+                HUDChip(icon: "clock.arrow.circlepath", text: "종료 후 채움 \(session.translateBacklog)", tint: Theme.Colors.lowConf)
+                    .help("말이 빨라 실시간 번역이 밀린 줄 — 최신 자막을 우선하려 미뤄뒀고, 녹음을 정지하면 자동으로 번역해 채웁니다")
             }
             if session.reconciling {
                 HUDChip(icon: "wand.and.stars", text: "AI 검토", tint: Theme.Colors.accent, pulsing: true)

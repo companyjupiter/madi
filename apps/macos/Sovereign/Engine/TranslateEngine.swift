@@ -48,6 +48,15 @@ final class TranslateEngine {
     // skipped — it's reordered, not dropped.
     private var pending: [Turn] = []   // not-yet-sent; popLast() = newest
     private var inflightTurn: Turn?    // the single turn currently generating
+    /// Live queue cap (turns). 0 = unbounded. When the newest-first stack grows
+    /// past this — fast speech the engine can't keep up with — the OLDEST turns
+    /// are shed (reported via onDrop for backfill at stop) so live captions track
+    /// the newest speech instead of the backlog ballooning to 100+ lines.
+    var maxPending = 0
+    /// Called with the LINE id of each turn shed by the cap. The session records
+    /// these and re-translates them (uncapped) at stop, so the saved record stays
+    /// complete — the drop only defers them out of the live path.
+    var onDrop: ((UUID) -> Void)?
 
     func start(engine: URL, model: URL) -> Bool {
         process.executableURL = engine
@@ -114,6 +123,15 @@ final class TranslateEngine {
         for target in ordered {
             pending.append(Turn(id: id, lang: target, source: oneLine,
                                 prompt: Self.prompt(for: target, text: oneLine, variant: false), retries: 1))
+        }
+        // Live cap: shed the OLDEST turns (front of the stack) past maxPending.
+        // popLast() serves newest-first, so the front holds the stalest backlog —
+        // exactly what a live caption no longer needs. Dropped lines → onDrop.
+        if maxPending > 0 {
+            while pending.count > maxPending {
+                let shed = pending.removeFirst()
+                onDrop?(shed.id)
+            }
         }
         pump()
         reportQueue()
