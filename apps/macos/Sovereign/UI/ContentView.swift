@@ -23,7 +23,7 @@ struct ContentView: View {
         return contentMode ? .content : .detailed
     }
     // Transcript text size (pt) — readable default, A−/A+ in the bar. Persisted.
-    @AppStorage("transcriptFontSize") private var fontSize = 18.0
+    @AppStorage("transcriptFontSize") private var fontSize = 16.0   // Figma 258:568 body 16px
     // IDE-style workspace explorer (save folder as a file tree) on the right.
     @AppStorage("showWorkspaceExplorer") private var showExplorer = true
     // N2 review navigator (상세 mode): step through low-confidence words.
@@ -33,6 +33,16 @@ struct ContentView: View {
     @State private var scrollTarget: UUID? = nil
     @State private var scrollTick = 0
     @State private var transcriptScrolled = false   // top fade shows only when scrolled
+    // Set to start language dropdowns: which panel is open ("input"/"output"),
+    // and each trigger pill's frame in the card space for panel anchoring.
+    @State private var openLangDropdown: String? = nil
+    @State private var langPillFrames: [String: CGRect] = [:]
+    private struct LangPillFrameKey: PreferenceKey {
+        static var defaultValue: [String: CGRect] = [:]
+        static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+            value.merge(nextValue()) { $1 }
+        }
+    }
     // Guard rails for destructive exits (X on the file card / back chevron):
     // confirm before wiping unsaved content, and stop-confirm mid-recording.
     @State private var showDiscardConfirm = false
@@ -342,24 +352,23 @@ struct ContentView: View {
     private var transcriptPane: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 20)   // top breathing room above the toolbar
-            if case .processing = session.phase { progressBanner }
-            if session.micSilent { silenceBanner }
+            // (file progress / silence / pipeline chips all live in the
+            // transcript-tail status line now — see transcriptStatus.)
             if !session.transcript.lines.isEmpty { viewModeBar }
-            // W3: pipeline status chips — what the invisible stages are doing
-            // RIGHT NOW. Same row grammar/insets as viewModeBar above.
-            if isRecordingLike {
-                pipelineHUD
-                    .padding(.leading, 21).padding(.trailing, 16).padding(.vertical, 4)
-            }
-            if session.reconciling || session.reconcileNote != nil { reconcileBar }
+            // reconcile RESULT only (has an undo button, so it can't be a
+            // transient status line); the in-progress state is the status line's.
+            if session.reconcileNote != nil { reconcileBar }
             if viewMode == .detailed && !flaggedWords.isEmpty { reviewBar }
             // (Speaker timeline moved into the left panel's sequence bar —
             // Figma 188:662 has no timeline card above the transcript.)
             ZStack {
-                if session.transcript.lines.isEmpty {
+                if session.transcript.displayLines.isEmpty {
                     emptyState
                 } else {
-                    TranscriptView(lines: session.transcript.lines, names: session.speakerNames,
+                    // displayLines (not lines): the ~30fps coalesced snapshot —
+                    // the transcript panel re-diffs once per frame, not once per
+                    // word/translation token (Phase 1 anti-twitch).
+                    TranscriptView(lines: session.transcript.displayLines, names: session.speakerNames,
                                    autoRecognizedSpeakers: session.autoRecognizedSpeakers,
                                    mode: viewMode,
                                    onRename: { session.renameSpeaker($0, to: $1) },
@@ -367,6 +376,12 @@ struct ContentView: View {
                                    focusedLine: scrollTarget,
                                    interim: session.livePartial,
                                    interimTranslations: session.livePartialTranslations,
+                                   warningText: transcriptWarning,
+                                   gapTimes: coverageGapTimes,
+                                   activityText: transcriptActivity,
+                                   activeLangs: session.translateTargets.sorted(),
+                                   translateBusy: session.translateQueueDepth > 0
+                                       || session.streamingTranslation != nil,
                                    fontSize: fontSize,
                                    streamingTransID: session.streamingTranslation?.id,
                                    streamingTransLang: session.streamingTranslation?.lang,
@@ -505,12 +520,6 @@ struct ContentView: View {
                 .foregroundStyle(Theme.Colors.textTertiary).monospacedDigit()
             Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
                 .buttonStyle(.plain).help("글자 크게")
-            // D20: translation backlog — distinguishes "밀림" from "고장".
-            if isRecordingLike, session.translateQueueDepth > 0 {
-                Label("\(session.translateQueueDepth)줄 번역 대기", systemImage: "hourglass")
-                    .font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
-                    .help("대기 중인 번역 턴 수 (엔진이 한 번에 하나씩 처리)")
-            }
             Spacer(minLength: 0)
             // A5/B9: floating live-translation caption overlay (Zoom·Teams 위,
             // 클리닉 이중 패널 포함) — translate targets picked in Settings.
@@ -542,43 +551,11 @@ struct ContentView: View {
         .padding(.top, 5)
     }
 
-    // N2 review queue (상세 mode only): step through low-confidence words so the
-    // reviewer doesn't have to scan a long transcript for the amber ones.
-    /// W3: pipeline status chips (recording only).
-    @ViewBuilder private var pipelineHUD: some View {
-        HStack(spacing: 5) {
-            if session.level > 0.02 {
-                HUDChip(icon: "waveform", text: "듣는 중", tint: Theme.Colors.meterFill)
-            }
-            if session.segmentsInFlight > 0 {
-                HUDChip(icon: "text.viewfinder", text: "전사 \(session.segmentsInFlight)", tint: Theme.Colors.accent, pulsing: true)
-            }
-            if session.translateQueueDepth > 0 {
-                HUDChip(icon: "globe", text: "번역 \(session.translateQueueDepth)", tint: Theme.Colors.accent, pulsing: true)
-            }
-            if session.reconciling {
-                HUDChip(icon: "wand.and.stars", text: "AI 검토", tint: Theme.Colors.accent, pulsing: true)
-            }
-            if !session.coverageGaps.isEmpty {
-                HUDChip(icon: "exclamationmark.triangle", text: "누락 의심 \(session.coverageGaps.count)", tint: Theme.Colors.lowConf)
-                    .help("음성이 있었는데 전사가 비어 재시도 후에도 실패한 구간")
-            }
-            if session.hangRecoveries > 0 {
-                HUDChip(icon: "arrow.clockwise", text: "복구 \(session.hangRecoveries)", tint: Theme.Colors.lowConf)
-                    .help("엔진이 멈춰 자동 재시작·재공급한 횟수 (오디오 무손실)")
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    /// Post-session AI correction status + one-tap undo of speaker changes.
+    /// Post-session AI correction RESULT + one-tap undo of speaker changes.
+    /// (The in-progress state is the transcript-tail status line.)
     private var reconcileBar: some View {
         HStack(spacing: 10) {
-            if session.reconciling {
-                ProgressView().controlSize(.small)
-                Text("AI가 화자·언어를 검토하는 중…").font(.system(size: 12))
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            } else if let note = session.reconcileNote {
+            if let note = session.reconcileNote {
                 Image(systemName: "wand.and.stars").font(.system(size: 12)).foregroundStyle(Theme.Colors.accent)
                 Text(note).font(.system(size: 12)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
@@ -632,55 +609,8 @@ struct ContentView: View {
         .padding(.top, 5).padding(.bottom, 5)
     }
 
-    // determinate file-transcription progress: filename + chunk bar (driven by
-    // the engine's "→ N chunk(s)" + per-chunk "[perf]" lines)
-    private var progressBanner: some View {
-        let done = session.chunksDone, total = session.chunksTotal
-        let frac = total > 0 ? Double(done) / Double(total) : 0
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("전사 중 — \(session.fileName)").font(Theme.Fonts.body).lineLimit(1)
-                Spacer()
-                if total > 0 {
-                    Text("\(done)/\(total) 청크 · \(Int(frac * 100))%")
-                        .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
-                }
-            }
-            if total > 0 {
-                ProgressView(value: frac).tint(Theme.Colors.accent)
-            } else {
-                ProgressView(value: 0).tint(Theme.Colors.accent)   // model loading / first chunk
-                    .opacity(0.4)
-            }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(Theme.Colors.accent.opacity(0.07))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .padding(.horizontal, Theme.Space.window)
-        // top gap matches the 12pt inset the side panels (explorer/control
-        // panel) start with from the window's top edge, so this card's top
-        // doesn't sit flush against the very top while its neighbors don't.
-        .padding(.top, 12).padding(.bottom, 5)
-    }
-
-    // Dead-mic warning (B안): shows after 15s of recording with no audible input
-    // — the energy graph's live edge going flat is the soft signal; this banner
-    // is the loud one. Clears itself as soon as sound returns.
-    private var silenceBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "mic.slash.fill")
-                .foregroundStyle(Theme.Colors.lowConf)
-            Text("소리가 감지되지 않아요 — 마이크 입력을 확인해주세요")
-                .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textPrimary)
-            Spacer()
-        }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(Theme.Colors.lowConf.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .padding(.horizontal, Theme.Space.window)
-        .padding(.top, 12).padding(.bottom, 5)
-    }
+    // (file-transcription progress + dead-mic warning banners folded into the
+    // transcript-tail status line — see transcriptStatus / StatusLineView.)
 
     private var emptyState: some View {
         VStack(spacing: 16) {
@@ -754,42 +684,47 @@ struct ContentView: View {
     // dark mode works (was hardcoded light-mode literals). chipInk = the monochrome
     // selected-chip / primary-CTA fill (inverts for dark); chipInkOn = its glyph.
     private static let chipInk = Theme.Colors.inkStrong
+    // brand/700 — the *Optional badge (Figma 246:789); reads on light & dark.
+    private static let optionalOrange = Color(red: 217/255, green: 78/255, blue: 0/255)
     private static let chipInkOn = Theme.Colors.inkStrongOn
     private static let dashBorder = Theme.Colors.separator      // dashed drop-zone border
     private static let dropZoneGray = Theme.Colors.textSecondary // file-size subtitle / drop icon
     private static let controlSubtle = Theme.Colors.surfaceSunken // sunken control fill (파일 선택 pill)
 
-    // Two-column "Set to start" (Figma 113:391, rev.2): 최근 항목 (recent
-    // transcripts, tap to reopen) | divider | 시작하기 (chips + file + CTA).
-    // The card fills the compact window; the wordmark sits top-left like a
-    // titlebar item.
+    // Two-column "Set to start" (Figma 246:749): left = wordmark + tagline up
+    // top with 최근 항목 anchored below | divider | 시작하기 (language dropdowns +
+    // chips + file + horizontal CTA pair). The language dropdown panels float in
+    // a ZStack layer above the columns, positioned by measured pill frames.
     private var setToStartCard: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 0) {
-                // Centered wordmark reads as the app's title (Figma 209:1523).
-                BrandLogo(width: 118)
-                    .padding(.top, 40)
-                // One-line identity so a first-time user reads "what is this" in
-                // ~3s — plain words ("글이 되고" not "전사"), Warm Focus rounded voice.
-                (Text("녹음하면 회의가 글이 되고, 실시간으로 번역돼요")
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                 + Text("  ·  모두 이 Mac 안에서")
-                    .foregroundStyle(Theme.Colors.textTertiary))
-                    .font(Theme.Fonts.startTagline)
-                    .padding(.top, 10)
-                // .top keeps the two headings level; recentColumn + divider
-                // stretch to startColumn's (taller) height so the 자동저장 block
-                // bottom-aligns with the CTA buttons across both columns.
+            ZStack(alignment: .topLeading) {
                 HStack(alignment: .top, spacing: 77) {
-                    recentColumn
+                    leftColumn
                     Rectangle().fill(Theme.Colors.surfaceSunken)
                         .frame(width: 1).frame(maxHeight: .infinity)
                     startColumn
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
-                .padding(.top, 34).padding(.bottom, 40)
+                .padding(.top, 60).padding(.bottom, 40)
+
+                // Click-away layer + the floating dropdown panel (must be ZStack
+                // siblings so the panel stays clickable above the catcher).
+                if openLangDropdown != nil {
+                    Color.black.opacity(0.001)
+                        .contentShape(Rectangle())
+                        .onTapGesture { openLangDropdown = nil }
+                        .zIndex(40)
+                }
+                if let which = openLangDropdown, let f = langPillFrames[which] {
+                    langDropdownPanel(which)
+                        .frame(width: f.width)
+                        .offset(x: f.minX, y: f.maxY + 4)
+                        .zIndex(50)
+                }
             }
+            .coordinateSpace(name: "startCard")
+            .onPreferenceChange(LangPillFrameKey.self) { langPillFrames = $0 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.surface)
@@ -799,130 +734,109 @@ struct ContentView: View {
         } isTargeted: { dropTargeted = $0 }
     }
 
-    private var recentColumn: some View {
-        VStack(spacing: 40) {
+    // Left column (Figma 246:749): wordmark + tagline up top, 최근 항목 anchored
+    // to the bottom so the list's last row lines up with the CTA row across the
+    // divider. (The 자동저장/폴더 block moved out — those controls live in the
+    // right explorer panel during a session.)
+    private var leftColumn: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            BrandLogo(width: 126)
+            Text("녹음하면 회의가 글이 되고, 실시간으로 번역돼요. 모두 이 Mac 안에서")
+                .font(Theme.Fonts.startTagline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .lineSpacing(4)
+                .frame(width: 272, alignment: .leading)
+                .padding(.top, 12)
+            Spacer(minLength: 40)
             Text("최근 항목")
                 .font(Theme.Fonts.startHeader).foregroundStyle(Theme.Colors.textPrimary)
-                .frame(maxWidth: .infinity)
-            VStack(spacing: 0) {
-                VStack(spacing: 18) {
-                    if recentTranscripts.isEmpty {
-                        // Empty first-run: an onboarding nudge, not dead text —
-                        // reclaims the left half and points to where to begin.
-                        VStack(spacing: 8) {
-                            SVGIcon(name: "content", size: 28, tint: Theme.Colors.textTertiary)
-                            Text("아직 회의록이 없어요")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                            Text("오른쪽에서 녹음을 시작하면 여기에 쌓여요")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(Theme.Colors.textTertiary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 20)
-                    } else {
-                        ForEach(recentTranscripts, id: \.url) { item in
-                            Button { session.openArchived(item.url) } label: {
-                                HStack(spacing: 7) {
-                                    SVGIcon(name: "content", size: 18)
-                                    Text(item.url.lastPathComponent)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(Theme.Colors.textPrimary)
-                                        .lineLimit(1).truncationMode(.middle)
-                                    Spacer(minLength: 8)
-                                    Text(relativeAge(item.date))
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(Theme.Colors.textSecondary)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .contentShape(Rectangle())
+            VStack(spacing: 18) {
+                if recentTranscripts.isEmpty {
+                    // Empty first-run: an onboarding nudge, not dead text —
+                    // reclaims the left half and points to where to begin.
+                    VStack(spacing: 8) {
+                        SVGIcon(name: "content", size: 28, tint: Theme.Colors.textTertiary)
+                        Text("아직 회의록이 없어요")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                        Text("오른쪽에서 녹음을 시작하면 여기에 쌓여요")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(Theme.Colors.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    ForEach(recentTranscripts, id: \.url) { item in
+                        Button { session.openArchived(item.url) } label: {
+                            HStack(spacing: 8) {
+                                SVGIcon(name: "content", size: 16)
+                                Text(item.url.lastPathComponent)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                    .lineLimit(1).truncationMode(.middle)
+                                Spacer(minLength: 8)
+                                Text(relativeAge(item.date))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
                             }
-                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
                 }
-                Spacer(minLength: 24)
-                recentBottomBlock
             }
-            .frame(maxHeight: .infinity)
+            .padding(.top, 28)
         }
         .frame(width: 318)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    // Below the recent list (Figma 209:1488): a divider, 자동저장 toggle, and
-    // 폴더 location + 변경 — the same autosave controls the working layout's
-    // right panel exposes, surfaced up front on the start screen.
-    private var recentBottomBlock: some View {
-        VStack(spacing: 18) {
-            Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
-            HStack {
-                Text("자동저장")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
-                Spacer()
-                autoSaveToggle
-            }
-            HStack(spacing: 6) {
-                Text("폴더")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
-                Text(session.autoSaveFolder.lastPathComponent)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .help(session.autoSaveFolder.path)
-                Spacer()
-                Button("변경") { chooseAutoSaveFolder() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.Colors.accent)
-            }
-        }
-        .padding(.bottom, 20)  // QA: 저장세팅영역 아래 여백 20px
-    }
-
-    // Custom black pill toggle (Figma 209:1493) — the system .switch tints blue
-    // and its track sits inset from the frame edge, so it read as detached from
-    // the list's right edge. BlackToggle right-aligns exactly and matches the
-    // wordmark's black ON state (shared with the right panel's autosave toggle).
-    private var autoSaveToggle: some View {
-        BlackToggle(isOn: $session.autoSaveEnabled)
-    }
-
-    private func chooseAutoSaveFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = session.autoSaveFolder
-        if panel.runModal() == .OK, let url = panel.url { session.autoSaveFolder = url }
-    }
-
     private var startColumn: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 40) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("시작하기")
                     .font(Theme.Fonts.startHeader).foregroundStyle(Theme.Colors.textPrimary)
                 Text("회의 정보를 설정하면 더 정확한 결과를 얻을 수 있어요")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
-            .frame(maxWidth: .infinity)
-            VStack(alignment: .leading, spacing: 20) {
-                setupBlock("언어") { languageChips }
-                // 라이브 번역을 첫 화면에 노출 (모델 유효할 때만) — 최대 3개
-                // 언어 동시 선택. {한국어, 상대} 2개면 클리닉 양방향이 자동으로
-                // 켜지고, Settings 없이 바로 시작할 수 있다.
-                if AssetManifest.translateAvailable {
-                    setupBlock("자막·번역", optional: true) { translatePairChips }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 20) {
+                    languageRow
+                    setupBlock("회의 모드") { meetingChips }
+                    setupBlock("화자") { speakerChips }
+                    setupBlock("파일 선택", optional: true) { setupDropZone }
                 }
-                setupBlock("회의 모드") { meetingChips }
-                setupBlock("화자") { speakerChips }
-                setupBlock("파일 선택", optional: true) { setupDropZone }
                 ctaButtons
-                    .padding(.top, 4)
             }
         }
         .frame(width: 318)
+    }
+
+    // 인풋(단일)·아웃풋(멀티 체크박스) 언어 드롭다운 한 줄 (Figma 246:756 +
+    // 247:555). Panels render at the card's ZStack layer (see setToStartCard).
+    private var languageRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                Text("입력 언어")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("번역 언어")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 3)
+            HStack(spacing: 4) {
+                langTrigger(id: "input", label: inputLangLabel)
+                langTrigger(id: "output", label: outputLangLabel)
+                    .opacity(AssetManifest.translateAvailable ? 1 : 0.4)
+                    .allowsHitTesting(AssetManifest.translateAvailable)
+                    .help(AssetManifest.translateAvailable ? "" : "번역 모델이 필요해요 — 설정 › 번역")
+            }
+        }
     }
 
     /// Newest transcripts across the whole workspace tree, for the 최근 항목
@@ -952,46 +866,58 @@ struct ContentView: View {
         return f.localizedString(for: d, relativeTo: Date())
     }
 
-    private var languageChips: some View {
-        HStack(spacing: 4) {
-            setupChip("자동", selected: session.languageTokenID == nil) { setLanguage(nil) }
-            setupChip("EN", selected: session.languageTokenID == WhisperLang.en) { setLanguage(WhisperLang.en) }
-            setupChip("KR", selected: session.languageTokenID == WhisperLang.ko) { setLanguage(WhisperLang.ko) }
+    // MARK: language dropdowns (Figma 247:555)
+
+    /// Input options: whisper token id (nil = auto-detect) + display label.
+    private static let inputLangOptions: [(id: Int?, label: String)] = [
+        (nil, "자동"), (WhisperLang.ko, "한국어"), (WhisperLang.en, "영어"),
+        (WhisperLang.zh, "중국어"), (WhisperLang.ja, "일본어"),
+    ]
+    /// Output options: translateTargets code + Korean display label.
+    private static let outputLangOptions: [(code: String, label: String)] = [
+        ("Korean", "한국어"), ("English", "영어"), ("Chinese", "중국어"), ("Japanese", "일본어"),
+    ]
+    private let maxTranslateTargets = 3
+
+    private var inputLangLabel: String {
+        Self.inputLangOptions.first { $0.id == session.languageTokenID }?.label ?? "자동"
+    }
+
+    /// translateTargets code of the chosen input language (nil for 자동) — used
+    /// to drop it from the output list (KO→KO translation is meaningless).
+    private var inputLangCode: String? {
+        switch session.languageTokenID {
+        case WhisperLang.ko: return "Korean"
+        case WhisperLang.en: return "English"
+        case WhisperLang.zh: return "Chinese"
+        case WhisperLang.ja: return "Japanese"
+        default: return nil
+        }
+    }
+
+    /// Collapsed pill label: 번역 안 함 / 영어 / 영어 · 일본어 / 영어 외 2.
+    private var outputLangLabel: String {
+        let labelFor: (String) -> String = { code in
+            Self.outputLangOptions.first { $0.code == code }?.label ?? code
+        }
+        let picked = session.translateTargets.sorted().map(labelFor)
+        switch picked.count {
+        case 0: return "번역 안 함"
+        case 1: return picked[0]
+        case 2: return picked.joined(separator: " · ")
+        default: return "\(picked[0]) 외 \(picked.count - 1)"
         }
     }
 
     private func setLanguage(_ id: Int?) {
         session.languageTokenID = id
         UserDefaults.standard.set(id ?? 0, forKey: "languageTokenID")
-    }
-
-    /// First-screen live-translation picker — MULTI-SELECT, up to 3 languages at
-    /// once (translateTargets is a Set; the source language is auto-excluded per
-    /// line). Picking exactly {한국어, X} keeps clinic bidirectional captions
-    /// (langCandidatePair); 3 targets = one utterance rendered into all of them.
-    private let maxTranslateTargets = 3
-    private var translatePairChips: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    setupChip("없음", selected: session.translateTargets.isEmpty) {
-                        session.translateTargets = []
-                    }
-                    ForEach(SessionController.translateLangLabels, id: \.code) { lang in
-                        let on = session.translateTargets.contains(lang.code)
-                        setupChip(lang.label, selected: on) { toggleTranslateTarget(lang.code) }
-                            // at the cap, un-selected chips dim to signal "remove one first".
-                            .opacity(!on && session.translateTargets.count >= maxTranslateTargets ? 0.4 : 1)
-                    }
-                }
-            }
-            Text(translateHint)
-                .font(Theme.Fonts.status)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .lineLimit(1)
-                .padding(.horizontal, 3)
-                .animation(.snappy, value: session.translateTargets)
+        // The new input language can't also be a translation target.
+        if let code = inputLangCode, session.translateTargets.contains(code) {
+            var t = session.translateTargets; t.remove(code)
+            session.translateTargets = t
         }
+        openLangDropdown = nil
     }
 
     private func toggleTranslateTarget(_ code: String) {
@@ -1001,27 +927,116 @@ struct ContentView: View {
         session.translateTargets = t
     }
 
-    private var translateHint: String {
-        switch session.translateTargets.count {
-        case 0: return "번역할 언어를 고르세요 (최대 \(maxTranslateTargets)개 동시)"
-        case maxTranslateTargets: return "최대 \(maxTranslateTargets)개까지 동시 번역돼요"
-        default:
-            return session.isBidirectionalKoPair
-                ? "한국어 ⇄ 상대 언어 양방향 통역"
-                : "선택한 언어로 동시 번역 · 원문 언어는 자동 제외"
+    /// Trigger pill (h30): label + chevron; tap toggles its panel. Reports its
+    /// frame in the card's coordinate space so the panel can anchor below it.
+    private func langTrigger(id: String, label: String) -> some View {
+        Button {
+            openLangDropdown = (openLangDropdown == id) ? nil : id
+        } label: {
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .rotationEffect(.degrees(openLangDropdown == id ? 180 : 0))
+            }
+            .padding(.leading, 14).padding(.trailing, 12)
+            .frame(height: 30)
+            .background(Capsule().fill(Theme.Colors.surface))
+            .overlay(Capsule().strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .background(GeometryReader { g in
+            Color.clear.preference(key: LangPillFrameKey.self,
+                                   value: [id: g.frame(in: .named("startCard"))])
+        })
+    }
+
+    /// The floating panel (Figma 246:1222/1244): white card, radius 12, rows of
+    /// px14/py8. Input = single-select (closes on pick); output = checkbox
+    /// multi-select topped by an exclusive "번역 안 함" row (stays open).
+    @ViewBuilder
+    private func langDropdownPanel(_ which: String) -> some View {
+        VStack(spacing: 0) {
+            if which == "input" {
+                ForEach(Self.inputLangOptions, id: \.label) { opt in
+                    Button { setLanguage(opt.id) } label: {
+                        HStack {
+                            Text(opt.label)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Theme.Colors.textPrimary)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                langCheckRow("번역 안 함", checked: session.translateTargets.isEmpty, dimmed: false) {
+                    session.translateTargets = []
+                }
+                ForEach(Self.outputLangOptions.filter { $0.code != inputLangCode }, id: \.code) { opt in
+                    let on = session.translateTargets.contains(opt.code)
+                    let capped = !on && session.translateTargets.count >= maxTranslateTargets
+                    langCheckRow(opt.label, checked: on, dimmed: capped) {
+                        toggleTranslateTarget(opt.code)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.Colors.surface))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(Color.black.opacity(0.04), lineWidth: 1))
+        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+
+    /// Output row: label + 15pt checkbox (#141616 filled + white ✓ when on).
+    private func langCheckRow(_ label: String, checked: Bool, dimmed: Bool,
+                              _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer(minLength: 8)
+                ZStack {
+                    if checked {
+                        RoundedRectangle(cornerRadius: 6).fill(Self.chipInk)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Self.chipInkOn)
+                    } else {
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Theme.Colors.separator, lineWidth: 0.75)
+                    }
+                }
+                .frame(width: 15, height: 15)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(dimmed ? 0.4 : 1)
+        .allowsHitTesting(!dimmed)
     }
 
     @ViewBuilder
     private func setupBlock<V: View>(_ title: String, optional: Bool = false, @ViewBuilder _ content: () -> V) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 4) {
-                Text(title).font(Theme.Fonts.label).foregroundStyle(Theme.Colors.textPrimary)
-                // "선택" in a quiet tertiary tone — keeps the "optional" signal but
-                // returns the loud brand-orange badge's contrast budget to the CTA.
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 3) {
+                Text(title).font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 if optional {
-                    Text("선택").font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(Theme.Colors.textTertiary)
+                    Text("*Optional").font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Self.optionalOrange)
                 }
             }
             .padding(.horizontal, 3)
@@ -1030,21 +1045,12 @@ struct ContentView: View {
     }
 
     private var meetingChips: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(MeetingMode.allCases) { m in
-                        setupChip(m.label, selected: session.meetingMode == m) { session.meetingMode = m }
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(MeetingMode.allCases) { m in
+                    setupChip(m.label, selected: session.meetingMode == m) { session.meetingMode = m }
                 }
             }
-            // Inline one-liner so the mode's effect is legible without a tooltip.
-            Text(session.meetingMode.config.mode.summaryDescription)
-                .font(Theme.Fonts.status)
-                .foregroundStyle(Theme.Colors.textTertiary)
-                .lineLimit(1).truncationMode(.tail)
-                .padding(.horizontal, 3)
-                .animation(.snappy, value: session.meetingMode)
         }
     }
 
@@ -1058,17 +1064,19 @@ struct ContentView: View {
         }
     }
 
-    // rev.2 chip: selected = solid #141616/white·semibold, unselected = white
-    // fill with a hairline #f2f2f7 border·medium (was a gray fill in rev.1).
+    // Figma 246:771 chip: both states keep the white fill and 12px medium ink —
+    // selection is a dark OUTLINE (#070808-equivalent ink border), not a solid
+    // black fill (that budget now belongs to the CTA row).
     private func setupChip(_ title: String, selected: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: selected ? .semibold : .medium))
-                .foregroundStyle(selected ? Self.chipInkOn : Theme.Colors.textPrimary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.Colors.textPrimary)
                 .padding(.horizontal, 14).padding(.vertical, 7)
-                .background(Capsule().fill(selected ? Self.chipInk : Theme.Colors.surface))
+                .background(Capsule().fill(Theme.Colors.surface))
                 .overlay(Capsule().strokeBorder(
                     selected ? Self.chipInk : Theme.Colors.surfaceSunken, lineWidth: 1))
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -1142,67 +1150,33 @@ struct ContentView: View {
         return String(format: "%.1fM", Double(bytes) / (1024 * 1024))
     }
 
-    // CTAs stacked with a clear hierarchy: exactly one primary (solid ink) draws
-    // the eye first, the other is a quiet ghost outline. Staging a file swaps
-    // which is primary — the color contrast itself says "this is what starts now".
+    // Figma 246:797 CTA: the two starts sit SIDE BY SIDE (h40, gap 8), both ink
+    // pills; whichever can't start right now renders on the muted track fill so
+    // exactly one reads as "press this". (The design's 10% ghost swallowed the
+    // white label — meterTrack keeps it legible, per earlier QA.)
     private var ctaButtons: some View {
-        let liveIsPrimary = (stagedFile == nil)
-        return VStack(spacing: 8) {
-            // 요청 3: reflect the chosen translation pair right above the button so
-            // "무엇으로 시작하는지"가 손가락 아래에서 확인된다. Tapping jumps to
-            // Settings › 번역 to fine-tune (3+ targets, model, etc.).
-            if !session.translateTargets.isEmpty {
-                Button { openTranslateSettings() } label: {
-                    HStack(spacing: 4) {
-                        SVGIcon(name: "content", size: 12, tint: Theme.Colors.accent)
-                        Text(translateSummaryText)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                        Spacer(minLength: 0)
-                    }
-                }
-                .buttonStyle(.plain)
-                .help("번역 설정 열기")
-            }
-            setupCTA("지금 녹음 시작", emphasis: liveIsPrimary ? .primary : .ghost) {
-                session.startCountdown()
-            }
-            setupCTA("파일 불러오기", emphasis: liveIsPrimary ? .ghost : .primary) {
+        HStack(spacing: 8) {
+            setupCTA("파일로 시작하기", enabled: stagedFile != nil) {
                 if let u = stagedFile { stagedFile = nil; session.transcribeFile(u) }
             }
+            setupCTA("지금 녹음 시작", enabled: stagedFile == nil) {
+                session.startCountdown()
+            }
         }
     }
 
-    /// "한국어 ⇄ 日本語 실시간 자막" (clinic pair) or "→ English, 日本語 자막".
-    private var translateSummaryText: String {
-        let labelFor: (String) -> String = { code in
-            SessionController.translateLangLabels.first { $0.code == code }?.label ?? code
-        }
-        if session.isBidirectionalKoPair, let other = session.translateTargets.first(where: { $0 != "Korean" }) {
-            return "한국어 ⇄ \(labelFor(other)) 실시간 자막"
-        }
-        let names = session.translateTargets.sorted().map(labelFor).joined(separator: ", ")
-        return "→ \(names) 자막"
-    }
-
-    private func openTranslateSettings() { openSettings() }
-
-    private enum CTAEmphasis { case primary, ghost }
-    /// primary = solid ink (adaptive, inverts in dark), ghost = quiet surface
-    /// outline. Ghost is non-interactive (matches the old enabled gating exactly:
-    /// exactly one CTA is live at a time).
-    private func setupCTA(_ title: String, emphasis: CTAEmphasis, _ action: @escaping () -> Void) -> some View {
-        let isPrimary = (emphasis == .primary)
-        return Button { if isPrimary { action() } } label: {
+    private func setupCTA(_ title: String, enabled: Bool, _ action: @escaping () -> Void) -> some View {
+        Button { if enabled { action() } } label: {
             Text(title)
                 .font(Theme.Fonts.cta)
-                .foregroundStyle(isPrimary ? Self.chipInkOn : Theme.Colors.textSecondary)
-                .frame(maxWidth: .infinity).frame(height: isPrimary ? 44 : 40)
-                .background(Capsule().fill(isPrimary ? Self.chipInk : Theme.Colors.surface))
-                .overlay(Capsule().strokeBorder(isPrimary ? Color.clear : Theme.Colors.separator, lineWidth: 1))
+                .foregroundStyle(Self.chipInkOn)
+                .frame(maxWidth: .infinity).frame(height: 40)
+                .background(Capsule().fill(enabled ? Self.chipInk : Theme.Colors.meterTrack))
         }
         .buttonStyle(.plain)
-        .allowsHitTesting(isPrimary)
+        // .allowsHitTesting (not .disabled) so the label keeps full opacity —
+        // .disabled applies a system dim that grays the white text out.
+        .allowsHitTesting(enabled)
     }
 
     private func chooseStagedFile() {
@@ -1328,14 +1302,14 @@ struct ContentView: View {
     @ViewBuilder private var liveControls: some View {
         switch session.phase {
         case .recording:
-            HStack(spacing: 12) {
+            HStack(spacing: 5) {
                 bigControl("일시 정지", action: { session.pauseRecording() }) { pauseGlyph }
                     .keyboardShortcut("p")
                 bigControl("정지", action: { session.stop() }) { stopGlyph }
                     .keyboardShortcut("r")
             }
         case .paused:
-            HStack(spacing: 12) {
+            HStack(spacing: 5) {
                 // rev.3 (Figma 188:714): 재개 is a BLACK play triangle, matching
                 // the pause glyph's ink — only 정지 stays red.
                 bigControl("재개", action: { session.resumeRecording() }) {
@@ -1493,10 +1467,9 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity).frame(height: 106)
             .background(
+                // No outline (removed per design); shadow carries the elevation.
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Theme.Colors.surface)
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Theme.Colors.separator, lineWidth: 1))
                     .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8))
@@ -1977,6 +1950,39 @@ struct ContentView: View {
     private var isRecordingLike: Bool {
         session.phase == .recording || session.phase == .paused
     }
+
+    /// Gradient WARNING row (Figma 260:1316): silence takes priority; otherwise
+    /// the 누락 의심/복구 summary (which is expandable via coverageGapTimes).
+    private var transcriptWarning: String? {
+        if session.micSilent { return "소리가 감지되지 않아요 — 마이크를 확인해주세요" }
+        var parts: [String] = []
+        if !session.coverageGaps.isEmpty { parts.append("누락 의심 \(session.coverageGaps.count)구간") }
+        if session.hangRecoveries > 0 { parts.append("복구 \(session.hangRecoveries)회") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// mm:ss of each suspected-missing segment — expands under the warning row.
+    /// (Empty while silence is the active warning, so that row stays non-expandable.)
+    private var coverageGapTimes: [String] {
+        guard !session.micSilent else { return [] }
+        return session.coverageGaps.sorted().map { secs in
+            let s = Int(secs); return String(format: "%d:%02d", s / 60, s % 60)
+        }
+    }
+
+    /// Dimmed ACTIVITY row (loading dots): what a stage is doing right now.
+    /// The activity row is a pure rendering of the session's pipeline state
+    /// machine (Phase 4) — no signal-priority logic lives in the view anymore.
+    private var transcriptActivity: String? {
+        switch session.pipeline {
+        case .diarizing:                 "AI가 화자·언어를 검토하는 중"
+        case .fileTranscribing(let pct): pct.map { "파일 전사 중 · \($0)%" } ?? "파일 전사 중"
+        case .translating(let n):        "번역 중 · \(n)줄 대기"
+        case .transcribing:              "전사 중"
+        case .listening:                 "듣는 중"
+        case .idle, .completed, .error:  nil   // error surfaces via phase UI, silence via warning row
+        }
+    }
     // accept anything the system recognizes as audio or audiovisual media (104+
     // types) — not a hardcoded extension list. Unknown extensions are let through
     // and AudioDecode surfaces a clear error if they can't actually be decoded.
@@ -2053,22 +2059,6 @@ struct FigmaCheckboxToggleStyle: ToggleStyle {
 /// W3: one-line pipeline status — listening / transcribing / translating /
 /// AI-reviewing / suspected misses / hang recoveries. Turns the invisible
 /// background stages into a glanceable answer to "지금 뭘 하는 중이지?".
-private struct HUDChip: View {
-    let icon: String
-    let text: String
-    var tint: Color = Theme.Colors.textSecondary
-    var pulsing = false
-    var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon).font(.system(size: 9))
-            Text(text).font(.system(size: 10, weight: .medium))
-        }
-        .foregroundStyle(tint)
-        .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(Capsule().fill(tint.opacity(0.1)))
-        .opacity(pulsing ? 0.85 : 1)
-    }
-}
 
 struct LevelMeter: View {
     let level: Float

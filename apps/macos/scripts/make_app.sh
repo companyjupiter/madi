@@ -81,6 +81,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/BrandLogo.swift
   "$APP_DIR"/Sovereign/UI/SVGIcon.swift
   "$APP_DIR"/Sovereign/UI/BlackToggle.swift
+  "$APP_DIR"/Sovereign/UI/StatusLine.swift
   "$APP_DIR"/Sovereign/UI/OrbView.swift
   "$APP_DIR"/Sovereign/UI/ContentView.swift
   "$APP_DIR"/Sovereign/UI/WorkspaceExplorer.swift
