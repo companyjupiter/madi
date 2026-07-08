@@ -132,9 +132,8 @@ struct SettingsView: View {
                     Text("정확 (10초)").tag(10.0)
                 }
                 .help("빠름=텍스트가 더 자주 뜸(체감↑), 정확=문맥 길어 품질↑")
-                .disabled(session.multiTranslateForcesAccurate)   // 2개+ 번역 → 정확 고정
                 if session.multiTranslateForcesAccurate {
-                    Text("번역 대상 2개 이상 → ‘정확(10초)’ 고정. 원문 경계 오류가 모든 번역으로 전파되지 않도록 가장 긴 문맥을 씁니다.")
+                    Text("번역 대상 2개 이상 → 최소 ‘보통(7초)’. ‘빠름(5초)’은 원문 경계 오류가 모든 번역으로 전파돼 자동으로 7초가 됩니다.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Toggle("실시간 프리뷰", isOn: $session.livePreviewEnabled)

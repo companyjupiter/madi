@@ -23,15 +23,18 @@ final class SessionController: EngineProcessDelegate {
     /// One DERIVED state machine over the existing signals — the single source
     /// the status line (and any future badge) renders from, so every surface
     /// agrees on "what the AI is doing right now". Priority mirrors severity:
-    /// reconcile > file transcription > translation backlog > live transcription.
+    /// reconcile > file transcription > translation backlog(shed) > live translation
+    /// queue > live transcription > post-stop backfill.
     enum PipelineState: Equatable {
         case idle
         case listening                    // recording, no audio in flight
         case transcribing                 // recording, segments decoding
         case fileTranscribing(Int?)       // file mode, optional % done
         case diarizing                    // AI speaker/language reconcile pass
-        case translating(Int)             // N lines queued
+        case translating(Int)             // N lines queued (live)
+        case translatingBacklogged(Int)   // live queue shed N lines under load — filled at stop
         case completed
+        case backfilling(Int)             // post-stop: N shed lines still being re-translated
         case error(String)
     }
 
@@ -42,12 +45,16 @@ final class SessionController: EngineProcessDelegate {
             return .fileTranscribing(chunksTotal > 0
                 ? Int(Double(chunksDone) / Double(chunksTotal) * 100) : nil)
         }
+        if translateBacklog > 0 { return .translatingBacklogged(translateQueueDepth) }
         if translateQueueDepth > 0 { return .translating(translateQueueDepth) }
         if phase == .recording {
             if micSilent { return .idle }        // the silence WARNING covers this
             return segmentsInFlight > 0 ? .transcribing : .listening
         }
-        if phase == .done { return .completed }
+        if phase == .done {
+            if backfillRemaining > 0 { return .backfilling(backfillRemaining) }
+            return .completed
+        }
         return .idle
     }
     var level: Float = 0
@@ -118,6 +125,19 @@ final class SessionController: EngineProcessDelegate {
     private(set) var streamingTranslation: TranslationRef?
     /// Pending translation turns (queued + in-flight) — the "N줄 대기" status (D20).
     private(set) var translateQueueDepth = 0
+    /// Max live translation queue depth (turns). Past this, fast speech sheds its
+    /// OLDEST turns to `translateBacklog` and they're re-translated at stop.
+    private static let liveTranslateCap = 30
+    /// Lines the live queue shed (translation deferred to stop) — the "N줄은 종료
+    /// 후 채움" HUD signal, and the backfill worklist finalize drains.
+    private var backlogLineIDs: Set<UUID> = []
+    private(set) var translateBacklog = 0
+    /// Post-stop backfill in progress: lines still being re-translated after the
+    /// live cap shed them. Drives the ".done · 채우는 중 N줄" HUD, and gates the
+    /// 8GB summary engine (which evicts translate) until backfill drains.
+    private var backfillPendingIDs: Set<UUID> = []
+    private(set) var backfillRemaining = 0
+    private var summaryDeferredForBackfill = false
     /// Wall-clock of the last committed line — the commit-cadence ring reads it
     /// against effectiveWindowSeconds to show progress toward the next commit (D19).
     private(set) var lastCommitAt = Date()
@@ -225,10 +245,11 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(liveWindowSeconds, forKey: "liveWindowSeconds") }
     }
 
-    /// 2개 이상으로 번역할 때는 반응속도와 무관하게 "정확"(10초) 윈도를 강제한다.
-    /// 짧은 윈도는 원문 경계 오류가 많은데, 그 오류가 모든 대상 언어 번역으로
-    /// 전파되므로 — 다중 번역에서는 가장 긴 문맥의 원문 품질이 우선이다. UI도 이
-    /// 규칙을 노출(2개+ 선택 시 반응속도 picker를 잠그고 "정확"으로 표시).
+    /// 2개 이상으로 번역할 때는 반응속도 하한을 "보통"(7초)으로 둔다 — 5초만 막고
+    /// 7·10초는 자유(2026-07-07 완화, 기존엔 10초 강제였음). 짧은 윈도는 원문
+    /// 경계 오류가 많은데 그 오류가 모든 대상 언어 번역으로 전파되므로, 다중 번역
+    /// 에서는 5초가 위험하다 — 다만 7초는 충분한 문맥이라 허용. UI도 이 규칙을
+    /// 노출(2개+ 선택 시 5초를 고르면 7초로 스냅).
     /// 예외 (T4, 2026-07-03): {한국어, X} 양방향 쌍은 per-line 스크립트 라우팅이
     /// 라인당 실효 타깃을 1개로 줄이므로(KO줄→X만, X줄→KO만) 강제하지 않는다 —
     /// 클리닉 대면 통역이 정확히 이 형태다.
@@ -236,7 +257,11 @@ final class SessionController: EngineProcessDelegate {
         translateTargets.count >= 2 &&
             !(translateTargets.count == 2 && translateTargets.contains("Korean"))
     }
-    var effectiveWindowSeconds: Double { multiTranslateForcesAccurate ? 10 : liveWindowSeconds }
+    /// Multi-target: floor the window at 7 s (short windows leak boundary errors
+    /// into every language) but allow 7 or 10 — no longer pinned to 10.
+    var effectiveWindowSeconds: Double {
+        multiTranslateForcesAccurate ? max(7, liveWindowSeconds) : liveWindowSeconds
+    }
 
     /// Streaming preview: a 2nd engine decodes the in-progress window every ~1.5s
     /// for instant interim text — NO accuracy cost (committed text is unchanged).
@@ -596,6 +621,13 @@ final class SessionController: EngineProcessDelegate {
             // caption display language first (T3): CaptionOverlay picks
             // sorted().first — make the engine serve that language first too.
             t.priorityLang = translateTargets.sorted().first
+            // Live cap: keep the queue tracking the newest speech. Turns the engine
+            // can't keep up with are shed and remembered for the stop-time backfill.
+            t.maxPending = Self.liveTranslateCap
+            t.onDrop = { [weak self] id in
+                guard let self else { return }
+                if self.backlogLineIDs.insert(id).inserted { self.translateBacklog = self.backlogLineIDs.count }
+            }
             t.onResult = { [weak self] id, lang, text, source in
                 guard let self else { return }
                 if id == Self.interimID {
@@ -619,6 +651,16 @@ final class SessionController: EngineProcessDelegate {
                     if let line = self.transcript.lines.first(where: { $0.id == id }),
                        self.lineHash(line.text) != self.lineHash(source) { return }
                     self.transcript.setTranslation(id, lang: lang, text)
+                    // Backfill progress: this shed line is filled — count it down.
+                    // When backfill drains, run the 8GB summary that was deferred so
+                    // it wouldn't evict the translate engine mid-backfill.
+                    if self.backfillPendingIDs.remove(id) != nil {
+                        self.backfillRemaining = self.backfillPendingIDs.count
+                        if self.backfillRemaining == 0, self.summaryDeferredForBackfill {
+                            self.summaryDeferredForBackfill = false
+                            self.startPostSessionSummary()
+                        }
+                    }
                     // T1 carryover teardown: the real translation replaced the
                     // provisional interim caption for the freshest content.
                     if id == self.transcript.lines.last?.id, self.livePartial.isEmpty {
@@ -1089,6 +1131,8 @@ final class SessionController: EngineProcessDelegate {
         fileName = ""; chunksDone = 0; chunksTotal = 0
         livePartial = ""; livePartialTranslations = [:]
         streamingTranslation = nil; translateQueueDepth = 0
+        backlogLineIDs.removeAll(); translateBacklog = 0
+        backfillPendingIDs.removeAll(); backfillRemaining = 0; summaryDeferredForBackfill = false
         segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
         stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0
         phase = .idle
@@ -1471,6 +1515,24 @@ final class SessionController: EngineProcessDelegate {
         engine = nil
         preview.stop(); livePartial = ""; livePartialTranslations = [:]   // tear down the 2nd engine + interim text
         phase = .done
+        // Backfill: lines the live queue shed under load get re-translated now,
+        // uncapped, so the on-screen transcript/scrollback is complete after stop
+        // (the live captions themselves already moved on). backfillRemaining drives
+        // the progress HUD; on 8GB the summary engine — which evicts translate —
+        // waits for this to drain. (interimCache is still warm → O3 reuse.)
+        if let t = translate, !backlogLineIDs.isEmpty {
+            t.maxPending = 0
+            backfillPendingIDs.removeAll()
+            for line in transcript.lines where backlogLineIDs.contains(line.id) {
+                // skip lines a late live turn already filled (no wasted turn)
+                if line.translations.count >= routedTargets(for: line.text).count { continue }
+                translatedHash[line.id] = nil
+                backfillPendingIDs.insert(line.id)
+                translateLine(line)
+            }
+            backfillRemaining = backfillPendingIDs.count
+            backlogLineIDs.removeAll(); translateBacklog = 0
+        }
         translateStableLines(includingLast: true)  // translate the final line(s) too
         interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
         stopLiveRail()       // recording ended — keep the accumulated rail for review
@@ -1479,13 +1541,25 @@ final class SessionController: EngineProcessDelegate {
         stopLiveCoach(); recomputeCoach()   // stop the 1Hz loop, snapshot the final transcript once
         calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
-        // A.I 요약이 켜진 라이브 세션: DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로
-        // 승격(rename)한다. 제목을 먼저 enqueue → 요약본 저장 전에 rename이 끝나 같은 베이스로 묶임.
+        // 8GB: ensureSummaryEngine() evicts the translate engine, discarding any
+        // in-flight backfill turns (data loss). Defer the summary until backfill
+        // drains (onResult restarts it). 16GB keeps both resident → run now.
+        if backfillRemaining > 0, !Self.liveRailCapable {
+            summaryDeferredForBackfill = true
+        } else {
+            startPostSessionSummary()
+        }
+        kickReconcile()   // opt-in: LLM reviews speaker/language after the session
+    }
+
+    /// Post-session AI title + summary. Split out so the 8GB backfill path can
+    /// defer it until the translate engine is done (it would otherwise be evicted).
+    private func startPostSessionSummary() {
+        // DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로 승격(rename).
         if autoSaveEnabled, autoSaveSummary, fileName.isEmpty, let s = ensureSummaryEngine() {
             s.generateTitle(lines: attributedLines)
         }
         if autoSaveSummary, autoSaveEnabled { autoSummarizeForSave() }   // 요약본 별개 저장
-        kickReconcile()   // opt-in: LLM reviews speaker/language after the session
     }
 
     // MARK: AI reconcile (post-session)

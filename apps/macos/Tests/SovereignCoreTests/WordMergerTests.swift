@@ -41,4 +41,35 @@ final class WordMergerTests: XCTestCase {
         m.add(w(0.0, 0.4, "live"))
         XCTAssertEqual(m.displayWords.map { $0.text }, ["live"])
     }
+
+    /// Degenerate cross-chunk repeat ("ndo.com. ndo.com…") must be truncated once
+    /// the same phrase has repeated past the cap — not committed forever.
+    func testRunawayRepeatIsTruncated() {
+        var m = WordMerger()
+        var t = 0.0
+        for _ in 0..<20 { m.add(w(t, t + 0.3, "ndo.com.")); t += 0.3 }
+        m.finish()
+        let reps = m.committed.filter { $0.text == "ndo.com." }.count
+        XCTAssertLessThanOrEqual(reps, WordMerger.maxPhraseRepeats + 1,
+            "runaway single-word repeat must be capped, got \(reps)")
+    }
+
+    /// A repeated multi-word phrase ("A B A B A B…") is also capped by period.
+    func testRunawayPhraseRepeatIsTruncated() {
+        var m = WordMerger()
+        var t = 0.0
+        for _ in 0..<12 { for s in ["ho", "ho"] { m.add(w(t, t + 0.2, s)); t += 0.2 } }
+        m.finish()
+        XCTAssertLessThan(m.committed.count, 10, "period-2 loop must be capped")
+    }
+
+    /// Genuine speech that happens to repeat a couple of times is NOT truncated.
+    func testShortLegitRepeatSurvives() {
+        var m = WordMerger()
+        let words = ["네", "네", "네", "그래서", "우리는", "다시", "시작", "합니다"]
+        var t = 0.0
+        for s in words { m.add(w(t, t + 0.3, s)); t += 0.3 }
+        m.finish()
+        XCTAssertEqual(m.committed.map { $0.text }, words, "3× backchannel + normal speech survives")
+    }
 }

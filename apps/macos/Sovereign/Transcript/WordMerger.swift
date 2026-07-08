@@ -62,7 +62,43 @@ struct WordMerger {
         if final, let h = held { commit(h); held = nil }
     }
 
+    /// Degenerate-repeat guard. The engine resets decode state per chunk, so the
+    /// in-decode no_repeat_ngram can't see across chunks — a hallucinated short
+    /// phrase repeating across segments ("ndo.com. ndo.com. ndo.com…") slips
+    /// through and the merged line explodes. Once the SAME 1–6-word phrase has
+    /// repeated `maxPhraseRepeats` times at the tail, drop further repeats.
+    /// (5+ verbatim repeats of a short phrase is degenerate, not real speech.)
+    static let maxPhraseRepeats = 4
+
+    private func normWord(_ w: Word) -> String {
+        w.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    /// Would appending `w` extend a tail run of an identical p-word phrase beyond
+    /// the cap? Scans only the recent tail (bounded work per commit).
+    private func isRunawayRepeat(adding w: Word) -> Bool {
+        let cap = Self.maxPhraseRepeats
+        let window = 6 * (cap + 1)                      // enough tail for any p≤6 run
+        var hist = committed.suffix(window).map(normWord)
+        hist.append(normWord(w))
+        let n = hist.count
+        for p in 1...6 {
+            guard n >= 2 * p else { continue }
+            // count contiguous identical p-grams ending at the (hypothetical) tail
+            var reps = 1
+            var i = n - p
+            while i - p >= 0, Array(hist[(i - p)..<i]) == Array(hist[i..<(i + p)]) {
+                reps += 1; i -= p
+            }
+            if reps > cap { return true }
+        }
+        return false
+    }
+
     private mutating func commit(_ w: Word) {
+        // advance the watermark even when dropped, so the overlap dedup stays
+        // consistent and later segments don't re-introduce the same repeat.
+        if isRunawayRepeat(adding: w) { emitted = max(emitted, w.t1); return }
         committed.append(w)
         emitted = max(emitted, w.t1)
     }
