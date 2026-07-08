@@ -49,17 +49,85 @@ struct Line: Identifiable {
     /// Display / export text — the user's edit if present, else the joined words.
     var text: String { editedText ?? joinedText }
     var isEdited: Bool { editedText != nil }
+
+    /// Per-segment AI processing state (Phase 3). DERIVED, not stored — the
+    /// segment's data (words/translations) stays the single source of truth,
+    /// so status can never drift out of sync with the content it describes.
+    func status(activeLangs: [String], isLiveTail: Bool, translateBusy: Bool) -> SegmentStatus {
+        if isLiveTail { return .transcribing }
+        if translateBusy, !activeLangs.isEmpty,
+           activeLangs.contains(where: { translations[$0] == nil }) { return .translating }
+        return .completed
+    }
+}
+
+/// The unified per-segment model of the transcript list (Phase 3): one value
+/// carries the transcription (words), speaker attribution, translations and
+/// AI-processing status. `Line` is its historical name across the codebase.
+typealias TranscriptSegment = Line
+
+/// idle → transcribing → diarizing → translating → completed, per segment.
+/// (.transcribing renders as the inline gray live tail; .translating as a
+/// small pending-dots row where the translation will appear.)
+enum SegmentStatus: Equatable {
+    case transcribing   // live tail — words still arriving
+    case translating    // committed, translation queued or streaming
+    case completed
 }
 
 @Observable
 @MainActor
 final class TranscriptStore {
+    /// Source of truth, updated SYNCHRONOUSLY by every event — engine callbacks,
+    /// stale-guards, exports and autosave all read this and must never see a
+    /// coalescing delay.
     private(set) var lines: [Line] = []
+
+    // ── Render coalescing (Phase 1) ─────────────────────────────────────────
+    // The view renders `displayLines`, a snapshot of `lines` refreshed at most
+    // ~30fps. Word events and translation tokens arrive every ~19-30ms EACH;
+    // publishing `lines` directly re-diffed the whole list per token, which is
+    // what made row heights twitch. Views observing only `displayLines` are
+    // untouched by the synchronous writes above (@Observable tracks per key).
+    private(set) var displayLines: [Line] = []
+    @ObservationIgnored private var renderScheduled = false
+
+    /// Coalesced view refresh — many calls within a frame collapse into one
+    /// `displayLines` write ~33ms later (the SwiftUI equivalent of rAF batching).
+    private func scheduleRender() {
+        guard !renderScheduled else { return }
+        renderScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 33_000_000)
+            renderScheduled = false
+            displayLines = lines
+        }
+    }
+
+    /// Immediate refresh — session boundaries (reset / archive load / finalize)
+    /// where a 33ms-stale frame would flash old content.
+    private func flushRenderNow() {
+        displayLines = lines
+    }
 
     private var merger = WordMerger()
     private var spk: [SpeakerLabel] = []      // streaming
     private var spkFix: [SpeakerLabel] = []   // FLUSH
     private var spkOv: [SpeakerLabel] = []     // FLUSH overlap
+
+    // ── Frozen prefix (Phase 2) ─────────────────────────────────────────────
+    // Lines whose audio is ≥ freezeMargin older than the newest word are
+    // PROMOTED here and never regrouped again: no future word can merge into
+    // them (words arrive in order; the merge window is lineBreakGap ≪ margin)
+    // and streaming labels for that region have long arrived. rebuildLive then
+    // regroups only the short live tail — per-word cost stops growing with
+    // session length, and every frozen line's identity/boundary is literally
+    // immutable, so the rendered list prefix never shifts under the reader.
+    // (Mid-session SPKFIX relabels update frozen lines' speaker IN PLACE via
+    // reassignFrozenSpeakers — attribute-only, boundaries stay put.)
+    private var frozen: [Line] = []
+    private var frozenWordCount = 0           // prefix length into merger words
+    private static let freezeMargin = 6.0     // ~2 engine windows behind live
 
     /// Start a new line when the inter-word gap exceeds this (readability —
     /// without it a monologue renders as one giant line).
@@ -75,6 +143,7 @@ final class TranscriptStore {
     func setTranslation(_ id: UUID, lang: String, _ text: String) {
         translationsByLine[id, default: [:]][lang] = text
         if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].translations[lang] = text }
+        scheduleRender()
     }
 
     /// Replace a line's text (inline editing, live or post). Keyed by the stable
@@ -83,6 +152,7 @@ final class TranscriptStore {
         let t = newText.trimmingCharacters(in: .whitespacesAndNewlines)
         editsByLine[id] = t
         if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].editedText = t }
+        scheduleRender()
     }
 
     /// Replace a single word in a line (review flow). Word.text is immutable so
@@ -97,6 +167,12 @@ final class TranscriptStore {
         lines[li].words[index] = Word(t0: old.t0, t1: old.t1, text: t, conf: 1.0)
         lines[li].editedText = lines[li].joinedText
         editsByLine[lineID] = lines[li].editedText
+        // If the line is frozen, sync the word fix into the frozen base too —
+        // otherwise the next rebuild would resurrect the old amber word.
+        if let fi = frozen.firstIndex(where: { $0.id == lineID }) {
+            frozen[fi].words = lines[li].words
+        }
+        scheduleRender()
     }
 
     // ── AI reconcile (speaker corrections as OVERLAYS) ──────────────────────
@@ -135,6 +211,7 @@ final class TranscriptStore {
             if let ov = speakerOverrides[lines[i].id] { lines[i].speaker = ov }
             else if let mg = speakerMerges[lines[i].speaker] { lines[i].speaker = mg }
         }
+        scheduleRender()
     }
     /// Regroup from whatever label set currently applies (live vs finalized).
     private func rebuildFromCurrentLabels() {
@@ -148,7 +225,9 @@ final class TranscriptStore {
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
         translationsByLine.removeAll(); editsByLine.removeAll()
         speakerMerges.removeAll(); speakerOverrides.removeAll()
+        frozen.removeAll(); frozenWordCount = 0
         finalized = false; diarNamespaceBroken = false
+        flushRenderNow()
     }
 
     /// Replace the transcript with externally-parsed lines — re-opening an
@@ -157,6 +236,7 @@ final class TranscriptStore {
     func load(_ newLines: [Line]) {
         reset()
         lines = newLines
+        flushRenderNow()
     }
 
     /// Re-apply id-keyed overlays after any (re)grouping.
@@ -190,7 +270,7 @@ final class TranscriptStore {
                 spk[i] = SpeakerLabel(time: spk[i].time, id: l.id, dur: spk[i].dur, margin: l.margin)
                 touched = true
             }
-            if touched { rebuildLive() }
+            if touched { reassignFrozenSpeakers(); rebuildLive() }
         case .speakerOverlap(let l): spkOv.append(l)
         default: break
         }
@@ -207,6 +287,9 @@ final class TranscriptStore {
     /// Called on <<FLUSH_END>>: produce the corrected, overlap-annotated transcript.
     func finalize() {
         finalized = true
+        // The one-shot full regroup below supersedes the live frozen prefix —
+        // thaw so SPKFIX boundaries can reshape the whole transcript once.
+        frozen.removeAll(); frozenWordCount = 0
         merger.finish()
         // dedupe SPKFIX by window time keeping the LAST entry — mid-session
         // corrections are superseded by the FLUSH full re-emission.
@@ -232,17 +315,47 @@ final class TranscriptStore {
                 }
             }
         }
+        flushRenderNow()
     }
 
     private func rebuildLive() {
-        lines = group(words: merger.displayWords, labels: spk)
+        let all = merger.displayWords
+        // Defensive: the frozen prefix must mirror the merger's committed
+        // prefix (append-only). If it ever doesn't, thaw rather than misindex.
+        if frozenWordCount > all.count { frozen.removeAll(); frozenWordCount = 0 }
+        var tail = group(words: Array(all[frozenWordCount...]), labels: spk)
+        // Promote settled tail lines. Conditions: fully older than the freeze
+        // watermark; their words already in the merger's committed region (past
+        // the holdback churn); and never the last line (it stays live).
+        let watermark = (all.last?.t1 ?? 0) - Self.freezeMargin
+        while tail.count > 1, let first = tail.first, first.end < watermark,
+              frozenWordCount + first.words.count <= merger.committed.count {
+            frozen.append(first)
+            frozenWordCount += first.words.count
+            tail.removeFirst()
+        }
+        lines = frozen + tail
         applyOverlays()
+        scheduleRender()
     }
 
-    /// Group consecutive same-speaker words into lines, breaking on long pauses.
-    /// Each word's speaker = the label window covering its onset.
-    private func group(words: [Word], labels: [SpeakerLabel]) -> [Line] {
-        guard !words.isEmpty else { return [] }
+    /// SPKFIX touched label windows inside the frozen region: update those
+    /// lines' speaker/margin IN PLACE (attribute-only — boundaries and ids are
+    /// frozen; content mode re-merges adjacent same-speaker blocks anyway).
+    private func reassignFrozenSpeakers() {
+        guard !frozen.isEmpty else { return }
+        let look = labelLookup(spk)
+        for i in frozen.indices {
+            let mid = (frozen[i].start + frozen[i].end) / 2
+            frozen[i].speaker = look.speakerAt(mid)
+            frozen[i].speakerMargin = look.marginAt(mid)
+        }
+    }
+
+    /// Speaker/margin lookup over a label set — shared by grouping and by the
+    /// frozen-prefix in-place relabel.
+    private func labelLookup(_ labels: [SpeakerLabel])
+        -> (speakerAt: (Double) -> Int, marginAt: (Double) -> Double) {
         let sorted = labels.sorted { $0.time < $1.time }
         func speakerAt(_ t: Double) -> Int {
             var best = sorted.first?.id ?? 0
@@ -254,17 +367,42 @@ final class TranscriptStore {
             }
             return best
         }
-
         func marginAt(_ t: Double) -> Double {
             for l in sorted where t >= l.time && t <= l.time + l.dur { return l.margin }
             return 1.0
         }
+        return (speakerAt, marginAt)
+    }
 
+    /// Group consecutive same-speaker words into lines, breaking on long pauses.
+    /// Each word's speaker = the label window covering its onset.
+    private func group(words: [Word], labels: [SpeakerLabel]) -> [Line] {
+        guard !words.isEmpty else { return [] }
+        let look = labelLookup(labels)
+        return groupLoop(words: words, speakerAt: look.speakerAt, marginAt: look.marginAt)
+    }
+
+    /// A word's trailing char ends a sentence → the next word starts a new line.
+    /// Guards against a lone-period false break (e.g. "3.5" ends mid-token, not
+    /// with a bare "."); requires the punctuation to be the actual last char.
+    private static let sentenceEnders: Set<Character> = [".", "?", "!", "。", "？", "！", "…"]
+    private static func endsSentence(_ text: String?) -> Bool {
+        guard let t = text?.trimmingCharacters(in: .whitespaces), let ch = t.last else { return false }
+        return sentenceEnders.contains(ch)
+    }
+
+    private func groupLoop(words: [Word], speakerAt: (Double) -> Int, marginAt: (Double) -> Double) -> [Line] {
         var out: [Line] = []
         for w in words.sorted(by: { $0.t0 < $1.t0 }) {
             let sp = speakerAt(w.t0)
             let m = marginAt(w.t0)
-            if var last = out.last, last.speaker == sp, w.t0 - last.end < lineBreakGap {
+            // Break at sentence boundaries too (not just pauses): a completed
+            // sentence commits as its own line so it translates ONCE and freezes,
+            // instead of re-translating the whole growing monologue from the top
+            // each time a word lands. (content mode re-merges these into one
+            // paragraph, so reading is unchanged.)
+            if var last = out.last, last.speaker == sp, w.t0 - last.end < lineBreakGap,
+               !Self.endsSentence(last.words.last?.text) {
                 last.end = max(last.end, w.t1)
                 last.words.append(w)
                 last.speakerMargin = min(last.speakerMargin, m)

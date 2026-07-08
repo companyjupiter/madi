@@ -26,6 +26,18 @@ struct TranscriptView: View {
     var focusedLine: UUID? = nil   // line to briefly emphasize after a jump
     var interim: String = ""       // live streaming-preview text (gray "진행 중")
     var interimTranslations: [String: String] = [:]   // provisional translation of the interim
+    // Consolidated status area at the transcript tail (Figma 258:908): a gradient
+    // WARNING row (누락 의심 / 무음) stacked over a dimmed ACTIVITY row (전사·번역·
+    // 듣는 중 …). The 누락 warning carries an expand chevron → outline box of the
+    // suspected-missing timestamps (gapTimes, pre-formatted mm:ss).
+    var warningText: String? = nil
+    var gapTimes: [String] = []
+    var activityText: String? = nil
+    // Per-segment status (Phase 3): languages being translated + whether the
+    // translate pipeline is busy — drives the ephemeral pending-dots row on
+    // segments whose translation hasn't arrived yet.
+    var activeLangs: [String] = []
+    var translateBusy: Bool = false
     var fontSize: CGFloat = 13     // transcript body text size (user-adjustable)
     // A7: the (line, language) whose translation is currently streaming in — a
     // blinking caret ▍ is appended so a half-arrived translation reads as "still
@@ -50,15 +62,55 @@ struct TranscriptView: View {
     var onScrolledFromTopChange: ((Bool) -> Void)? = nil
     private var bodyFont: Font { .system(size: fontSize) }
 
-    private struct ScrollTopKey: PreferenceKey {
-        static var defaultValue: CGFloat = 0
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-    }
+    @State private var viewportH: CGFloat = 0
+    // Jump pill (#8): while the user reads ABOVE the follow zone, new commits
+    // don't drag the view (OS anchor releases) — they count up here instead,
+    // surfaced as a "새 전사 N" pill that jumps back to the live tail.
+    @State private var atBottom = true
+    @State private var unseenCount = 0
+    // Corrective re-glue: defaultScrollAnchor(.bottom) loses its grip when an
+    // EARLIER line grows (translation backlog attaching above the viewport,
+    // mid-session speaker fixes regrouping blocks) — content grows at the top,
+    // the offset stays, and the OS reads the new gap as "user left the bottom".
+    // followLive tracks REAL user intent instead: only an upward wheel scroll
+    // over the transcript (or a scrollbar-sized jump) releases it; while it
+    // holds, any drift off the bottom snaps back instantly.
+    @State private var followLive = true
+    @State private var hovering = false
+    @State private var lastGap: CGFloat = 0
+    @State private var wheelMonitor: Any? = nil
+    @State private var metrics: CGPoint = .zero   // latest ScrollMetricsKey value
 
     @State private var editingSpeaker: Int? = nil
     @State private var draftName: String = ""
     @State private var editingLine: UUID? = nil
     @State private var editDraft: String = ""
+    // Typewriter buffer for the interim preview: the raw `interim` prop arrives
+    // in whole-hypothesis jumps; this drips the delta out a few characters per
+    // ~24ms tick so live text types smoothly instead of flashing in chunks.
+    @State private var shownInterim = ""
+    @State private var typerTask: Task<Void, Never>? = nil
+    @State private var coverageExpanded = false
+
+    private func syncInterim(_ target: String) {
+        typerTask?.cancel()
+        if target.isEmpty { shownInterim = ""; return }
+        // The hypothesis can be REWRITTEN (not just extended) — snap, don't type.
+        if !target.hasPrefix(shownInterim) { shownInterim = target; return }
+        if target == shownInterim { return }
+        typerTask = Task { @MainActor in
+            while !Task.isCancelled, shownInterim.count < target.count {
+                let pending = target.count - shownInterim.count
+                // Way behind (window commit dumped a paragraph) → catch up now.
+                if pending > 120 { shownInterim = target; return }
+                let step = pending > 40 ? 5 : 2
+                let cut = target.index(target.startIndex,
+                                       offsetBy: min(shownInterim.count + step, target.count))
+                shownInterim = String(target[..<cut])
+                try? await Task.sleep(nanoseconds: 24_000_000)
+            }
+        }
+    }
     // Word-review popover: index into `flaggedRefs` currently being edited (nil =
     // closed), plus the draft text for that word.
     @State private var reviewRefIndex: Int? = nil
@@ -135,6 +187,14 @@ struct TranscriptView: View {
         editingLine = nil
     }
 
+    /// squares(copy) header button: the line's text + its translations.
+    private func copyLine(_ line: Line) {
+        var parts = [line.text]
+        for lang in line.translations.keys.sorted() { parts.append(line.translations[lang]!) }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(parts.joined(separator: "\n"), forType: .string)
+    }
+
     /// Consecutive same-speaker lines collapsed into one reading paragraph.
     /// The block id is its last line's id so live auto-scroll (which targets
     /// `lines.last.id`) still lands on the newest block.
@@ -167,56 +227,234 @@ struct TranscriptView: View {
 
     private var firstSpeaker: Int? { lines.first?.speaker }
 
+    // MARK: inline live continuation
+
+    /// The part of the live hypothesis that ISN'T already committed — rendered
+    /// gray, inline after the last committed line, so a window commit simply
+    /// "turns the gray text black" in place instead of swapping blocks (which
+    /// duplicated text and jolted the scroll). Token-overlap heuristic: the
+    /// longest normalized match between the committed tail and the hypothesis
+    /// head is dropped from the front of the hypothesis.
+    private var interimSuffix: String {
+        guard !shownInterim.isEmpty, !lines.isEmpty else { return "" }
+        let tail = lines.suffix(3).map(\.text).joined(separator: " ")
+        return Self.dedupedContinuation(committedTail: tail, hypothesis: shownInterim)
+    }
+
+    static func dedupedContinuation(committedTail: String, hypothesis: String) -> String {
+        func norm(_ s: Substring) -> String {
+            s.lowercased().trimmingCharacters(in: .punctuationCharacters)
+        }
+        let tailToks = committedTail.split(separator: " ").map(norm).filter { !$0.isEmpty }
+        let hypRaw = hypothesis.split(separator: " ")
+        let hypToks = hypRaw.map(norm)
+        guard !tailToks.isEmpty, !hypToks.isEmpty else { return hypothesis }
+        // Largest m where the last m committed tokens == the first m hypothesis
+        // tokens (normalized). Fully-covered hypothesis → nothing new to show.
+        let maxM = min(tailToks.count, hypToks.count)
+        for m in stride(from: maxM, through: 1, by: -1) {
+            if Array(tailToks.suffix(m)) == Array(hypToks.prefix(m)) {
+                return hypRaw.dropFirst(m).joined(separator: " ")
+            }
+        }
+        return hypothesis
+    }
+
+    /// Append the gray live continuation to a committed body Text (last row only).
+    private func withLiveTail(_ base: Text, isLast: Bool) -> Text {
+        let suffix = isLast ? interimSuffix : ""
+        guard !suffix.isEmpty else { return base }
+        return base + Text(" " + suffix).foregroundColor(Theme.Colors.textTertiary)
+    }
+
+    /// Ephemeral per-segment status row (Phase 3): quiet pulsing dots where the
+    /// translation WILL appear, shown while this segment is queued/streaming and
+    /// no text has landed yet. Once any translation text exists, the gray
+    /// streaming line itself is the status.
+    @ViewBuilder private func segmentStatusRow(_ line: Line) -> some View {
+        let st = line.status(activeLangs: activeLangs,
+                             isLiveTail: line.id == lines.last?.id && !interimSuffix.isEmpty,
+                             translateBusy: translateBusy)
+        if st == .translating, line.translations.isEmpty {
+            LoadingDots(color: Theme.Colors.textTertiary)
+                .padding(.top, 2)
+                .transition(.opacity)
+        }
+    }
+
+    // ── Panel spacing — the ONLY three numbers that shape the column ────────
+    // Figma 258:908: root gap 30 between blocks (also above the status area),
+    // pb-40 bottom clearance under it.
+    private static let blockGap: CGFloat = 30
+    private static let statusGapTop: CGFloat = 30
+    private static let tailClearance: CGFloat = 40
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 22) {   // Figma 195:866 block gap
-                    if mode == .content {
-                        // Distinct id namespace from the detailed rows: a content
-                        // block's id would otherwise equal its last line's id, which
-                        // collides with that line's row id and makes LazyVStack keep
-                        // the merged-paragraph view alongside the rows after a mode
-                        // switch (the whole transcript rendered a second time).
-                        ForEach(blocks) { b in contentBlock(b).id(blockScrollID(b.id)) }
-                    } else if mode == .chat {
-                        ForEach(lines) { line in chatRow(line).id(line.id) }
-                    } else {
-                        ForEach(lines) { line in row(line).id(line.id) }
-                    }
-                    if !interim.isEmpty {
-                        Text(interim)
-                            .font(bodyFont)
-                            .foregroundStyle(Theme.Colors.textSecondary)  // adaptive — readable on light & dark
-                            .italic()
-                            .id("interim")
-                    }
-                    // provisional translation of the interim. Rendered independently
-                    // of the interim TEXT (T1 carryover): on window commit the last
-                    // interim translation stays visible under the committed line
-                    // until its authoritative translation streams in. C16: same
-                    // language-tag chip as committed translations, so the jump from
-                    // provisional→committed doesn't change the visual grammar.
-                    if !interimTranslations.isEmpty {
-                        ForEach(interimTranslations.keys.sorted(), id: \.self) { lang in
-                            interimTranslationLine(lang, interimTranslations[lang] ?? "")
+                // ── Column structure (Figma 258:908), one deterministic stack ──
+                //   LazyVStack — transcript blocks only, gap = blockGap
+                //   StatusArea — exactly statusGapTop above (it sits OUTSIDE the
+                //                LazyVStack so list spacing can never stack with
+                //                its padding; the old layout piled spacing +
+                //                padding + tail frames into 30–60pt surprises)
+                //   tail       — tailClearance of bottom clearance
+                VStack(alignment: .leading, spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: Self.blockGap) {
+                        // .transaction nil-animation on every row: streaming text
+                        // grows row heights dozens of times a second — any inherited
+                        // animation context turns that into visible wobble. Height
+                        // changes must land instantly; only the status area and the
+                        // jump pill animate.
+                        if mode == .content {
+                            // Distinct id namespace from the detailed rows: a content
+                            // block's id would otherwise equal its last line's id, which
+                            // collides with that line's row id and makes LazyVStack keep
+                            // the merged-paragraph view alongside the rows after a mode
+                            // switch (the whole transcript rendered a second time).
+                            ForEach(blocks) { b in
+                                contentBlock(b).id(blockScrollID(b.id))
+                                    .transaction { $0.animation = nil }
+                            }
+                        } else if mode == .chat {
+                            ForEach(lines) { line in
+                                chatRow(line).id(line.id)
+                                    .transaction { $0.animation = nil }
+                            }
+                        } else {
+                            ForEach(lines) { line in
+                                row(line).id(line.id)
+                                    .transaction { $0.animation = nil }
+                            }
                         }
+                        // The live hypothesis renders INLINE as a gray continuation
+                        // of the last committed line (see interimSuffix) — no
+                        // separate block, so committing just "turns gray text
+                        // black" in place. A standalone gray paragraph only before
+                        // the first commit.
+                        if lines.isEmpty, !shownInterim.isEmpty {
+                            Text(shownInterim)
+                                .font(bodyFont)
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                                .id("interim")
+                        }
+                        // (Interim TRANSLATIONS are not rendered in the transcript
+                        // — committed translations only. The caption overlay still
+                        // consumes livePartialTranslations for live subtitles.)
                     }
-                    // Clearance below the newest line: auto-scroll anchors THIS
-                    // tail to the bottom, so the live/interim line lands ~50pt
-                    // above the window edge — clear of the bottom fade instead of
-                    // hidden under it. (Also gives a static transcript's last line
-                    // breathing room above the fade.)
-                    Color.clear.frame(height: 50).id("liveTail")
+                    if warningText != nil || activityText != nil {
+                        StatusArea(warningText: warningText, gapTimes: gapTimes,
+                                   activityText: activityText, expanded: $coverageExpanded)
+                            .padding(.top, Self.statusGapTop)
+                            .id("statusLine")
+                            .transition(.opacity)
+                    }
+                    Color.clear.frame(height: Self.tailClearance).id("liveTail")
                 }
                 .padding(Theme.Space.window)
+                // Direct geometry observation — NOT a PreferenceKey: preference
+                // values published from ScrollView content stopped reaching
+                // .onPreferenceChange on macOS 26 (the handler simply never
+                // fired, freezing atBottom/gap at their initial values), so the
+                // scroll metrics are written straight into @State from here.
                 .background(GeometryReader { geo in
-                    Color.clear.preference(key: ScrollTopKey.self,
-                        value: geo.frame(in: .named("transcriptScroll")).minY)
+                    let f = geo.frame(in: .named("transcriptScroll"))
+                    Color.clear
+                        .onAppear { metrics = CGPoint(x: f.minY, y: f.height) }
+                        .onChange(of: f) { _, nf in
+                            metrics = CGPoint(x: nf.minY, y: nf.height)
+                        }
                 })
+                // Reading order first, chat behavior second: stretching the
+                // content to at least the viewport height (top-aligned) makes
+                // short transcripts read from the TOP, while the .bottom anchor
+                // keeps an overflowing live one chat-pinned — no flip moment,
+                // no measurement feedback loop.
+                .frame(minHeight: viewportH, alignment: .topLeading)
             }
+            // Live session: bottom-anchored — the OS keeps the view glued through
+            // growth (scroll up to release, return to re-engage), LLM-chat style.
+            // Static archive (no activity): a document — open at the TOP. The
+            // anchor is fixed at view creation (archives and live sessions each
+            // mount a fresh TranscriptView; runtime anchor flips are unreliable).
+            .defaultScrollAnchor(activityText != nil ? .bottom : .top)
             .coordinateSpace(name: "transcriptScroll")
-            .onPreferenceChange(ScrollTopKey.self) { minY in
-                onScrolledFromTopChange?(minY < -2)
+            .background(GeometryReader { geo in
+                Color.clear
+                    .onAppear { viewportH = geo.size.height }
+                    .onChange(of: geo.size) { _, s in viewportH = s.height }
+            })
+            .onChange(of: metrics) { _, m in
+                onScrolledFromTopChange?(m.x < -2)
+                // Bottom proximity — inside 120pt counts as "at the bottom"
+                // (matches the OS anchor's follow zone closely enough).
+                let bottomGap = (m.y + m.x) - viewportH
+                lastGap = bottomGap
+                let near = bottomGap <= 120
+                if near != atBottom { withAnimation(.easeOut(duration: 0.2)) { atBottom = near } }
+                if near, unseenCount != 0 { unseenCount = 0 }
+                // Follow intent from geometry: exact bottom re-arms; a jump of
+                // half a viewport+ (scrollbar drag, review jump) releases.
+                if bottomGap <= 8 { followLive = true }
+                else if bottomGap > max(240, viewportH * 0.5) { followLive = false }
+                // The corrective pin (live sessions only): while following, any
+                // gap that appears WITHOUT an upward user scroll is drift from
+                // above-viewport growth — snap back, un-animated.
+                if followLive, activityText != nil, bottomGap > 2 {
+                    proxy.scrollTo("liveTail", anchor: .bottom)
+                }
+            }
+            // User-intent detection: an upward wheel/trackpad scroll over the
+            // transcript is the ONLY ordinary way to release the follow; a
+            // downward scroll near the bottom re-arms it.
+            .onHover { hovering = $0 }
+            .onAppear {
+                guard wheelMonitor == nil else { return }
+                wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { ev in
+                    if hovering {
+                        if ev.scrollingDeltaY > 2 { followLive = false }
+                        else if ev.scrollingDeltaY < -2, lastGap <= 160 { followLive = true }
+                    }
+                    return ev
+                }
+            }
+            .onDisappear {
+                if let m = wheelMonitor { NSEvent.removeMonitor(m); wheelMonitor = nil }
+            }
+            // Count commits that landed below the fold while the user reads above.
+            .onChange(of: lines.count) { old, new in
+                if new > old, !atBottom {
+                    withAnimation(.easeOut(duration: 0.2)) { unseenCount += new - old }
+                } else if new < old {
+                    unseenCount = 0   // session reset / reload
+                }
+            }
+            // The jump pill itself — floats over the bottom edge, tap = re-glue.
+            .overlay(alignment: .bottom) {
+                if !atBottom, unseenCount > 0 {
+                    Button {
+                        unseenCount = 0
+                        followLive = true
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            proxy.scrollTo("liveTail", anchor: .bottom)
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("새 전사 \(unseenCount)")
+                                .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                        }
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Capsule().fill(Theme.Colors.surface)
+                            .shadow(color: .black.opacity(0.18), radius: 6, y: 2))
+                        .overlay(Capsule().strokeBorder(Theme.Colors.separator, lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 14)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             // mouse-drag selection + ⌘C copy across the whole transcript
             .textSelection(.enabled)
@@ -231,11 +469,8 @@ struct TranscriptView: View {
                     withAnimation { proxy.scrollTo(ref.lineID, anchor: .center) }
                 }
             }
-            .onChange(of: lines.count) { _, _ in
-                // 50ms: 기본(≈250ms) 스크롤 애니메이션이 새 줄 표시를 그만큼
-                // 늦춰 보이게 한다 — 라이브 전사는 즉시성이 우선.
-                withAnimation(.linear(duration: 0.05)) { proxy.scrollTo("liveTail", anchor: .bottom) }
-            }
+            // (per-event scrolls removed — defaultScrollAnchor(.bottom) keeps the
+            // view glued through commits, typing, translations, status changes.)
             .onChange(of: scrollTick) { _, _ in
                 guard let t = scrollTarget else { return }
                 // In content mode the line's row doesn't exist — scroll to the
@@ -248,9 +483,8 @@ struct TranscriptView: View {
                     withAnimation { proxy.scrollTo(t, anchor: .center) }
                 }
             }
-            .onChange(of: interim) { _, v in
-                if !v.isEmpty { withAnimation { proxy.scrollTo("liveTail", anchor: .bottom) } }
-            }
+            .onChange(of: interim) { _, v in syncInterim(v) }
+            .onAppear { shownInterim = interim }
             .alert("화자 이름", isPresented: Binding(
                 get: { editingSpeaker != nil },
                 set: { if !$0 { editingSpeaker = nil } })
@@ -276,7 +510,7 @@ struct TranscriptView: View {
                     HStack(spacing: 6) {
                         Circle().fill(Theme.Colors.speaker(b.speaker))
                             .frame(width: 6, height: 6)
-                        Text(name(b.speaker)).font(.system(size: 13, weight: .semibold))
+                        Text(name(b.speaker)).font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Theme.Colors.textPrimary)
                         if autoRecognizedSpeakers.contains(b.speaker) {
                             Label("음성 인식됨", systemImage: "checkmark.seal.fill")
@@ -292,11 +526,16 @@ struct TranscriptView: View {
             }
             // double-click in the reading view flips to 상세 so the per-line edit
             // gesture is available (editing is line-granular; blocks join lines).
-            Text(b.text).font(bodyFont)
+            withLiveTail(Text(b.text), isLast: b.lineIDs.contains(lines.last?.id ?? UUID()))
+                .font(bodyFont)
                 .lineSpacing(fontSize * 0.3)
                 .onTapGesture(count: 2) { if onEdit != nil { onRequestDetailed?() } }
-            ForEach(blockTranslations(b), id: \.0) { lang, text in
-                translationLine(lang, text, speaker: b.speaker, lineID: b.id)
+            let bt = blockTranslations(b)
+            ForEach(bt, id: \.0) { lang, text in
+                translationLine(lang, text, speaker: b.speaker, lineID: b.id, showTag: bt.count > 1)
+            }
+            if bt.isEmpty, let lastLine = lines.last(where: { b.lineIDs.contains($0.id) }) {
+                segmentStatusRow(lastLine)
             }
         }
     }
@@ -312,35 +551,45 @@ struct TranscriptView: View {
 
     private static let langTag = ["Korean": "한", "English": "EN", "Japanese": "日", "Chinese": "中"]
 
-    /// One translation line: a short language tag + the translated text. C15: the
-    /// tag chip carries the SOURCE speaker's color so a two-party conversation's
-    /// translations are attributable pre-attentively. A7: a caret ▍ trails the
-    /// text while this (line, lang) is still streaming in.
+    /// One translation line (Figma 258:907): quiet body text — 0.875× the original
+    /// size, textPrimary at 85%, tight tracking — reading as a subtitle, not an
+    /// accent-colored insert. The language tag chip (speaker-colored, C15) only
+    /// appears when the line carries 2+ target languages — with a single target
+    /// it's redundant. A7: a caret ▍ trails while (line, lang) is streaming in.
     private func translationLine(_ lang: String, _ text: String, speaker: Int? = nil,
-                                 lineID: UUID? = nil) -> some View {
+                                 lineID: UUID? = nil, showTag: Bool = false) -> some View {
         let tag = Self.langTag[lang] ?? lang
         let tagColor = speaker.map { Theme.Colors.speaker($0) } ?? Theme.Colors.accent
         let streaming = lineID != nil && lineID == streamingTransID && lang == streamingTransLang
         return HStack(alignment: .top, spacing: 6) {
-            Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
-                .foregroundStyle(tagColor).opacity(0.75)
-                .frame(width: fontSize * 1.4, alignment: .leading)
+            if showTag {
+                Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
+                    .foregroundStyle(tagColor).opacity(streaming ? 0.4 : 0.75)
+                    .frame(width: fontSize * 1.4, alignment: .leading)
+            }
+            // While this (line, lang) is still streaming, the translation is
+            // provisional — render it GRAY, exactly like the transcript's
+            // uncommitted gray tail (withLiveTail). It flips to dark on commit.
             (Text(text) + (streaming ? Text(" ▍") : Text("")))
-                .font(.system(size: fontSize * 0.92))
-                .foregroundStyle(Theme.Colors.accent).opacity(0.85)
+                .font(.system(size: fontSize * 0.875)).tracking(-0.28)
+                .lineSpacing(fontSize * 0.875 * 0.4)
+                .foregroundStyle(streaming ? Theme.Colors.textTertiary
+                                           : Theme.Colors.textPrimary.opacity(0.85))
         }
     }
 
-    /// Interim (provisional) translation — italic + gray, but the SAME tag chip as
-    /// the committed translationLine (C16).
-    private func interimTranslationLine(_ lang: String, _ text: String) -> some View {
+    /// Interim (provisional) translation — same grammar as the committed line
+    /// (C16) but italic + lighter, so provisional→committed only changes weight.
+    private func interimTranslationLine(_ lang: String, _ text: String, showTag: Bool = false) -> some View {
         let tag = Self.langTag[lang] ?? lang
         return HStack(alignment: .top, spacing: 6) {
-            Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
-                .foregroundStyle(Theme.Colors.accent).opacity(0.55)
-                .frame(width: fontSize * 1.4, alignment: .leading)
-            Text(text).font(.system(size: fontSize * 0.92))
-                .foregroundStyle(Theme.Colors.accent.opacity(0.7)).italic()
+            if showTag {
+                Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.accent).opacity(0.55)
+                    .frame(width: fontSize * 1.4, alignment: .leading)
+            }
+            Text(text).font(.system(size: fontSize * 0.875)).tracking(-0.28)
+                .foregroundStyle(Theme.Colors.textSecondary).italic()
         }
     }
 
@@ -354,12 +603,15 @@ struct TranscriptView: View {
             if side == .trailing { Spacer(minLength: 40) }
             VStack(alignment: side == .leading ? .leading : .trailing, spacing: 3) {
                 Text(name(line.speaker)).font(Theme.Fonts.speaker).foregroundStyle(color)
-                Text(line.text).font(bodyFont)
+                withLiveTail(Text(line.text), isLast: line.id == lines.last?.id)
+                    .font(bodyFont)
                     .frame(maxWidth: .infinity, alignment: side == .leading ? .leading : .trailing)
                     .multilineTextAlignment(side == .leading ? .leading : .trailing)
                 ForEach(line.translations.keys.sorted(), id: \.self) { lang in
-                    translationLine(lang, line.translations[lang]!, speaker: line.speaker, lineID: line.id)
+                    translationLine(lang, line.translations[lang]!, speaker: line.speaker,
+                                    lineID: line.id, showTag: line.translations.count > 1)
                 }
+                segmentStatusRow(line)
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.08)))
@@ -373,6 +625,9 @@ struct TranscriptView: View {
 
     private func row(_ line: Line) -> some View {
         VStack(alignment: .leading, spacing: 9) {   // Figma 188:663 header→body gap
+            // Figma 258:1118 header: dot 6 · name 14 bold · timecode 12 medium
+            // (hh:mm:ss) on the left; squares(copy) + pen(edit) 16pt, gap 16, on
+            // the right.
             HStack(spacing: 6) {
                 Circle().fill(Theme.Colors.speaker(line.speaker))
                     .frame(width: 6, height: 6)
@@ -384,7 +639,7 @@ struct TranscriptView: View {
                     editingSpeaker = line.speaker
                 } label: {
                     HStack(spacing: 4) {
-                        Text(name(line.speaker)).font(.system(size: 13, weight: .semibold))
+                        Text(name(line.speaker)).font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Theme.Colors.textPrimary)
                         if autoRecognizedSpeakers.contains(line.speaker) {
                             Label("음성 인식됨", systemImage: "checkmark.seal.fill")
@@ -397,8 +652,9 @@ struct TranscriptView: View {
                 }
                 .buttonStyle(.plain)
                 .help("클릭하여 이름 지정")
-                Text(timecode(line.start)).font(Theme.Fonts.timestamp)
-                    .foregroundStyle(Theme.Colors.textTertiary)
+                Text(timecode(line.start))
+                    .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                    .foregroundStyle(Theme.Colors.textSecondary)
                 if let onPlay {
                     Button { onPlay(line) } label: {
                         Image(systemName: playingLine == line.id ? "pause.circle.fill" : "play.circle")
@@ -411,13 +667,20 @@ struct TranscriptView: View {
                 if line.isEdited {
                     Text("편집됨").font(Theme.Fonts.timestamp).foregroundStyle(Theme.Colors.accent)
                 }
-                if canEdit(line) {
-                    Spacer()
-                    Button { beginEdit(line) } label: {
-                        Image(systemName: "pencil").font(.system(size: 11))
+                Spacer(minLength: 8)
+                HStack(spacing: 16) {
+                    Button { copyLine(line) } label: {
+                        SVGIcon(name: "squares", size: 16, tint: Theme.Colors.textSecondary)
                     }
-                    .buttonStyle(.plain).foregroundStyle(Theme.Colors.textTertiary)
-                    .help("이 문장 편집")
+                    .buttonStyle(.plain)
+                    .help("이 문장 복사")
+                    if canEdit(line) {
+                        Button { beginEdit(line) } label: {
+                            SVGIcon(name: "pen", size: 16, tint: Theme.Colors.textSecondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("이 문장 편집")
+                    }
                 }
             }
             if editingLine == line.id {
@@ -460,7 +723,8 @@ struct TranscriptView: View {
                 }
                 .padding(.top, -2)
             } else {
-                let body = Text(attributed(line)).font(bodyFont)
+                let body = withLiveTail(Text(attributed(line)), isLast: line.id == lines.last?.id)
+                    .font(bodyFont)
                     .lineSpacing(fontSize * 0.3)
                     .onTapGesture(count: 2) { beginEdit(line) }
                 // On a line WITH review links, disable text selection so the low-
@@ -474,13 +738,19 @@ struct TranscriptView: View {
                 }
             }
             ForEach(line.translations.keys.sorted(), id: \.self) { lang in
-                translationLine(lang, line.translations[lang]!, speaker: line.speaker, lineID: line.id)
+                translationLine(lang, line.translations[lang]!, speaker: line.speaker,
+                                lineID: line.id, showTag: line.translations.count > 1)
             }
+            segmentStatusRow(line)
         }
-        .padding(.horizontal, 6).padding(.vertical, 4)
+        // No layout padding (Figma 258:908: rows sit flush — the speaker dot
+        // aligns with the status area's icon, and block gaps stay exactly 30).
+        // The review highlight instead BLEEDS past the text via negative insets,
+        // so the visual pill is unchanged without inflating the row's box.
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(reviewHighlight(line) ? Theme.Colors.lowConf.opacity(0.14) : .clear)
+                .padding(.horizontal, -6).padding(.vertical, -4)
         )
         // Word-review popover anchors to the row holding the current flagged word.
         .popover(isPresented: Binding(
@@ -534,12 +804,10 @@ struct TranscriptView: View {
             }
             var run = AttributedString(w.text)
             if w.conf < Theme.confThreshold {
-                // low confidence: amber + underline + slight fade — the user's eye
-                // lands on exactly the words to double-check (validated: real errors
-                // like 섹스→색스, 빛공예→빛공해 fall here). Also a tappable link that
-                // opens the word-review popover (handled via the openURL override).
-                run.underlineStyle = .single
-                run.foregroundColor = Theme.Colors.lowConf.opacity(0.85)
+                // low confidence (Figma 258:568): the word is COLORED #E0992A only
+                // — no underline; the orange itself is the review affordance. Still
+                // a tappable link opening the word-review popover (openURL override).
+                run.foregroundColor = Color(red: 224/255, green: 153/255, blue: 42/255)
                 if let url = URL(string: "madi-review://w/\(line.id.uuidString)/\(i)") {
                     run.link = url
                 }
@@ -559,6 +827,8 @@ struct TranscriptView: View {
     // same person carries one label across transcript and stats.
     private func name(_ id: Int) -> String { names[id] ?? "Speaker \(id + 1)" }
     private func timecode(_ t: Double) -> String {
-        String(format: "%02d:%02d", Int(t) / 60, Int(t) % 60)
+        // Figma 258:1122: always hh:mm:ss ("00:00:00")
+        let s = Int(t)
+        return String(format: "%02d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
     }
 }

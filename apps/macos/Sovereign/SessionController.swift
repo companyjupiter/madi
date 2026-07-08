@@ -17,6 +17,46 @@ final class SessionController: EngineProcessDelegate {
     }
 
     private(set) var phase: Phase = .idle
+
+    /// Session-level AI pipeline state (Phase 4):
+    /// idle → listening → transcribing → diarizing → translating → completed/error.
+    /// One DERIVED state machine over the existing signals — the single source
+    /// the status line (and any future badge) renders from, so every surface
+    /// agrees on "what the AI is doing right now". Priority mirrors severity:
+    /// reconcile > file transcription > translation backlog(shed) > live translation
+    /// queue > live transcription > post-stop backfill.
+    enum PipelineState: Equatable {
+        case idle
+        case listening                    // recording, no audio in flight
+        case transcribing                 // recording, segments decoding
+        case fileTranscribing(Int?)       // file mode, optional % done
+        case diarizing                    // AI speaker/language reconcile pass
+        case translating(Int)             // N lines queued (live)
+        case translatingBacklogged(Int)   // live queue shed N lines under load — filled at stop
+        case completed
+        case backfilling(Int)             // post-stop: N shed lines still being re-translated
+        case error(String)
+    }
+
+    var pipeline: PipelineState {
+        if case .error(let e) = phase { return .error(e) }
+        if reconciling { return .diarizing }
+        if case .processing = phase {
+            return .fileTranscribing(chunksTotal > 0
+                ? Int(Double(chunksDone) / Double(chunksTotal) * 100) : nil)
+        }
+        if translateBacklog > 0 { return .translatingBacklogged(translateQueueDepth) }
+        if translateQueueDepth > 0 { return .translating(translateQueueDepth) }
+        if phase == .recording {
+            if micSilent { return .idle }        // the silence WARNING covers this
+            return segmentsInFlight > 0 ? .transcribing : .listening
+        }
+        if phase == .done {
+            if backfillRemaining > 0 { return .backfilling(backfillRemaining) }
+            return .completed
+        }
+        return .idle
+    }
     var level: Float = 0
     /// Peak-hold version of `level` for the live meter: instant attack, ~0.5s
     /// release. Because the UI samples only a few times a second, reading the raw

@@ -278,8 +278,11 @@ struct SettingsView: View {
     }
 }
 
-/// Whisper language token IDs (must match the engine's token table).
+/// Whisper language token IDs (must match the engine's token table —
+/// transcribe.zig order: en=50259, zh=50260, ko=50264, ja=50266).
 enum WhisperLang {
     static let en = 50259
+    static let zh = 50260
     static let ko = 50264
+    static let ja = 50266
 }
