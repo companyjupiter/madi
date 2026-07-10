@@ -7,12 +7,36 @@ auto-detection**, long-audio chunking, and a **near-real-time live meeting mode*
 Metal/MSL + Apple system frameworks (Metal, MPS, Accelerate) — **no
 Python/PyTorch/onnxruntime at runtime**. Korean guide: [README_KR.md](README_KR.md).
 
-Cross-platform support for Windows, macOS, and Linux is now a product target;
-see [docs/CROSS_PLATFORM.md](docs/CROSS_PLATFORM.md) for the migration plan.
-
 > Highlights: peak RSS **1.1 GB** (Q8 + streaming loader), decode **~188 tok/s**,
 > diarization **9.67% DER** on VoxConverse dev (beats pyannote 3.1 SOTA ~11.2%).
-> Full status: [`metal/STATUS.md`](metal/STATUS.md).
+> Full status: [`engine/metal/STATUS.md`](engine/metal/STATUS.md).
+
+## The primary flow: a local-first macOS app
+
+Madi's wedge is a **native on-device meeting engine** — not another configurable
+AI-provider wrapper. The whole core path runs on your Mac with **no account, no
+API key, no cloud**:
+
+1. **Install** `Madi.app` (build locally with `apps/macos/scripts/make_app.sh`, or
+   ship a signed DMG — see [docs/RELEASE.md](docs/RELEASE.md)).
+2. **Model ready** — on first launch the ~830 MB speech model downloads once into
+   Application Support, SHA-256 verified. A setup gate blocks recording until it's
+   ready (progress / cancel / retry / re-download all recoverable).
+3. **Record or replay** a meeting → a **live, speaker-attributed transcript** with
+   word timestamps.
+4. **Export** to Markdown (speaker labels + timecodes) or `.srt` subtitles.
+5. **Optionally** enable on-device **translation / summaries / Q&A / titles** — a
+   separate ~2.6 GB local LLM, downloaded on demand from Settings. Transcription
+   never depends on it; only those features are gated until it's installed.
+
+See [docs/DEMO.md](docs/DEMO.md) for a reproducible transcript/export proof from a
+clean checkout. Differentiators: speaker diarization, word timestamps, voiceprints,
+dictation, and fully local translation/summary/Q&A.
+
+The rest of this README documents the underlying **Zig + Metal engine** (built and
+run from `engine/metal/`), which the app embeds. Cross-platform (Windows/Linux)
+support is tracked but **not** part of the current wedge — see
+[docs/CROSS_PLATFORM.md](docs/CROSS_PLATFORM.md).
 
 ## Requirements
 - Apple Silicon (M1 or newer), macOS with the Xcode command-line tools (`xcrun metal`).
@@ -21,23 +45,23 @@ see [docs/CROSS_PLATFORM.md](docs/CROSS_PLATFORM.md) for the migration plan.
 - Python 3 (only for one-time **asset generation**, not for inference).
 
 ## Setup
-All commands run from `metal/`.
+All commands run from `engine/metal/`.
 
-1. **Model + tokenizer assets** (`metal/assets/`): you need
+1. **Model + tokenizer assets** (`engine/metal/assets/`): you need
    `model.safetensors` (Whisper large-v3-turbo) plus the HF tokenizer/config
    files (`tokenizer.json`, `generation_config.json`, `added_tokens.json`, …).
    Then generate the binaries:
    ```bash
-   cd metal/assets && python3 gen_assets.py   # → mel_filters.bin, WHISPER_BPE.bin, suppress_tokens.bin
+   cd engine/metal/assets && python3 gen_assets.py   # → mel_filters.bin, WHISPER_BPE.bin, suppress_tokens.bin
    ```
 2. **Diarization model** (Apache-2.0 wespeaker ResNet34, ~25 MB):
    ```bash
-   cd metal && bash bench/gen_diar_assets.sh  # → assets/resnet34_diar.bin, assets/kaldi_melbank.bin
+   cd engine/metal && bash bench/gen_diar_assets.sh  # → assets/resnet34_diar.bin, assets/kaldi_melbank.bin
    ```
 
 ## Build
 ```bash
-cd metal && bash build.sh transcribe.zig     # → out/transcribe
+cd engine/metal && bash build.sh transcribe.zig     # → out/transcribe
 ```
 
 ## Run
@@ -74,14 +98,14 @@ Examples:
 
 ## Live meeting transcription (near-real-time)
 
-`metal/live_transcribe.sh` turns the file-based `transcribe` into a streaming,
+`engine/metal/live_transcribe.sh` turns the file-based `transcribe` into a streaming,
 **timestamped, speaker-attributed** meeting transcriber. It captures the mic (any
 avfoundation device) into rolling N-second segments and transcribes each one the
 moment it closes. Latency trails live audio by roughly **N + overlap + decode (~3s)**.
 
 One command is all you need:
 ```bash
-cd metal
+cd engine/metal
 ./live_transcribe.sh --mode ko-meeting                       # Korean multi-speaker meeting
 ./live_transcribe.sh -m en-meeting --md notes.md --srt notes.srt   # English + save transcript & subtitles
 ./live_transcribe.sh --replay meeting.m4a -m ko              # transcribe a recording (no mic)
@@ -155,15 +179,16 @@ dedicated var, so it never collides with the shell locale `$LANG`.
 | live (153 s KO+EN, resident) | — | **~35 s (≈4× real-time)** |
 
 ## Project layout
-- `metal/transcribe.zig` — full pipeline (mel → conv → encoder → decoder → BPE, timestamps, diarization) + resident STREAM mode for live use.
-- `metal/encoder.zig`, `decoder.zig`, `mel.zig`, `diar_resnet.zig` — modules.
-- `metal/live_transcribe.sh` — near-real-time meeting runner (mic capture, overlap, resident pipeline, colour/`.md`/`.srt`).
-- `metal/merge_seg.awk` — merges word timestamps with speaker labels (overlap dedup, speaker carry-over).
-- `metal/online_diar.zig`, `diar_embed_wav.zig` — standalone diar tools (used by the `--no-resident` fallback).
-- `metal/kernels/*.metal` — Metal kernels. `metal/metal_backend.{m,h}` — ObjC bridge.
-- `metal/bench/` — DER benchmark harness + diarization study docs. `metal/testdata/` — live-pipeline regression fixture.
-- Docs: `metal/STATUS.md` (current state), `metal/PERF_LOG.md` (history),
-  `metal/PORT.md` (CUDA→Metal port notes), `metal/bench/*.md`.
+- `apps/macos/` — the native macOS app (SwiftUI). Pure-logic core is covered by `swift test` (`cd apps/macos && swift test`); packaging scripts live in `apps/macos/scripts/`.
+- `engine/metal/transcribe.zig` — full pipeline (mel → conv → encoder → decoder → BPE, timestamps, diarization) + resident STREAM mode for live use.
+- `engine/metal/encoder.zig`, `decoder.zig`, `mel.zig`, `diar_resnet.zig` — modules.
+- `engine/metal/live_transcribe.sh` — near-real-time meeting runner (mic capture, overlap, resident pipeline, colour/`.md`/`.srt`).
+- `engine/metal/merge_seg.awk` — merges word timestamps with speaker labels (overlap dedup, speaker carry-over).
+- `engine/metal/online_diar.zig`, `diar_embed_wav.zig` — standalone diar tools (used by the `--no-resident` fallback).
+- `engine/metal/kernels/*.metal` — Metal kernels. `engine/metal/metal_backend.{m,h}` — ObjC bridge.
+- `engine/metal/bench/` — DER benchmark harness + diarization study docs. `engine/metal/testdata/` — live-pipeline regression fixture.
+- Docs: `engine/metal/STATUS.md` (current state), `engine/metal/PERF_LOG.md` (history),
+  `engine/metal/PORT.md` (CUDA→Metal port notes), `engine/metal/bench/*.md`.
 
 ## License / provenance
 Inference code is original work of this project. It reuses two third-party models,
@@ -177,4 +202,4 @@ whose notices are retained as required and reproduced in full:
 
 See [`NOTICE`](NOTICE) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)
 for the attributions and full license texts; source headers in
-`metal/transcribe.zig` and `metal/diar_resnet.zig` carry the same notices.
+`engine/metal/transcribe.zig` and `engine/metal/diar_resnet.zig` carry the same notices.

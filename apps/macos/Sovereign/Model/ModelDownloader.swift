@@ -13,6 +13,7 @@ final class ModelDownloader: NSObject {
         case downloading(progress: Double)   // 0…1
         case verifying
         case ready
+        case cancelled                       // user cancelled — recoverable via startDownload()
         case failed(String)
     }
 
@@ -42,7 +43,7 @@ final class ModelDownloader: NSObject {
 
     func cancel() {
         task?.cancel()
-        state = .idle
+        state = .cancelled
     }
 }
 
@@ -95,8 +96,12 @@ extension ModelDownloader: URLSessionDownloadDelegate {
 
     nonisolated func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error else { return }
+        // A user cancel() surfaces here as NSURLErrorCancelled; keep the
+        // recoverable .cancelled state instead of clobbering it with .failed.
+        if (error as NSError).code == NSURLErrorCancelled { return }
         Task { @MainActor in
             if case .ready = self.state { return }
+            if case .cancelled = self.state { return }
             self.state = .failed(error.localizedDescription)
         }
     }

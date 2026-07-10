@@ -60,7 +60,7 @@ struct SettingsView: View {
                     Button("번역 모델 다운로드") { translateDownloader.startDownload() }
                         .buttonStyle(.borderedProminent)
                 }
-                Text("로컬 온디바이스 번역(KO·ZH·JA·EN)용. 앱에 동봉되지 않고 켤 때 받습니다 — 메모리 약 3 GB 추가.")
+                Text("로컬 온디바이스 번역(KO·ZH·JA·EN)용. 앱에 동봉되지 않고 켤 때 받습니다 — 메모리 약 \(Int(AssetManifest.translateModel.approxRuntimeMemoryGB ?? 3)) GB 추가.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("실시간 번역 (다중 대상)") {

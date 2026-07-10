@@ -9,9 +9,9 @@ clean reading view is the default; every editor signal (timecodes, confidence,
 cut-lists, chapters, retakes, highlights) lives in the **상세 view**, the **export
 menu**, or the **JSON export** — never in the default 내용 (content) view.
 
-All cut/analysis logic lives in `app/Sovereign/Transcript/EditorCuts.swift`;
-rendering/exports in `app/Sovereign/Transcript/Exporters.swift`. Unit tests:
-`app/Tests/EditorCutsTests.swift` (15 cases) and `app/Tests/CaptionTests.swift`
+All cut/analysis logic lives in `apps/macos/Sovereign/Transcript/EditorCuts.swift`;
+rendering/exports in `apps/macos/Sovereign/Transcript/Exporters.swift`. Unit tests:
+`apps/macos/Tests/EditorCutsTests.swift` (15 cases) and `apps/macos/Tests/CaptionTests.swift`
 (9 cases). Each feature below names its PR.
 
 ---

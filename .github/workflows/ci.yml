@@ -65,36 +65,14 @@ jobs:
         run: npm run build
 
   swift-tests:
-    name: Swift standalone tests
+    name: Swift core tests
     runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/macos
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Engine protocol parser
-        working-directory: app
-        run: |
-          swiftc -parse-as-library \
-            Sovereign/Engine/EngineProtocol.swift \
-            Tests/EngineProtocolTests.swift \
-            -o /tmp/engine-protocol-tests
-          /tmp/engine-protocol-tests
-
-      - name: Event contract fixtures
-        working-directory: app
-        run: |
-          swiftc -parse-as-library \
-            Sovereign/Engine/EngineEvents.swift \
-            Tests/EventContractTests.swift \
-            -o /tmp/event-contract-tests
-          /tmp/event-contract-tests
-
-      - name: Word merger
-        working-directory: app
-        run: |
-          swiftc -parse-as-library \
-            Sovereign/Transcript/WordMerger.swift \
-            Tests/WordMergerStub.swift \
-            Tests/WordMergerTests.swift \
-            -o /tmp/word-merger-tests
-          /tmp/word-merger-tests
+      - name: Run SovereignCore test suite
+        run: swift test

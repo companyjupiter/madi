@@ -17,9 +17,12 @@ ENT="$HERE/../Sovereign/Sovereign.entitlements"
 echo "[1/4] sign embedded executables (inner first)"
 codesign --force --options runtime --timestamp \
   --entitlements "$ENT" --sign "$SIGN_ID" "$APP/Contents/MacOS/transcribe"
-# metallib is a resource, but signing it is harmless and keeps --strict happy
-codesign --force --options runtime --timestamp \
-  --sign "$SIGN_ID" "$APP/Contents/MacOS/whisper.metallib" || true
+# metallib lives in Resources/ (make_app.sh) or MacOS/ (assemble_bundle.sh);
+# sign whichever exists. In Resources/ the outer bundle signature already seals
+# it — signing here is harmless and keeps --strict happy for the MacOS/ layout.
+for mlib in "$APP/Contents/Resources/whisper.metallib" "$APP/Contents/MacOS/whisper.metallib"; do
+  [ -f "$mlib" ] && codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$mlib"
+done
 
 echo "[2/4] sign the app bundle (no --deep; inner already signed)"
 codesign --force --options runtime --timestamp \
