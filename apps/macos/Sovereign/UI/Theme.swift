@@ -72,20 +72,47 @@ enum Theme {
                 ? NSColor(red: 0.2824, green: 0.2863, blue: 0.3020, alpha: 1.0)   // #48494D (dark)
                 : NSColor(red: 0.8039, green: 0.8235, blue: 0.8235, alpha: 1.0)   // #cdd2d2 (light)
         })
-        // First three overridden to the redesign's speaker palette
-        // (Figma 188:662: #6773EB / #97D0FF / #BF97FF).
-        static let speakerPalette: [Color] = [
-            Color(red: 103/255, green: 115/255, blue: 235/255, opacity: 1.0),  // indigo
-            Color(red: 151/255, green: 208/255, blue: 255/255, opacity: 1.0),  // light blue
-            Color(red: 191/255, green: 151/255, blue: 255/255, opacity: 1.0),  // light purple
-            Color(red: 107/255, green: 164/255, blue: 255/255, opacity: 1.0),  // blue (#6BA4FF)
-            Color(red: 0.2627, green: 0.6471, blue: 0.4196, opacity: 1.0),  // green
-            Color(red: 0.6078, green: 0.4235, blue: 0.8471, opacity: 1.0),  // violet
-            Color(red: 0.8784, green: 0.4627, blue: 0.2980, opacity: 1.0),  // coral
-            Color(red: 0.2431, green: 0.5608, blue: 0.8157, opacity: 1.0),  // sky
+        private static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
+            Color(red: r / 255, green: g / 255, blue: b / 255)
+        }
+
+        // Speaker palette (Figma 306:540): each speaker is a two-stop GRADIENT,
+        // ordered so consecutive speakers sit far apart on the wheel (amber →
+        // pink → purple → mint → lime → cyan → blue → red) — fixing the old
+        // set's blue-on-blue collisions. Large fills (the share bar) use the
+        // gradient; small marks (speaker dots, energy dither) use the gradient's
+        // MIDPOINT as a flat solid, since a gradient in a 3–6px area just reads
+        // as a muddy single tone.
+        static let speakerGradientStops: [(Color, Color)] = [
+            (rgb(255, 209, 136), rgb(255, 169, 122)),  // 1 amber → orange
+            (rgb(255, 143, 145), rgb(243, 154, 195)),  // 2 coral → pink
+            (rgb(198, 157, 215), rgb(157, 171, 255)),  // 3 purple → periwinkle
+            (rgb(126, 215, 197), rgb(158, 231, 177)),  // 4 teal → green
+            (rgb(207, 230, 154), rgb(242, 215, 115)),  // 5 lime → yellow
+            (rgb(113, 214, 217), rgb(128, 189, 229)),  // 6 cyan → blue
+            (rgb(51, 169, 247),  rgb(143, 161, 239)),  // 7 blue → periwinkle
+            (rgb(243, 145, 146), rgb(255, 107, 107)),  // 8 coral → red
         ]
-        static func speaker(_ id: Int) -> Color {
-            speakerPalette[((id % speakerPalette.count) + speakerPalette.count) % speakerPalette.count]
+        // Midpoint solids — precomputed average of each gradient's two stops.
+        static let speakerMids: [Color] = [
+            rgb(255, 189, 129), rgb(249, 149, 170), rgb(178, 164, 235), rgb(142, 223, 187),
+            rgb(225, 223, 135), rgb(121, 202, 223), rgb(97, 165, 243), rgb(249, 126, 127),
+        ]
+        // Gradient direction ≈ Figma's 80° (shallow left→right, slight upward).
+        static let speakerGradientStart = UnitPoint(x: 0, y: 0.6)
+        static let speakerGradientEnd = UnitPoint(x: 1, y: 0.4)
+
+        private static func speakerIndex(_ id: Int) -> Int {
+            let n = speakerMids.count
+            return ((id % n) + n) % n
+        }
+        /// Flat solid for small marks — the gradient's midpoint.
+        static func speaker(_ id: Int) -> Color { speakerMids[speakerIndex(id)] }
+        /// Full two-stop gradient for large fills (the share distribution bar).
+        static func speakerGradient(_ id: Int) -> LinearGradient {
+            let (a, b) = speakerGradientStops[speakerIndex(id)]
+            return LinearGradient(colors: [a, b],
+                                  startPoint: speakerGradientStart, endPoint: speakerGradientEnd)
         }
     }
     enum Fonts {

@@ -516,7 +516,7 @@ struct TranscriptView: View {
                             Label("음성 인식됨", systemImage: "checkmark.seal.fill")
                                 .labelStyle(.iconOnly)
                                 .font(.system(size: 10))
-                                .foregroundStyle(Theme.Colors.accent)
+                                .foregroundStyle(Theme.Colors.textTertiary)   // de-accent
                                 .help("음성 인식됨 — 등록된 목소리와 일치")
                         }
                     }
@@ -645,7 +645,7 @@ struct TranscriptView: View {
                             Label("음성 인식됨", systemImage: "checkmark.seal.fill")
                                 .labelStyle(.iconOnly)
                                 .font(.system(size: 10))
-                                .foregroundStyle(Theme.Colors.accent)
+                                .foregroundStyle(Theme.Colors.textTertiary)   // de-accent
                                 .help("음성 인식됨 — 등록된 목소리와 일치")
                         }
                     }
@@ -665,7 +665,7 @@ struct TranscriptView: View {
                     .help("이 구간 오디오 재생")
                 }
                 if line.isEdited {
-                    Text("편집됨").font(Theme.Fonts.timestamp).foregroundStyle(Theme.Colors.accent)
+                    Text("편집됨").font(Theme.Fonts.timestamp).foregroundStyle(Theme.Colors.textTertiary)   // de-accent
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 16) {

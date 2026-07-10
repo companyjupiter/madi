@@ -253,7 +253,7 @@ struct ContentView: View {
     private var summarySheet: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkles").foregroundStyle(Theme.Colors.accent)
+                Image(systemName: "sparkles").foregroundStyle(Theme.Colors.textSecondary)   // de-accent
                 Text("회의 요약").font(Theme.Fonts.appTitle)
                 Text("온디바이스").font(Theme.Fonts.status)
                     .foregroundStyle(Theme.Colors.textTertiary)
@@ -326,7 +326,7 @@ struct ContentView: View {
                     .foregroundStyle(Theme.Colors.textPrimary).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
-                    .background(RoundedRectangle(cornerRadius: Theme.Radius.card).fill(Theme.Colors.accent.opacity(0.06)))
+                    .background(RoundedRectangle(cornerRadius: Theme.Radius.card).fill(Theme.Colors.surfaceSunken))   // de-accent
             }
         }
     }
@@ -354,7 +354,10 @@ struct ContentView: View {
             Color.clear.frame(height: 20)   // top breathing room above the toolbar
             // (file progress / silence / pipeline chips all live in the
             // transcript-tail status line now — see transcriptStatus.)
-            if !session.transcript.lines.isEmpty { viewModeBar }
+            // Toolbar (글자 크기 · 내용/상세) stays put even while the transcript is
+            // still empty/loading — the pane frame shouldn't jump when the first
+            // line lands.
+            viewModeBar
             // reconcile RESULT only (has an undo button, so it can't be a
             // transient status line); the in-progress state is the status line's.
             if session.reconcileNote != nil { reconcileBar }
@@ -422,7 +425,8 @@ struct ContentView: View {
                             .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.accent))
                         .padding(8).allowsHitTesting(false)
                 }
-                if case .countingDown(let n) = session.phase { countdownOverlay(n) }
+                // (countdown now renders inline as the pre-transcript status
+                // line in emptyState — no separate full-pane ring overlay.)
                 if showSaveToast {
                     VStack {
                         Spacer()
@@ -447,11 +451,15 @@ struct ContentView: View {
             Spacer(minLength: 10)
             Button {
                 showSaveToast = false
-                session.reset()
+                if let u = session.lastAutoSaved { NSWorkspace.shared.open(u) }
             } label: {
-                Text("새 기록 시작")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(red: 136/255, green: 156/255, blue: 255/255))  // #889CFF
+                HStack(spacing: 5) {
+                    Text("파일 열기")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)   // de-accent: was #889CFF
+                    SVGIcon(name: "chevron-left", size: 12, tint: .white)
+                        .rotationEffect(.degrees(180))   // point right
+                }
             }
             .buttonStyle(.plain)
         }
@@ -556,7 +564,7 @@ struct ContentView: View {
     private var reconcileBar: some View {
         HStack(spacing: 10) {
             if let note = session.reconcileNote {
-                Image(systemName: "wand.and.stars").font(.system(size: 12)).foregroundStyle(Theme.Colors.accent)
+                Image(systemName: "wand.and.stars").font(.system(size: 12)).foregroundStyle(Theme.Colors.textSecondary)   // de-accent
                 Text(note).font(.system(size: 12)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 if session.transcript.hasSpeakerCorrections {
@@ -567,7 +575,7 @@ struct ContentView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16).padding(.vertical, 7)
-        .background(Theme.Colors.accent.opacity(0.06))
+        .background(Theme.Colors.surfaceSunken)   // de-accent
         .overlay(alignment: .bottom) { Divider() }
     }
 
@@ -613,69 +621,97 @@ struct ContentView: View {
     // transcript-tail status line — see transcriptStatus / StatusLineView.)
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            if case .processing = session.phase {
-                haloIcon("waveform.badge.magnifyingglass")
-                Text("전사 결과가 곧 여기에 표시됩니다…")
-                    .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
-            } else if case .error(let msg) = session.phase {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 40)).foregroundStyle(.orange)
-                Text(msg).font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center).padding(.horizontal, 32)
-                HStack(spacing: 8) {
-                    if msg.contains("마이크 권한") {
-                        Button("시스템 설정 열기") {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    if msg.contains("모델이 준비되지") {
-                        SettingsLink { Text("설정 열기") }.buttonStyle(.borderedProminent)
-                    }
-                    Button("처음으로") { session.reset() }.buttonStyle(.bordered)
-                }
+        Group {
+            if case .error(let msg) = session.phase {
+                errorState(msg)
             } else if isBusy {
-                ProgressView()
-                Text(phaseText).font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
-            } else {
-                OrbView()
-                VStack(spacing: 6) {
-                    Text("기록할 준비가 되었어요")
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("‘녹음 시작’을 누르거나, 오디오·영상 파일을 끌어다 놓으세요.")
-                        .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
+                // Pre-transcript: NOT a centered spinner/orb — the transcript
+                // simply "hasn't shown yet", so the pane carries the SAME status
+                // line the user already knows (gray text + loading dots; the
+                // warn-gradient during countdown), placed top-left where the
+                // first line lands. One consistent loading language start→
+                // countdown→전사→번역.
+                VStack(alignment: .leading, spacing: 0) {
+                    preTranscriptStatus
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(Theme.Space.window)
+            } else {
+                readyState
+            }
+        }
+    }
+
+    // The single top-left status row shown while the transcript is still empty.
+    @ViewBuilder private var preTranscriptStatus: some View {
+        HStack(spacing: 5) {
+            if case .countingDown(let n) = session.phase {
+                // Same warn-gradient as the status rows, NO exclamation icon —
+                // reads as an eager "about to start", not a warning.
+                GradientText("곧 녹음이 시작됩니다 \(n)")
+                LoadingDots(color: Color(red: 136/255, green: 145/255, blue: 234/255))
+                    .padding(.top, 4)
+            } else {
+                Text("전사 결과가 곧 여기에 표시됩니다")
+                    .font(StatusArea.warnFont).tracking(-0.28)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                LoadingDots(color: Theme.Colors.textTertiary)
+                    .padding(.top, 4)
+            }
+        }
+        .frame(height: 21)
+    }
+
+    private var readyState: some View {
+        VStack(spacing: 16) {
+            OrbView()
+            VStack(spacing: 6) {
+                Text("기록할 준비가 되었어요")
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("‘녹음 시작’을 누르거나, 오디오·영상 파일을 끌어다 놓으세요.")
+                    .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
     }
 
-    // #4 — full-pane countdown: a big, calm number that ticks 3·2·1 before the
-    // mic opens. Dimmed scrim so it reads as a moment of "getting ready".
-    // Ring countdown (user ref): an accent arc sweeps one full lap around the
-    // number each second, then the digit ticks down. Semibold number, accent
-    // purple ring.
-    private func countdownOverlay(_ n: Int) -> some View {
-        ZStack {
-            Theme.Colors.surface
-            CountdownRingView(n: n)
+    private func errorState(_ msg: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40)).foregroundStyle(.orange)
+            Text(msg).font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
+                .multilineTextAlignment(.center).padding(.horizontal, 32)
+            HStack(spacing: 8) {
+                if msg.contains("마이크 권한") {
+                    Button("시스템 설정 열기") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                if msg.contains("모델이 준비되지") {
+                    SettingsLink { Text("설정 열기") }.buttonStyle(.borderedProminent)
+                }
+                Button("처음으로") { session.reset() }.buttonStyle(.bordered)
+            }
         }
-        .transition(.opacity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
     }
+
 
     // soft accent halo behind a glyph — warm, calm focal point for empty/idle states
     private func haloIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 38, weight: .light))
-            .foregroundStyle(Theme.Colors.accent)
+            .foregroundStyle(Theme.Colors.textTertiary)   // de-accent
             .frame(width: 88, height: 88)
-            .background(Circle().fill(Theme.Colors.accent.opacity(0.10)))
+            .background(Circle().fill(Theme.Colors.surfaceSunken))
     }
 
     // MARK: — Set to start (Figma 113:391) — pre-start config card
@@ -1088,7 +1124,7 @@ struct ContentView: View {
             // close (times) button top-right to clear the staged file.
             ZStack(alignment: .topTrailing) {
                 VStack(spacing: 4) {
-                    SVGIcon(name: "folder", size: 24, tint: nil)   // baked indigo (#5A67D8)
+                    SVGIcon(name: "content", size: 20)   // de-accent: neutral doc glyph
                     VStack(spacing: 1) {
                         Text(f.lastPathComponent)
                             .font(.system(size: 12, weight: .semibold))
@@ -1350,7 +1386,7 @@ struct ContentView: View {
     private var fileCard: some View {
         ZStack(alignment: .topTrailing) {
             VStack(spacing: 4) {
-                SVGIcon(name: "folder", size: 24, tint: nil)   // baked indigo (#5A67D8)
+                SVGIcon(name: "content", size: 20)   // de-accent: neutral doc glyph
                 VStack(spacing: 1) {
                     Text(fileCardName)
                         .font(.system(size: 12, weight: .semibold))
@@ -1506,13 +1542,8 @@ struct ContentView: View {
                 Text("총 시간")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.Colors.textSecondary)
-                // D19: progress toward the next expected commit — turns the
-                // "왜 멈춰있지?" wait into a predictable one (translate mode).
-                if session.phase == .recording, !session.translateTargets.isEmpty {
-                    CommitCadenceRing(since: session.lastCommitAt,
-                                      window: session.effectiveWindowSeconds)
-                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-                }
+                // (CommitCadenceRing removed — the accent commit-cadence spinner
+                // next to 총 시간 was dropped per de-accent / cleaner-live-UI.)
             }
         }
     }
@@ -1535,79 +1566,32 @@ struct ContentView: View {
         return String(format: "%d:%02d", secs / 60, secs % 60)
     }
 
-    /// Single-lane who-spoke-when bar: consecutive lines by the same speaker
-    /// merge into one rounded block, widths ∝ talk time (Figma 188:677), each
-    /// floored at 10pt. The scroll surface runs EDGE TO EDGE of the card (it
-    /// escapes the panel's 16pt inset) so overflowing blocks slide under the
-    /// card edge instead of chopping at an arbitrary inner line; the content
-    /// keeps its own 16pt margins, and every new committed turn auto-anchors
-    /// the newest block 16pt from the right edge with a smooth animation.
+    /// 100% stacked speaker-share bar: ONE rounded segment per speaker, width ∝
+    /// total talk time, sorted to match the share list below (largest first) so
+    /// the list reads as this bar's legend. Fixed width by construction — the
+    /// old time-ordered sequence bar grew a block per turn and needed horizontal
+    /// scrolling; who-spoke-WHEN now lives in the energy flow's speaker colors,
+    /// so this bar only answers "how much".
     private var speakerSequenceBar: some View {
-        let segs = speakerSegments
-        let total = max(segs.reduce(0) { $0 + $1.dur }, 0.001)
-        let minW: CGFloat = 10
+        var times: [Int: Double] = [:]
+        for l in session.transcript.lines { times[l.speaker, default: 0] += max(0, l.end - l.start) }
+        let sorted = times.sorted { $0.value > $1.value }
+        let total = max(0.001, times.values.reduce(0, +))
         let spacing: CGFloat = 2
         return GeometryReader { geo in
-            let inner = max(geo.size.width - 32, 1)   // resting width between the 16pt margins
-            let gaps = CGFloat(max(segs.count - 1, 0)) * spacing
-            let avail = max(inner - gaps, 1)
-            let widths = segs.map { max(minW, avail * CGFloat($0.dur / total)) }
-            let contentW = widths.reduce(0, +) + gaps
-            let overflowing = contentW > inner + 0.5
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    // 16pt margins live INSIDE as spacers: the trailing spacer is
-                    // itself the scroll anchor, so aligning it to the viewport
-                    // edge leaves the newest block exactly 16pt from the right —
-                    // rather than jammed against the card edge.
-                    HStack(spacing: 0) {
-                        Color.clear.frame(width: 16)
-                        HStack(spacing: spacing) {
-                            ForEach(segs.indices, id: \.self) { i in
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(Theme.Colors.speaker(segs[i].speaker))
-                                    .frame(width: widths[i])
-                            }
-                        }
-                        Color.clear.frame(width: 16).id("seqEnd")
-                    }
-                    .animation(.snappy(duration: 0.35), value: contentW)
-                }
-                .scrollDisabled(!overflowing)
-                .onAppear { proxy.scrollTo("seqEnd", anchor: .trailing) }
-                .onChange(of: contentW) { _, _ in
-                    withAnimation(.snappy(duration: 0.35)) {
-                        proxy.scrollTo("seqEnd", anchor: .trailing)
-                    }
+            let avail = max(geo.size.width - CGFloat(max(sorted.count - 1, 0)) * spacing, 1)
+            HStack(spacing: spacing) {
+                ForEach(sorted, id: \.key) { entry in
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Theme.Colors.speakerGradient(entry.key))
+                        .frame(width: max(4, avail * CGFloat(entry.value / total)))
+                        .help("\(session.speakerNames[entry.key] ?? "Speaker \(entry.key + 1)") · \(Int((entry.value / total * 100).rounded()))%")
                 }
             }
-            // Left fade: hints that earlier turns exist off the left edge once
-            // the bar overflows (the newest turns stay pinned at the right).
-            .overlay(alignment: .leading) {
-                if overflowing {
-                    LinearGradient(colors: [Theme.Colors.surface, Theme.Colors.surface.opacity(0)],
-                                   startPoint: .leading, endPoint: .trailing)
-                        .frame(width: 22)
-                        .allowsHitTesting(false)
-                }
-            }
+            .animation(.snappy(duration: 0.35), value: total)
         }
         .frame(height: 26)
-        .padding(.horizontal, -16)   // escape the panel inset → card-edge-wide scroll surface
-        .help("발언 순서 — 화자별 발언 구간")
-    }
-
-    private var speakerSegments: [(speaker: Int, dur: Double)] {
-        var out: [(speaker: Int, dur: Double)] = []
-        for l in session.transcript.lines {
-            let d = max(0, l.end - l.start)
-            if let last = out.last, last.speaker == l.speaker {
-                out[out.count - 1].dur += d
-            } else {
-                out.append((speaker: l.speaker, dur: d))
-            }
-        }
-        return out
+        .help("발언 비율 — 화자별 점유")
     }
 
     private var speakerShareList: some View {
@@ -1644,7 +1628,7 @@ struct ContentView: View {
     private func savedStatus(_ url: URL) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "checkmark.circle.fill").font(Theme.Fonts.status)
-                .foregroundStyle(Theme.Colors.accent)
+                .foregroundStyle(Theme.Colors.textSecondary)   // de-accent
             Button(url.lastPathComponent) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 .font(Theme.Fonts.status).buttonStyle(.plain)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -1658,7 +1642,7 @@ struct ContentView: View {
         let s = session.tightenStat
         return HStack(spacing: 6) {
             Image(systemName: "scissors").font(Theme.Fonts.status)
-                .foregroundStyle(Theme.Colors.accent)
+                .foregroundStyle(Theme.Colors.textSecondary)   // de-accent
             Text("타이튼: \(s.cuts)컷 · \(String(format: "%.0f", s.seconds))초 절감 가능")
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
             Spacer()
@@ -1684,7 +1668,7 @@ struct ContentView: View {
     private func calendarBlock(_ ev: CalendarBridge.MeetingEvent) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Image(systemName: "calendar").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.accent)
+                Image(systemName: "calendar").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)   // de-accent
                 Text(ev.title).font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
                     .lineLimit(1).truncationMode(.tail)
             }
@@ -2094,44 +2078,6 @@ private struct WindowAccessor: NSViewRepresentable {
 // sweeps one full lap (0→1) over each 1s tick, then the Semibold number ticks
 // down. The sweep resets instantly (disabled transaction) at each new number so
 // every second starts a fresh lap.
-private struct CountdownRingView: View {
-    let n: Int
-    @State private var sweep: CGFloat = 0
-
-    var body: some View {
-        VStack(spacing: 22) {
-            ZStack {
-                Circle().stroke(Theme.Colors.separator, lineWidth: 5)
-                Circle()
-                    .trim(from: 0, to: sweep)
-                    .stroke(Theme.Colors.accent,
-                            style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))   // start the lap at 12 o'clock
-                Text("\(n)")
-                    .font(.system(size: 38, weight: .semibold))
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .monospacedDigit()
-                    .contentTransition(.numericText(countsDown: true))
-                    .animation(.snappy(duration: 0.3), value: n)
-            }
-            .frame(width: 87, height: 87)
-            Text("곧 녹음을 시작합니다")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Theme.Colors.textTertiary)
-        }
-        .onAppear { runSweep() }
-        .onChange(of: n) { _, _ in runSweep() }
-    }
-
-    private func runSweep() {
-        var reset = Transaction(); reset.disablesAnimations = true
-        withTransaction(reset) { sweep = 0 }
-        DispatchQueue.main.async {
-            withAnimation(.linear(duration: 1.0)) { sweep = 1 }
-        }
-    }
-}
-
 /// D19: a small ring filling toward the next expected commit (elapsed since the
 /// last commit / window length). TimelineView animates it without a manual timer;
 /// it saturates at 1.0 and holds (a decode may run past the nominal window).
