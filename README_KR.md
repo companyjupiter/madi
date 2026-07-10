@@ -10,7 +10,7 @@ Apple Silicon에서 동작하는 자체완결형 Whisper **large-v3-turbo** 음�
 
 > 요약: peak RSS **1.1 GB**, decode **~188 tok/s**, diarization **DER 9.67%**
 > (VoxConverse dev — 상용 pyannote 3.1 SOTA ~11.2%보다 우수).
-> 현재 상태 전체: [`metal/STATUS.md`](metal/STATUS.md)
+> 현재 상태 전체: [`engine/metal/STATUS.md`](engine/metal/STATUS.md)
 
 ---
 
@@ -29,17 +29,17 @@ xcode-select --install         # xcrun metal 툴체인
 ---
 
 ## 2. 에셋 준비 (최초 1회)
-모든 명령은 `metal/` 폴더 기준입니다.
+모든 명령은 `engine/metal/` 폴더 기준입니다.
 
 ### (1) 모델 + 토크나이저
-`metal/assets/` 에 다음이 있어야 합니다:
+`engine/metal/assets/` 에 다음이 있어야 합니다:
 - `model.safetensors` — Whisper large-v3-turbo 가중치 (HuggingFace에서 받기)
 - 토크나이저/설정 파일: `tokenizer.json`, `generation_config.json`,
   `added_tokens.json`, `vocab.json`, `merges.txt` 등
 
 그 다음 보조 바이너리를 생성합니다 (순수 stdlib, 의존성 없음):
 ```bash
-cd metal/assets
+cd engine/metal/assets
 python3 gen_assets.py
 #  → mel_filters.bin, WHISPER_BPE.bin, suppress_tokens.bin
 ```
@@ -47,7 +47,7 @@ python3 gen_assets.py
 ### (2) 화자 분리 모델 (diarization용, ~25MB)
 Apache-2.0 wespeaker ResNet34를 받아 우리 포맷으로 변환합니다:
 ```bash
-cd metal
+cd engine/metal
 bash bench/gen_diar_assets.sh
 #  → assets/resnet34_diar.bin, assets/kaldi_melbank.bin
 ```
@@ -57,7 +57,7 @@ bash bench/gen_diar_assets.sh
 
 ## 3. 빌드
 ```bash
-cd metal
+cd engine/metal
 bash build.sh transcribe.zig
 #  → out/transcribe
 ```
@@ -96,7 +96,7 @@ DIAR_K=1 ./out/transcribe assets/model.safetensors lecture.wav assets/WHISPER_BP
 ---
 
 ## 4-b. 준실시간 회의 전사 (마이크 → 라이브 전사)
-`metal/live_transcribe.sh` 는 마이크(또는 임의의 avfoundation 오디오 장치)를
+`engine/metal/live_transcribe.sh` 는 마이크(또는 임의의 avfoundation 오디오 장치)를
 **N초 세그먼트로 굴려가며** 닫히는 즉시 전사해, 흐르는 **타임스탬프 + 화자별**
 회의록을 실시간에 가깝게 출력합니다. 지연은 대략 **N + 오버랩 + 디코드(~3초)** 입니다.
 
@@ -113,7 +113,7 @@ DIAR_K=1 ./out/transcribe assets/model.safetensors lecture.wav assets/WHISPER_BP
 > 보조 도구 `diar_embed_wav`(ResNet34 임베딩)·`online_diar`(코사인 온라인 클러스터링)
 > 가 필요합니다. 빌드:
 > ```bash
-> cd metal
+> cd engine/metal
 > bash build.sh diar_embed_wav.zig
 > zig build-obj -O ReleaseFast -lc --name online_diar -femit-bin=build/online_diar.o online_diar.zig
 > clang -O2 build/online_diar.o -o out/online_diar
@@ -127,7 +127,7 @@ DIAR_K=1 ./out/transcribe assets/model.safetensors lecture.wav assets/WHISPER_BP
 
 ### 실행 (플래그 CLI)
 ```bash
-cd metal
+cd engine/metal
 ./live_transcribe.sh --help            # 전체 옵션
 ./live_transcribe.sh                   # 기본: 내장 마이크, 10초, 오버랩+화자 ON, 언어 자동. Ctrl-C 종료.
 ```
@@ -274,14 +274,14 @@ WHISPER_LANG_ID=50264 ./out/transcribe assets/model.safetensors talk.wav assets/
 ---
 
 ## 9. 더 보기
-- `metal/live_transcribe.sh` — 준실시간 라이브 회의 러너(마이크·오버랩·상주·색상·md/srt)
-- `metal/merge_seg.awk` — 워드 타임스탬프 ↔ 화자 라벨 머지(오버랩 dedup·화자 캐리오버)
-- `metal/online_diar.zig`·`diar_embed_wav.zig` — 독립 diar 도구(`--no-resident` 폴백용)
-- `metal/testdata/` — 라이브 파이프라인 회귀 픽스처(한+영) + `check.sh`
-- `metal/STATUS.md` — 현재 검증 상태(성능·RSS·DER·타임스탬프) 한눈에
-- `metal/PERF_LOG.md` — 최적화 시계열 전체 기록
-- `metal/bench/` — DER 벤치마크 하네스 + 화자분리 연구 문서
-- `metal/PORT.md` — CUDA/PTX → Metal 포팅 노트
+- `engine/metal/live_transcribe.sh` — 준실시간 라이브 회의 러너(마이크·오버랩·상주·색상·md/srt)
+- `engine/metal/merge_seg.awk` — 워드 타임스탬프 ↔ 화자 라벨 머지(오버랩 dedup·화자 캐리오버)
+- `engine/metal/online_diar.zig`·`diar_embed_wav.zig` — 독립 diar 도구(`--no-resident` 폴백용)
+- `engine/metal/testdata/` — 라이브 파이프라인 회귀 픽스처(한+영) + `check.sh`
+- `engine/metal/STATUS.md` — 현재 검증 상태(성능·RSS·DER·타임스탬프) 한눈에
+- `engine/metal/PERF_LOG.md` — 최적화 시계열 전체 기록
+- `engine/metal/bench/` — DER 벤치마크 하네스 + 화자분리 연구 문서
+- `engine/metal/PORT.md` — CUDA/PTX → Metal 포팅 노트
 
 ## 라이선스 / 출처
 추론 코드는 본 프로젝트의 독자 구현입니다. 두 가지 서드파티 모델을 재사용하며,
@@ -294,4 +294,4 @@ WHISPER_LANG_ID=50264 ./out/transcribe assets/model.safetensors talk.wav assets/
   NOTICE·라이선스 전문 포함 + 변경 사실 명시가 필요합니다.
 
 전체 고지·라이선스 전문은 [`NOTICE`](NOTICE)·[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md),
-소스 헤더(`metal/transcribe.zig`·`metal/diar_resnet.zig`)에도 동일 고지가 있습니다.
+소스 헤더(`engine/metal/transcribe.zig`·`engine/metal/diar_resnet.zig`)에도 동일 고지가 있습니다.

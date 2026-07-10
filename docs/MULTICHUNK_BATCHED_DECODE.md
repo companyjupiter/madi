@@ -93,7 +93,7 @@ foundation for a future batched-attention effort. See PERF_LOG `J`.
 **Done + verified (merged):** recon (PR #35, decode is occupancy-bound 5.8× off
 ceiling; batched GEMM 6–9×), spec (#36), quality-equivalence correction (#37),
 implementation recipe (#38), and the **make-or-break primitive proof** (#39,
-`metal/test_batchproj.zig`): `deqW16` (Q8→F16, once) + `matmulF16Batched` over B
+`engine/metal/test_batchproj.zig`): `deqW16` (Q8→F16, once) + `matmulF16Batched` over B
 slots is **correct** (CPU-F32 reverse-verify max|Δ|=4.35e-3) and **5.7–7.4×
 cheaper/row at B=8** (deq amortized). Two traps caught: `mul_mm_q8` is slow (use
 `matmulF16Batched`); deq-per-call dominates (amortize once/layer).
@@ -118,7 +118,7 @@ sequential, then the WER/CER A/B gate. `BATCHDEC=0` keeps the proven per-slot pa
 
 **Goal.** Spend the measured occupancy headroom (J-recon: single-token decode runs
 5.8× off the bandwidth ceiling; a batched GEMM is **6–9× cheaper per token** at
-M=8 — `metal/test_specgemm.zig`) **without a draft model**, by decoding a long
+M=8 — `engine/metal/test_specgemm.zig`) **without a draft model**, by decoding a long
 file's independent 30 s chunks *together*: at decode step *t*, compute token-*t*
 for all B in-flight chunks in **one batched forward** instead of B sequential
 single-token forwards.

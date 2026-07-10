@@ -35,6 +35,14 @@ struct ModelGateView: View {
                 }
             case .verifying:
                 ProgressView("검증 중…")
+            case .cancelled:
+                VStack(spacing: 8) {
+                    Text("다운로드를 취소했습니다").foregroundStyle(Theme.Colors.textSecondary)
+                    Text("음성 모델이 있어야 회의를 기록할 수 있습니다")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("다운로드 시작") { downloader.startDownload() }
+                        .buttonStyle(.borderedProminent).tint(Theme.Colors.accent)
+                }
             case .failed(let msg):
                 VStack(spacing: 8) {
                     Text("다운로드 실패").foregroundStyle(Theme.Colors.recording)

@@ -5,8 +5,9 @@
 // is fetched on first run into Application Support, verified by SHA-256.
 // (Q8 is 1.86x smaller than F16 — the old "1.5 GB" figure was the F16 model.)
 //
-// TODO(hosting): fill in `url` + `sha256` once the model is hosted (R2/S3/CDN)
-// and pin the version. Bumping the model = ship a new app build with new hashes.
+// Hosting: both models are hosted on Hugging Face with pinned `resolve/main`
+// endpoints and their real SHA-256/size below (verified == local 2026-06-22).
+// Bumping a model = new HF upload + a new app build with updated hash/size here.
 
 import Foundation
 import CryptoKit
@@ -16,6 +17,9 @@ struct RemoteAsset {
     let url: URL
     let sha256: String        // lowercase hex of the expected digest
     let sizeBytes: Int64
+    /// Approx extra RAM the model needs at runtime, in GB (nil = negligible).
+    /// Documented here so the requirement lives with the asset, not only in UI copy.
+    var approxRuntimeMemoryGB: Double? = nil
 }
 
 enum AssetManifest {
@@ -45,7 +49,8 @@ enum AssetManifest {
         name: "DNA3.0-4B.i1-Q4_K_M.gguf",
         url: URL(string: "https://huggingface.co/mradermacher/DNA3.0-4B-i1-GGUF/resolve/main/DNA3.0-4B.i1-Q4_K_M.gguf")!,
         sha256: "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8",
-        sizeBytes: 2_783_447_424
+        sizeBytes: 2_783_447_424,
+        approxRuntimeMemoryGB: 3.0
     )
     /// Always App Support (never bundled). The 1.1 MB engine binary IS bundled.
     static var translateModelURL: URL { supportDir.appendingPathComponent(translateModel.name) }

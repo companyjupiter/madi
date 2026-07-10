@@ -4,7 +4,7 @@ The `transcribe` engine has two output surfaces:
 
 1. **stdout text** — the original human/Swift contract (`=== WORD TIMESTAMPS ===`,
    `[t0s-t1s] word «conf x»`, `SPK/SPKFIX/SPKOV`, `<<SEG_END>>`, `<<FLUSH_END>>`,
-   `[perf]`). **Frozen** — parsed by `app/Sovereign/Engine/EngineProtocol.swift`
+   `[perf]`). **Frozen** — parsed by `apps/macos/Sovereign/Engine/EngineProtocol.swift`
    and its unit tests. Never change its shape.
 2. **structured events** — this document. **Opt-in**: set `EVENTS_FILE=<path>`
    and the engine writes one JSON object per line to that file, *in addition*
@@ -64,7 +64,7 @@ data model before the producing feature lands:
 
 ```sh
 EVENTS_FILE=web/fixtures/jfk3.events.jsonl CONF=1 DIAR=1 \
-  metal/out/transcribe metal/assets/model.safetensors metal/assets/jfk3.wav metal/assets/WHISPER_BPE.bin
+  engine/metal/out/transcribe engine/metal/assets/model.safetensors engine/metal/assets/jfk3.wav engine/metal/assets/WHISPER_BPE.bin
 ```
 
 Checked-in fixtures (`web/fixtures/`) drive the dashboard offline:

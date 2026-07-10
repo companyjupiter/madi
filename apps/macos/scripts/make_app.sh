@@ -11,7 +11,7 @@
 #   SEED_MODEL=1 make_app.sh      # also symlink the repo model into App Support
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_DIR="$(cd "$HERE/.." && pwd)"        # app/
+APP_DIR="$(cd "$HERE/.." && pwd)"        # apps/macos
 ROOT="$(cd "$APP_DIR/../.." && pwd)"     # repo root (apps/macos → ..)
 OUT="${1:-$APP_DIR/build}"
 BUNDLE="$OUT/Madi.app"

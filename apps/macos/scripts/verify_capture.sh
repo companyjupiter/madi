@@ -15,8 +15,8 @@
 #    replace with a REAL 48k mic recording for Layer 4.)
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP="$(cd "$HERE/.." && pwd)"
-ROOT="$(cd "$APP/.." && pwd)"
+APP="$(cd "$HERE/.." && pwd)"          # apps/macos
+ROOT="$(cd "$APP/../.." && pwd)"       # repo root (apps/macos → ..)
 SRC="${1:?usage: verify_capture.sh <16k.wav> <ref.rttm>}"
 REF="${2:?need ref.rttm}"
 W="${W:-/tmp/cv}"; mkdir -p "$W"
@@ -39,9 +39,9 @@ rm -rf "$W/seg_nat" "$W/seg_ff"
 "$W/capture_verify" segment "$W/nat16k.wav" "$W/seg_nat" 10 3 | tail -1
 "$W/capture_verify" segment "$W/ref16k.wav" "$W/seg_ff"  10 3 | tail -1
 echo "[native path DER]"
-python3 "$ROOT/metal/bench/feed_der.py" "$W/seg_nat/feed.txt" "$REF" | grep -E 'DER|windows'
+python3 "$ROOT/engine/metal/bench/feed_der.py" "$W/seg_nat/feed.txt" "$REF" | grep -E 'DER|windows'
 echo "[ffmpeg path DER]"
-python3 "$ROOT/metal/bench/feed_der.py" "$W/seg_ff/feed.txt"  "$REF" | grep -E 'DER|windows'
+python3 "$ROOT/engine/metal/bench/feed_der.py" "$W/seg_ff/feed.txt"  "$REF" | grep -E 'DER|windows'
 echo
 echo "verdict: native must be acoustically faithful (Layer 1 corr>0.999) and"
 echo "its DER within the engine's input-sensitivity band of the ffmpeg path."
