@@ -967,6 +967,13 @@ pub fn main() !void {
     const elnp_w = try upVec(sf, "model.encoder.layer_norm.weight");
     const elnp_b = try upVec(sf, "model.encoder.layer_norm.bias");
     try out.print("[5] encoder weights loaded (32 layers)\n", .{});
+    if (std.posix.getenv("ENC_F16_CACHE") != null) {
+        var cache_timer = try std.time.Timer.start();
+        try enc.cacheWeights(Ke, &elayers);
+        try out.print("[5c] encoder F16 cache ready ({d:.0} ms, ~1.25 GB)\n", .{
+            @as(f64, @floatFromInt(cache_timer.read())) / 1e6,
+        });
+    }
 
     // ── encoder scratch (F16 activations, reused per chunk) ─────────
     const escr = enc.Scratch{

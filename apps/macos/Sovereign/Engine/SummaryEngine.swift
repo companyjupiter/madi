@@ -23,16 +23,8 @@ final class SummaryEngine {
     /// so follow-up questions don't reload the 2.6 GB model.
     var onResult: ((String, String?) -> Void)?
 
-    private let process = Process()
-    private let stdinPipe = Pipe()
-    private let stdoutPipe = Pipe()
-    private let ioQueue = DispatchQueue(label: "sovereign.summary.io")
-    private var lineBuffer = Data()
-
-    private var ready = false
-    private var current = ""                       // reply lines accumulating (newline-joined)
-    private var inflightTag: String?               // tag of the request awaiting its reply
-    private var queue: [(tag: String, prompt: String)] = []   // FIFO (incl. pre-READY)
+    private let broker = DNAEngineBroker.shared
+    private let clientID = UUID()
 
     // map-reduce for long meetings: the engine context is ~1024 tokens and silently
     // truncates past it, so a long transcript is split into char-budgeted chunks,
@@ -44,26 +36,11 @@ final class SummaryEngine {
     private var foldRound = 0                       // safety cap against a non-converging fold
 
     func start(engine: URL, model: URL) -> Bool {
-        process.executableURL = engine
-        process.arguments = [model.path]
-        var env = ProcessInfo.processInfo.environment
-        env.removeValue(forKey: "SOV_DEBUG")   // gates on presence, not value
-        process.environment = env
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = FileHandle.nullDevice
-        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
-            let chunk = h.availableData
-            guard !chunk.isEmpty else { return }
-            self?.ioQueue.async { self?.ingest(chunk) }
-        }
-        do { try process.run(); return true } catch { return false }
+        broker.attach(client: clientID, engine: engine, model: model, onReady: {})
     }
 
     func stop() {
-        stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        if process.isRunning { process.terminate() }
-        ready = false; current = ""; inflightTag = nil; queue.removeAll()
+        broker.detach(client: clientID)
     }
 
     private func transcriptOneLine(_ lines: [String]) -> String {
@@ -107,7 +84,7 @@ final class SummaryEngine {
     func reconcile(numbered: String) {
         let body = String(numbered.suffix(chunkChars))
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { onResult?("reconcile", nil); return }
-        enqueue("reconcile", TranscriptReconciler.instruction() + "\n" + body)
+        enqueue("reconcile", TranscriptReconciler.instruction() + " " + body)
     }
 
     // The final-format prompt (single fitting text → the user-facing output).
@@ -207,68 +184,21 @@ final class SummaryEngine {
     }
 
     private func enqueue(_ tag: String, _ prompt: String) {
-        if ready, inflightTag == nil { send(tag, prompt) } else { queue.append((tag, prompt)) }
-    }
-
-    private func send(_ tag: String, _ prompt: String) {
-        inflightTag = tag
-        current = ""
-        write(prompt + "\n")
-    }
-
-    private func write(_ s: String) {
-        guard let data = s.data(using: .utf8) else { return }
-        ioQueue.async { [weak self] in try? self?.stdinPipe.fileHandleForWriting.write(contentsOf: data) }
-    }
-
-    private func ingest(_ chunk: Data) {
-        lineBuffer.append(chunk)
-        while let nl = lineBuffer.firstIndex(of: 0x0A) {
-            let lineData = lineBuffer.subdata(in: lineBuffer.startIndex..<nl)
-            lineBuffer.removeSubrange(lineBuffer.startIndex...nl)
-            guard let raw = String(data: lineData, encoding: .utf8) else { continue }
-            Task { @MainActor in self.parse(raw) }
+        let priority: DNAEngineBroker.Priority = tag == "live-rail" ? .liveRail : .postSession
+        broker.submit(client: clientID, prompt: prompt, priority: priority,
+                      preserveNewlines: true) { [weak self] text in
+            self?.complete(tag, text)
         }
     }
 
-    @MainActor
-    private func parse(_ raw: String) {
-        var s = raw
-        while s.hasPrefix(">") { s = String(s.dropFirst()).trimmingCharacters(in: .whitespaces) }
-        if s == "READY" {
-            ready = true
-            drain()
+    private func complete(_ tag: String, _ text: String?) {
+        let out = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if tag == "fold" {
+            if !out.isEmpty { foldAcc.append(out) }
+            foldRemaining -= 1
+            if foldRemaining <= 0 { runFoldRound(foldAcc) }
             return
         }
-        if s.hasPrefix("[perf] generation") {           // reply complete
-            let out = current.trimmingCharacters(in: .whitespacesAndNewlines)
-            current = ""
-            guard let tag = inflightTag else { return }
-            inflightTag = nil
-            if tag == "fold" {                       // map-reduce intermediate — not user-facing
-                if !out.isEmpty { foldAcc.append(out) }
-                foldRemaining -= 1
-                if foldRemaining <= 0 { runFoldRound(foldAcc) }
-                drain()
-                return
-            }
-            onResult?(tag, out.isEmpty ? nil : out)
-            drain()
-            return
-        }
-        if s.isEmpty || s.hasPrefix("[chat]") || s.hasPrefix("[perf]")
-            || s.hasPrefix("Loading") || s.hasPrefix("Initializing") || s.hasPrefix("[arch]")
-            || s.hasPrefix("token[") {
-            return
-        }
-        // reply text — preserve line structure ([요약]/[액션]/bullets) with newlines
-        current += current.isEmpty ? s : "\n" + s
-    }
-
-    /// Send the next queued request if idle.
-    private func drain() {
-        guard ready, inflightTag == nil, !queue.isEmpty else { return }
-        let next = queue.removeFirst()
-        send(next.tag, next.prompt)
+        onResult?(tag, out.isEmpty ? nil : out)
     }
 }

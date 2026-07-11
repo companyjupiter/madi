@@ -48,6 +48,9 @@ final class EngineProcess {
         /// voiceprints, so a known voice (clinic staff) is VERIFIED against a
         /// fixed reference instead of re-discovered by clustering.
         var anchorVoiceprints = false
+        /// 24GB+ main-engine mode: expand encoder Q8 weights once (~1.25GB) and
+        /// remove per-segment dequant dispatches. Preview always forces this off.
+        var encoderF16Cache = false
     }
 
     private let config: Config
@@ -63,6 +66,7 @@ final class EngineProcess {
         env["CONF"] = "1" // emit per-word confidence «conf x.xx» for low-conf highlighting
         env["DIAR"] = config.diarize ? "1" : "0"
         env["OSD"] = config.osd ? "1" : "0"
+        if config.encoderF16Cache { env["ENC_F16_CACHE"] = "1" }
         env["DIAR_MAXK"] = String(config.maxSpeakers)
         // per-speaker-count speech-gate optimum (bench/VAD_TUNING.md)
         if let p = config.vadProb { env["VAD_PROB"] = String(format: "%.2f", p) }

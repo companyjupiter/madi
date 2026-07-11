@@ -24,6 +24,7 @@ import Foundation
 struct TranslateStreamParser {
     enum Event: Equatable {
         case ready
+        case prefixReady(Int)
         case replyDelta(String)      // full accumulated reply text so far (not a diff)
         case turnComplete(String)    // final reply text for the turn
     }
@@ -33,6 +34,9 @@ struct TranslateStreamParser {
     private var buffer = Data()
     private var state: State = .control
     private var replyRaw = Data()
+    private let preserveNewlines: Bool
+
+    init(preserveNewlines: Bool = false) { self.preserveNewlines = preserveNewlines }
 
     private static let generationMarker = Data("[perf] generation".utf8)
 
@@ -72,12 +76,12 @@ struct TranslateStreamParser {
                     if buffer.prefix(m.count) == m {
                         state = .control       // the control handler completes the turn
                     } else {
-                        replyRaw.append(0x20)  // join continuation line with a space
+                        replyRaw.append(preserveNewlines ? 0x0A : 0x20)
                         state = .reply
                     }
                 } else if buffer.firstIndex(of: 0x0A) != nil {
                     // a full line shorter than the marker — continuation
-                    replyRaw.append(0x20)
+                    replyRaw.append(preserveNewlines ? 0x0A : 0x20)
                     state = .reply
                 } else {
                     break loop                 // wait for more bytes
@@ -91,6 +95,10 @@ struct TranslateStreamParser {
         guard var s = String(data: lineData, encoding: .utf8) else { return nil }
         while s.hasPrefix(">") { s = String(s.dropFirst()).trimmingCharacters(in: .whitespaces) }
         if s == "READY" { return .ready }
+        if s.hasPrefix("PFX_OK ") {
+            let fields = s.split(separator: " ")
+            if fields.count >= 2, let slot = Int(fields[1]) { return .prefixReady(slot) }
+        }
         if s.hasPrefix("[perf] prefill") {     // reply bytes follow
             state = .reply
             replyRaw.removeAll(keepingCapacity: true)

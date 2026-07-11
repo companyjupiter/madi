@@ -48,6 +48,19 @@ final class TranslateStreamParserTests: XCTestCase {
         XCTAssertEqual(done, [.turnComplete("첫 줄 둘째 줄이 충분히 길어서 마커보다 깁니다")])
     }
 
+    func testSummaryModePreservesIntraReplyNewlines() {
+        var p = TranslateStreamParser(preserveNewlines: true)
+        _ = feed(&p, "READY\n[perf] prefill: 10 tok in 1ms (1 tok/s)\n")
+        _ = feed(&p, "[요약] 첫 줄")
+        let ev = feed(&p, "\n[액션] 둘째 줄이 충분히 길어서 마커보다 깁니다")
+        XCTAssertEqual(ev.last, .replyDelta("[요약] 첫 줄\n[액션] 둘째 줄이 충분히 길어서 마커보다 깁니다"))
+    }
+
+    func testPrefixRegistrationControlEvent() {
+        var p = TranslateStreamParser()
+        XCTAssertEqual(feed(&p, "> PFX_OK 2 40\n"), [.prefixReady(2)])
+    }
+
     func testEmptyReplyCompletesEmpty() {
         var p = TranslateStreamParser()
         _ = feed(&p, "READY\n[perf] prefill: 10 tok in 1ms (1 tok/s)\n")
