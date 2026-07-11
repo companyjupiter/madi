@@ -32,14 +32,15 @@ final class TranslateEngine {
     /// Queued + in-flight turn count, fired whenever it changes (D20 status).
     var onQueueChange: ((Int) -> Void)?
 
-    private let process = Process()
-    private let stdinPipe = Pipe()
-    private let stdoutPipe = Pipe()
-    private let ioQueue = DispatchQueue(label: "sovereign.translate.io")
-    private var parser = TranslateStreamParser()          // ioQueue-owned
-    private var lastPartialEmit = ContinuousClock.now     // ioQueue-owned throttle
+    private let broker = DNAEngineBroker.shared
+    private let clientID = UUID()
+    private var lastPartialEmit = ContinuousClock.now
 
-    private struct Turn { let id: UUID; let lang: String; let source: String; let prompt: String; var retries: Int }
+    private struct Turn {
+        let id: UUID; let lang: String; let source: String
+        let prompt: String; let prefix: String?; let body: String?
+        var retries: Int
+    }
     private var ready = false
     // Live-priority scheduling: hold turns in a stack and write them NEWEST-FIRST,
     // one at a time. During a meeting the line you're looking at (the most recent)
@@ -48,6 +49,9 @@ final class TranslateEngine {
     // skipped — it's reordered, not dropped.
     private var pending: [Turn] = []   // not-yet-sent; popLast() = newest
     private var inflightTurn: Turn?    // the single turn currently generating
+    private var registeredPrefixes: Set<String> = []
+    private var registeringPrefixes: Set<String> = []
+    private var disabledPrefixes: Set<String> = []
     /// Live queue cap (turns). 0 = unbounded. When the newest-first stack grows
     /// past this — fast speech the engine can't keep up with — the OLDEST turns
     /// are shed (reported via onDrop for backfill at stop) so live captions track
@@ -59,32 +63,17 @@ final class TranslateEngine {
     var onDrop: ((UUID) -> Void)?
 
     func start(engine: URL, model: URL) -> Bool {
-        process.executableURL = engine
-        process.arguments = [model.path]
-        // NOTE: do NOT set SOV_DEBUG — the engine gates debug on env PRESENCE
-        // (not value), so even SOV_DEBUG=0 turns on the token-dump. Leave it unset.
-        var env = ProcessInfo.processInfo.environment
-        env.removeValue(forKey: "SOV_DEBUG")
-        // Runaway-tail guard (T10): the engine's default cap is 1024 tokens with
-        // no newline stop — a pathological generation blocks the single-inflight
-        // queue for ~23 s. Captions never legitimately need more than ~192.
-        env["SOV_NSTEPS"] = "192"
-        process.environment = env
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = FileHandle.nullDevice
-        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
-            let chunk = h.availableData
-            guard !chunk.isEmpty else { return }
-            self?.ioQueue.async { self?.pumpParser(chunk) }
+        broker.attach(client: clientID, engine: engine, model: model) { [weak self] in
+            guard let self else { return }
+            self.ready = true
+            self.pump()
         }
-        do { try process.run(); return true } catch { return false }
     }
 
     func stop() {
-        stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        if process.isRunning { process.terminate() }
+        broker.detach(client: clientID)
         ready = false; pending.removeAll(); inflightTurn = nil
+        registeredPrefixes.removeAll(); registeringPrefixes.removeAll(); disabledPrefixes.removeAll()
     }
 
     /// Queue a translation of `text` into each of `targets` (English language
@@ -106,10 +95,16 @@ final class TranslateEngine {
         ["Korean": "감사합니다", "English": "Thank you", "Japanese": "ありがとうございます", "Chinese": "谢谢"]
 
     private static func prompt(for target: String, text: String, variant: Bool) -> String {
+        prefix(for: target, variant: variant) + text + " =>"
+    }
+
+    private static func prefix(for target: String, variant: Bool) -> String {
         let a = (variant ? anchor2[target] : anchor[target]) ?? "Hello"
         let ex = variant ? "Thank you" : "Hello"
-        return "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — \(ex) => \(a) . Now: \(text) =>"
+        return "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — \(ex) => \(a) . Now: "
     }
+
+    private static let prefixSlot = ["Korean": 0, "English": 1, "Japanese": 2, "Chinese": 3]
 
     func translate(_ text: String, into targets: [String], id: UUID) {
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
@@ -122,7 +117,8 @@ final class TranslateEngine {
         }
         for target in ordered {
             pending.append(Turn(id: id, lang: target, source: oneLine,
-                                prompt: Self.prompt(for: target, text: oneLine, variant: false), retries: 1))
+                                prompt: Self.prompt(for: target, text: oneLine, variant: false),
+                                prefix: Self.prefix(for: target, variant: false), body: oneLine + " =>", retries: 1))
         }
         // Live cap: shed the OLDEST turns (front of the stack) past maxPending.
         // popLast() serves newest-first, so the front holds the stalest backlog —
@@ -142,32 +138,36 @@ final class TranslateEngine {
     /// Write the NEXT turn (newest pending) iff the engine is free. One turn in
     /// flight at a time — the DNA3 REPL generates one reply per prompt.
     private func pump() {
-        guard ready, inflightTurn == nil, let turn = pending.popLast() else { return }
-        inflightTurn = turn
-        write(turn.prompt + "\n")
-    }
-
-    private func write(_ s: String) {
-        guard let data = s.data(using: .utf8) else { return }
-        ioQueue.async { [weak self] in try? self?.stdinPipe.fileHandleForWriting.write(contentsOf: data) }
-    }
-
-    // MARK: stdout events (framing in TranslateStreamParser — pure, unit-tested)
-    private func pumpParser(_ chunk: Data) {
-        for event in parser.ingest(chunk) {
-            switch event {
-            case .ready:
-                Task { @MainActor in self.ready = true; self.pump() }
-            case .replyDelta(let text):
-                // throttle UI hops to ~12/s (tokens arrive every ~19 ms)
-                let now = ContinuousClock.now
-                guard now - lastPartialEmit > .milliseconds(80) else { continue }
-                lastPartialEmit = now
-                Task { @MainActor in self.emitPartial(text) }
-            case .turnComplete(let text):
-                Task { @MainActor in self.completeTurn(text) }
+        guard ready, inflightTurn == nil, let turn = pending.last else { return }
+        if let prefix = turn.prefix, let slot = Self.prefixSlot[turn.lang],
+           !registeredPrefixes.contains(turn.lang), !disabledPrefixes.contains(turn.lang) {
+            guard registeringPrefixes.insert(turn.lang).inserted else { return }
+            broker.registerPrefix(client: clientID, slot: slot, text: prefix) { [weak self] ok in
+                guard let self else { return }
+                self.registeringPrefixes.remove(turn.lang)
+                if ok { self.registeredPrefixes.insert(turn.lang) }
+                else { self.disabledPrefixes.insert(turn.lang) }
+                self.pump()
             }
+            return
         }
+        _ = pending.popLast()
+        inflightTurn = turn
+        let wirePrompt: String
+        if let body = turn.body, let slot = Self.prefixSlot[turn.lang], registeredPrefixes.contains(turn.lang) {
+            wirePrompt = "%%TRN \(slot) \(body)"
+        } else {
+            wirePrompt = turn.prompt
+        }
+        broker.submit(client: clientID, prompt: wirePrompt, priority: .committedCaption,
+            onPartial: { [weak self] text in
+                guard let self else { return }
+                let now = ContinuousClock.now
+                guard now - self.lastPartialEmit > .milliseconds(80) else { return }
+                self.lastPartialEmit = now
+                self.emitPartial(text)
+            }, completion: { [weak self] text in self?.completeTurn(text ?? "") })
+        reportQueue()
     }
 
     private func emitPartial(_ text: String) {
@@ -193,6 +193,7 @@ final class TranslateEngine {
                 // different greedy trajectory); same-prompt retries are no-ops.
                 pending.append(Turn(id: turn.id, lang: turn.lang, source: turn.source,
                                     prompt: Self.prompt(for: turn.lang, text: turn.source, variant: true),
+                                    prefix: nil, body: nil,
                                     retries: turn.retries - 1))
             }
             return   // retry pending, or suppress the echo

@@ -29,6 +29,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Engine/EngineProtocol.swift
   "$APP_DIR"/Sovereign/Engine/EngineProcess.swift
   "$APP_DIR"/Sovereign/Engine/PreviewEngine.swift
+  "$APP_DIR"/Sovereign/Engine/DNAEngineBroker.swift
   "$APP_DIR"/Sovereign/Engine/TranslateStreamParser.swift
   "$APP_DIR"/Sovereign/Engine/TranslateEngine.swift
   "$APP_DIR"/Sovereign/Engine/SummaryEngine.swift

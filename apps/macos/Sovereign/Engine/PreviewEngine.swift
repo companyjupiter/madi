@@ -16,7 +16,9 @@ final class PreviewEngine: EngineProcessDelegate {
 
     private var engine: EngineProcess?
     private var ready = false
-    private var queued: URL?       // a preview that arrived before the engine was ready
+    private var admitted = true
+    private var inFlight = false
+    private var latest: URL?       // latest-only: supersedes stale pre-ready/busy previews
     private var building = ""      // words of the preview currently streaming in
 
     /// `lang` FORCES the preview language (token id). Critical: previews decode
@@ -27,6 +29,7 @@ final class PreviewEngine: EngineProcessDelegate {
         guard engine == nil else { return }
         var c = base
         c.diarize = false; c.osd = false; c.voiceprintsDir = nil; c.fileURL = nil
+        c.encoderF16Cache = false
         if let l = lang { c.languageTokenID = l }
         let e = EngineProcess(config: c)
         e.delegate = self
@@ -35,35 +38,55 @@ final class PreviewEngine: EngineProcessDelegate {
     }
 
     func feed(wav: URL) {
-        guard let e = engine else { return }
-        if ready { e.feed(offset: 0, wav: wav) } else { queued = wav }
+        guard engine != nil else { return }
+        latest = wav
+        pump()
+    }
+
+    /// Main transcription and DNA captions have admission priority. While they
+    /// are busy we retain only the newest preview; reopening the gate decodes
+    /// that snapshot instead of replaying a stale FIFO.
+    func setAdmitted(_ value: Bool) {
+        admitted = value
+        pump()
+    }
+
+    private func pump() {
+        guard ready, admitted, !inFlight, let wav = latest, let engine else { return }
+        latest = nil
+        inFlight = true
+        building = ""
+        engine.feed(offset: 0, wav: wav)
     }
 
     func stop() {
         engine?.terminate()
-        engine = nil; ready = false; building = ""; queued = nil
+        engine = nil; ready = false; admitted = true; inFlight = false
+        building = ""; latest = nil
     }
 
     // MARK: EngineProcessDelegate
     func engineDidBecomeReady() {
         ready = true
-        if let w = queued { queued = nil; engine?.feed(offset: 0, wav: w) }
+        pump()
     }
     func engine(didEmit event: EngineEvent) {
         switch event {
         case .wordSectionBegin:
-            // a new preview's words are about to stream — publish the previous
-            // preview's COMPLETE text now (flicker-free: never shows a half cue).
-            if !building.isEmpty { onText?(building) }
-            building = ""
+            break
         case .word(_, _, let text, _):
             let t = text.trimmingCharacters(in: .whitespaces)
             if t.isEmpty { break }
             if !building.isEmpty, t.first.map({ !",.!?…".contains($0) }) ?? true { building += " " }
             building += t
-        default: break   // SPK/SEG_END/perf noise — ignored for previews
+        case .segmentEnd:
+            if !building.isEmpty { onText?(building) }
+            building = ""
+            inFlight = false
+            pump()
+        default: break
         }
     }
     func engineDidFlush() {}
-    func engine(didTerminate code: Int32) { ready = false }
+    func engine(didTerminate code: Int32) { ready = false; inFlight = false }
 }

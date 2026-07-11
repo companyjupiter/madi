@@ -134,10 +134,9 @@ final class SessionController: EngineProcessDelegate {
     private(set) var translateBacklog = 0
     /// Post-stop backfill in progress: lines still being re-translated after the
     /// live cap shed them. Drives the ".done · 채우는 중 N줄" HUD, and gates the
-    /// 8GB summary engine (which evicts translate) until backfill drains.
+    /// Shared DNA broker serves these ahead of post-session summary work.
     private var backfillPendingIDs: Set<UUID> = []
     private(set) var backfillRemaining = 0
-    private var summaryDeferredForBackfill = false
     /// Wall-clock of the last committed line — the commit-cadence ring reads it
     /// against effectiveWindowSeconds to show progress toward the next commit (D19).
     private(set) var lastCommitAt = Date()
@@ -294,6 +293,14 @@ final class SessionController: EngineProcessDelegate {
     private var interimGen = 0
     private static let interimID = UUID()
     private let preview = PreviewEngine()
+    private var dnaBusy = false
+
+    /// GPU admission order: committed Whisper > DNA caption > throwaway preview.
+    /// PreviewEngine itself is latest-only, so closing this gate never grows a
+    /// stale queue; the newest open-window snapshot runs when both priorities drain.
+    private func updatePreviewAdmission() {
+        preview.setAdmitted(segmentsInFlight == 0 && !dnaBusy)
+    }
 
     /// Live translation TARGETS — a set of English language NAMES
     /// ("Korean"/"Chinese"/"Japanese"/"English"); empty = off. Each committed
@@ -377,17 +384,11 @@ final class SessionController: EngineProcessDelegate {
         transcript.lines.map { "\(speakerNames[$0.speaker] ?? "화자\($0.speaker)"): \($0.text)" }
     }
 
-    /// Spawn the DNA3 engine for meeting intelligence (summary + Q&A), kept resident
-    /// so follow-up questions don't reload the 2.6 GB model. Frees the translate
-    /// engine first (one model resident at a time; summary/Q&A are post-session).
+    /// Attach meeting intelligence to the shared resident DNA3 broker. Translation,
+    /// rail, summary and Q&A serialize onto one model/process at every RAM tier.
     private func ensureSummaryEngine() -> SummaryEngine? {
         guard let eng = AssetManifest.translateEngineURL, AssetManifest.translateModelIsValid() else { return nil }
         if summaryEngine == nil {
-            // One-model-resident is a MEMORY constraint, not a hard rule: on ≥16GB
-            // (where the live action rail runs) two DNA3 instances + Whisper fit, so
-            // KEEP the translate engine alive — otherwise the rail's 18s summary tick
-            // would kill+reload translation every cycle, starving live captions.
-            if !Self.liveRailCapable { translate?.stop(); translate = nil }
             let s = SummaryEngine()
             s.onResult = { [weak self] tag, text in
                 guard let self else { return }
@@ -652,14 +653,8 @@ final class SessionController: EngineProcessDelegate {
                        self.lineHash(line.text) != self.lineHash(source) { return }
                     self.transcript.setTranslation(id, lang: lang, text)
                     // Backfill progress: this shed line is filled — count it down.
-                    // When backfill drains, run the 8GB summary that was deferred so
-                    // it wouldn't evict the translate engine mid-backfill.
                     if self.backfillPendingIDs.remove(id) != nil {
                         self.backfillRemaining = self.backfillPendingIDs.count
-                        if self.backfillRemaining == 0, self.summaryDeferredForBackfill {
-                            self.summaryDeferredForBackfill = false
-                            self.startPostSessionSummary()
-                        }
                     }
                     // T1 carryover teardown: the real translation replaced the
                     // provisional interim caption for the freshest content.
@@ -680,8 +675,12 @@ final class SessionController: EngineProcessDelegate {
                 }
             }
             // queue depth (D20) — the engine reports queued + in-flight turns.
-            t.onQueueChange = { [weak self] depth in self?.translateQueueDepth = depth }
-            _ = t.start(engine: eng, model: AssetManifest.translateModelURL)
+            t.onQueueChange = { [weak self] depth in
+                guard let self else { return }
+                self.translateQueueDepth = depth
+                self.updatePreviewAdmission()
+            }
+            guard t.start(engine: eng, model: AssetManifest.translateModelURL) else { return nil }
             translate = t
         }
         return translate
@@ -1039,7 +1038,8 @@ final class SessionController: EngineProcessDelegate {
             vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
             streamWavRoots: [capture.segmentDirectory],
             langCandidates: langCandidatePair,
-            anchorVoiceprints: !langCandidatePair.isEmpty && hasEnrolledVoiceprints)
+            anchorVoiceprints: !langCandidatePair.isEmpty && hasEnrolledVoiceprints,
+            encoderF16Cache: ProcessInfo.processInfo.physicalMemory >= 24 * (1 << 30))
     }
 
     /// Any enrolled .vec voiceprints on disk? (S1 anchor precondition)
@@ -1132,7 +1132,7 @@ final class SessionController: EngineProcessDelegate {
         livePartial = ""; livePartialTranslations = [:]
         streamingTranslation = nil; translateQueueDepth = 0
         backlogLineIDs.removeAll(); translateBacklog = 0
-        backfillPendingIDs.removeAll(); backfillRemaining = 0; summaryDeferredForBackfill = false
+        backfillPendingIDs.removeAll(); backfillRemaining = 0
         segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
         stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0
         phase = .idle
@@ -1216,6 +1216,11 @@ final class SessionController: EngineProcessDelegate {
         translatedHash.removeAll()
         interimCache.clear()
         clearSummary()
+        DNAEngineBroker.shared.onBusyChange = { [weak self] busy in
+            guard let self else { return }
+            self.dnaBusy = busy
+            self.updatePreviewAdmission()
+        }
         streamingTranslation = nil; translateQueueDepth = 0; lastCommitAt = Date()
         segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
         // T11 prewarm: spawn the translate engine during the dead time between
@@ -1251,6 +1256,7 @@ final class SessionController: EngineProcessDelegate {
             self.segmentAudio.append((offset, url))   // retain for AI re-transcription
             self.segQueue.append(SegJob(offset: offset, url: url, hadSpeech: hadSpeech, retried: false, fedAt: Date()))
             self.segmentsInFlight = self.segQueue.count
+            self.updatePreviewAdmission()
             self.engine?.feed(offset: offset, wav: url)
         }
         capture.onLevel = { [weak self] lvl in
@@ -1468,6 +1474,7 @@ final class SessionController: EngineProcessDelegate {
             }
             wordsSinceSegStart = 0
             segmentsInFlight = segQueue.count
+            updatePreviewAdmission()
         case .partial(_, let text):
             // in-decode hypothesis of the closed segment — better context than
             // the preview engine's text and converges to the committed line, so
@@ -1541,19 +1548,13 @@ final class SessionController: EngineProcessDelegate {
         stopLiveCoach(); recomputeCoach()   // stop the 1Hz loop, snapshot the final transcript once
         calendar.matchToSpeakers(speakerNames)   // attendee ↔ speaker match + 결석 flag
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
-        // 8GB: ensureSummaryEngine() evicts the translate engine, discarding any
-        // in-flight backfill turns (data loss). Defer the summary until backfill
-        // drains (onResult restarts it). 16GB keeps both resident → run now.
-        if backfillRemaining > 0, !Self.liveRailCapable {
-            summaryDeferredForBackfill = true
-        } else {
-            startPostSessionSummary()
-        }
+        // Broker priority keeps backfill captions ahead of post-session work,
+        // without a second process or an 8GB-specific reload/deferral path.
+        startPostSessionSummary()
         kickReconcile()   // opt-in: LLM reviews speaker/language after the session
     }
 
-    /// Post-session AI title + summary. Split out so the 8GB backfill path can
-    /// defer it until the translate engine is done (it would otherwise be evicted).
+    /// Post-session AI title + summary. Broker priority keeps it below captions.
     private func startPostSessionSummary() {
         // DNA3가 이미 뜨므로 제목도 생성해 파일명을 AI 제목으로 승격(rename).
         if autoSaveEnabled, autoSaveSummary, fileName.isEmpty, let s = ensureSummaryEngine() {

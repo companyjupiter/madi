@@ -70,6 +70,13 @@ pub const Layer = struct {
     m0_b: [*]f32,
     m2_w: Q8, // [D][MLP]
     m2_b: [*]f32,
+    // Optional high-memory performance cache in Metal GEMM [K][N] layout.
+    q_f16: ?[*]f16 = null,
+    k_f16: ?[*]f16 = null,
+    v_f16: ?[*]f16 = null,
+    o_f16: ?[*]f16 = null,
+    m0_f16: ?[*]f16 = null,
+    m2_f16: ?[*]f16 = null,
 };
 
 /// Scratch (F16 activations), sized for M = batch_count * ENC_SEQ.
@@ -157,6 +164,29 @@ fn kCvt(K: Kernels, dst: [*]f32, src: [*]f16, n: u32) !void {
     try mtl.dispatch(K.cvt, .{ (n + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
 }
 
+/// Expand encoder Q8 weights once for the 24GB+ performance mode (~1.25GB).
+pub fn cacheWeights(K: Kernels, layers: []Layer) !void {
+    const d2 = @as(usize, D) * D;
+    const dnb = @as(usize, D) / 32;
+    for (layers) |*L| {
+        L.q_f16 = (try mtl.allocSlice(f16, d2)).ptr;
+        L.k_f16 = (try mtl.allocSlice(f16, d2)).ptr;
+        L.v_f16 = (try mtl.allocSlice(f16, d2)).ptr;
+        L.o_f16 = (try mtl.allocSlice(f16, d2)).ptr;
+        L.m0_f16 = (try mtl.allocSlice(f16, @as(usize, MLP) * D)).ptr;
+        L.m2_f16 = (try mtl.allocSlice(f16, @as(usize, MLP) * D)).ptr;
+        try mtl.beginCommandBuffer();
+        try kDeq(K, L.q_f16.?, L.qkv_w, D, D);
+        try kDeq(K, L.k_f16.?, .{ .qs = L.qkv_w.qs + d2, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
+        try kDeq(K, L.v_f16.?, .{ .qs = L.qkv_w.qs + 2 * d2, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+        try kDeq(K, L.o_f16.?, L.o_w, D, D);
+        try kDeq(K, L.m0_f16.?, L.m0_w, MLP, D);
+        try kDeq(K, L.m2_f16.?, L.m2_w, D, MLP);
+        try mtl.commitCommandBuffer();
+        try mtl.sync();
+    }
+}
+
 /// Run the encoder. `x` (F32 residual, pos-emb already added) in/out; final
 /// ln_post written F16 into `out_f16` then converted to F32 `enc_out`.
 /// One batched command buffer per layer, single sync at the layer boundary.
@@ -194,19 +224,19 @@ pub fn forward(
         // while it is cache-hot (MPS + separate bias_add_f16 = an extra full
         // M×D memory pass each); ENC_M4=0 reverts to MPS.
         if (K.m4_bias) |m4b| {
-            try kDeq(K, s.wdq, L.qkv_w, D, D);
-            try kM4Bias(m4b, s.x_ln, s.wdq, q, L.q_b, M, D, D);
-            try kDeq(K, s.wdq2, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
-            try kM4Bias(m4b, s.x_ln, s.wdq2, k, L.k_b, M, D, D);
-            try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
-            try kM4Bias(m4b, s.x_ln, s.wdq, v, L.v_b, M, D, D);
+            if (L.q_f16 == null) try kDeq(K, s.wdq, L.qkv_w, D, D);
+            try kM4Bias(m4b, s.x_ln, L.q_f16 orelse s.wdq, q, L.q_b, M, D, D);
+            if (L.k_f16 == null) try kDeq(K, s.wdq2, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
+            try kM4Bias(m4b, s.x_ln, L.k_f16 orelse s.wdq2, k, L.k_b, M, D, D);
+            if (L.v_f16 == null) try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+            try kM4Bias(m4b, s.x_ln, L.v_f16 orelse s.wdq, v, L.v_b, M, D, D);
         } else {
-            try kDeq(K, s.wdq, L.qkv_w, D, D);
-            try mtl.matmulF16Batched(s.x_ln, s.wdq, q, M, D, D);
-            try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
-            try mtl.matmulF16Batched(s.x_ln, s.wdq, k, M, D, D);
-            try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
-            try mtl.matmulF16Batched(s.x_ln, s.wdq, v, M, D, D);
+            if (L.q_f16 == null) try kDeq(K, s.wdq, L.qkv_w, D, D);
+            try mtl.matmulF16Batched(s.x_ln, L.q_f16 orelse s.wdq, q, M, D, D);
+            if (L.k_f16 == null) try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
+            try mtl.matmulF16Batched(s.x_ln, L.k_f16 orelse s.wdq, k, M, D, D);
+            if (L.v_f16 == null) try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+            try mtl.matmulF16Batched(s.x_ln, L.v_f16 orelse s.wdq, v, M, D, D);
             try kBias(K, q, L.q_b, M * D, D);
             try kBias(K, k, L.k_b, M * D, D);
             try kBias(K, v, L.v_b, M * D, D);
@@ -215,26 +245,26 @@ pub fn forward(
             const off = bi * seq * D;
             try kFlash(K, s.ao + off, q + off, k + off, v + off, seq);
         }
-        try kDeq(K, s.wdq, L.o_w, D, D);
+        if (L.o_f16 == null) try kDeq(K, s.wdq, L.o_w, D, D);
         if (K.m4_nn) |m4| {
-            try kM4(m4, s.ao, s.wdq, s.mo, M, D, D);
+            try kM4(m4, s.ao, L.o_f16 orelse s.wdq, s.mo, M, D, D);
         } else {
-            try mtl.matmulF16Batched(s.ao, s.wdq, s.mo, M, D, D);
+            try mtl.matmulF16Batched(s.ao, L.o_f16 orelse s.wdq, s.mo, M, D, D);
         }
         try kBRLN(K, x, s.mo, L.o_b, s.x_ln, L.mln_w, L.mln_b, D, M);
-        try kDeq(K, s.wdq, L.m0_w, MLP, D);
+        if (L.m0_f16 == null) try kDeq(K, s.wdq, L.m0_w, MLP, D);
         if (K.m4_bias_gelu) |m4bg| {
-            try kM4Bias(m4bg, s.x_ln, s.wdq, s.mh, L.m0_b, M, MLP, D);
+            try kM4Bias(m4bg, s.x_ln, L.m0_f16 orelse s.wdq, s.mh, L.m0_b, M, MLP, D);
         } else {
-            try mtl.matmulF16Batched(s.x_ln, s.wdq, s.mh, M, MLP, D);
+            try mtl.matmulF16Batched(s.x_ln, L.m0_f16 orelse s.wdq, s.mh, M, MLP, D);
             try kBias(K, s.mh, L.m0_b, M * MLP, MLP);
             try kGelu(K, s.mh, M * MLP);
         }
-        try kDeq(K, s.wdq2, L.m2_w, D, MLP);
+        if (L.m2_f16 == null) try kDeq(K, s.wdq2, L.m2_w, D, MLP);
         if (K.m4_nn) |m4| {
-            try kM4(m4, s.mh, s.wdq2, s.mo, M, D, MLP);
+            try kM4(m4, s.mh, L.m2_f16 orelse s.wdq2, s.mo, M, D, MLP);
         } else {
-            try mtl.matmulF16Batched(s.mh, s.wdq2, s.mo, M, D, MLP);
+            try mtl.matmulF16Batched(s.mh, L.m2_f16 orelse s.wdq2, s.mo, M, D, MLP);
         }
         if (li + 1 < layers.len) {
             try kBRLN(K, x, s.mo, L.m2_b, s.x_ln, layers[li + 1].aln_w, layers[li + 1].aln_b, D, M);
