@@ -119,6 +119,9 @@ struct ContentView: View {
             // layout, which drew an old-looking name + separator line.)
             w.titleVisibility = .hidden
             w.titlebarAppearsTransparent = true
+            // Kill the automatic hairline macOS draws under the titlebar when
+            // content scrolls (the intermittent "bottom border" below the header).
+            w.titlebarSeparatorStyle = .none
             syncWindowMode()
         })
         .onChange(of: showSetToStart) { _, _ in syncWindowMode() }
@@ -179,6 +182,11 @@ struct ContentView: View {
         frame.origin.y = vis.midY - frameSize.height / 2
         frame.size = frameSize
         w.setFrame(frame, display: true, animate: animate)
+        // Re-assert the clean titlebar: mutating styleMask above resets these,
+        // which is why the header separator kept coming back on layout switch.
+        w.titleVisibility = .hidden
+        w.titlebarAppearsTransparent = true
+        w.titlebarSeparatorStyle = .none
     }
 
     // The pre-start "Set to start" screen (Figma 113:391) shows only while nothing
@@ -545,8 +553,11 @@ struct ContentView: View {
                 .foregroundStyle(session.captionOverlayOn ? Theme.Colors.accent : Theme.Colors.textSecondary)
                 .help(session.captionOverlayOn ? "자막 오버레이 끄기" : "자막 오버레이 — 화면 위 실시간 번역 자막 창")
             }
-            // C18: chat layout toggle (two-party only)
-            if twoSpeakers {
+            // C18: chat layout toggle (two-party only) — hidden from the toolbar
+            // (the 말풍선 icon). The .chat mode still exists in code but isn't
+            // exposed here; flip `showChatToggle` to restore it.
+            let showChatToggle = false
+            if showChatToggle, twoSpeakers {
                 Button { chatLayout.toggle() } label: {
                     Image(systemName: chatLayout ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
                         .font(.system(size: 12))
