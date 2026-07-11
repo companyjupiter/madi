@@ -113,6 +113,12 @@ struct ContentView: View {
         }
         .background(WindowAccessor { w in
             if appWindow !== w { appWindow = w }
+            // Clean unified titlebar: no title text, no divider — the traffic
+            // lights float over the content and the in-content wordmark is the
+            // only branding. (Was .titleBar with a visible title in the working
+            // layout, which drew an old-looking name + separator line.)
+            w.titleVisibility = .hidden
+            w.titlebarAppearsTransparent = true
             syncWindowMode()
         })
         .onChange(of: showSetToStart) { _, _ in syncWindowMode() }
@@ -158,14 +164,13 @@ struct ContentView: View {
             w.styleMask.remove(.resizable)
             w.contentMinSize = content
             w.contentMaxSize = content
-            w.titleVisibility = .hidden
         } else {
-            // Expanded working layout — free resize again.
+            // Expanded working layout — free resize again. (Title stays hidden /
+            // titlebar transparent — set once in WindowAccessor, not per mode.)
             w.styleMask.insert(.resizable)
             w.contentMinSize = NSSize(width: 760, height: 520)
             w.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             content = NSSize(width: min(1150, vis.width - 60), height: min(710, vis.height - 60))
-            w.titleVisibility = .visible
         }
         let frameSize = w.frameRect(forContentRect: NSRect(origin: .zero, size: content)).size
         var frame = w.frame
@@ -1147,11 +1152,11 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity).frame(height: 125)
             .background(
+                // Match the 재생/멈춤 controls: shadow only, no outline.
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Theme.Colors.surface)
                     .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
             )
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.Colors.separator, lineWidth: 1))
         } else {
             // Before upload (Figma 216:1827): dashed box, folder-plus prompt + pill.
             VStack(spacing: 12) {
@@ -1273,7 +1278,7 @@ struct ContentView: View {
                     totalTimeBlock
                         .padding(.top, 18)
                     if !session.transcript.lines.isEmpty {
-                        speakerSequenceBar.padding(.top, 20)
+                        speakerSequenceBar.padding(.top, 16)
                         speakerShareList.padding(.top, 18)
                     }
                     Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
@@ -1410,11 +1415,11 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity).frame(height: 118)
         .background(
+            // Match the 재생/멈춤 controls: shadow only, no outline.
             RoundedRectangle(cornerRadius: 8)
                 .fill(Theme.Colors.surface)
                 .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
         )
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.Colors.separator, lineWidth: 1))
         .confirmationDialog("저장되지 않은 기록이 있어요", isPresented: $showDiscardConfirm, titleVisibility: .visible) {
             Button("삭제하고 닫기", role: .destructive) { session.reset() }
             Button("취소", role: .cancel) {}
@@ -1521,10 +1526,9 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity).frame(height: 106)
         .background(
+            // Match the 재생/멈춤 controls + file cards: shadow only, no outline.
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Theme.Colors.surface)
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Theme.Colors.separator, lineWidth: 1))
                 .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
         )
     }
