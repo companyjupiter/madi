@@ -46,7 +46,7 @@ enum WorkspaceRetrieval {
             guard let parsed = TranscriptArchive.parse(url) else { continue }   // skip unparseable
             let meeting = url.deletingPathExtension().lastPathComponent
             for (i, line) in parsed.lines.enumerated() {
-                let who = parsed.names[line.speaker] ?? "화자\(line.speaker)"
+                let who = SpeakerID.display(line.speaker, names: parsed.names, fallback: "화자\(line.speaker)")
                 let text = "\(who): \(line.text)"
                 let s = scoreLine(text)
                 if s > 0 { candidates.append(Scored(meeting: meeting, order: i, text: text, score: s)) }

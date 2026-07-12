@@ -19,7 +19,9 @@ struct ContentView: View {
     // C18: opt-in two-party chat layout (staff left / patient right). Only
     // meaningful with exactly two speakers — the toggle hides otherwise.
     @AppStorage("transcriptChatLayout") private var chatLayout = false
-    private var twoSpeakers: Bool { Set(session.transcript.lines.map { $0.speaker }).count == 2 }
+    // The Unknown bucket is not a conversational party — a 2-speaker chat with a
+    // rare 미확인 interjection still counts as two-party.
+    private var twoSpeakers: Bool { Set(session.transcript.lines.map { $0.speaker }).subtracting([SpeakerID.unknown]).count == 2 }
     private var viewMode: TranscriptViewMode {
         if chatLayout && twoSpeakers { return .chat }
         return contentMode ? .content : .detailed
@@ -1615,7 +1617,7 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(Theme.Colors.speakerGradient(entry.key))
                         .frame(width: max(4, avail * CGFloat(entry.value / total)))
-                        .help("\(session.speakerNames[entry.key] ?? "Speaker \(entry.key + 1)") · \(Int((entry.value / total * 100).rounded()))%")
+                        .help("\(SpeakerID.display(entry.key, names: session.speakerNames, fallback: "Speaker \(entry.key + 1)")) · \(Int((entry.value / total * 100).rounded()))%")
                 }
             }
             .animation(.snappy(duration: 0.35), value: total)
@@ -1634,7 +1636,7 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     HStack(spacing: 6) {
                         Circle().fill(Theme.Colors.speaker(entry.key)).frame(width: 6, height: 6)
-                        Text(session.speakerNames[entry.key] ?? "Speaker \(entry.key + 1)")
+                        Text(SpeakerID.display(entry.key, names: session.speakerNames, fallback: "Speaker \(entry.key + 1)"))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Theme.Colors.textPrimary)
                             .lineLimit(1)

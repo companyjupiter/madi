@@ -175,7 +175,7 @@ struct CaptionView: View {
     private func speakerTag(_ id: Int) -> some View {
         HStack(spacing: 5) {
             Circle().fill(Theme.Colors.speaker(id)).frame(width: 8, height: 8)
-            Text(session.speakerNames[id] ?? "화자 \(id)")
+            Text(SpeakerID.display(id, names: session.speakerNames, fallback: "화자 \(id)"))
                 .font(.system(size: transFont * 0.42, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
         }

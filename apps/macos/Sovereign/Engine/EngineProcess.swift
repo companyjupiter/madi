@@ -36,6 +36,12 @@ final class EngineProcess {
         var osd = true
         var languageTokenID: Int?   // nil = auto
         var maxSpeakers = 8
+        /// FIXED speaker count (화자 N명 고정). nil = auto (silhouette). When set,
+        /// the engine clusters to EXACTLY this many speakers (no auto-K, no K=1
+        /// collapse) and routes acoustically-distant windows to a single Unknown
+        /// bucket (DIAR_K env). Distinct from `maxSpeakers` (DIAR_MAXK = the auto
+        /// upper bound). Was never wired → "2명 고정" behaved as "up to 2, auto".
+        var fixedK: Int?
         var vadProb: Double?        // per-speaker-count Silero gate; nil = engine default 0.5
         var voiceprintsDir: URL?
         var streamWavRoots: [URL] = []
@@ -68,6 +74,10 @@ final class EngineProcess {
         env["OSD"] = config.osd ? "1" : "0"
         if config.encoderF16Cache { env["ENC_F16_CACHE"] = "1" }
         env["DIAR_MAXK"] = String(config.maxSpeakers)
+        // FIXED-K (화자 N명 고정): set BEFORE the file/stream branch so it reaches
+        // both native FILE mode (diarizeEmb) and live STREAM mode (liveRecluster).
+        // Unset = auto-K. This is the fix for "화자 고정해도 자동 분리".
+        if let k = config.fixedK { env["DIAR_K"] = String(k) }
         // per-speaker-count speech-gate optimum (bench/VAD_TUNING.md)
         if let p = config.vadProb { env["VAD_PROB"] = String(format: "%.2f", p) }
         if let lang = config.languageTokenID { env["WHISPER_LANG_ID"] = String(lang) }

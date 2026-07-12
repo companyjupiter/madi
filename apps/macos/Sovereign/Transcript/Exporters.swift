@@ -15,10 +15,10 @@ enum Exporters {
         }
         s += "> *기울임* 표시된 단어는 인식 신뢰도가 낮습니다 — 검토 권장.\n\n"
         for l in lines {
-            let who = names[l.speaker] ?? "Speaker \(l.speaker)"
+            let who = SpeakerID.display(l.speaker, names: names, fallback: "Speaker \(l.speaker)")
             let body = renderWords(l.words)
             let mark = l.overlapSpeakers
-                .map { " ⟨+\(names[$0] ?? "Speaker \($0)") 겹침⟩" }
+                .map { " ⟨+\(SpeakerID.display($0, names: names, fallback: "Speaker \($0)")) 겹침⟩" }
                 .joined()
             s += "- **[\(timecode(l.start))] \(who)** \(body)\(mark)\n"
         }
@@ -41,7 +41,7 @@ enum Exporters {
     static func plainText(_ lines: [Line], names: [Int: String] = [:]) -> String {
         var s = ""
         for l in lines {
-            let who = names[l.speaker] ?? "Speaker \(l.speaker)"
+            let who = SpeakerID.display(l.speaker, names: names, fallback: "Speaker \(l.speaker)")
             s += "[\(timecode(l.start))] \(who): \(l.text)\n"
         }
         return s
@@ -54,7 +54,7 @@ enum Exporters {
         let segs: [[String: Any]] = lines.map { l in
             [
                 "speaker": l.speaker,
-                "name": names[l.speaker] ?? "Speaker \(l.speaker)",
+                "name": SpeakerID.display(l.speaker, names: names, fallback: "Speaker \(l.speaker)"),
                 "start": l.start, "end": l.end,
                 "text": l.text,
                 "overlap_speakers": l.overlapSpeakers,
@@ -64,7 +64,7 @@ enum Exporters {
         var times: [Int: Double] = [:]
         for l in lines { times[l.speaker, default: 0] += max(0, l.end - l.start) }
         let speakers: [[String: Any]] = times.sorted { $0.value > $1.value }.map {
-            ["speaker": $0.key, "name": names[$0.key] ?? "Speaker \($0.key)", "talk_seconds": $0.value]
+            ["speaker": $0.key, "name": SpeakerID.display($0.key, names: names, fallback: "Speaker \($0.key)"), "talk_seconds": $0.value]
         }
         var root: [String: Any] = ["segments": segs, "speakers": speakers]
         if settings.fillers {
@@ -137,7 +137,7 @@ enum Exporters {
             let words = l.words.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
             if words.isEmpty { continue }
             let prefix = (label && l.speaker != prevSpeaker)
-                ? "\(names[l.speaker] ?? "Speaker \(l.speaker)"): " : ""
+                ? "\(SpeakerID.display(l.speaker, names: names, fallback: "Speaker \(l.speaker)")): " : ""
             var pending: [Word] = []
             var firstCue = true
 

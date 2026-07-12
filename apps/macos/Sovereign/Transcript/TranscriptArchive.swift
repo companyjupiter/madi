@@ -69,7 +69,12 @@ enum TranscriptArchive {
         var nextNamed = maxReserved + 1
         for who in whoOrder {
             let r = NSRange(who.startIndex..<who.endIndex, in: who)
-            if let sm = speakerN.firstMatch(in: who, range: r),
+            if who == SpeakerID.unknownLabel {
+                // Round-trip the Unknown bucket back to its reserved id — do NOT
+                // allocate it a named-speaker id or put it in `names` (it must
+                // render via the shared helper, stay un-nameable/un-enrollable).
+                idForWho[who] = SpeakerID.unknown
+            } else if let sm = speakerN.firstMatch(in: who, range: r),
                let nr = Range(sm.range(at: 1), in: who), let n = Int(who[nr]) {
                 idForWho[who] = n
             } else {
