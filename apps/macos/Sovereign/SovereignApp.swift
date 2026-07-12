@@ -33,11 +33,13 @@ struct SovereignApp: App {
     @State private var session = SessionController()
     @State private var translateDownloader = TranslateModelDownloader()
     @State private var dictation = DictationController()
+    @State private var betaGate = BetaGate()
+    @State private var updateChecker = UpdateChecker()
     @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some Scene {
         WindowGroup("Madi") {
-            ContentView(session: session, downloader: downloader)
+            ContentView(session: session, downloader: downloader, betaGate: betaGate)
                 .preferredColorScheme(appearance.colorScheme)
                 .task { downloader.ensureModel() }
                 .task { dictation.micBusy = { session.phase == .recording || session.phase == .paused } }
@@ -48,16 +50,37 @@ struct SovereignApp: App {
         .windowResizability(.automatic)
         .defaultSize(width: 500, height: 900)
         .commands {
-            // Replace the empty default Help menu with a link to the bundled
-            // user manual (sealed into Resources/manual/ by make_app.sh).
+            // Replace the empty default Help menu: bundled user manual +
+            // update / info (the latter two open dedicated windows).
             CommandGroup(replacing: .help) {
                 Button("Madi 사용자 매뉴얼") { Self.openManual() }
                     .keyboardShortcut("?", modifiers: .command)
+                Divider()
+                HelpMenuExtras()
             }
         }
 
+        // Info window (Help → 정보) — version, channel, beta lifecycle.
+        Window("Madi 정보", id: Self.infoWindowID) {
+            InfoView(betaGate: betaGate)
+                .preferredColorScheme(appearance.colorScheme)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+
+        // Update window (Help → 업데이트 설치) — GitHub Releases check + install.
+        Window("Madi 업데이트", id: Self.updateWindowID) {
+            UpdateView(checker: updateChecker)
+                .preferredColorScheme(appearance.colorScheme)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+
         Settings { SettingsView(session: session, downloader: downloader, translateDownloader: translateDownloader, dictation: dictation) }
     }
+
+    static let infoWindowID = "madi-info"
+    static let updateWindowID = "madi-update"
 
     /// Open the bundled, self-contained user manual (Resources/manual/index.html)
     /// in the default browser. Works fully offline.
@@ -65,5 +88,16 @@ struct SovereignApp: App {
         if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "manual") {
             NSWorkspace.shared.open(url)
         }
+    }
+}
+
+/// The two Help-menu items that open windows. Split into its own View so it can
+/// read `@Environment(\.openWindow)` (menu Buttons in `.commands` otherwise have
+/// no scene-opening environment).
+private struct HelpMenuExtras: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button("업데이트 설치…") { openWindow(id: SovereignApp.updateWindowID) }
+        Button("정보") { openWindow(id: SovereignApp.infoWindowID) }
     }
 }
