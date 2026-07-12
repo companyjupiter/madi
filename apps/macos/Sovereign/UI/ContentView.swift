@@ -9,7 +9,9 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Bindable var session: SessionController
     @Bindable var downloader: ModelDownloader
+    @Bindable var betaGate: BetaGate
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @State private var dropTargeted = false
     // Default to the clean reading view — general users just want the content.
     // The detailed (timecode + confidence + overlap) view is one tap away.
@@ -96,19 +98,32 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            switch downloader.state {
-            case .ready:
-                ZStack {
-                    if showSetToStart {
-                        setToStartCard
-                            .transition(.scale(scale: 0.96).combined(with: .opacity))
-                    } else {
-                        mainLayout
+            if betaGate.isExpired {
+                // Hard beta expiry: replace the whole session UI (same gating role
+                // as the model gate). The app genuinely stops working here.
+                ExpiredGateView()
+            } else {
+                switch downloader.state {
+                case .ready:
+                    ZStack {
+                        if showSetToStart {
+                            setToStartCard
+                                .transition(.scale(scale: 0.96).combined(with: .opacity))
+                        } else {
+                            VStack(spacing: 0) {
+                                if case .expiringSoon(let d) = betaGate.status {
+                                    BetaWarningBanner(daysLeft: d) {
+                                        openWindow(id: SovereignApp.updateWindowID)
+                                    }
+                                }
+                                mainLayout
+                            }
                             .transition(.opacity)
+                        }
                     }
+                    .animation(.snappy(duration: 0.32), value: showSetToStart)
+                default: ModelGateView(downloader: downloader)
                 }
-                .animation(.snappy(duration: 0.32), value: showSetToStart)
-            default: ModelGateView(downloader: downloader)
             }
         }
         .background(WindowAccessor { w in

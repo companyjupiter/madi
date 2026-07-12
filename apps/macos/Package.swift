@@ -18,6 +18,7 @@ let package = Package(
             name: "SovereignCore",
             path: "Sovereign",
             sources: [
+                "AppInfo/AppVersion.swift",
                 "Transcript/TranscriptStore.swift",
                 "Transcript/WordMerger.swift",
                 "Transcript/EditorCuts.swift",
