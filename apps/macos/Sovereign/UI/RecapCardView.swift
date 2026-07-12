@@ -58,7 +58,7 @@ struct RecapData {
         }
         let talk = secs
             .map { Talk(speaker: $0.key,
-                        name: names[$0.key] ?? "화자\($0.key)",
+                        name: SpeakerID.display($0.key, names: names, fallback: "화자\($0.key)"),
                         seconds: $0.value) }
             .sorted { $0.seconds > $1.seconds }
         let maxTalk = talk.map(\.seconds).max() ?? 0

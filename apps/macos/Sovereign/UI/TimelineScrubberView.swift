@@ -43,6 +43,7 @@ struct TimelineScrubberView: View {
     }
 
     private func speakerLabel(_ id: Int) -> String {
+        if id == SpeakerID.unknown { return SpeakerID.unknownLabel }
         if let n = speakerNames[id], !n.isEmpty { return n }
         return "화자 \(id + 1)"
     }

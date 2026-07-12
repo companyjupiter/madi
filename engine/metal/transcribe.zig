@@ -790,6 +790,10 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         if (new2stable[k] >= 0) {
             sidx = @intCast(new2stable[k]);
         } else {
+            // FIXED-K (화자 N명 고정): never mint a (N+1)th stable id — recluster
+            // may only REMAP the accumulated windows onto the diar_k ids, else a
+            // fixed 2명 session drifts to 3+ speakers over time.
+            if (fixed_k >= 1) continue;
             if (cnts[k] < min_sz or cents.items.len >= 32) continue;
             try cents.append(.{ .count = 0, .sum = [_]f32{0} ** diar.EMB });
             sidx = cents.items.len - 1;
@@ -1370,6 +1374,17 @@ pub fn main() !void {
                     }
                     const fix_ids = try alloc.alloc(i32, mwin);
                     defer alloc.free(fix_ids);
+                    // FIXED-K live Unknown: with online births + recluster capped at
+                    // diar_k (born_cap + write-back block), the N centroids are the N
+                    // fixed speakers; a window whose best cosine to ALL of them is
+                    // below DIAR_UNK_THR matches none → single Unknown bucket (only if
+                    // >= DIAR_UNK_MIN such windows, mirroring file mode).
+                    const live_do_unk = diar_k >= 1 and !std.mem.eql(u8, std.posix.getenv("DIAR_UNK") orelse "1", "0");
+                    const live_unk_thr = envF("DIAR_UNK_THR", 0.35);
+                    const live_unk_min = envU("DIAR_UNK_MIN", 3);
+                    const wbest = try alloc.alloc(f32, mwin); defer alloc.free(wbest);
+                    const wmar = try alloc.alloc(f32, mwin); defer alloc.free(wmar);
+                    var n_unk: usize = 0;
                     for (0..mwin) |i| {
                         const v = live_emb.items[i * diar.EMB ..][0 .. diar.EMB];
                         var best: f32 = -2;
@@ -1381,7 +1396,14 @@ pub fn main() !void {
                             if (dt > best) { second = best; best = dt; bs = sidx; } else if (dt > second) second = dt;
                         }
                         fix_ids[i] = @intCast(bs);
-                        try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(bs), if (nc >= 2) best - second else 1.0);
+                        wbest[i] = best;
+                        wmar[i] = if (nc >= 2) best - second else 1.0;
+                        if (live_do_unk and best < live_unk_thr) n_unk += 1;
+                    }
+                    const emit_unk = live_do_unk and n_unk >= live_unk_min;
+                    for (0..mwin) |i| {
+                        if (emit_unk and wbest[i] < live_unk_thr) fix_ids[i] = DIAR_UNK_ID;
+                        try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(fix_ids[i]), wmar[i]);
                     }
                     // overlap rows for the saved transcript: same local-track
                     // identity as diarizeEmb, against the RELABELED windows
@@ -1606,7 +1628,12 @@ pub fn main() !void {
                         // (new speakers enter via the next k-means auto-K bump)
                         // 앵커 모드: recl_done 후에도 출생 허용 — 봉쇄하면 늦게
                         // 등장한 앵커-근접 화자가 앵커에 흡수·명명된다 (engine-diar-1)
-                        const eff_max: u32 = if (recl_done and n_anchor == 0) @intCast(cents.items.len) else diar_max;
+                        // FIXED-K: cap online births at the fixed count (+ enrolled
+                        // anchors, which hold slots but still need room for the N
+                        // conversational speakers), so a 2명 session never shows 8
+                        // transient speakers before the first recluster.
+                        const born_cap: u32 = if (diar_k >= 1) @max(diar_k, @as(u32, @intCast(n_anchor))) else diar_max;
+                        const eff_max: u32 = if (recl_done and n_anchor == 0) @intCast(cents.items.len) else born_cap;
                         const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
                         const spk = ar.id;
                         // far-field silence inside the 1.5 s grid window was
@@ -2400,6 +2427,91 @@ fn silhouetteSimplified(X: []const f32, m: usize, segd: usize, asg: []const usiz
     return @floatCast(sil / @as(f64, @floatFromInt(m)));
 }
 
+// Reserved speaker id for the single "Unknown" (미확인) bucket used ONLY in
+// fixed-K mode: a rare acoustically-distinct extra voice that matches none of the
+// N fixed speakers. Must be POSITIVE (file mode treats spk<0 as non-speech) and
+// >= 16 (the OSD votes[.][16] `g<16` guards silently drop it so Unknown never
+// becomes an overlap target) and <= 255 (fits the live_ids u8 clamp). Shared
+// verbatim with the app (Swift SpeakerID.unknown). 255 satisfies all three.
+const DIAR_UNK_ID: i32 = 255;
+
+// Fixed-K clustering WITH a single "Unknown" bucket (화자 N명 고정 + 미확인).
+// Naive k-means at K=N mis-seeds under farthest-point init: the most-distant
+// outlier seeds cent[1], so "2 near voices A,B + 1 distinct C" collapses to
+// {A∪B} vs {C} — the inverse of what the user wants. Fix: cluster at N+1 so the
+// outlier gets its OWN cluster, keep the N most-POPULOUS clusters as the fixed
+// speakers (the main conversation), and route the single leftover cluster to
+// Unknown IFF it is both sizeable (>= DIAR_UNK_MIN windows) AND acoustically
+// distinct from every kept speaker (max centroid cos-sim < DIAR_UNK_THR). A
+// leftover that is just an over-split sub-cluster of a real voice is highly
+// similar to a kept centroid → folded back in (protects clean N-speaker files
+// from false Unknown). Fills asg[i] in 0..N-1 (real) + unk[i]=true for Unknown;
+// keeping N clusters guarantees the "min N real speakers" floor (Unknown can only
+// ever come from the (N+1)th cluster). Returns the real speaker count.
+fn assignFixedKUnknown(X: []const f32, m: usize, segd: usize, N: usize, asg: []usize, unk: []bool) !usize {
+    @memset(unk, false);
+    // too few windows to spare an outlier cluster → plain fixed-K, no Unknown
+    if (m <= N + 1 or N < 1) {
+        const K = @max(@min(N, m), 1);
+        try kmeansFit(X, m, segd, K, asg);
+        return K;
+    }
+    // cos-sim floor: a leftover cluster below this to EVERY kept speaker is "a
+    // different voice". 0.35 sits just under the online-birth bar DIAR_SIM=0.40
+    // and well above the ~0.27 cross-speaker centroid floor, so only a genuinely
+    // unmodeled voice is flagged; a swept 0.30–0.45 shows zero false Unknown on
+    // clean 1/2-speaker audio. Tune DOWN (stricter) if over-flagging appears.
+    const unk_thr = envF("DIAR_UNK_THR", 0.35);
+    const unk_min = envU("DIAR_UNK_MIN", 3); // min windows to materialize Unknown (mirrors min_sz=3 / OSD ≥3-frame trust)
+    const Kp = N + 1;
+    const a2 = try alloc.alloc(usize, m); defer alloc.free(a2);
+    try kmeansFit(X, m, segd, Kp, a2);
+    // mean UNIT-centroid direction + window count per cluster
+    const mu = try alloc.alloc(f32, Kp * segd); defer alloc.free(mu);
+    const cnt = try alloc.alloc(usize, Kp); defer alloc.free(cnt);
+    @memset(mu, 0); @memset(cnt, 0);
+    for (0..m) |i| { cnt[a2[i]] += 1; for (0..segd) |j| mu[a2[i] * segd + j] += X[i * segd + j]; }
+    for (0..Kp) |c| {
+        var s: f32 = 0; for (0..segd) |j| s += mu[c * segd + j] * mu[c * segd + j];
+        const inv = 1.0 / (@sqrt(s) + 1e-9);
+        for (0..segd) |j| mu[c * segd + j] *= inv;
+    }
+    // rank clusters by size desc (selection sort — Kp is tiny)
+    const order = try alloc.alloc(usize, Kp); defer alloc.free(order);
+    for (0..Kp) |c| order[c] = c;
+    for (0..Kp) |i| {
+        var mx = i;
+        for (i + 1..Kp) |j| if (cnt[order[j]] > cnt[order[mx]]) { mx = j; };
+        const t = order[i]; order[i] = order[mx]; order[mx] = t;
+    }
+    const leftover = order[N]; // smallest cluster
+    const c2real = try alloc.alloc(i32, Kp); defer alloc.free(c2real);
+    for (0..Kp) |c| c2real[c] = -1;
+    for (0..N) |r| c2real[order[r]] = @intCast(r);
+    // leftover distinctness: max cos-sim of its centroid to any KEPT centroid
+    var lmax: f32 = -2;
+    for (0..N) |r| {
+        var dot: f32 = 0;
+        for (0..segd) |j| dot += mu[leftover * segd + j] * mu[order[r] * segd + j];
+        if (dot > lmax) lmax = dot;
+    }
+    const leftoverUnknown = cnt[leftover] >= unk_min and lmax < unk_thr;
+    for (0..m) |i| {
+        const c = a2[i];
+        if (c2real[c] >= 0) { asg[i] = @intCast(c2real[c]); continue; }
+        if (leftoverUnknown) { unk[i] = true; asg[i] = 0; continue; }
+        // not distinct enough → fold leftover window into its nearest kept speaker
+        var best: f32 = -2; var br: usize = 0;
+        for (0..N) |r| {
+            var dot: f32 = 0;
+            for (0..segd) |j| dot += X[i * segd + j] * mu[order[r] * segd + j];
+            if (dot > best) { best = dot; br = r; }
+        }
+        asg[i] = br;
+    }
+    return N;
+}
+
 // Global speaker diarization on 256-d ResNet34 speaker embeddings. Pipeline:
 // relative energy VAD → L2-normalize → k-means (K = `diar_k`, deterministic
 // farthest-point init) → merge consecutive same-speaker segments → timeline +
@@ -2429,11 +2541,20 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
 
     // Choose K: fixed (diar_k≥1) or auto via simplified-silhouette over 2..maxK.
     const asg = try alloc.alloc(usize, m); defer alloc.free(asg);
+    const unk = try alloc.alloc(bool, m); defer alloc.free(unk);
+    @memset(unk, false);
     var K: usize = undefined;
     var ev_sil: f32 = 0; var ev_sep: f32 = 2; var ev_tau: f32 = 0; // for the structured diar event
     if (diar_k >= 1) {
-        K = @min(@as(usize, diar_k), m);
-        try kmeansFit(X, m, segd, K, asg);
+        // Fixed-K: cluster to EXACTLY N speakers (no auto-K, no tau/MIN_SEP
+        // collapse), routing a rare distinct extra voice to a single Unknown
+        // bucket. Env DIAR_UNK=0 disables Unknown (plain fixed-K fallback).
+        if (std.mem.eql(u8, std.posix.getenv("DIAR_UNK") orelse "1", "0")) {
+            K = @min(@as(usize, diar_k), m);
+            try kmeansFit(X, m, segd, K, asg);
+        } else {
+            K = try assignFixedKUnknown(X, m, segd, @min(@as(usize, diar_k), m), asg, unk);
+        }
     } else {
         // windows-per-speaker floor: a K-speaker split needs ≥DIAR_KWIN
         // windows each on average — silhouette happily splits a 14-window
@@ -2472,6 +2593,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
     for (0..K) |i| remap[i] = -1;
     var nspk: i32 = 0;
     for (0..m) |i| {
+        if (unk[i]) { spk[keep[i]] = DIAR_UNK_ID; continue; } // Unknown bucket — bypass remap, excluded from nspk
         const c = asg[i];
         if (remap[c] < 0) { remap[c] = nspk; nspk += 1; }
         spk[keep[i]] = remap[c];
@@ -2571,6 +2693,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
                         break;
                     }
                 }
+                if (prim == DIAR_UNK_ID) prim = -1; // Unknown never gets overlap attribution
                 if (prim >= 0) { // a 2nd speaker only ON TOP of an asserted 1st
                     if (ga >= 0 and ga != prim) sec = ga;
                     if (gb >= 0 and gb != prim and (sec < 0 or ga == prim)) sec = gb;

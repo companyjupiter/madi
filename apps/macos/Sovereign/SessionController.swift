@@ -381,7 +381,7 @@ final class SessionController: EngineProcessDelegate {
     private var reconcileIsMid = false
 
     private var attributedLines: [String] {
-        transcript.lines.map { "\(speakerNames[$0.speaker] ?? "화자\($0.speaker)"): \($0.text)" }
+        transcript.lines.map { "\(SpeakerID.display($0.speaker, names: speakerNames, fallback: "화자\($0.speaker)")): \($0.text)" }
     }
 
     /// Attach meeting intelligence to the shared resident DNA3 broker. Translation,
@@ -985,6 +985,8 @@ final class SessionController: EngineProcessDelegate {
     /// back to "Speaker N". Naming also ENROLLS the voiceprint so the voice is
     /// recognized in future sessions (if the engine dumped this session's centroid).
     func renameSpeaker(_ id: Int, to name: String) {
+        // The Unknown bucket (미확인) is not a person: never name or enroll it.
+        guard id != SpeakerID.unknown else { return }
         let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty { speakerNames[id] = nil; pendingEnrollment.remove(id: id); autoRecognizedSpeakers.remove(id); return }
         speakerNames[id] = t
@@ -1035,6 +1037,7 @@ final class SessionController: EngineProcessDelegate {
             assetsDir: AssetManifest.bundledAssetsDir,
             diarize: diarize, osd: osd,
             languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers,
+            fixedK: speakerCount.fixedK,
             vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
             streamWavRoots: [capture.segmentDirectory],
             langCandidates: langCandidatePair,
@@ -1650,7 +1653,7 @@ final class SessionController: EngineProcessDelegate {
         })
         let numbered = TranscriptReconciler.promptInput(
             lines: lines.map { (speaker: $0.speaker, text: $0.text) },
-            speakerName: { [weak self] in self?.speakerNames[$0] ?? "화자 \($0)" },
+            speakerName: { [weak self] in SpeakerID.display($0, names: self?.speakerNames ?? [:], fallback: "화자 \($0)") },
             uncertain: uncertain)
         s.reconcile(numbered: numbered)
     }
@@ -1663,7 +1666,10 @@ final class SessionController: EngineProcessDelegate {
         let mid = reconcileIsMid
         guard let reply else { if !mid { reconcileNote = nil }; return }
         let snapshot = reconcileSnapshot
-        let speakers = Set(transcript.lines.map(\.speaker))
+        // Exclude the Unknown bucket: the on-device LLM reconciler must never
+        // MERGE/RELABEL 미확인 into (or out of) a real speaker — its guard is
+        // set-membership on the numeric id, not the display name.
+        let speakers = Set(transcript.lines.map(\.speaker)).subtracting([SpeakerID.unknown])
         // S3 fusion gate: RELABEL is only accepted for acoustically-uncertain
         // lines (margin < threshold at snapshot indices, resolved to live lines).
         var allowed = Set<Int>()
@@ -1879,6 +1885,18 @@ enum SpeakerCount: Int, CaseIterable, Identifiable {
     var maxSpeakers: Int {
         switch self {
         case .auto, .fourPlus: return 8   // no tight cap — let the engine detect
+        case .one:             return 1
+        case .two:             return 2
+        case .three:           return 3
+        }
+    }
+    /// FIXED speaker count passed to the engine as DIAR_K. nil ⇒ auto-K
+    /// (silhouette). A concrete N ⇒ cluster to EXACTLY N speakers + at most one
+    /// "Unknown" bucket for acoustically-distant windows. 자동/4명 이상 stay auto;
+    /// 1/2/3명 are hard-fixed (fixes "화자 고정해도 자동 분리").
+    var fixedK: Int? {
+        switch self {
+        case .auto, .fourPlus: return nil
         case .one:             return 1
         case .two:             return 2
         case .three:           return 3

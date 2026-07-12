@@ -825,7 +825,7 @@ struct TranscriptView: View {
 
     // "Speaker N" (1-based) matches the redesign's side-panel share list, so the
     // same person carries one label across transcript and stats.
-    private func name(_ id: Int) -> String { names[id] ?? "Speaker \(id + 1)" }
+    private func name(_ id: Int) -> String { SpeakerID.display(id, names: names, fallback: "Speaker \(id + 1)") }
     private func timecode(_ t: Double) -> String {
         // Figma 258:1122: always hh:mm:ss ("00:00:00")
         let s = Int(t)

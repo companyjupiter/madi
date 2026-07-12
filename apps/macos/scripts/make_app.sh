@@ -45,6 +45,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Model/ModelDownloader.swift
   "$APP_DIR"/Sovereign/Model/TranslateModelDownloader.swift
   "$APP_DIR"/Sovereign/Model/WorkspaceTree.swift
+  "$APP_DIR"/Sovereign/Transcript/SpeakerID.swift
   "$APP_DIR"/Sovereign/Transcript/WordMerger.swift
   "$APP_DIR"/Sovereign/Transcript/TranscriptStore.swift
   "$APP_DIR"/Sovereign/Transcript/EditorCuts.swift
