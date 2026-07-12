@@ -175,7 +175,7 @@ struct WorkspaceExplorer: View {
                 Button("변경") { chooseFolder() }
                     .buttonStyle(.plain)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.Colors.accent)
+                    .foregroundStyle(Theme.Colors.textPrimary)   // de-accent
             }
             exportButton
         }

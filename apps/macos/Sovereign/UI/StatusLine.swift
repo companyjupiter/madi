@@ -111,14 +111,15 @@ struct StatusLineView: View {
 /// real gradient behind the glyph shapes, so all three stops always show.
 struct GradientText: View {
     let text: String
-    init(_ text: String) { self.text = text }
+    var font: Font
+    init(_ text: String, font: Font = StatusArea.warnFont) { self.text = text; self.font = font }
 
     var body: some View {
         // `base` is drawn hidden (for layout size) and reused as the mask, so the
         // visible gradient is clipped to exactly these glyphs. monospacedDigit:
         // the "N구간 · M회" counters change every commit — fixed-width digits keep
         // the row (and the trailing dots/chevron) from twitching sideways.
-        let base = Text(text).font(StatusArea.warnFont).tracking(-0.28).monospacedDigit()
+        let base = Text(text).font(font).tracking(-0.28).monospacedDigit()
         base
             .hidden()
             .overlay { StatusArea.warnGradient.mask(base) }

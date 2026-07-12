@@ -39,6 +39,7 @@ enum EnergyArc {
         var speech = [Double](repeating: 0, count: n)   // seconds of speech in bucket
         var overlap = [Double](repeating: 0, count: n)  // overlap-weighted speech events
         var turns = [Double](repeating: 0, count: n)    // rapid speaker hand-offs (back-and-forth)
+        var words = [Double](repeating: 0, count: n)    // word onsets (speech-rate signal)
 
         // Turn-taking energy: a speaker change with only a short gap is lively
         // discussion; the SAME density of continuous monologue is not — so a
@@ -59,6 +60,16 @@ enum EnergyArc {
             // Overlap weight: each concurrent extra speaker adds a flat boost.
             let ovBoost = Double(l.overlapSpeakers.count)
 
+            // Speech-rate signal: word onsets per bucket. Density alone is
+            // binary (talking → 1, silence → 0), which rendered the graph as
+            // all-or-nothing columns; the words-per-second rate varies WITHIN
+            // continuous speech (fast argument vs. slow reading), giving the
+            // midtones the sparkline was missing.
+            for w in l.words where w.t0 >= t0 && w.t0 < t1 {
+                let b = min(max(Int((w.t0 - t0) / bucketDur), 0), n - 1)
+                words[b] += 1
+            }
+
             // Distribute this line's duration across the buckets it spans.
             var lo = Int((s - t0) / bucketDur)
             var hi = Int((e - t0) / bucketDur)
@@ -75,19 +86,65 @@ enum EnergyArc {
             }
         }
 
-        // Per-bucket raw score: speaking density + rapid turn-taking + overlap.
-        // Silence is implicit — a bucket with little speech scores low.
+        // Per-bucket raw score: speaking density + speech rate + rapid
+        // turn-taking + overlap. Silence is implicit — little speech, low score.
+        // Density's weight is deliberately below ½: it saturates the moment
+        // anyone talks, so letting it dominate made every speech bucket
+        // identical. Rate/turns/overlap carry the variation.
         var raw = [Double](repeating: 0, count: n)
         for b in 0..<n {
             let density = min(1.0, speech[b] / bucketDur)             // 0 = silent
+            let rate = min(1.0, (words[b] / bucketDur) / 3.5)         // ~3.5 wps = full
             let turnNorm = min(1.0, turns[b] / 2.0)                   // 2+ hand-offs = full
             let ov = bucketDur > 0 ? min(1.0, overlap[b] / bucketDur) : 0
-            raw[b] = 0.55 * density + 0.30 * turnNorm + 0.15 * ov
+            raw[b] = 0.40 * density + 0.25 * rate + 0.22 * turnNorm + 0.13 * ov
         }
 
-        // Normalize to 0...1 by the busiest bucket so the arc fills the gamut.
+        // Normalize by the busiest bucket, then lift the midtones (γ 0.75):
+        // an ordinary talking bucket should read as a mid column, not as
+        // either a floor dot or a full spike. Preserves 0→0, peak→1, order.
         let peak = raw.max() ?? 0
         guard peak > 0 else { return raw }   // all-silent → all zeros
-        return raw.map { min(1.0, max(0.0, $0 / peak)) }
+        return raw.map { pow(min(1.0, max(0.0, $0 / peak)), 0.75) }
+    }
+
+    /// Per-bucket speaker mix for the dot-color dithering: who spoke in each
+    /// time bin, as (speaker, share) pairs. Same span/bucket math as compute()
+    /// so column i of the energy sparkline and mix[i] describe the SAME slice
+    /// of the meeting. Trimmed to the top-2 speakers per bucket (a 3rd color in
+    /// a ~10-dot column is noise) and renormalized to sum 1; a silent bucket
+    /// yields [].
+    static func speakerShares(lines: [Line], buckets: Int = 30,
+                              spanEnd: Double? = nil) -> [[(speaker: Int, share: Double)]] {
+        let n = max(1, buckets)
+        guard !lines.isEmpty else { return [] }
+        let t0 = lines.map(\.start).min() ?? 0
+        let t1 = max(lines.map(\.end).max() ?? 0, spanEnd ?? 0)
+        let span = t1 - t0
+        guard span > 0 else { return [] }
+        let bucketDur = span / Double(n)
+        guard bucketDur > 0 else { return [] }
+
+        var secs = [[Int: Double]](repeating: [:], count: n)
+        for l in lines {
+            let s = max(t0, l.start)
+            let e = min(t1, l.end)
+            guard e > s else { continue }
+            var lo = Int((s - t0) / bucketDur)
+            var hi = Int((e - t0) / bucketDur)
+            lo = min(max(lo, 0), n - 1)
+            hi = min(max(hi, 0), n - 1)
+            for b in lo...hi {
+                let bStart = t0 + Double(b) * bucketDur
+                let covered = min(e, bStart + bucketDur) - max(s, bStart)
+                if covered > 0 { secs[b][l.speaker, default: 0] += covered }
+            }
+        }
+        return secs.map { dict in
+            let top = dict.sorted { $0.value > $1.value }.prefix(2)
+            let total = top.reduce(0) { $0 + $1.value }
+            guard total > 0 else { return [] }
+            return top.map { (speaker: $0.key, share: $0.value / total) }
+        }
     }
 }
