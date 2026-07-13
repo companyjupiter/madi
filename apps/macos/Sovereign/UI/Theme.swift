@@ -44,7 +44,15 @@ enum Theme {
         })
         static let separator = Color(nsColor: .separatorColor)
         static let textPrimary = Color(nsColor: .labelColor)
-        static let textSecondary = Color(nsColor: .secondaryLabelColor)
+        // Figma's textsecondary token is #3C3C43 at 60% — the system
+        // secondaryLabelColor renders darker (0,0,0,0.5) in light mode, so
+        // override light with the literal token; dark keeps the system value.
+        static let textSecondary = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor.secondaryLabelColor
+                : NSColor(red: 60 / 255, green: 60 / 255, blue: 67 / 255, alpha: 0.6)
+        })
         static let textTertiary = Color(nsColor: .tertiaryLabelColor)
         static let overlapMarker = Color(red: 0.9490, green: 0.6000, blue: 0.2902, opacity: 1.0)
         static let lowConf = Color(red: 0.8510, green: 0.5137, blue: 0.1412, opacity: 1.0)

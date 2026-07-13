@@ -176,14 +176,13 @@ struct ContentView: View {
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let content: NSSize
         if setup {
-            // Fixed frame — the card IS the window (Figma rev.2 is a wide
-            // two-column card). Matches the expanded working-layout size below
-            // so 시작하기 doesn't resize the window, just swaps the content.
-            // Title text hidden so the wordmark in the content reads as branding.
+            // The card IS the window (Figma rev.4 wide two-column card), but
+            // free to resize — the content block centers itself both ways
+            // (setToStartCard's GeometryReader), so stretching just adds margin.
             content = NSSize(width: min(1150, vis.width - 60), height: min(710, vis.height - 60))
-            w.styleMask.remove(.resizable)
-            w.contentMinSize = content
-            w.contentMaxSize = content
+            w.styleMask.insert(.resizable)
+            w.contentMinSize = NSSize(width: 980, height: 640)
+            w.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         } else {
             // Expanded working layout — free resize again. (Title stays hidden /
             // titlebar transparent — set once in WindowAccessor, not per mode.)
@@ -760,40 +759,70 @@ struct ContentView: View {
     private static let dropZoneGray = Theme.Colors.textSecondary // file-size subtitle / drop icon
     private static let controlSubtle = Theme.Colors.surfaceSunken // sunken control fill (파일 선택 pill)
 
-    // Two-column "Set to start" (Figma 246:749): left = wordmark + tagline up
-    // top with 최근 항목 anchored below | divider | 시작하기 (language dropdowns +
-    // chips + file + horizontal CTA pair). The language dropdown panels float in
-    // a ZStack layer above the columns, positioned by measured pill frames.
+    // "Set to start" rev.4 (Figma 246:749): wordmark + tagline up top, then two
+    // columns — 회의 정보 (language/mode/speaker knobs) | divider | 시작하기
+    // (file drop + start CTAs + mic picker). The language dropdown panels float
+    // in a ZStack layer above the columns, positioned by measured pill frames.
     private var setToStartCard: some View {
+        // GeometryReader + minHeight keeps the whole block centered BOTH ways as
+        // the window grows, while the ScrollView still kicks in when it shrinks.
+        GeometryReader { geo in
         ScrollView(.vertical, showsIndicators: false) {
             ZStack(alignment: .topLeading) {
-                HStack(alignment: .top, spacing: 77) {
-                    leftColumn
-                    Rectangle().fill(Theme.Colors.surfaceSunken)
-                        .frame(width: 1).frame(maxHeight: .infinity)
-                    startColumn
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 60).padding(.bottom, 40)
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header (Figma 246:801/800) — leading-aligned with the
+                    // 회의 정보 column below.
+                    BrandLogo(width: 126)
+                    Text("녹음하면 회의가 글이 되고, 실시간으로 번역돼요. 모두 이 Mac 안에서")
+                        .font(Theme.Fonts.startTagline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)   // wrap to 2 lines
+                        .frame(width: 380, alignment: .leading)
+                        .padding(.top, 12)
 
-                // Click-away layer + the floating dropdown panel (must be ZStack
-                // siblings so the panel stays clickable above the catcher).
+                    HStack(alignment: .top, spacing: 77) {
+                        meetingInfoColumn
+                        Rectangle().fill(Theme.Colors.surfaceSunken)
+                            .frame(width: 1).frame(maxHeight: .infinity)
+                        startColumn
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 110)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+                // Extra bottom margin: the header-heavy layout reads as sitting
+                // low when geometrically centered, so bias the block upward.
+                .padding(.bottom, 100)
+            }
+            // Click-away layer + floating dropdown panel as OVERLAYS: they draw
+            // above the card without contributing to its layout size (as ZStack
+            // children they inflated it, shoving the centered content upward).
+            // Later overlay wins hit-testing, so the panel stays clickable.
+            .overlay(alignment: .topLeading) {
                 if openLangDropdown != nil {
                     Color.black.opacity(0.001)
                         .contentShape(Rectangle())
                         .onTapGesture { openLangDropdown = nil }
-                        .zIndex(40)
                 }
+            }
+            .overlay(alignment: .topLeading) {
                 if let which = openLangDropdown, let f = langPillFrames[which] {
                     langDropdownPanel(which)
                         .frame(width: f.width)
                         .offset(x: f.minX, y: f.maxY + 4)
-                        .zIndex(50)
                 }
             }
             .coordinateSpace(name: "startCard")
             .onPreferenceChange(LangPillFrameKey.self) { langPillFrames = $0 }
+            // Fill the viewport so the (default-center) frame alignment centers
+            // the content vertically; dropdown offsets stay ZStack-relative.
+            .frame(maxWidth: .infinity, minHeight: geo.size.height)
+        }
+        // macOS 26 draws a hard scroll-edge hairline where content passes under
+        // the transparent titlebar — reads as a header divider here; suppress.
+        .modifier(HideTopScrollEdgeHairline())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.surface)
@@ -803,84 +832,127 @@ struct ContentView: View {
         } isTargeted: { dropTargeted = $0 }
     }
 
-    // Left column (Figma 246:749): wordmark + tagline up top, 최근 항목 anchored
-    // to the bottom so the list's last row lines up with the CTA row across the
-    // divider. (The 자동저장/폴더 block moved out — those controls live in the
-    // right explorer panel during a session.)
-    private var leftColumn: some View {
+    // Left column (Figma 463:2864): 회의 정보 — the language/mode/speaker knobs,
+    // moved here so 시작하기 keeps only the actual start actions. (최근 항목 left
+    // this screen in the rev.4 redesign.)
+    private var meetingInfoColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
-            BrandLogo(width: 126)
-            Text("녹음하면 회의가 글이 되고, 실시간으로 번역돼요. 모두 이 Mac 안에서")
-                .font(Theme.Fonts.startTagline)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .lineSpacing(4)
-                .frame(width: 272, alignment: .leading)
-                .padding(.top, 12)
-            Spacer(minLength: 40)
-            Text("최근 항목")
-                .font(Theme.Fonts.startHeader).foregroundStyle(Theme.Colors.textPrimary)
-            VStack(spacing: 18) {
-                if recentTranscripts.isEmpty {
-                    // Empty first-run: an onboarding nudge, not dead text —
-                    // reclaims the left half and points to where to begin.
-                    VStack(spacing: 8) {
-                        SVGIcon(name: "content", size: 28, tint: Theme.Colors.textTertiary)
-                        Text("아직 회의록이 없어요")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                        Text("오른쪽에서 녹음을 시작하면 여기에 쌓여요")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(Theme.Colors.textTertiary)
-                    }
-                    .frame(maxWidth: .infinity)
-                } else {
-                    ForEach(recentTranscripts, id: \.url) { item in
-                        Button { session.openArchived(item.url) } label: {
-                            HStack(spacing: 8) {
-                                SVGIcon(name: "content", size: 16)
-                                Text(item.url.lastPathComponent)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                    .lineLimit(1).truncationMode(.middle)
-                                Spacer(minLength: 8)
-                                Text(relativeAge(item.date))
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .padding(.top, 28)
-        }
-        .frame(width: 318)
-        .frame(maxHeight: .infinity, alignment: .top)
-    }
-
-    private var startColumn: some View {
-        VStack(alignment: .leading, spacing: 40) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("시작하기")
+                Text("회의 정보")
                     .font(Theme.Fonts.startHeader).foregroundStyle(Theme.Colors.textPrimary)
                 Text("회의 정보를 설정하면 더 정확한 결과를 얻을 수 있어요")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
+            VStack(alignment: .leading, spacing: 18) {
+                languageRow
+                setupBlock("회의 모드") { meetingChips }
+                setupBlock("화자") { speakerChips }
+            }
+            .padding(.top, 22)
+        }
+        .frame(width: 380)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    // Right column (Figma 246:750): 시작하기 — file drop + 파일로 시작하기, an
+    // "or" hairline, then mic picker + 지금 녹음 시작 side by side.
+    private var startColumn: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("시작하기")
+                    .font(Theme.Fonts.startHeader).foregroundStyle(Theme.Colors.textPrimary)
+                Text("오디오, 비디오 파일을 선택하거나 지금 바로 녹음을 시작해 보세요")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 20) {
-                    languageRow
-                    setupBlock("회의 모드") { meetingChips }
-                    setupBlock("화자") { speakerChips }
-                    setupBlock("파일 선택", optional: true) { setupDropZone }
+            VStack(alignment: .leading, spacing: 8) {
+                setupDropZone
+                setupCTA("파일로 시작하기", enabled: stagedFile != nil) {
+                    if let u = stagedFile { stagedFile = nil; session.transcribeFile(u) }
                 }
-                ctaButtons
+                orDivider
+                    .padding(.vertical, 2)
+                HStack(spacing: 4) {
+                    micPicker
+                    setupCTA("지금 녹음 시작", enabled: stagedFile == nil) {
+                        session.startCountdown()
+                    }
+                }
             }
         }
-        .frame(width: 318)
+        .frame(width: 380)
+    }
+
+    // Figma 463:2932 — hairline · or · hairline between the two start paths.
+    private var orDivider: some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(Theme.Colors.surfaceSunken)
+                .frame(height: 1).frame(maxWidth: .infinity)
+            Text("or")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Rectangle().fill(Theme.Colors.surfaceSunken)
+                .frame(height: 1).frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 2)
+    }
+
+    /// Mic device rows for the custom dropdown panels — same visual language as
+    /// the language dropdowns (check row, closes on pick). Selection routes
+    /// through setInputDevice so a live session hot-swaps.
+    @ViewBuilder private var micPanelRows: some View {
+        langCheckRow("시스템 기본", checked: session.inputDeviceID == nil, dimmed: false) {
+            session.setInputDevice(nil); openLangDropdown = nil
+        }
+        ForEach(session.availableInputs) { dev in
+            langCheckRow(dev.name, checked: session.inputDeviceID == dev.id, dimmed: false) {
+                session.setInputDevice(dev.id); openLangDropdown = nil
+            }
+        }
+    }
+
+    // Mic input picker (Figma 463:2851): which device 지금 녹음 시작 captures.
+    // Opens the shared custom dropdown panel (id "mic") like the language pills.
+    private var micPicker: some View {
+        Button {
+            openLangDropdown = (openLangDropdown == "mic") ? nil : "mic"
+        } label: {
+            HStack(spacing: 4) {
+                Text(micLabel)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .rotationEffect(.degrees(openLangDropdown == "mic" ? 180 : 0))
+            }
+            .padding(.leading, 22).padding(.trailing, 16)
+            .frame(width: 200, height: 40)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .background(Capsule().fill(Theme.Colors.surface))
+        // Outline unified with the 회의 정보 pills (surfaceSunken, not meterTrack).
+        .overlay(Capsule().strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
+        .help("녹음에 사용할 마이크")
+        .background(GeometryReader { g in
+            Color.clear.preference(key: LangPillFrameKey.self,
+                                   value: ["mic": g.frame(in: .named("startCard"))])
+        })
+    }
+
+    /// Collapsed mic label: the chosen device, else the system default's name.
+    private var micLabel: String {
+        let inputs = session.availableInputs
+        if let id = session.inputDeviceID,
+           let d = inputs.first(where: { $0.id == id }) { return d.name }
+        if let def = AudioDevices.defaultInputID,
+           let d = inputs.first(where: { $0.id == def }) { return d.name }
+        return "시스템 기본"
     }
 
     // 인풋(단일)·아웃풋(멀티 체크박스) 언어 드롭다운 한 줄 (Figma 246:756 +
@@ -892,7 +964,7 @@ struct ContentView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text("번역 언어")
+                Text("출력 언어")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -906,33 +978,6 @@ struct ContentView: View {
                     .help(AssetManifest.translateAvailable ? "" : "번역 모델이 필요해요 — 설정 › 번역")
             }
         }
-    }
-
-    /// Newest transcripts across the whole workspace tree, for the 최근 항목
-    /// column. Modification date (not name) orders them; capped at 5.
-    private var recentTranscripts: [(url: URL, date: Date)] {
-        var mds: [URL] = []
-        func walk(_ nodes: [FileNode]) {
-            for n in nodes {
-                if let kids = n.children { walk(kids) }
-                else if n.isTranscript { mds.append(n.url) }
-            }
-        }
-        walk(session.workspace.nodes)
-        let fm = FileManager.default
-        let dated: [(url: URL, date: Date)] = mds.compactMap { u in
-            guard let d = (try? fm.attributesOfItem(atPath: u.path))?[.modificationDate] as? Date
-            else { return nil }
-            return (url: u, date: d)
-        }
-        return Array(dated.sorted { $0.date > $1.date }.prefix(5))
-    }
-
-    private func relativeAge(_ d: Date) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "ko_KR")
-        f.unitsStyle = .short
-        return f.localizedString(for: d, relativeTo: Date())
     }
 
     // MARK: language dropdowns (Figma 247:555)
@@ -1014,7 +1059,7 @@ struct ContentView: View {
                     .rotationEffect(.degrees(openLangDropdown == id ? 180 : 0))
             }
             .padding(.leading, 14).padding(.trailing, 12)
-            .frame(height: 30)
+            .frame(height: 34)   // +2px top/bottom — closes the gap to the mic pill
             .background(Capsule().fill(Theme.Colors.surface))
             .overlay(Capsule().strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
             .contentShape(Capsule())
@@ -1033,7 +1078,9 @@ struct ContentView: View {
     @ViewBuilder
     private func langDropdownPanel(_ which: String) -> some View {
         VStack(spacing: 0) {
-            if which == "input" {
+            if which == "mic" || which == "side-mic" {
+                micPanelRows
+            } else if which == "input" {
                 ForEach(Self.inputLangOptions, id: \.label) { opt in
                     Button { setLanguage(opt.id) } label: {
                         HStack {
@@ -1178,7 +1225,7 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .padding(.top, 9).padding(.trailing, 11)
             }
-            .frame(maxWidth: .infinity).frame(height: 125)
+            .frame(maxWidth: .infinity).frame(height: 85)
             .background(
                 // Match the 재생/멈춤 controls: shadow only, no outline.
                 RoundedRectangle(cornerRadius: 8)
@@ -1186,22 +1233,21 @@ struct ContentView: View {
                     .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
             )
         } else {
-            // Before upload (Figma 216:1827): dashed box, folder-plus prompt + pill.
-            VStack(spacing: 12) {
+            // Before upload (Figma 463:2912): compact dashed strip — the whole
+            // zone is the picker button ("파일 선택 or 드래그 앤 드롭").
+            Button { chooseStagedFile() } label: {
                 VStack(spacing: 4) {
                     SVGIcon(name: "folder-plus", size: 24)
-                    Text("파일 드래그 앤 드롭")
+                        .opacity(0.6)
+                    Text("파일 선택 or 드래그 앤 드롭")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.Colors.textPrimary)
                 }
-                Button { chooseStagedFile() } label: {
-                    Text("파일 선택")
-                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
-                        .padding(.horizontal, 14).padding(.vertical, 6)
-                        .background(Capsule().fill(Self.controlSubtle))
-                }.buttonStyle(.plain).disabled(!canDrop)
+                .frame(maxWidth: .infinity).frame(height: 85)
+                .contentShape(RoundedRectangle(cornerRadius: 12))
             }
-            .frame(maxWidth: .infinity).frame(height: 125)
+            .buttonStyle(.plain)
+            .disabled(!canDrop)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(dropTargeted ? Theme.Colors.accent : Self.dashBorder,
@@ -1219,21 +1265,9 @@ struct ContentView: View {
         return String(format: "%.1fM", Double(bytes) / (1024 * 1024))
     }
 
-    // Figma 246:797 CTA: the two starts sit SIDE BY SIDE (h40, gap 8), both ink
-    // pills; whichever can't start right now renders on the muted track fill so
-    // exactly one reads as "press this". (The design's 10% ghost swallowed the
-    // white label — meterTrack keeps it legible, per earlier QA.)
-    private var ctaButtons: some View {
-        HStack(spacing: 8) {
-            setupCTA("파일로 시작하기", enabled: stagedFile != nil) {
-                if let u = stagedFile { stagedFile = nil; session.transcribeFile(u) }
-            }
-            setupCTA("지금 녹음 시작", enabled: stagedFile == nil) {
-                session.startCountdown()
-            }
-        }
-    }
-
+    // Figma 246:797 CTA pills (h40). Whichever can't start right now renders on
+    // the muted track fill so exactly one reads as "press this". (The design's
+    // 10% ghost swallowed the white label — meterTrack keeps it legible.)
     private func setupCTA(_ title: String, enabled: Bool, _ action: @escaping () -> Void) -> some View {
         Button { if enabled { action() } } label: {
             Text(title)
@@ -1298,6 +1332,13 @@ struct ContentView: View {
             bigControls
                 .padding(.horizontal, 16).padding(.top, 16)
 
+            // Input-mic row (Figma 470:3074): visible during a live mic session
+            // so the device can be swapped WITHOUT stopping the recording.
+            if micRowVisible {
+                micRow
+                    .padding(.horizontal, 16).padding(.top, 16)
+            }
+
             Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
                 .padding(.horizontal, 16).padding(.top, 22)
 
@@ -1346,6 +1387,70 @@ struct ContentView: View {
         .shadow(color: .black.opacity(0.03), radius: 9, x: 4, y: 4)
         .padding(.vertical, 13)
         .padding(.leading, 13)
+        // Custom mic dropdown (same panel style as the start screen's language
+        // pickers): click-catcher + floating panel as layout-neutral overlays,
+        // anchored by the mic row's measured frame in this coordinate space.
+        .coordinateSpace(name: "sidePanel")
+        .onPreferenceChange(LangPillFrameKey.self) { langPillFrames.merge($0) { _, new in new } }
+        .overlay(alignment: .topLeading) {
+            if openLangDropdown == "side-mic" {
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
+                    .onTapGesture { openLangDropdown = nil }
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if openLangDropdown == "side-mic", let f = langPillFrames["side-mic"] {
+                langDropdownPanel("side-mic")
+                    .frame(width: f.width)
+                    .offset(x: f.minX, y: f.maxY + 4)
+            }
+        }
+    }
+
+    // MARK: input-mic row (Figma 470:3074)
+
+    /// Only a LIVE mic session can hot-swap its input — file transcription and
+    /// system-audio capture have no mic to switch.
+    private var micRowVisible: Bool {
+        guard session.sourceMediaURL == nil, session.audioSource != .system else { return false }
+        switch session.phase {
+        case .recording, .paused: return true
+        default: return false
+        }
+    }
+
+    /// "입력 마이크 · <device> ⌄" — swaps the capture device mid-recording.
+    private var micRow: some View {
+        HStack(spacing: 8) {
+            Text("입력 마이크")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Spacer(minLength: 8)
+            Button {
+                openLangDropdown = (openLangDropdown == "side-mic") ? nil : "side-mic"
+            } label: {
+                HStack(spacing: 2) {
+                    Text(micLabel)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .lineLimit(1).truncationMode(.middle)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .rotationEffect(.degrees(openLangDropdown == "side-mic" ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .help("녹음 중에도 입력 마이크를 바꿀 수 있어요")
+        }
+        // The panel anchors to the WHOLE row's frame (panel width = row width).
+        .background(GeometryReader { g in
+            Color.clear.preference(key: LangPillFrameKey.self,
+                                   value: ["side-mic": g.frame(in: .named("sidePanel"))])
+        })
     }
 
     // MARK: big transport controls (Figma 188:711 — two 106pt cards)
@@ -2094,6 +2199,19 @@ struct LevelMeter: View {
 // Grabs the hosting NSWindow so ContentView can resize it imperatively (compact
 // "Set to start" frame ↔ expanded working layout). onResolve fires once the view
 // is in a window and again on updates; callers de-dupe by tracking mode.
+/// Suppresses the macOS 26 "hard" scroll-edge hairline at the top of a scroll
+/// view sitting under the transparent titlebar (it reads as a header divider).
+/// No-op on earlier macOS, where the hairline never appears.
+private struct HideTopScrollEdgeHairline: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            content
+        }
+    }
+}
+
 private struct WindowAccessor: NSViewRepresentable {
     let onResolve: (NSWindow) -> Void
     func makeNSView(context: Context) -> NSView {

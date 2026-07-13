@@ -130,6 +130,39 @@ final class AudioCapture {
     func pause() { paused = true }
     func resume() { paused = false }
 
+    /// Switch the input mic MID-capture: brief engine hop (tap off → device →
+    /// tap on) on the new device's hardware format. The segmenter timeline
+    /// simply has no samples for the ~100 ms swap — same as a short pause.
+    /// Not running (or system-audio source): just records the choice for the
+    /// next start().
+    func switchInput(to id: AudioDeviceID?) {
+        inputDeviceID = id
+        guard source != .system, engine.isRunning else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        // nil = follow the system default. The AUHAL keeps whatever device it
+        // was bound to, so re-bind the CURRENT default explicitly.
+        if let dev = id ?? AudioDevices.defaultInputID {
+            AudioDevices.setInput(dev, on: engine)
+        }
+        let input = engine.inputNode
+        let hwFormat = input.outputFormat(forBus: 0)
+        guard let rs = Resampler(from: hwFormat) else {
+            onError?("마이크를 전환하지 못했어요 — 이전 마이크로 계속 녹음하려면 다시 선택하세요.")
+            return
+        }
+        resampler = rs
+        input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self, rs] buf, _ in
+            let samples = rs.convert(buf)
+            guard !samples.isEmpty else { return }
+            let level = AudioCapture.rmsLevel(samples)
+            Task { @MainActor in self?.ingest(samples, level: level, mic: true) }
+        }
+        engine.prepare()
+        do { try engine.start() }
+        catch { onError?("마이크 전환 후 재시작 실패: \(error.localizedDescription)") }
+    }
+
     /// Finish the current partial window (final tail) and stop.
     func stop() {
         paused = false
