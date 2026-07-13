@@ -2109,6 +2109,7 @@ pub fn main() !void {
             d_pos[0] = PL - 1; // first prediction step
             var n_text: u32 = 0;
             var done = false;
+            var partial_frozen = false; // stop streaming a runaway hypothesis (see partial emit below)
             while (n_text < max_gen and !done) {
                 const this_b = @min(DBATCH, max_gen - n_text);
                 var rec_t = try std.time.Timer.start();
@@ -2146,10 +2147,26 @@ pub fn main() !void {
                 // the app renders the segment's text WHILE it decodes instead of
                 // all-at-once at SEG_END. Opt-in env → the frozen stdout text
                 // contract is untouched for every existing consumer.
-                if (g_partials and !dropped and n_text > 0) {
-                    const ptext = bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]) catch "";
-                    evPartial(t_off + pass_off, ptext);
-                    if (stream) try out.print("\u{00AB}partial {d:.2}\u{00BB} {s}\n", .{ t_off + pass_off, std.mem.trim(u8, ptext, " \n") });
+                // Runaway-guard the STREAMING preview: the plain pass can over-
+                // generate past the real speech (run-on hallucination that
+                // NO_REPEAT_NGRAM doesn't catch — the tokens don't repeat). The
+                // post-loop rescue (tokenCollapse / LOGPROB_RESCUE below) discards
+                // and re-decodes such a pass, but the ballooning «partial»s were
+                // ALREADY streamed → a huge preview flashes on screen then gets
+                // "corrected" by the clean commit. Freeze partials the moment the
+                // hypothesis trips the SAME collapse predicate the rescue uses, or
+                // exceeds a token budget (~½ MAX_TOK) — keep the last good preview;
+                // the rescue still lands the clean committed text.
+                if (g_partials and !dropped and n_text > 0 and !partial_frozen) {
+                    if (tokenCollapse(out_tokens[PL .. PL + n_text]) or
+                        n_text > envU("PARTIAL_MAX_TOK", 224))
+                    {
+                        partial_frozen = true;
+                    } else {
+                        const ptext = bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]) catch "";
+                        evPartial(t_off + pass_off, ptext);
+                        if (stream) try out.print("\u{00AB}partial {d:.2}\u{00BB} {s}\n", .{ t_off + pass_off, std.mem.trim(u8, ptext, " \n") });
+                    }
                 }
             }
             n_tok_total += n_text;
