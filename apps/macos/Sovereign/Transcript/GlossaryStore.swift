@@ -35,21 +35,27 @@ struct GlossaryEntry: Codable, Equatable {
 /// The persistent personal glossary. Keyed by the normalized `wrong` token so the
 /// same mishearing learned twice reinforces one rule (hits++) rather than dupes.
 struct Glossary: Codable, Equatable {
+    private var schemaVersion = 2
     /// Master gate — auto-correction is OFF by default (a wrong substitution
     /// corrupts text), so the user opts in. Learning still happens silently when
     /// off, so flipping it on starts working immediately.
     var enabled = false
     /// Don't auto-substitute until a rule has been confirmed this many times — a
     /// single accidental edit shouldn't rewrite future transcripts.
-    var minHits = 1
+    var minHits = 2
     /// wrong-token → entry. The token is the normalized key (== entry.wrong).
     var entries: [String: GlossaryEntry] = [:]
 
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        let version = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        schemaVersion = 2
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
-        minHits = try c.decodeIfPresent(Int.self, forKey: .minHits) ?? 1
+        let savedMinHits = try c.decodeIfPresent(Int.self, forKey: .minHits) ?? 1
+        // v1 shipped an unsafe one-edit activation default. Migration raises the
+        // gate without deleting personal data; the second confirmation activates it.
+        minHits = version < 2 ? max(2, savedMinHits) : max(1, savedMinHits)
         entries = try c.decodeIfPresent([String: GlossaryEntry].self, forKey: .entries) ?? [:]
     }
 

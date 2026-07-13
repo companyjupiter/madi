@@ -29,4 +29,48 @@ enum WavWriter {
 
         try d.write(to: url, options: .atomic)
     }
+
+    /// Crop a canonical Madi segment WAV to one transcript line. Live segments
+    /// are written by `write`, so a strict format check is safer than accepting a
+    /// malformed container. The bounded clip prevents whole-window text from
+    /// replacing one line and reduces forced-language decode work proportionally.
+    static func crop16kMonoPCM(source: URL, start: Double, end: Double,
+                               pad: Double = 0.2) throws -> URL {
+        let data = try Data(contentsOf: source, options: .mappedIfSafe)
+        func ascii(_ offset: Int, _ value: String) -> Bool {
+            guard let bytes = value.data(using: .ascii), offset + bytes.count <= data.count else { return false }
+            return data[offset..<(offset + bytes.count)].elementsEqual(bytes)
+        }
+        func u16(_ offset: Int) -> UInt16 {
+            UInt16(data[offset]) | (UInt16(data[offset + 1]) << 8)
+        }
+        func u32(_ offset: Int) -> UInt32 {
+            UInt32(data[offset]) | (UInt32(data[offset + 1]) << 8)
+                | (UInt32(data[offset + 2]) << 16) | (UInt32(data[offset + 3]) << 24)
+        }
+        guard data.count >= 44, ascii(0, "RIFF"), ascii(8, "WAVE"), ascii(12, "fmt "),
+              u16(20) == 1, u16(22) == channels, u32(24) == sampleRate,
+              u16(34) == bitsPerSample, ascii(36, "data") else {
+            throw NSError(domain: "WavWriter", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "unsupported segment WAV"])
+        }
+        let payloadBytes = min(Int(u32(40)), data.count - 44)
+        let sampleCount = payloadBytes / MemoryLayout<Int16>.size
+        let lo = max(0, min(sampleCount, Int(floor((start - pad) * Double(sampleRate)))))
+        let hi = max(lo, min(sampleCount, Int(ceil((end + pad) * Double(sampleRate)))))
+        guard hi > lo else {
+            throw NSError(domain: "WavWriter", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "empty crop"])
+        }
+        var samples: [Int16] = []
+        samples.reserveCapacity(hi - lo)
+        for index in lo..<hi {
+            let offset = 44 + index * 2
+            samples.append(Int16(bitPattern: u16(offset)))
+        }
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("madi-correction-\(UUID().uuidString).wav")
+        try write(samples: samples, to: destination)
+        return destination
+    }
 }

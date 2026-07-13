@@ -15,6 +15,11 @@ protocol EngineProcessDelegate: AnyObject {
     func engine(didEmit event: EngineEvent)
     func engineDidFlush()
     func engine(didTerminate code: Int32)
+    func engine(didEmitStructured event: StructuredEvent)
+}
+
+extension EngineProcessDelegate {
+    func engine(didEmitStructured event: StructuredEvent) {}
 }
 
 final class EngineProcess {
@@ -26,6 +31,10 @@ final class EngineProcess {
     private let decoder = EngineProtocol.Decoder()
     private let ioQueue = DispatchQueue(label: "sovereign.engine.io")
     private var lineBuffer = Data()
+    private let eventsURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("madi-engine-\(UUID().uuidString).events.jsonl")
+    private var eventsOffset: UInt64 = 0
+    private var eventsRemainder = Data()
 
     struct Config {
         var binaryURL: URL          // …/Contents/MacOS/transcribe
@@ -69,6 +78,7 @@ final class EngineProcess {
         process.currentDirectoryURL = config.assetsDir   // engine reads some assets by relative path
 
         var env = ProcessInfo.processInfo.environment
+        env["EVENTS_FILE"] = eventsURL.path
         env["CONF"] = "1" // emit per-word confidence «conf x.xx» for low-conf highlighting
         env["DIAR"] = config.diarize ? "1" : "0"
         env["OSD"] = config.osd ? "1" : "0"
@@ -154,6 +164,7 @@ final class EngineProcess {
     func terminate() {
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
         if process.isRunning { process.terminate() }
+        try? FileManager.default.removeItem(at: eventsURL)
     }
 
     // MARK: stdin
@@ -174,8 +185,36 @@ final class EngineProcess {
             lineBuffer.removeSubrange(lineBuffer.startIndex...nl)
             guard let line = String(data: lineData, encoding: .utf8) else { continue }
             let event = decoder.decode(line: line)
-            Task { @MainActor in self.dispatch(event) }
+            let structured: [StructuredEvent]
+            if event == .segmentEnd || event == .flushEnd { structured = drainStructuredEvents() }
+            else { structured = [] }
+            Task { @MainActor in
+                for item in structured { self.delegate?.engine(didEmitStructured: item) }
+                self.dispatch(event)
+            }
         }
+    }
+
+    /// Read only bytes appended since the previous segment barrier. A partial
+    /// final JSON line is retained until the next barrier.
+    private func drainStructuredEvents() -> [StructuredEvent] {
+        guard let handle = try? FileHandle(forReadingFrom: eventsURL) else { return [] }
+        defer { try? handle.close() }
+        do {
+            try handle.seek(toOffset: eventsOffset)
+            let fresh = try handle.readToEnd() ?? Data()
+            eventsOffset += UInt64(fresh.count)
+            eventsRemainder.append(fresh)
+        } catch { return [] }
+        var out: [StructuredEvent] = []
+        while let nl = eventsRemainder.firstIndex(of: 0x0A) {
+            let line = eventsRemainder.subdata(in: eventsRemainder.startIndex..<nl)
+            eventsRemainder.removeSubrange(eventsRemainder.startIndex...nl)
+            if let raw = String(data: line, encoding: .utf8), let event = EngineEvents.decode(line: raw) {
+                out.append(event)
+            }
+        }
+        return out
     }
 
     @MainActor

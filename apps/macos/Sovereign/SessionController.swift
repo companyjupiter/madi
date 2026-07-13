@@ -31,6 +31,7 @@ final class SessionController: EngineProcessDelegate {
         case transcribing                 // recording, segments decoding
         case fileTranscribing(Int?)       // file mode, optional % done
         case diarizing                    // AI speaker/language reconcile pass
+        case correcting(Int)              // N forced-language line decodes remain
         case translating(Int)             // N lines queued (live)
         case translatingBacklogged(Int)   // live queue shed N lines under load — filled at stop
         case completed
@@ -40,6 +41,7 @@ final class SessionController: EngineProcessDelegate {
 
     var pipeline: PipelineState {
         if case .error(let e) = phase { return .error(e) }
+        if languageCorrectionsPending > 0 { return .correcting(languageCorrectionsPending) }
         if reconciling { return .diarizing }
         if case .processing = phase {
             return .fileTranscribing(chunksTotal > 0
@@ -122,6 +124,11 @@ final class SessionController: EngineProcessDelegate {
     /// the typing caret (A7). Set on the first diverged partial, cleared on the
     /// final result. Struct so SwiftUI diffs it cheaply.
     struct TranslationRef: Equatable { let id: UUID; let lang: String }
+    private struct TranslationWorkKey: Hashable {
+        let id: UUID
+        let lang: String
+        let sourceRevision: UInt64
+    }
     private(set) var streamingTranslation: TranslationRef?
     /// Pending translation turns (queued + in-flight) — the "N줄 대기" status (D20).
     private(set) var translateQueueDepth = 0
@@ -135,12 +142,12 @@ final class SessionController: EngineProcessDelegate {
     private static let maxLivePartialChars = 512
     /// Lines the live queue shed (translation deferred to stop) — the "N줄은 종료
     /// 후 채움" HUD signal, and the backfill worklist finalize drains.
-    private var backlogLineIDs: Set<UUID> = []
+    private var backlogKeys: Set<TranslationWorkKey> = []
     private(set) var translateBacklog = 0
     /// Post-stop backfill in progress: lines still being re-translated after the
     /// live cap shed them. Drives the ".done · 채우는 중 N줄" HUD, and gates the
     /// Shared DNA broker serves these ahead of post-session summary work.
-    private var backfillPendingIDs: Set<UUID> = []
+    private var backfillPendingKeys: Set<TranslationWorkKey> = []
     private(set) var backfillRemaining = 0
     /// Wall-clock of the last committed line — the commit-cadence ring reads it
     /// against effectiveWindowSeconds to show progress toward the next commit (D19).
@@ -285,18 +292,21 @@ final class SessionController: EngineProcessDelegate {
             // last interim translation stays on screen as a provisional caption
             // (T1 carryover) until the committed line's real translation lands.
             // Session reset/stop sites clear livePartialTranslations explicitly.
-            if livePartial.isEmpty { interimInFlight = false }
-            else if livePartial != oldValue { scheduleInterimTranslate() }
+            if livePartial != oldValue { scheduleInterimTranslate() }
         }
     }
     /// Provisional translation of the in-progress interim text (lang → text), shown
     /// immediately so a caption doesn't wait ~10s for the window to close. Replaced
     /// by the authoritative per-line translation once the line commits.
     private(set) var livePartialTranslations: [String: String] = [:]
-    private var interimInFlight = false
-    private var interimSource = ""
+    private struct InterimRequest {
+        let source: String
+        var pending: Set<String>
+        var translations: [String: String]
+    }
+    private var interimRequests: [UUID: InterimRequest] = [:]
+    private var activeInterimID: UUID?
     private var interimGen = 0
-    private static let interimID = UUID()
     private let preview = PreviewEngine()
     private var dnaBusy = false
 
@@ -329,7 +339,7 @@ final class SessionController: EngineProcessDelegate {
     var isBidirectionalKoPair: Bool { translateTargets.count == 2 && translateTargets.contains("Korean") }
 
     private var translate: TranslateEngine?
-    private var translatedHash: [UUID: Int] = [:]  // line id → translated text hash (re-queue on change)
+    private var translatedHash: [UUID: UInt64] = [:]  // line id → source revision (re-queue on change)
     private var tailGen = 0                        // tail-timeout generation (T2)
     /// T8: disk-persistent pre-translated clinic phrase bank (0 ms on hit).
     private let faqStore = FAQTranslationStore.load(
@@ -384,6 +394,10 @@ final class SessionController: EngineProcessDelegate {
     private var midReconcileTimer: Timer?
     private var reconcileSnapshot: [UUID] = []   // prompt line order → line ids
     private var reconcileIsMid = false
+    private var decodeRiskRanges: [(start: Double, end: Double)] = []
+    private(set) var languageCorrectionsPending = 0
+    private var reconcileSpeakerNamesBefore: [Int: String]?
+    private var reconcileAutoNamesBefore: Set<Int>?
 
     private var attributedLines: [String] {
         transcript.lines.map { "\(SpeakerID.display($0.speaker, names: speakerNames, fallback: "화자\($0.speaker)")): \($0.text)" }
@@ -613,8 +627,8 @@ final class SessionController: EngineProcessDelegate {
         return translateTargets.subtracting([src].compactMap { $0 }).sorted()
     }
     /// Normalized per-session content hash for re-translate-on-change gating.
-    private func lineHash(_ text: String) -> Int {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).hashValue
+    private func lineHash(_ text: String) -> UInt64 {
+        TextRevision.of(text)
     }
 
     /// Start the translate engine on demand (targets set + assets present).
@@ -630,53 +644,51 @@ final class SessionController: EngineProcessDelegate {
             // Live cap: keep the queue tracking the newest speech. Turns the engine
             // can't keep up with are shed and remembered for the stop-time backfill.
             t.maxPending = Self.liveTranslateCap
-            t.onDrop = { [weak self] id in
+            t.onDrop = { [weak self] id, lang, source in
                 guard let self else { return }
-                if self.backlogLineIDs.insert(id).inserted { self.translateBacklog = self.backlogLineIDs.count }
+                if self.finishInterimTurn(id: id, lang: lang, source: source, text: nil) { return }
+                let key = TranslationWorkKey(id: id, lang: lang, sourceRevision: self.lineHash(source))
+                self.backlogKeys.insert(key)
+                self.translateBacklog = Set(self.backlogKeys.map(\.id)).count
             }
             t.onResult = { [weak self] id, lang, text, source in
                 guard let self else { return }
-                if id == Self.interimID {
-                    self.interimInFlight = false
-                    if !self.livePartial.isEmpty {
-                        self.livePartialTranslations[lang] = text
-                        // Cache this interim source's translations so the matching
-                        // committed line can reuse them (O3). Keyed by interimSource —
-                        // the exact text that was sent to translate() for this turn.
-                        self.interimCache.put(self.interimSource, self.livePartialTranslations)
-                    }
-                    if self.livePartial != self.interimSource { self.scheduleInterimTranslate() }  // grew → refresh
-                } else {
-                    // A7: this turn finished streaming — drop the caret.
-                    if self.streamingTranslation == TranslationRef(id: id, lang: lang) {
-                        self.streamingTranslation = nil
-                    }
-                    // stale-guard (T2): the line may have GROWN after this turn was
-                    // queued (merge). The hash gate already re-queued the new text —
-                    // don't let the old turn overwrite the fresher translation.
-                    if let line = self.transcript.lines.first(where: { $0.id == id }),
-                       self.lineHash(line.text) != self.lineHash(source) { return }
-                    self.transcript.setTranslation(id, lang: lang, text)
-                    // Backfill progress: this shed line is filled — count it down.
-                    if self.backfillPendingIDs.remove(id) != nil {
-                        self.backfillRemaining = self.backfillPendingIDs.count
-                    }
-                    // T1 carryover teardown: the real translation replaced the
-                    // provisional interim caption for the freshest content.
-                    if id == self.transcript.lines.last?.id, self.livePartial.isEmpty {
-                        self.livePartialTranslations = [:]
-                    }
+                if self.finishInterimTurn(id: id, lang: lang, source: source,
+                                          text: text.isEmpty ? nil : text) { return }
+                // A7: this turn finished streaming — drop the caret.
+                if self.streamingTranslation == TranslationRef(id: id, lang: lang) {
+                    self.streamingTranslation = nil
+                }
+                let revision = self.lineHash(source)
+                let completedKey = TranslationWorkKey(id: id, lang: lang, sourceRevision: revision)
+                if !text.isEmpty {
+                    _ = self.transcript.setTranslation(id, lang: lang, text,
+                                                       sourceRevision: revision)
+                }
+                self.backlogKeys.remove(completedKey)
+                self.translateBacklog = Set(self.backlogKeys.map(\.id)).count
+                // Backfill is keyed per target+source generation; one language
+                // completing can never falsely mark its siblings complete.
+                self.backfillPendingKeys.remove(completedKey)
+                self.backfillRemaining = self.backfillPendingKeys.count
+                // T1 carryover teardown: the real translation replaced the
+                // provisional interim caption for the freshest content.
+                if id == self.transcript.lines.last?.id, self.livePartial.isEmpty {
+                    self.livePartialTranslations = [:]
                 }
             }
             // streaming partial (T5): the reply types itself onto the screen
             // (~19 ms/token) instead of appearing whole ~0.5-0.9 s later.
-            t.onPartial = { [weak self] id, lang, text in
+            t.onPartial = { [weak self] id, lang, text, source in
                 guard let self else { return }
-                if id == Self.interimID {
-                    if !self.livePartial.isEmpty { self.livePartialTranslations[lang] = text }
+                if let request = self.interimRequests[id] {
+                    guard id == self.activeInterimID, request.source == source,
+                          self.livePartial == source else { return }
+                    self.livePartialTranslations[lang] = text
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
-                    self.transcript.setTranslation(id, lang: lang, text)
+                    _ = self.transcript.setTranslation(id, lang: lang, text,
+                                                       sourceRevision: self.lineHash(source))
                 }
             }
             // queue depth (D20) — the engine reports queued + in-flight turns.
@@ -691,6 +703,31 @@ final class SessionController: EngineProcessDelegate {
         return translate
     }
 
+    /// Consume one target of an interim request. Each source snapshot owns a
+    /// unique UUID and a per-language barrier, so A/B completions cannot share
+    /// cache state or clear the in-flight guard early.
+    @discardableResult
+    private func finishInterimTurn(id: UUID, lang: String, source: String, text: String?) -> Bool {
+        guard var request = interimRequests[id], request.source == source else { return false }
+        request.pending.remove(lang)
+        if let text, !text.isEmpty { request.translations[lang] = text }
+        let isActive = activeInterimID == id
+        if isActive, livePartial == source {
+            livePartialTranslations = request.translations
+            if !request.translations.isEmpty { interimCache.put(source, request.translations) }
+        }
+        if request.pending.isEmpty {
+            interimRequests[id] = nil
+            if isActive {
+                activeInterimID = nil
+                if !livePartial.isEmpty, livePartial != source { scheduleInterimTranslate() }
+            }
+        } else {
+            interimRequests[id] = request
+        }
+        return true
+    }
+
     /// Debounced (≈0.3s, one in flight) translation of the in-progress interim text
     /// so a PROVISIONAL caption appears right after you speak instead of waiting for
     /// the window to close. Best-effort + throwaway — the per-line translation wins.
@@ -702,13 +739,17 @@ final class SessionController: EngineProcessDelegate {
         let gen = interimGen
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
-            guard let self, gen == self.interimGen, !self.interimInFlight, !self.livePartial.isEmpty else { return }
+            guard let self, gen == self.interimGen, self.activeInterimID == nil,
+                  !self.livePartial.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
-            let targets = self.routedTargets(for: self.livePartial)
+            let source = self.livePartial
+            let targets = self.routedTargets(for: source)
             guard !targets.isEmpty else { return }
-            self.interimInFlight = true
-            self.interimSource = self.livePartial
-            t.translate(self.livePartial, into: targets, id: Self.interimID)
+            let id = UUID()
+            self.activeInterimID = id
+            self.interimRequests[id] = InterimRequest(
+                source: source, pending: Set(targets), translations: [:])
+            t.translate(source, into: targets, id: id)
         }
     }
 
@@ -730,38 +771,42 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// Queue one line (hash-gated, FAQ/O3-cached, direction-routed).
-    private func translateLine(_ line: Line) {
+    private func translateLine(_ line: Line, forceTargets: Set<String>? = nil) {
         let h = lineHash(line.text)
-        if translatedHash[line.id] == h { return }
+        let routed = Set(routedTargets(for: line.text))
+        let requested = forceTargets.map { $0.intersection(routed) } ?? routed
+        let existing = transcript.pruneTranslations(line.id, validTargets: routed, sourceRevision: h)
+        let missing = requested.subtracting(existing)
+        guard !missing.isEmpty else { translatedHash[line.id] = h; return }
+        if forceTargets == nil, translatedHash[line.id] == h { return }
         guard let t = ensureTranslateEngine() else { return }
-        let targets = routedTargets(for: line.text)
-        guard !targets.isEmpty else { return }
         translatedHash[line.id] = h
         // T8: session-invariant FAQ bank first — a recurring clinic phrase costs
         // 0 ms and no DNA3 turn. Conservative exact (normalized) match only.
         if let faq = faqStore.lookup(line.text) {
-            var missing: [String] = []
-            for tgt in targets {
-                if let tr = faq[tgt] { transcript.setTranslation(line.id, lang: tgt, tr) }
-                else { missing.append(tgt) }
+            var unresolved: [String] = []
+            for tgt in missing.sorted() {
+                if let tr = faq[tgt] {
+                    _ = transcript.setTranslation(line.id, lang: tgt, tr, sourceRevision: h)
+                } else { unresolved.append(tgt) }
             }
-            if missing.isEmpty { return }
-            t.translate(line.text, into: missing, id: line.id)
+            if unresolved.isEmpty { return }
+            t.translate(line.text, into: unresolved, id: line.id)
             return
         }
         // O3: if this line's text was already translated as interim, reuse the
         // cached translations and skip the DNA3 turn entirely. Only reuse the
         // targets we actually have cached; queue the engine for any that miss.
         if let cached = interimCache.get(line.text) {
-            let missing = targets.filter { cached[$0] == nil }
-            for tgt in targets where cached[tgt] != nil {
-                transcript.setTranslation(line.id, lang: tgt, cached[tgt]!)
+            let unresolved = missing.filter { cached[$0] == nil }.sorted()
+            for tgt in missing where cached[tgt] != nil {
+                _ = transcript.setTranslation(line.id, lang: tgt, cached[tgt]!, sourceRevision: h)
             }
-            if missing.isEmpty { return }
-            t.translate(line.text, into: missing, id: line.id)
+            if unresolved.isEmpty { return }
+            t.translate(line.text, into: unresolved, id: line.id)
             return
         }
-        t.translate(line.text, into: targets, id: line.id)
+        t.translate(line.text, into: missing.sorted(), id: line.id)
     }
 
     /// T2 tail timeout: the LAST line never loses last-status in a monologue —
@@ -1149,9 +1194,11 @@ final class SessionController: EngineProcessDelegate {
         fileName = ""; chunksDone = 0; chunksTotal = 0
         livePartial = ""; livePartialTranslations = [:]
         streamingTranslation = nil; translateQueueDepth = 0
-        backlogLineIDs.removeAll(); translateBacklog = 0
-        backfillPendingIDs.removeAll(); backfillRemaining = 0
-        segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
+        backlogKeys.removeAll(); translateBacklog = 0
+        backfillPendingKeys.removeAll(); backfillRemaining = 0
+        interimRequests.removeAll(); activeInterimID = nil
+        segmentAudio.removeAll(); decodeRiskRanges.removeAll(); reconcileNote = nil; reconciling = false; languageCorrectionsPending = 0
+        reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
         stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0
         phase = .idle
     }
@@ -1191,35 +1238,45 @@ final class SessionController: EngineProcessDelegate {
     func editWord(_ lineID: UUID, index: Int, to newText: String) {
         let oldText = transcript.lines.first(where: { $0.id == lineID })
             .flatMap { index >= 0 && index < $0.words.count ? $0.words[index].text : nil }
-        transcript.editWord(lineID, index: index, to: newText)
+        guard transcript.editWord(lineID, index: index, to: newText) else { return }
         if let old = oldText, old != newText, !newText.trimmingCharacters(in: .whitespaces).isEmpty {
-            glossary.learn(wrong: old, right: newText); glossary.save()
+            for pair in PersonalVocabulary.diff(before: old, after: newText) {
+                glossary.learn(wrong: pair.wrong, right: pair.right)
+            }
+            glossary.save()
         }
-        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
-        let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
-        guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == lineID }) else { return }
-        translatedHash[lineID] = lineHash(line.text)
-        t.translate(line.text, into: targets, id: lineID)
+        translatedHash[lineID] = nil
+        if let line = transcript.lines.first(where: { $0.id == lineID }) { translateLine(line) }
     }
 
     func editLine(_ id: UUID, to newText: String) {
-        transcript.editLine(id, newText)
-        // LEARN: the user just corrected this line — index any swapped tokens so
-        // future mis-recognitions of the same term self-correct. Diff the ASR text
-        // (joinedText of the current words) against the user's new text.
-        if let line = transcript.lines.first(where: { $0.id == id }) {
-            let asrText = line.words.map(\.text).joined(separator: " ")
-            let pairs = PersonalVocabulary.diff(before: asrText, after: newText)
+        _ = applyTextCorrection(id, to: newText, expectedRevision: nil, learn: true)
+    }
+
+    /// Single correction transaction for manual edits, vocabulary fixes and AI
+    /// re-decodes: revision guard → source mutation → stale translation purge →
+    /// direction-routed retranslation. No caller may bypass these invariants.
+    @discardableResult
+    private func applyTextCorrection(_ id: UUID, to newText: String,
+                                     expectedRevision: UInt64?, learn: Bool) -> Bool {
+        guard let before = transcript.lines.first(where: { $0.id == id }) else { return false }
+        guard transcript.editLine(id, newText, expectedRevision: expectedRevision) else { return false }
+        if learn {
+            let pairs = PersonalVocabulary.diff(before: before.text, after: newText)
             if !pairs.isEmpty {
                 for p in pairs { glossary.learn(wrong: p.wrong, right: p.right) }
                 glossary.save()
             }
         }
-        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
-        let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
-        guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == id }) else { return }
-        translatedHash[id] = lineHash(line.text)
-        t.translate(line.text, into: targets, id: id)
+        translatedHash[id] = nil
+        if let line = transcript.lines.first(where: { $0.id == id }) { translateLine(line) }
+        return true
+    }
+
+    /// User correction of model translation. Source provenance remains bound to
+    /// the current source revision and round-trips through Markdown/JSON.
+    func editTranslation(_ id: UUID, lang: String, to newText: String) {
+        _ = transcript.editTranslation(id, lang: lang, newText)
     }
 
     func start() {
@@ -1233,6 +1290,9 @@ final class SessionController: EngineProcessDelegate {
         lastAutoSaved = nil
         translatedHash.removeAll()
         interimCache.clear()
+        backlogKeys.removeAll(); translateBacklog = 0
+        backfillPendingKeys.removeAll(); backfillRemaining = 0
+        interimRequests.removeAll(); activeInterimID = nil
         clearSummary()
         DNAEngineBroker.shared.onBusyChange = { [weak self] busy in
             guard let self else { return }
@@ -1240,7 +1300,8 @@ final class SessionController: EngineProcessDelegate {
             self.updatePreviewAdmission()
         }
         streamingTranslation = nil; translateQueueDepth = 0; lastCommitAt = Date()
-        segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
+        segmentAudio.removeAll(); decodeRiskRanges.removeAll(); reconcileNote = nil; reconciling = false; languageCorrectionsPending = 0
+        reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
         // T11 prewarm: spawn the translate engine during the dead time between
         // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
         // first caption's translation doesn't pay the cold start.
@@ -1510,6 +1571,16 @@ final class SessionController: EngineProcessDelegate {
         }
     }
 
+    /// Structured decode evidence is authoritative for language-review targeting;
+    /// stdout remains the rendering contract. Rescue, drop, or avg_logprob below
+    /// the engine's −1.0 rescue threshold marks overlapping transcript lines ◇.
+    func engine(didEmitStructured event: StructuredEvent) {
+        guard case .segment(let info) = event else { return }
+        if info.dropped || info.fallback != "none" || info.avgLogprob < -1.0 {
+            decodeRiskRanges.append((start: info.t0, end: info.t1))
+        }
+    }
+
     func engineDidFlush() { finalizeOnce() }
 
     func engine(didTerminate code: Int32) {
@@ -1553,18 +1624,26 @@ final class SessionController: EngineProcessDelegate {
         // (the live captions themselves already moved on). backfillRemaining drives
         // the progress HUD; on 8GB the summary engine — which evicts translate —
         // waits for this to drain. (interimCache is still warm → O3 reuse.)
-        if let t = translate, !backlogLineIDs.isEmpty {
+        if let t = translate, !backlogKeys.isEmpty {
             t.maxPending = 0
-            backfillPendingIDs.removeAll()
-            for line in transcript.lines where backlogLineIDs.contains(line.id) {
-                // skip lines a late live turn already filled (no wasted turn)
-                if line.translations.count >= routedTargets(for: line.text).count { continue }
+            backfillPendingKeys = Set(backlogKeys.filter { key in
+                guard let line = transcript.lines.first(where: { $0.id == key.id }) else { return false }
+                return lineHash(line.text) == key.sourceRevision
+                    && routedTargets(for: line.text).contains(key.lang)
+                    && line.translations[key.lang] == nil
+            })
+            let grouped = Dictionary(grouping: backfillPendingKeys, by: \.id)
+            for (id, keys) in grouped {
+                guard let line = transcript.lines.first(where: { $0.id == id }) else { continue }
                 translatedHash[line.id] = nil
-                backfillPendingIDs.insert(line.id)
-                translateLine(line)
+                translateLine(line, forceTargets: Set(keys.map(\.lang)))
+                // FAQ/interim caches resolve synchronously and do not produce a
+                // completion callback, so close those exact work keys here.
+                let valid = transcript.validTranslationLanguages(id, sourceRevision: lineHash(line.text))
+                for key in keys where valid.contains(key.lang) { backfillPendingKeys.remove(key) }
             }
-            backfillRemaining = backfillPendingIDs.count
-            backlogLineIDs.removeAll(); translateBacklog = 0
+            backfillRemaining = backfillPendingKeys.count
+            backlogKeys.removeAll(); translateBacklog = 0
         }
         translateStableLines(includingLast: true)  // translate the final line(s) too
         interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
@@ -1576,8 +1655,10 @@ final class SessionController: EngineProcessDelegate {
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
         // Broker priority keeps backfill captions ahead of post-session work,
         // without a second process or an 8GB-specific reload/deferral path.
-        startPostSessionSummary()
-        kickReconcile()   // opt-in: LLM reviews speaker/language after the session
+        // Summary must read the corrected transcript. Keep the immediate Markdown
+        // durability save above, then defer summary/title until reconcile (and any
+        // bounded language re-decodes) completes.
+        if !kickReconcile() { startPostSessionSummary() }
     }
 
     /// Post-session AI title + summary. Broker priority keeps it below captions.
@@ -1658,15 +1739,16 @@ final class SessionController: EngineProcessDelegate {
 
     private var pendingFinalReconcile = false
 
-    private func kickReconcile(mid: Bool = false) {
+    @discardableResult
+    private func kickReconcile(mid: Bool = false) -> Bool {
         // mid 응답 대기 중 final 킥이 스냅샷을 덮으면 mid 응답이 final로 오적용
         // 된다 (역검증 fusion-1/watchdog-conc-4) — in-flight면 final을 예약.
-        if reconciling { if !mid { pendingFinalReconcile = true }; return }
+        if reconciling { if !mid { pendingFinalReconcile = true }; return true }
         guard aiReconcileEnabled, transcript.lines.count >= 4,
-              let s = ensureSummaryEngine() else { return }
+              let s = ensureSummaryEngine() else { return false }
         // B1 mid-session: only the STABLE prefix (the last 2 lines may still grow)
         let lines = mid ? Array(transcript.lines.dropLast(2)) : transcript.lines
-        guard lines.count >= 4 else { return }
+        guard lines.count >= 4 else { return false }
         reconciling = true
         if !mid { reconcileNote = nil }
         reconcileIsMid = mid
@@ -1674,11 +1756,15 @@ final class SessionController: EngineProcessDelegate {
         let uncertain = Set(lines.enumerated().compactMap { i, l in
             l.speakerMargin < Self.uncertainMargin ? i : nil
         })
+        let languageRisk = Set(lines.enumerated().compactMap { i, line in
+            decodeRiskRanges.contains(where: { $0.end > line.start && $0.start < line.end }) ? i : nil
+        })
         let numbered = TranscriptReconciler.promptInput(
             lines: lines.map { (speaker: $0.speaker, text: $0.text) },
             speakerName: { [weak self] in SpeakerID.display($0, names: self?.speakerNames ?? [:], fallback: "화자 \($0)") },
-            uncertain: uncertain)
+            uncertain: uncertain, languageRisk: languageRisk)
         s.reconcile(numbered: numbered)
+        return true
     }
 
     /// Apply the parsed correction plan: speaker merges/relabels immediately
@@ -1687,7 +1773,11 @@ final class SessionController: EngineProcessDelegate {
     private func applyReconcile(_ reply: String?) {
         reconciling = false
         let mid = reconcileIsMid
-        guard let reply else { if !mid { reconcileNote = nil }; return }
+        guard let reply else {
+            if !mid { reconcileNote = nil }
+            completeReconcileCycle(mid: mid)
+            return
+        }
         let snapshot = reconcileSnapshot
         // Exclude the Unknown bucket: the on-device LLM reconciler must never
         // MERGE/RELABEL 미확인 into (or out of) a real speaker — its guard is
@@ -1702,13 +1792,21 @@ final class SessionController: EngineProcessDelegate {
         }
         let plan = TranscriptReconciler.parse(reply, speakers: speakers, lineCount: snapshot.count,
                                               relabelAllowed: allowed)
-        guard !plan.isEmpty else { if !mid { reconcileNote = nil }; return }
+        guard !plan.isEmpty else {
+            if !mid { reconcileNote = nil }
+            completeReconcileCycle(mid: mid)
+            return
+        }
 
         var merged = 0, relabeled = 0
         // mid-session: merges are deferred to the final pass (a wrong merge
         // mid-meeting is disruptive; relabels are line-local and gated).
         if !mid {
-            for c in plan.merges { if case let .merge(from, into) = c { transcript.mergeSpeaker(from: from, into: into); merged += 1 } }
+            for c in plan.merges {
+                if case let .merge(from, into) = c, mergeSpeakerIdentity(from: from, into: into) {
+                    merged += 1
+                }
+            }
         }
         for c in plan.relabels {
             if case let .relabel(line, sp) = c, line < snapshot.count {
@@ -1722,13 +1820,13 @@ final class SessionController: EngineProcessDelegate {
             }
             return nil
         }
-        reTranscribeLanguage(langFlags)
-
         var parts: [String] = []
         if merged > 0 { parts.append("화자 \(merged)건 병합") }
         if relabeled > 0 { parts.append("화자 \(relabeled)건 재지정") }
-        if !langFlags.isEmpty { parts.append("언어 \(langFlags.count)줄 재전사") }
-        if !parts.isEmpty {
+        var languageAsync = false
+        if !langFlags.isEmpty {
+            languageAsync = reTranscribeLanguage(langFlags, completedParts: parts, mid: mid)
+        } else if !parts.isEmpty {
             reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ") + parts.joined(separator: " · ")
         } else if !mid {
             reconcileNote = nil
@@ -1737,15 +1835,51 @@ final class SessionController: EngineProcessDelegate {
             calendar.matchToSpeakers(speakerNames)   // speaker set changed → rematch attendees
             recomputeCoach()
         }
+        if !languageAsync { completeReconcileCycle(mid: mid) }
+    }
+
+    private func completeReconcileCycle(mid: Bool) {
+        if !mid { autoSaveMarkdown() }
         if pendingFinalReconcile {
             pendingFinalReconcile = false
-            kickReconcile()
+            _ = kickReconcile()
+        } else if !mid {
+            startPostSessionSummary()
         }
+    }
+
+    /// Merge transcript labels and every attached identity surface as one
+    /// transaction. Distinct explicit names are counter-evidence, so that merge
+    /// is rejected instead of silently destroying a person's identity.
+    private func mergeSpeakerIdentity(from: Int, into: Int) -> Bool {
+        let fromName = speakerNames[from]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let intoName = speakerNames[into]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let fromName, !fromName.isEmpty, let intoName, !intoName.isEmpty,
+           fromName.caseInsensitiveCompare(intoName) != .orderedSame { return false }
+        if reconcileSpeakerNamesBefore == nil {
+            reconcileSpeakerNamesBefore = speakerNames
+            reconcileAutoNamesBefore = autoRecognizedSpeakers
+        }
+        transcript.mergeSpeaker(from: from, into: into)
+        let survivingName = (intoName?.isEmpty == false ? intoName : fromName)
+        speakerNames[from] = nil
+        if let survivingName, !survivingName.isEmpty {
+            speakerNames[into] = survivingName
+            pendingEnrollment.remove(id: from)
+            pendingEnrollment.add(id: into, name: survivingName)
+            enrollVoiceprint(speaker: into, name: survivingName)
+        }
+        if autoRecognizedSpeakers.contains(from) { autoRecognizedSpeakers.insert(into) }
+        autoRecognizedSpeakers.remove(from)
+        return true
     }
 
     /// Revert all AI speaker corrections in one step (UI "되돌리기").
     func revertReconcile() {
         transcript.revertSpeakerCorrections()
+        if let names = reconcileSpeakerNamesBefore { speakerNames = names }
+        if let auto = reconcileAutoNamesBefore { autoRecognizedSpeakers = auto }
+        reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
         reconcileNote = nil
         calendar.matchToSpeakers(speakerNames)
     }
@@ -1756,26 +1890,93 @@ final class SessionController: EngineProcessDelegate {
     /// per-segment audio, so they are flagged only (no re-transcription).
     /// Best-effort: a segment ≈ one utterance in the short-turn clinic case; a
     /// multi-line segment yields the whole window's text for the flagged line.
-    private func reTranscribeLanguage(_ flags: [(id: UUID, lang: String)]) {
-        guard !flags.isEmpty, !segmentAudio.isEmpty else { return }
+    @discardableResult
+    private func reTranscribeLanguage(_ flags: [(id: UUID, lang: String)],
+                                      completedParts: [String], mid: Bool) -> Bool {
+        guard !flags.isEmpty else { return false }
         let bin = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/transcribe")
         let model = AssetManifest.modelURL
         let bpe = AssetManifest.bundledBPE
         let assets = AssetManifest.bundledAssetsDir
         let segs = segmentAudio
+        struct Job: Sendable {
+            let id: UUID; let langToken: Int; let source: URL
+            let relativeStart: Double; let relativeEnd: Double; let expectedRevision: UInt64
+        }
+        var jobs: [Job] = []
         for f in flags {
             guard let line = transcript.lines.first(where: { $0.id == f.id }),
                   let tok = TranscriptReconciler.languageToken(f.lang),
                   let seg = (segs.last(where: { $0.offset <= line.start + 0.05 }) ?? segs.first),
                   FileManager.default.fileExists(atPath: seg.url.path) else { continue }
-            let id = f.id
-            Task.detached {
-                guard let text = Self.runOneShotTranscribe(
-                    bin: bin, model: model, wav: seg.url, bpe: bpe, assets: assets, langToken: tok),
-                    !text.isEmpty else { return }
-                await MainActor.run { [weak self] in self?.transcript.editLine(id, text) }
+            jobs.append(Job(id: f.id, langToken: tok, source: seg.url,
+                            relativeStart: max(0, line.start - seg.offset),
+                            relativeEnd: max(line.start - seg.offset + 0.08, line.end - seg.offset),
+                            expectedRevision: lineHash(line.text)))
+        }
+        let unavailable = flags.count - jobs.count
+        guard !jobs.isEmpty else {
+            let failed = unavailable > 0 ? unavailable : flags.count
+            reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ")
+                + (completedParts + ["언어 \(failed)건 검증만(보존 오디오 없음)"]).joined(separator: " · ")
+            return false
+        }
+        languageCorrectionsPending = jobs.count
+        reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ")
+            + (completedParts + ["언어 0/\(jobs.count)줄 교정 중"]).joined(separator: " · ")
+        Task.detached { [weak self] in
+            var applied = 0
+            var failed = unavailable
+            for (index, job) in jobs.enumerated() {
+                var clip: URL?
+                do {
+                    clip = try WavWriter.crop16kMonoPCM(source: job.source,
+                                                        start: job.relativeStart, end: job.relativeEnd)
+                } catch {
+                    failed += 1
+                }
+                var didApply = false
+                if let clip {
+                    let text = Self.runOneShotTranscribe(
+                        bin: bin, model: model, wav: clip, bpe: bpe, assets: assets,
+                        langToken: job.langToken)
+                    try? FileManager.default.removeItem(at: clip)
+                    if let text, !text.isEmpty {
+                        didApply = await MainActor.run { [weak self] in
+                            self?.applyTextCorrection(job.id, to: text,
+                                                      expectedRevision: job.expectedRevision, learn: false) ?? false
+                        }
+                    }
+                    if didApply { applied += 1 } else { failed += 1 }
+                }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.languageCorrectionsPending = jobs.count - index - 1
+                    self.reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ")
+                        + (completedParts + ["언어 \(index + 1)/\(jobs.count)줄 처리"]).joined(separator: " · ")
+                }
+            }
+            let appliedCount = applied
+            let failedCount = failed
+            await MainActor.run { [weak self] in
+                self?.finishLanguageCorrections(applied: appliedCount, failed: failedCount,
+                                                completedParts: completedParts, mid: mid)
             }
         }
+        return true
+    }
+
+    private func finishLanguageCorrections(applied: Int, failed: Int,
+                                           completedParts: [String], mid: Bool) {
+        languageCorrectionsPending = 0
+        var parts = completedParts
+        if applied > 0 { parts.append("언어 \(applied)건 교정") }
+        if failed > 0 { parts.append("언어 \(failed)건 원문 유지") }
+        reconcileNote = parts.isEmpty ? nil
+            : (mid ? "AI 교정(진행 중): " : "AI 교정: ") + parts.joined(separator: " · ")
+        autoSaveMarkdown()
+        recomputeCoach()
+        completeReconcileCycle(mid: mid)
     }
 
     /// Run the bundled `transcribe` binary once on a single wav in plain FILE

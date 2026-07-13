@@ -74,7 +74,7 @@ final class GlossaryStoreTests: XCTestCase {
         """.data(using: .utf8)!
         let g = try JSONDecoder().decode(Glossary.self, from: json)
         XCTAssertFalse(g.enabled, "missing enabled → default false, not a throw")
-        XCTAssertEqual(g.minHits, 1, "missing minHits → default 1")
+        XCTAssertEqual(g.minHits, 2, "v1 data migrates to the two-confirmation safety gate")
         XCTAssertEqual(g.entries["소버림"]?.right, "소버린")
         XCTAssertEqual(g.entries["소버림"]?.hits, 1, "missing hits → default 1")
     }
@@ -86,6 +86,7 @@ final class GlossaryStoreTests: XCTestCase {
 
         var g = Glossary()
         g.enabled = true
+        g.learn(wrong: "쿠버", right: "쿠버네티스")
         g.learn(wrong: "쿠버", right: "쿠버네티스")
         g.save(defaults)
 
@@ -101,5 +102,12 @@ final class GlossaryStoreTests: XCTestCase {
         let g = Glossary.load(defaults)
         XCTAssertFalse(g.enabled)
         XCTAssertTrue(g.entries.isEmpty)
+        XCTAssertEqual(g.minHits, 2)
+    }
+
+    func testV1ExplicitSingleHitGateMigratesToTwo() throws {
+        let json = #"{"enabled":true,"minHits":1,"entries":{}}"#.data(using: .utf8)!
+        let g = try JSONDecoder().decode(Glossary.self, from: json)
+        XCTAssertEqual(g.minHits, 2)
     }
 }

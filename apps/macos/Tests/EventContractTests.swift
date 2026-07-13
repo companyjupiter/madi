@@ -17,7 +17,8 @@ struct EventContractTests {
 
         // locate the repo's fixtures relative to this file's build dir / cwd
         let candidates = [
-            "../web/fixtures", "web/fixtures",
+            "../../web/fixtures", "../web/fixtures", "web/fixtures",
+            FileManager.default.currentDirectoryPath + "/../../web/fixtures",
             FileManager.default.currentDirectoryPath + "/../web/fixtures",
         ]
         guard let dir = candidates.first(where: { FileManager.default.fileExists(atPath: $0 + "/jfk3.events.jsonl") }) else {

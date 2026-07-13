@@ -11,7 +11,7 @@ final class TranscriptReconcilerParseTests: XCTestCase {
 
     func testWellFormedCommands() {
         let plan = parse("MERGE 1 3\nRELABEL 5 2\nLANG 4 ja")
-        XCTAssertEqual(plan.merges, [.merge(from: 3, into: 1)])       // higher→lower
+        XCTAssertEqual(plan.merges, [.merge(from: 1, into: 3)])       // explicit from→into
         XCTAssertEqual(plan.relabels, [.relabel(line: 4, speaker: 2)]) // 1-based → 0-based
         XCTAssertEqual(plan.languageFlags, [.language(line: 3, lang: "Japanese")])
     }
@@ -29,14 +29,14 @@ final class TranscriptReconcilerParseTests: XCTestCase {
 
     func testIgnoresMalformedAndProse() {
         let plan = parse("여기 교정 사항입니다:\nMERGE one three\nMERGE 0 2\n음, 잘 모르겠네요")
-        XCTAssertEqual(plan.merges, [.merge(from: 2, into: 0)])
+        XCTAssertEqual(plan.merges, [.merge(from: 0, into: 2)])
         XCTAssertTrue(plan.relabels.isEmpty)
     }
 
     func testMergeChainAvoidance() {
         // once 3 is merged away it can't be a merge operand again
         let plan = parse("MERGE 1 3\nMERGE 3 2")
-        XCTAssertEqual(plan.merges, [.merge(from: 3, into: 1)])
+        XCTAssertEqual(plan.merges, [.merge(from: 1, into: 3)])
     }
 
     func testFirstWinsPerLine() {
@@ -54,7 +54,7 @@ final class TranscriptReconcilerParseTests: XCTestCase {
     func testSlashDelimitedFormat() {
         // observed 4B output: it echoes the example's "/" delimiter on one line
         let plan = parse("MERGE 1 3 / RELABEL 5 2 / LANG 4 ja")
-        XCTAssertEqual(plan.merges, [.merge(from: 3, into: 1)])
+        XCTAssertEqual(plan.merges, [.merge(from: 1, into: 3)])
         XCTAssertEqual(plan.relabels, [.relabel(line: 4, speaker: 2)])
         XCTAssertEqual(plan.languageFlags, [.language(line: 3, lang: "Japanese")])
     }
@@ -72,8 +72,8 @@ final class TranscriptReconcilerParseTests: XCTestCase {
     func testUncertainMarkInPrompt() {
         let input = TranscriptReconciler.promptInput(
             lines: [(0, "안녕하세요"), (1, "네 맞아요")],
-            speakerName: { "화자 \($0)" }, uncertain: [1])
-        XCTAssertTrue(input.contains("1 [S0"))
+            speakerName: { "화자 \($0)" }, uncertain: [1], languageRisk: [0])
+        XCTAssertTrue(input.contains("1◇ [S0"))
         XCTAssertTrue(input.contains("2△ [S1"))
     }
 
@@ -89,5 +89,17 @@ final class TranscriptReconcilerParseTests: XCTestCase {
             speakerName: { $0 == 0 ? "직원" : "환자" })
         XCTAssertTrue(input.contains("1 [S0·직원] 안녕하세요"))
         XCTAssertTrue(input.contains("2 [S1·환자] のどが痛い"))
+    }
+
+    func testPromptBatchesCoverEveryGlobalLineExactlyOnce() {
+        let numbered = (1...30).map { "\($0) [S0·화자 0] line-\($0)-" + String(repeating: "x", count: 35) }
+            .joined(separator: "\n")
+        let batches = TranscriptReconciler.promptBatches(numbered, budget: 180)
+        XCTAssertGreaterThan(batches.count, 1)
+        XCTAssertTrue(batches.allSatisfy { $0.count <= 180 })
+        let rows = batches.joined(separator: "\n").split(separator: "\n").map(String.init)
+        for i in 1...30 {
+            XCTAssertEqual(rows.filter { $0.hasPrefix("\(i) [S0·화자 0]") }.count, 1)
+        }
     }
 }

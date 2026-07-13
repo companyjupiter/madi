@@ -16,6 +16,18 @@ Use the toggle at the top of the screen (tooltip **내용: 깨끗한 회의록 �
 3. Fix the text and finish typing.
 4. Edited lines are marked **편집됨** (Edited).
 
+Editing the source automatically discards translations still being generated from
+the previous source and translates from the corrected text again. A late, stale AI
+result cannot overwrite your correction.
+
+## Correcting a translation
+
+**Double-click** a completed translation to edit that language directly. A pencil
+marks the saved translation, while other target languages remain intact. Corrected
+source text, translations, and speaker names are stored together in Markdown and
+JSON; translations survive reopening a Markdown transcript. SRT/VTT always use the
+final corrected source.
+
 ## Review needed — confirm low-confidence words fast
 
 The **상세 (Detailed)** view flags words below the confidence threshold (set in Settings, default 0.55) in amber.

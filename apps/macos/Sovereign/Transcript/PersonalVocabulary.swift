@@ -16,8 +16,8 @@
 //   · the misheard token must be ≥ minLen chars (don't rewrite "네"/"음"),
 //   · phonetic matches require Jaro-Winkler ≥ phoneticFloor (high bar).
 //
-// Tokenization MUST mirror Retrieval.keywords' Korean particle-strip so a term
-// learned from "소버린을" matches a future "소버린" — normalize() reuses that logic.
+// Particle handling is allowlisted, never `dropLast()`: arbitrary truncation made
+// 회의실/회의록 collide at 회의 and turned AWS into aw.
 
 import Foundation
 
@@ -45,19 +45,10 @@ enum PersonalVocabulary {
     /// exact key match substitutes — see the phoneticFloor calibration note.
     static let phoneticMinLen = 5
 
-    /// Normalize a raw word token the SAME way the retrieval/keyword path does:
-    /// lowercase, strip surrounding punctuation, then strip a trailing Korean
-    /// particle for ≥3-char tokens (소버린을 → 소버린) so a rule learned with a
-    /// particle still matches the bare form. Returns "" for empty/punct-only tokens.
+    /// Lowercase + punctuation trim, then remove only a known Korean particle.
     static func normalize(_ raw: String) -> String {
         let t = surfaceForm(raw)
-        guard t.count >= 3 else { return t }
-        // 조사 strip mirrors Retrieval.keywords (line 24): drop one trailing char so
-        // the canonical key is the particle-stripped stem. This is what makes a rule
-        // learned from an inflected form ("소버린을" → stem "소버린") match a future
-        // bare "소버린": both sides normalize to the same stem. normalizeKeys keeps
-        // the full surface form available too for an exact (un-inflected) hit.
-        return String(t.dropLast())
+        return splitParticle(t).stem
     }
 
     /// Lowercased, punctuation-stripped surface form WITHOUT the trailing-particle
@@ -69,17 +60,31 @@ enum PersonalVocabulary {
             .lowercased()
     }
 
-    /// Candidate lookup keys for a token: the full surface form, and (for ≥3 chars)
-    /// the trailing-particle-stripped stem — same dual-index trick as Retrieval.
+    /// Candidate keys: exact surface plus a stem only when an allowlisted particle
+    /// is actually present. Lexemes such as 회의실/회의록/AWS remain distinct.
     static func normalizeKeys(_ raw: String) -> [String] {
         let surface = surfaceForm(raw)
         guard !surface.isEmpty else { return [] }
         var keys = [surface]
-        if surface.count >= 3 {
-            let stem = String(surface.dropLast())
-            if stem != surface { keys.append(stem) }
-        }
+        let split = splitParticle(surface)
+        if split.particle != nil, split.stem != surface { keys.append(split.stem) }
         return keys
+    }
+
+    /// Longest-first. A minimum two-character stem prevents short nouns such as
+    /// 사과 from being interpreted as 사+과.
+    private static let particles = [
+        "한테서", "이라고", "으로", "에게", "에서", "부터", "까지", "처럼", "보다",
+        "께서", "한테", "이랑", "라고", "은", "는", "이", "가", "을", "를", "와", "과",
+        "의", "에", "께", "로", "도", "만", "랑",
+    ]
+
+    private static func splitParticle(_ surface: String) -> (stem: String, particle: String?) {
+        for particle in particles where surface.hasSuffix(particle) {
+            let stem = String(surface.dropLast(particle.count))
+            if stem.count >= 2 { return (stem, particle) }
+        }
+        return (surface, nil)
     }
 
     // ── LEARN: diff an edit into (wrong → right) corrections ──────────────────────
@@ -98,14 +103,15 @@ enum PersonalVocabulary {
         guard bs.count == as_.count, !bs.isEmpty else { return [] }
         var out: [(wrong: String, right: String)] = []
         for (b, a) in zip(bs, as_) {
-            // The WRONG side is the lookup key → particle-stripped stem so a future
-            // bare/inflected form of the same word matches (normalize). The RIGHT side
-            // is the literal replacement text → keep its FULL surface form (stripping a
-            // particle here would substitute a truncated word into the transcript).
-            // Gate on the surface token length so the strip can't shrink a legit
-            // 3-char token below minLen.
-            let nb = normalize(b), na = surfaceForm(a)
-            guard surfaceForm(b) != na, surfaceForm(b).count >= minLen, na.count >= 1 else { continue }
+            let before = surfaceForm(b), after = surfaceForm(a)
+            let bs = splitParticle(before), as_ = splitParticle(after)
+            // When both sides carry the same particle, learn stem→stem. At apply
+            // time the observed particle is reattached, so bare and inflected
+            // future forms both remain grammatical.
+            let shareParticle = bs.particle != nil && bs.particle == as_.particle
+            let nb = shareParticle ? bs.stem : before
+            let na = shareParticle ? as_.stem : after
+            guard before != after, before.count >= minLen, !na.isEmpty else { continue }
             out.append((wrong: nb, right: na))
         }
         return out
@@ -177,7 +183,15 @@ enum PersonalVocabulary {
         guard let primary = keys.first, primary.count >= minLen else { return nil }
         // 1) exact (either the normalized form or its particle-stripped stem) — the
         //    certain path: the user corrected this exact token before.
-        for k in keys { if let e = glossary.exact(k) { return e.right } }
+        let surface = surfaceForm(raw)
+        let split = splitParticle(surface)
+        for k in keys {
+            if let e = glossary.exact(k) {
+                if k == split.stem, let particle = split.particle,
+                   !e.right.hasSuffix(particle) { return e.right + particle }
+                return e.right
+            }
+        }
         // 2) phonetic — only for LONG tokens, where Jaro-Winkler separates a true
         //    mishearing (≥phoneticFloor) from unrelated prefix-sharers. Short tokens
         //    are intentionally NOT phonetically guessed (see calibration note).
