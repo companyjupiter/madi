@@ -128,6 +128,11 @@ final class SessionController: EngineProcessDelegate {
     /// Max live translation queue depth (turns). Past this, fast speech sheds its
     /// OLDEST turns to `translateBacklog` and they're re-translated at stop.
     private static let liveTranslateCap = 30
+    /// Upper bound on a live PREVIEW (interim) string. A real ~10s recognition
+    /// window holds well under this in any language; a value beyond it is a
+    /// run-on-hallucination balloon, dropped so it never flashes on the caption
+    /// or gets interim-translated (the clean committed line still lands).
+    private static let maxLivePartialChars = 512
     /// Lines the live queue shed (translation deferred to stop) — the "N줄은 종료
     /// 후 채움" HUD signal, and the backfill worklist finalize drains.
     private var backlogLineIDs: Set<UUID> = []
@@ -1284,7 +1289,10 @@ final class SessionController: EngineProcessDelegate {
         // .languageDetected below) so previews match the committed transcript.
         livePartial = ""; livePartialTranslations = [:]
         if livePreviewEnabled {
-            preview.onText = { [weak self] t in self?.livePartial = t }
+            preview.onText = { [weak self] t in
+                guard let self, t.count <= Self.maxLivePartialChars else { return }
+                self.livePartial = t
+            }
             capture.onPreview = { [weak self] url in self?.preview.feed(wav: url) }
             if let lang = languageTokenID { preview.start(config: makeConfig(), lang: lang) }
         } else {
@@ -1482,7 +1490,12 @@ final class SessionController: EngineProcessDelegate {
             // in-decode hypothesis of the closed segment — better context than
             // the preview engine's text and converges to the committed line, so
             // it may overwrite; the next preview/commit supersedes it.
-            if !text.isEmpty { livePartial = text }
+            // Defense-in-depth for the "폭파" (run-on hallucination): the engine now
+            // freezes a runaway «partial», but drop any preview far longer than a
+            // real ~10s window could hold (any language ≪ 512 chars) so a balloon
+            // from any future/other emitter never reaches the caption + interim
+            // translation. The clean rescue-committed line still lands normally.
+            if !text.isEmpty, text.count <= Self.maxLivePartialChars { livePartial = text }
         default: transcript.ingest(event)
         }
     }
