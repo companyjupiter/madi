@@ -1022,15 +1022,25 @@ final class SessionController: EngineProcessDelegate {
 
     private var isError: Bool { if case .error = phase { return true }; return false }
 
-    /// T12: derive the bidirectional language pair from the translate targets —
-    /// a {Korean, X} target set IS the clinic conversation declaration (staff
-    /// speaks KO, patient speaks X). No extra UI: the pair unlocks per-segment
-    /// language re-probe in the engine so BOTH sides transcribe correctly.
+    /// T12: per-segment language re-probe whitelist = TRANSLATE TARGETS ∪ INPUT
+    /// LANGUAGE. The old "exactly {Korean, X}" pair NEVER included the spoken
+    /// (input) language when it wasn't a target — with {中,韓} targets an EN
+    /// speaker was force-labeled KO/ZH every segment and transcribed as Korean
+    /// hallucinations ("일요일…", 2026-07-13 폭파). The engine additionally always
+    /// keeps its session-detected language in the probe, so 자동 input works too.
+    /// Any 2..4 distinct languages activate the re-probe; <2 = plain lock/auto.
     private var langCandidatePair: [Int] {
-        guard translateTargets.count == 2, translateTargets.contains("Korean") else { return [] }
         let tok: [String: Int] = ["English": 50259, "Chinese": 50260, "Korean": 50264, "Japanese": 50266]
-        let pair = translateTargets.compactMap { tok[$0] }
-        return pair.count == 2 ? pair.sorted() : []
+        var set = Set(translateTargets.compactMap { tok[$0] })
+        if let input = languageTokenID { set.insert(input) }
+        return set.count >= 2 ? set.sorted() : []
+    }
+
+    /// The original clinic bidirectional declaration ({Korean, X} targets) —
+    /// kept as the S1 voiceprint-ANCHOR trigger only, so widening the language
+    /// whitelist above doesn't silently change diarization behavior.
+    private var isBidirectionalClinicPair: Bool {
+        translateTargets.count == 2 && translateTargets.contains("Korean")
     }
 
     private func makeConfig() -> EngineProcess.Config {
@@ -1046,7 +1056,7 @@ final class SessionController: EngineProcessDelegate {
             vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
             streamWavRoots: [capture.segmentDirectory],
             langCandidates: langCandidatePair,
-            anchorVoiceprints: !langCandidatePair.isEmpty && hasEnrolledVoiceprints,
+            anchorVoiceprints: isBidirectionalClinicPair && hasEnrolledVoiceprints,
             encoderF16Cache: ProcessInfo.processInfo.physicalMemory >= 24 * (1 << 30))
     }
 

@@ -1987,20 +1987,13 @@ pub fn main() !void {
             try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
-            if (g_lang_ncands > 0) {
-                var bl: u32 = g_lang_cands[0];
-                var bv: f32 = d_logits[g_lang_cands[0]];
-                for (g_lang_cands[1..g_lang_ncands]) |c| {
-                    if (d_logits[c] > bv) { bv = d_logits[c]; bl = c; }
-                }
-                seg_lang = bl;
-                if (lang_tok == 0) {
-                    lang_tok = bl; // session default (preview engine start etc.)
-                    try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
-                } else if (seg_lang != lang_tok) {
-                    try out.print("[lang] seg token {d}\n", .{seg_lang});
-                }
-            } else {
+            if (lang_tok == 0) {
+                // First detection (auto): FULL-range argmax even when a candidate
+                // whitelist is set — the whitelist is built from the TRANSLATE
+                // TARGETS, and the actually-spoken language can sit OUTSIDE it
+                // (EN speech with {中,韓} targets → forced-KO decode produced the
+                // "일요일…/이 시각 세계였습니다" hallucinations, 2026-07-13 폭파).
+                // The detected session language then joins the whitelist below.
                 var bl: u32 = 50259;
                 var bv: f32 = d_logits[50259];
                 var lt: u32 = 50259;
@@ -2008,6 +2001,20 @@ pub fn main() !void {
                 lang_tok = bl;
                 seg_lang = bl;
                 try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+            } else {
+                // Per-segment re-probe (T12): argmax over the whitelist ∪ the
+                // SESSION language — the session lock/first-detect must always be
+                // able to win, or a source language outside the target-derived
+                // whitelist gets relabeled every segment.
+                var bl: u32 = lang_tok;
+                var bv: f32 = d_logits[lang_tok];
+                for (g_lang_cands[0..g_lang_ncands]) |c| {
+                    if (d_logits[c] > bv) { bv = d_logits[c]; bl = c; }
+                }
+                seg_lang = bl;
+                if (seg_lang != lang_tok) {
+                    try out.print("[lang] seg token {d}\n", .{seg_lang});
+                }
             }
         }
         d_tokens[1] = seg_lang;
@@ -2159,6 +2166,7 @@ pub fn main() !void {
                 // the rescue still lands the clean committed text.
                 if (g_partials and !dropped and n_text > 0 and !partial_frozen) {
                     if (tokenCollapse(out_tokens[PL .. PL + n_text]) or
+                        tokenDiversityCollapse(out_tokens[PL .. PL + n_text]) or
                         n_text > envU("PARTIAL_MAX_TOK", 224))
                     {
                         partial_frozen = true;
@@ -2179,19 +2187,34 @@ pub fn main() !void {
             var pass_lp: f64 = 0; var pass_nlp: u32 = 0;
             for (0..n_text) |i| { const c = d_conf[PL + i]; if (c > 0) { pass_lp += @log(@as(f64, c)); pass_nlp += 1; } }
             const pass_avg_lp: f64 = if (pass_nlp > 0) pass_lp / @as(f64, @floatFromInt(pass_nlp)) else 0;
-            // rescue trigger: periodic collapse (existing) OR a degenerate decode
-            // (avg_logprob below LOGPROB_RESCUE, default −1.0 — Whisper's threshold).
-            // The ts-mode re-decode is collapse-immune AND timestamp-anchored, so a
-            // short utterance the plain pass over-ran gets a clean EOT. Safety net,
-            // not a WER mover (the residual errors are confident substitutions —
-            // re-decode can't fix those; see PERF_LOG P1).
-            if (!ts_mode and (tokenCollapse(out_tokens[PL .. PL + n_text]) or pass_avg_lp < envF("LOGPROB_RESCUE", -1.0))) {
+            // rescue trigger: periodic collapse (existing) OR a MUTATED loop
+            // (tokenDiversityCollapse — the NRNG ban makes a stuck decode vary
+            // each period, which defeats exact-match runs; 2026-07-13 폭파) OR a
+            // degenerate decode (avg_logprob below LOGPROB_RESCUE, default −1.0 —
+            // Whisper's threshold). Predicates run on TEXT tokens only: the
+            // ts-mode pass interleaves <|t|> tokens that would break period runs
+            // and inflate 4-gram diversity, masking a text loop.
+            var loop_txt: [MAX_TOK]u32 = undefined;
+            var n_loop: usize = 0;
+            for (0..n_text) |i| {
+                const tk = out_tokens[PL + i];
+                if (tk < EOT) { loop_txt[n_loop] = tk; n_loop += 1; }
+            }
+            const loopy = tokenCollapse(loop_txt[0..n_loop]) or tokenDiversityCollapse(loop_txt[0..n_loop]);
+            if (!ts_mode and (loopy or pass_avg_lp < envF("LOGPROB_RESCUE", -1.0))) {
                 ts_mode = true; // discard this pass, re-decode in ts mode
                 fb_reason = if (pass_avg_lp < envF("LOGPROB_RESCUE", -1.0)) "logprob" else "collapse";
                 try out.print("[rescue] chunk {d}: {s} — re-decoding with timestamp tokens\n", .{ cchunk + 1, fb_reason });
                 continue :mode;
             }
-            if (!dropped and n_text > 0) {
+            // the RESCUE re-decode itself was previously committed UNGATED — a ts
+            // pass that also loops walked straight into the transcript (the 폭파
+            // screenshot's "이 시각 세계였습니다" ×20 line). Empty output is
+            // strictly better than committed garbage: drop the pass.
+            const pass_garbage = ts_mode and loopy;
+            if (pass_garbage)
+                try out.print("[rescue] chunk {d}: re-decode still degenerate — segment dropped\n", .{cchunk + 1});
+            if (!dropped and n_text > 0 and !pass_garbage) {
                 sum_lp += pass_lp; n_lp += pass_nlp; // accumulate for the seg event
                 var ht = try std.time.Timer.start();
                 const text = try bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]);
@@ -2200,6 +2223,7 @@ pub fn main() !void {
                 try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, PL, t_off + pass_off, pass_got, senv[env_off..], d_conf);
                 host_ns += ht.read();
             }
+            if (pass_garbage) break :seek; // garbage timestamps — don't seek into junk
             if (!ts_mode) break :seek; // plain mode: single pass, no seek
             // continue from the last closed segment if ≥1 s of voiced audio remains
             var last_fr: u32 = 0; // window-relative frame of the last <|t|>
@@ -2941,6 +2965,36 @@ fn tokenCollapse(toks: []const u32) bool {
         }
     }
     return false;
+}
+
+// MUTATION-TOLERANT loop detector (2026-07-13 폭파 후속): the NRNG window ban
+// forces a stuck decode to VARY each period ("이 시각 세계였습니다"→"시각
+// 세계였습니다") — tokenCollapse's exact-match runs reset at every mutation and
+// the loop commits. Whisper's own compression-ratio gate catches this class;
+// the equivalent token-level signal is 4-GRAM DIVERSITY: distinct 4-grams /
+// total. A looped segment reuses the same few 4-grams (screenshot loop ≈0.12)
+// while real speech is near 1.0. Threshold LOOP_DIV_TAU (default 0.35) fires
+// only on heavy reuse; segments under 24 text tokens are exempt (too little
+// signal — and a short genuine repeat is legitimate). Zero-alloc: fixed
+// open-addressed table (947 slots ≫ 445 max 4-grams).
+fn tokenDiversityCollapse(toks: []const u32) bool {
+    if (toks.len < 24) return false;
+    var table = [_]u64{0} ** 947;
+    var distinct: usize = 0;
+    const total = toks.len - 3;
+    for (0..total) |i| {
+        var h: u64 = 0xcbf29ce484222325;
+        for (0..4) |k| {
+            h ^= toks[i + k];
+            h *%= 0x100000001b3;
+        }
+        if (h == 0) h = 1; // 0 marks an empty slot
+        var s: usize = @intCast(h % table.len);
+        while (table[s] != 0 and table[s] != h) s = (s + 1) % table.len;
+        if (table[s] == 0) { table[s] = h; distinct += 1; }
+    }
+    const ratio = @as(f32, @floatFromInt(distinct)) / @as(f32, @floatFromInt(total));
+    return ratio < envF("LOOP_DIV_TAU", 0.35);
 }
 
 // 1 ms-hop energy envelope: mean |x| over a ±2 ms window (whisper.cpp
