@@ -122,6 +122,11 @@ final class SessionController: EngineProcessDelegate {
     /// the typing caret (A7). Set on the first diverged partial, cleared on the
     /// final result. Struct so SwiftUI diffs it cheaply.
     struct TranslationRef: Equatable { let id: UUID; let lang: String }
+    private struct TranslationWorkKey: Hashable {
+        let id: UUID
+        let lang: String
+        let sourceRevision: UInt64
+    }
     private(set) var streamingTranslation: TranslationRef?
     /// Pending translation turns (queued + in-flight) — the "N줄 대기" status (D20).
     private(set) var translateQueueDepth = 0
@@ -135,12 +140,12 @@ final class SessionController: EngineProcessDelegate {
     private static let maxLivePartialChars = 512
     /// Lines the live queue shed (translation deferred to stop) — the "N줄은 종료
     /// 후 채움" HUD signal, and the backfill worklist finalize drains.
-    private var backlogLineIDs: Set<UUID> = []
+    private var backlogKeys: Set<TranslationWorkKey> = []
     private(set) var translateBacklog = 0
     /// Post-stop backfill in progress: lines still being re-translated after the
     /// live cap shed them. Drives the ".done · 채우는 중 N줄" HUD, and gates the
     /// Shared DNA broker serves these ahead of post-session summary work.
-    private var backfillPendingIDs: Set<UUID> = []
+    private var backfillPendingKeys: Set<TranslationWorkKey> = []
     private(set) var backfillRemaining = 0
     /// Wall-clock of the last committed line — the commit-cadence ring reads it
     /// against effectiveWindowSeconds to show progress toward the next commit (D19).
@@ -285,18 +290,21 @@ final class SessionController: EngineProcessDelegate {
             // last interim translation stays on screen as a provisional caption
             // (T1 carryover) until the committed line's real translation lands.
             // Session reset/stop sites clear livePartialTranslations explicitly.
-            if livePartial.isEmpty { interimInFlight = false }
-            else if livePartial != oldValue { scheduleInterimTranslate() }
+            if livePartial != oldValue { scheduleInterimTranslate() }
         }
     }
     /// Provisional translation of the in-progress interim text (lang → text), shown
     /// immediately so a caption doesn't wait ~10s for the window to close. Replaced
     /// by the authoritative per-line translation once the line commits.
     private(set) var livePartialTranslations: [String: String] = [:]
-    private var interimInFlight = false
-    private var interimSource = ""
+    private struct InterimRequest {
+        let source: String
+        var pending: Set<String>
+        var translations: [String: String]
+    }
+    private var interimRequests: [UUID: InterimRequest] = [:]
+    private var activeInterimID: UUID?
     private var interimGen = 0
-    private static let interimID = UUID()
     private let preview = PreviewEngine()
     private var dnaBusy = false
 
@@ -329,7 +337,7 @@ final class SessionController: EngineProcessDelegate {
     var isBidirectionalKoPair: Bool { translateTargets.count == 2 && translateTargets.contains("Korean") }
 
     private var translate: TranslateEngine?
-    private var translatedHash: [UUID: Int] = [:]  // line id → translated text hash (re-queue on change)
+    private var translatedHash: [UUID: UInt64] = [:]  // line id → source revision (re-queue on change)
     private var tailGen = 0                        // tail-timeout generation (T2)
     /// T8: disk-persistent pre-translated clinic phrase bank (0 ms on hit).
     private let faqStore = FAQTranslationStore.load(
@@ -613,8 +621,8 @@ final class SessionController: EngineProcessDelegate {
         return translateTargets.subtracting([src].compactMap { $0 }).sorted()
     }
     /// Normalized per-session content hash for re-translate-on-change gating.
-    private func lineHash(_ text: String) -> Int {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).hashValue
+    private func lineHash(_ text: String) -> UInt64 {
+        TextRevision.of(text)
     }
 
     /// Start the translate engine on demand (targets set + assets present).
@@ -630,53 +638,51 @@ final class SessionController: EngineProcessDelegate {
             // Live cap: keep the queue tracking the newest speech. Turns the engine
             // can't keep up with are shed and remembered for the stop-time backfill.
             t.maxPending = Self.liveTranslateCap
-            t.onDrop = { [weak self] id in
+            t.onDrop = { [weak self] id, lang, source in
                 guard let self else { return }
-                if self.backlogLineIDs.insert(id).inserted { self.translateBacklog = self.backlogLineIDs.count }
+                if self.finishInterimTurn(id: id, lang: lang, source: source, text: nil) { return }
+                let key = TranslationWorkKey(id: id, lang: lang, sourceRevision: self.lineHash(source))
+                self.backlogKeys.insert(key)
+                self.translateBacklog = Set(self.backlogKeys.map(\.id)).count
             }
             t.onResult = { [weak self] id, lang, text, source in
                 guard let self else { return }
-                if id == Self.interimID {
-                    self.interimInFlight = false
-                    if !self.livePartial.isEmpty {
-                        self.livePartialTranslations[lang] = text
-                        // Cache this interim source's translations so the matching
-                        // committed line can reuse them (O3). Keyed by interimSource —
-                        // the exact text that was sent to translate() for this turn.
-                        self.interimCache.put(self.interimSource, self.livePartialTranslations)
-                    }
-                    if self.livePartial != self.interimSource { self.scheduleInterimTranslate() }  // grew → refresh
-                } else {
-                    // A7: this turn finished streaming — drop the caret.
-                    if self.streamingTranslation == TranslationRef(id: id, lang: lang) {
-                        self.streamingTranslation = nil
-                    }
-                    // stale-guard (T2): the line may have GROWN after this turn was
-                    // queued (merge). The hash gate already re-queued the new text —
-                    // don't let the old turn overwrite the fresher translation.
-                    if let line = self.transcript.lines.first(where: { $0.id == id }),
-                       self.lineHash(line.text) != self.lineHash(source) { return }
-                    self.transcript.setTranslation(id, lang: lang, text)
-                    // Backfill progress: this shed line is filled — count it down.
-                    if self.backfillPendingIDs.remove(id) != nil {
-                        self.backfillRemaining = self.backfillPendingIDs.count
-                    }
-                    // T1 carryover teardown: the real translation replaced the
-                    // provisional interim caption for the freshest content.
-                    if id == self.transcript.lines.last?.id, self.livePartial.isEmpty {
-                        self.livePartialTranslations = [:]
-                    }
+                if self.finishInterimTurn(id: id, lang: lang, source: source,
+                                          text: text.isEmpty ? nil : text) { return }
+                // A7: this turn finished streaming — drop the caret.
+                if self.streamingTranslation == TranslationRef(id: id, lang: lang) {
+                    self.streamingTranslation = nil
+                }
+                let revision = self.lineHash(source)
+                let completedKey = TranslationWorkKey(id: id, lang: lang, sourceRevision: revision)
+                if !text.isEmpty {
+                    _ = self.transcript.setTranslation(id, lang: lang, text,
+                                                       sourceRevision: revision)
+                }
+                self.backlogKeys.remove(completedKey)
+                self.translateBacklog = Set(self.backlogKeys.map(\.id)).count
+                // Backfill is keyed per target+source generation; one language
+                // completing can never falsely mark its siblings complete.
+                self.backfillPendingKeys.remove(completedKey)
+                self.backfillRemaining = self.backfillPendingKeys.count
+                // T1 carryover teardown: the real translation replaced the
+                // provisional interim caption for the freshest content.
+                if id == self.transcript.lines.last?.id, self.livePartial.isEmpty {
+                    self.livePartialTranslations = [:]
                 }
             }
             // streaming partial (T5): the reply types itself onto the screen
             // (~19 ms/token) instead of appearing whole ~0.5-0.9 s later.
-            t.onPartial = { [weak self] id, lang, text in
+            t.onPartial = { [weak self] id, lang, text, source in
                 guard let self else { return }
-                if id == Self.interimID {
-                    if !self.livePartial.isEmpty { self.livePartialTranslations[lang] = text }
+                if let request = self.interimRequests[id] {
+                    guard id == self.activeInterimID, request.source == source,
+                          self.livePartial == source else { return }
+                    self.livePartialTranslations[lang] = text
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
-                    self.transcript.setTranslation(id, lang: lang, text)
+                    _ = self.transcript.setTranslation(id, lang: lang, text,
+                                                       sourceRevision: self.lineHash(source))
                 }
             }
             // queue depth (D20) — the engine reports queued + in-flight turns.
@@ -691,6 +697,31 @@ final class SessionController: EngineProcessDelegate {
         return translate
     }
 
+    /// Consume one target of an interim request. Each source snapshot owns a
+    /// unique UUID and a per-language barrier, so A/B completions cannot share
+    /// cache state or clear the in-flight guard early.
+    @discardableResult
+    private func finishInterimTurn(id: UUID, lang: String, source: String, text: String?) -> Bool {
+        guard var request = interimRequests[id], request.source == source else { return false }
+        request.pending.remove(lang)
+        if let text, !text.isEmpty { request.translations[lang] = text }
+        let isActive = activeInterimID == id
+        if isActive, livePartial == source {
+            livePartialTranslations = request.translations
+            if !request.translations.isEmpty { interimCache.put(source, request.translations) }
+        }
+        if request.pending.isEmpty {
+            interimRequests[id] = nil
+            if isActive {
+                activeInterimID = nil
+                if !livePartial.isEmpty, livePartial != source { scheduleInterimTranslate() }
+            }
+        } else {
+            interimRequests[id] = request
+        }
+        return true
+    }
+
     /// Debounced (≈0.3s, one in flight) translation of the in-progress interim text
     /// so a PROVISIONAL caption appears right after you speak instead of waiting for
     /// the window to close. Best-effort + throwaway — the per-line translation wins.
@@ -702,13 +733,17 @@ final class SessionController: EngineProcessDelegate {
         let gen = interimGen
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
-            guard let self, gen == self.interimGen, !self.interimInFlight, !self.livePartial.isEmpty else { return }
+            guard let self, gen == self.interimGen, self.activeInterimID == nil,
+                  !self.livePartial.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
-            let targets = self.routedTargets(for: self.livePartial)
+            let source = self.livePartial
+            let targets = self.routedTargets(for: source)
             guard !targets.isEmpty else { return }
-            self.interimInFlight = true
-            self.interimSource = self.livePartial
-            t.translate(self.livePartial, into: targets, id: Self.interimID)
+            let id = UUID()
+            self.activeInterimID = id
+            self.interimRequests[id] = InterimRequest(
+                source: source, pending: Set(targets), translations: [:])
+            t.translate(source, into: targets, id: id)
         }
     }
 
@@ -730,38 +765,42 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// Queue one line (hash-gated, FAQ/O3-cached, direction-routed).
-    private func translateLine(_ line: Line) {
+    private func translateLine(_ line: Line, forceTargets: Set<String>? = nil) {
         let h = lineHash(line.text)
-        if translatedHash[line.id] == h { return }
+        let routed = Set(routedTargets(for: line.text))
+        let requested = forceTargets.map { $0.intersection(routed) } ?? routed
+        let existing = transcript.pruneTranslations(line.id, validTargets: routed, sourceRevision: h)
+        let missing = requested.subtracting(existing)
+        guard !missing.isEmpty else { translatedHash[line.id] = h; return }
+        if forceTargets == nil, translatedHash[line.id] == h { return }
         guard let t = ensureTranslateEngine() else { return }
-        let targets = routedTargets(for: line.text)
-        guard !targets.isEmpty else { return }
         translatedHash[line.id] = h
         // T8: session-invariant FAQ bank first — a recurring clinic phrase costs
         // 0 ms and no DNA3 turn. Conservative exact (normalized) match only.
         if let faq = faqStore.lookup(line.text) {
-            var missing: [String] = []
-            for tgt in targets {
-                if let tr = faq[tgt] { transcript.setTranslation(line.id, lang: tgt, tr) }
-                else { missing.append(tgt) }
+            var unresolved: [String] = []
+            for tgt in missing.sorted() {
+                if let tr = faq[tgt] {
+                    _ = transcript.setTranslation(line.id, lang: tgt, tr, sourceRevision: h)
+                } else { unresolved.append(tgt) }
             }
-            if missing.isEmpty { return }
-            t.translate(line.text, into: missing, id: line.id)
+            if unresolved.isEmpty { return }
+            t.translate(line.text, into: unresolved, id: line.id)
             return
         }
         // O3: if this line's text was already translated as interim, reuse the
         // cached translations and skip the DNA3 turn entirely. Only reuse the
         // targets we actually have cached; queue the engine for any that miss.
         if let cached = interimCache.get(line.text) {
-            let missing = targets.filter { cached[$0] == nil }
-            for tgt in targets where cached[tgt] != nil {
-                transcript.setTranslation(line.id, lang: tgt, cached[tgt]!)
+            let unresolved = missing.filter { cached[$0] == nil }.sorted()
+            for tgt in missing where cached[tgt] != nil {
+                _ = transcript.setTranslation(line.id, lang: tgt, cached[tgt]!, sourceRevision: h)
             }
-            if missing.isEmpty { return }
-            t.translate(line.text, into: missing, id: line.id)
+            if unresolved.isEmpty { return }
+            t.translate(line.text, into: unresolved, id: line.id)
             return
         }
-        t.translate(line.text, into: targets, id: line.id)
+        t.translate(line.text, into: missing.sorted(), id: line.id)
     }
 
     /// T2 tail timeout: the LAST line never loses last-status in a monologue —
@@ -1149,8 +1188,9 @@ final class SessionController: EngineProcessDelegate {
         fileName = ""; chunksDone = 0; chunksTotal = 0
         livePartial = ""; livePartialTranslations = [:]
         streamingTranslation = nil; translateQueueDepth = 0
-        backlogLineIDs.removeAll(); translateBacklog = 0
-        backfillPendingIDs.removeAll(); backfillRemaining = 0
+        backlogKeys.removeAll(); translateBacklog = 0
+        backfillPendingKeys.removeAll(); backfillRemaining = 0
+        interimRequests.removeAll(); activeInterimID = nil
         segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
         stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0
         phase = .idle
@@ -1191,35 +1231,45 @@ final class SessionController: EngineProcessDelegate {
     func editWord(_ lineID: UUID, index: Int, to newText: String) {
         let oldText = transcript.lines.first(where: { $0.id == lineID })
             .flatMap { index >= 0 && index < $0.words.count ? $0.words[index].text : nil }
-        transcript.editWord(lineID, index: index, to: newText)
+        guard transcript.editWord(lineID, index: index, to: newText) else { return }
         if let old = oldText, old != newText, !newText.trimmingCharacters(in: .whitespaces).isEmpty {
-            glossary.learn(wrong: old, right: newText); glossary.save()
+            for pair in PersonalVocabulary.diff(before: old, after: newText) {
+                glossary.learn(wrong: pair.wrong, right: pair.right)
+            }
+            glossary.save()
         }
-        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
-        let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
-        guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == lineID }) else { return }
-        translatedHash[lineID] = lineHash(line.text)
-        t.translate(line.text, into: targets, id: lineID)
+        translatedHash[lineID] = nil
+        if let line = transcript.lines.first(where: { $0.id == lineID }) { translateLine(line) }
     }
 
     func editLine(_ id: UUID, to newText: String) {
-        transcript.editLine(id, newText)
-        // LEARN: the user just corrected this line — index any swapped tokens so
-        // future mis-recognitions of the same term self-correct. Diff the ASR text
-        // (joinedText of the current words) against the user's new text.
-        if let line = transcript.lines.first(where: { $0.id == id }) {
-            let asrText = line.words.map(\.text).joined(separator: " ")
-            let pairs = PersonalVocabulary.diff(before: asrText, after: newText)
+        _ = applyTextCorrection(id, to: newText, expectedRevision: nil, learn: true)
+    }
+
+    /// Single correction transaction for manual edits, vocabulary fixes and AI
+    /// re-decodes: revision guard → source mutation → stale translation purge →
+    /// direction-routed retranslation. No caller may bypass these invariants.
+    @discardableResult
+    private func applyTextCorrection(_ id: UUID, to newText: String,
+                                     expectedRevision: UInt64?, learn: Bool) -> Bool {
+        guard let before = transcript.lines.first(where: { $0.id == id }) else { return false }
+        guard transcript.editLine(id, newText, expectedRevision: expectedRevision) else { return false }
+        if learn {
+            let pairs = PersonalVocabulary.diff(before: before.text, after: newText)
             if !pairs.isEmpty {
                 for p in pairs { glossary.learn(wrong: p.wrong, right: p.right) }
                 glossary.save()
             }
         }
-        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
-        let targets = translateTargets.subtracting([sourceLangName].compactMap { $0 }).sorted()
-        guard !targets.isEmpty, let line = transcript.lines.first(where: { $0.id == id }) else { return }
-        translatedHash[id] = lineHash(line.text)
-        t.translate(line.text, into: targets, id: id)
+        translatedHash[id] = nil
+        if let line = transcript.lines.first(where: { $0.id == id }) { translateLine(line) }
+        return true
+    }
+
+    /// User correction of model translation. Source provenance remains bound to
+    /// the current source revision and round-trips through Markdown/JSON.
+    func editTranslation(_ id: UUID, lang: String, to newText: String) {
+        _ = transcript.editTranslation(id, lang: lang, newText)
     }
 
     func start() {
@@ -1233,6 +1283,9 @@ final class SessionController: EngineProcessDelegate {
         lastAutoSaved = nil
         translatedHash.removeAll()
         interimCache.clear()
+        backlogKeys.removeAll(); translateBacklog = 0
+        backfillPendingKeys.removeAll(); backfillRemaining = 0
+        interimRequests.removeAll(); activeInterimID = nil
         clearSummary()
         DNAEngineBroker.shared.onBusyChange = { [weak self] busy in
             guard let self else { return }
@@ -1553,18 +1606,26 @@ final class SessionController: EngineProcessDelegate {
         // (the live captions themselves already moved on). backfillRemaining drives
         // the progress HUD; on 8GB the summary engine — which evicts translate —
         // waits for this to drain. (interimCache is still warm → O3 reuse.)
-        if let t = translate, !backlogLineIDs.isEmpty {
+        if let t = translate, !backlogKeys.isEmpty {
             t.maxPending = 0
-            backfillPendingIDs.removeAll()
-            for line in transcript.lines where backlogLineIDs.contains(line.id) {
-                // skip lines a late live turn already filled (no wasted turn)
-                if line.translations.count >= routedTargets(for: line.text).count { continue }
+            backfillPendingKeys = Set(backlogKeys.filter { key in
+                guard let line = transcript.lines.first(where: { $0.id == key.id }) else { return false }
+                return lineHash(line.text) == key.sourceRevision
+                    && routedTargets(for: line.text).contains(key.lang)
+                    && line.translations[key.lang] == nil
+            })
+            let grouped = Dictionary(grouping: backfillPendingKeys, by: \.id)
+            for (id, keys) in grouped {
+                guard let line = transcript.lines.first(where: { $0.id == id }) else { continue }
                 translatedHash[line.id] = nil
-                backfillPendingIDs.insert(line.id)
-                translateLine(line)
+                translateLine(line, forceTargets: Set(keys.map(\.lang)))
+                // FAQ/interim caches resolve synchronously and do not produce a
+                // completion callback, so close those exact work keys here.
+                let valid = transcript.validTranslationLanguages(id, sourceRevision: lineHash(line.text))
+                for key in keys where valid.contains(key.lang) { backfillPendingKeys.remove(key) }
             }
-            backfillRemaining = backfillPendingIDs.count
-            backlogLineIDs.removeAll(); translateBacklog = 0
+            backfillRemaining = backfillPendingKeys.count
+            backlogKeys.removeAll(); translateBacklog = 0
         }
         translateStableLines(includingLast: true)  // translate the final line(s) too
         interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)

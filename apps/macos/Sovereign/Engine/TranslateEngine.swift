@@ -24,7 +24,7 @@ final class TranslateEngine {
     /// Streaming in-progress translation (same keys; text = accumulated so far).
     /// Echo-gated: not fired while the reply is still a prefix of the source, so a
     /// verbatim echo (the 4B failure mode) never streams to the UI.
-    var onPartial: ((UUID, String, String) -> Void)?
+    var onPartial: ((UUID, String, String, String) -> Void)?
     /// Language written FIRST when several targets queue for one line — the
     /// caption's display language. Without it, sorted-append + LIFO pop meant
     /// the alphabetically-last language always translated first (T3).
@@ -60,7 +60,7 @@ final class TranslateEngine {
     /// Called with the LINE id of each turn shed by the cap. The session records
     /// these and re-translates them (uncapped) at stop, so the saved record stays
     /// complete — the drop only defers them out of the live path.
-    var onDrop: ((UUID) -> Void)?
+    var onDrop: ((UUID, String, String) -> Void)?
 
     func start(engine: URL, model: URL) -> Bool {
         broker.attach(client: clientID, engine: engine, model: model) { [weak self] in
@@ -126,7 +126,7 @@ final class TranslateEngine {
         if maxPending > 0 {
             while pending.count > maxPending {
                 let shed = pending.removeFirst()
-                onDrop?(shed.id)
+                onDrop?(shed.id, shed.lang, shed.source)
             }
         }
         pump()
@@ -176,7 +176,7 @@ final class TranslateEngine {
         // it may be a verbatim echo — hold streaming until it diverges. A real
         // cross-script translation diverges at the first token.
         if Self.norm(turn.source).hasPrefix(Self.norm(text)) { return }
-        onPartial?(turn.id, turn.lang, text)
+        onPartial?(turn.id, turn.lang, text, turn.source)
     }
 
     private func completeTurn(_ text: String) {
@@ -196,9 +196,12 @@ final class TranslateEngine {
                                     prefix: nil, body: nil,
                                     retries: turn.retries - 1))
             }
-            return   // retry pending, or suppress the echo
+            if turn.retries == 0 { onResult?(turn.id, turn.lang, "", turn.source) }
+            return   // retry pending, or report a completed suppressed echo
         }
-        if !text.isEmpty { onResult?(turn.id, turn.lang, text, turn.source) }
+        // Empty is a terminal result too: request-generation and backfill
+        // barriers must drain even when the model returns no usable text.
+        onResult?(turn.id, turn.lang, text, turn.source)
     }
 
     private static func norm(_ x: String) -> String {

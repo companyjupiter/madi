@@ -36,6 +36,7 @@ struct Line: Identifiable {
     /// the LLM reconcile pass may relabel (S3 fusion gate).
     var speakerMargin: Double = 1.0
     var translations: [String: String] = [:]   // targetLang → text (multi-target live translation)
+    var editedTranslations: Set<String> = []   // languages explicitly corrected by the user
     var editedText: String? = nil     // user edit (live or post); overrides the joined words
     /// Words joined with the engine's spacing convention.
     var joinedText: String {
@@ -59,6 +60,27 @@ struct Line: Identifiable {
            activeLangs.contains(where: { translations[$0] == nil }) { return .translating }
         return .completed
     }
+}
+
+/// Stable, process-independent content revision used to bind every async
+/// translation/correction result to the exact source text that produced it.
+/// Swift's `hashValue` is intentionally randomized between processes, so it is
+/// unsuitable for persisted/archive-visible provenance or deterministic tests.
+enum TextRevision {
+    static func of(_ text: String) -> UInt64 {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in text.trimmingCharacters(in: .whitespacesAndNewlines).utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return hash
+    }
+}
+
+private struct TranslationRecord {
+    var text: String
+    var sourceRevision: UInt64
+    var userEdited: Bool
 }
 
 /// The unified per-segment model of the transcript list (Phase 3): one value
@@ -136,33 +158,95 @@ final class TranscriptStore {
     // Overlays keyed by stable line id (= first word id). Survive the per-word
     // live rebuild and the FLUSH regroup, so an async translation that arrives
     // seconds later — or a user edit made mid-recording — still lands.
-    private var translationsByLine: [UUID: [String: String]] = [:]
+    private var translationsByLine: [UUID: [String: TranslationRecord]] = [:]
     private var editsByLine: [UUID: String] = [:]
 
     /// Attach a per-language translation to a line by id (from TranslateEngine, async).
-    func setTranslation(_ id: UUID, lang: String, _ text: String) {
-        translationsByLine[id, default: [:]][lang] = text
-        if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].translations[lang] = text }
+    @discardableResult
+    func setTranslation(_ id: UUID, lang: String, _ text: String,
+                        sourceRevision: UInt64? = nil, userEdited: Bool = false) -> Bool {
+        guard let i = lines.firstIndex(where: { $0.id == id }) else { return false }
+        let current = TextRevision.of(lines[i].text)
+        guard sourceRevision == nil || sourceRevision == current else { return false }
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return false }
+        translationsByLine[id, default: [:]][lang] = TranslationRecord(
+            text: t, sourceRevision: current, userEdited: userEdited)
+        lines[i].translations[lang] = t
+        if userEdited { lines[i].editedTranslations.insert(lang) }
+        else { lines[i].editedTranslations.remove(lang) }
         scheduleRender()
+        return true
+    }
+
+    /// Direct translation correction uses the same provenance gate as model
+    /// output, but records authorship so the UI can truthfully mark it edited.
+    @discardableResult
+    func editTranslation(_ id: UUID, lang: String, _ text: String) -> Bool {
+        setTranslation(id, lang: lang, text, userEdited: true)
+    }
+
+    func sourceRevision(for id: UUID) -> UInt64? {
+        lines.first(where: { $0.id == id }).map { TextRevision.of($0.text) }
+    }
+
+    func validTranslationLanguages(_ id: UUID, sourceRevision: UInt64) -> Set<String> {
+        Set((translationsByLine[id] ?? [:]).compactMap { lang, record in
+            record.sourceRevision == sourceRevision ? lang : nil
+        })
+    }
+
+    /// Remove target languages no longer routed for this source, plus any result
+    /// generated from an older source revision. Returns the still-valid keys.
+    @discardableResult
+    func pruneTranslations(_ id: UUID, validTargets: Set<String>, sourceRevision: UInt64) -> Set<String> {
+        let previous = translationsByLine[id] ?? [:]
+        var kept: [String: TranslationRecord] = [:]
+        for (lang, record) in previous
+            where validTargets.contains(lang) && record.sourceRevision == sourceRevision {
+            kept[lang] = record
+        }
+        let changed = previous.count != kept.count || previous.contains { lang, record in
+            guard let next = kept[lang] else { return true }
+            return record.text != next.text || record.sourceRevision != next.sourceRevision
+                || record.userEdited != next.userEdited
+        }
+        if changed {
+            translationsByLine[id] = kept
+            if let i = lines.firstIndex(where: { $0.id == id }) {
+                lines[i].translations = kept.mapValues(\.text)
+                lines[i].editedTranslations = Set(kept.compactMap { $0.value.userEdited ? $0.key : nil })
+            }
+            scheduleRender()
+        }
+        return Set(kept.keys)
     }
 
     /// Replace a line's text (inline editing, live or post). Keyed by the stable
     /// line id so the edit persists through subsequent live rebuilds.
-    func editLine(_ id: UUID, _ newText: String) {
+    @discardableResult
+    func editLine(_ id: UUID, _ newText: String, expectedRevision: UInt64? = nil) -> Bool {
         let t = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, let i = lines.firstIndex(where: { $0.id == id }) else { return false }
+        let current = TextRevision.of(lines[i].text)
+        guard expectedRevision == nil || expectedRevision == current else { return false }
+        if lines[i].text == t { return true }
         editsByLine[id] = t
-        if let i = lines.firstIndex(where: { $0.id == id }) { lines[i].editedText = t }
+        lines[i].editedText = t
+        invalidateTranslations(id, lineIndex: i)
         scheduleRender()
+        return true
     }
 
     /// Replace a single word in a line (review flow). Word.text is immutable so
     /// the word is rebuilt; conf → 1.0 clears its low-confidence flag. editedText
     /// is refreshed to the new joinedText so exports/content-view stay in sync.
-    func editWord(_ lineID: UUID, index: Int, to newText: String) {
+    @discardableResult
+    func editWord(_ lineID: UUID, index: Int, to newText: String) -> Bool {
         guard let li = lines.firstIndex(where: { $0.id == lineID }),
-              index >= 0, index < lines[li].words.count else { return }
+              index >= 0, index < lines[li].words.count else { return false }
         let t = newText.trimmingCharacters(in: .whitespaces)
-        guard !t.isEmpty else { return }
+        guard !t.isEmpty else { return false }
         let old = lines[li].words[index]
         lines[li].words[index] = Word(t0: old.t0, t1: old.t1, text: t, conf: 1.0)
         lines[li].editedText = lines[li].joinedText
@@ -172,7 +256,15 @@ final class TranscriptStore {
         if let fi = frozen.firstIndex(where: { $0.id == lineID }) {
             frozen[fi].words = lines[li].words
         }
+        invalidateTranslations(lineID, lineIndex: li)
         scheduleRender()
+        return true
+    }
+
+    private func invalidateTranslations(_ id: UUID, lineIndex: Int) {
+        translationsByLine[id] = nil
+        lines[lineIndex].translations.removeAll()
+        lines[lineIndex].editedTranslations.removeAll()
     }
 
     // ── AI reconcile (speaker corrections as OVERLAYS) ──────────────────────
@@ -188,7 +280,14 @@ final class TranscriptStore {
 
     /// Merge every line of speaker `from` into `into` (over-split fix).
     func mergeSpeaker(from: Int, into: Int) {
-        speakerMerges[from] = into
+        guard from != into else { return }
+        let target = resolvedSpeaker(into)
+        speakerMerges[from] = target
+        // Path compression makes chained A→B→C merges deterministic regardless
+        // of command order and prevents one-hop overlays from leaking B labels.
+        for (source, destination) in speakerMerges where resolvedSpeaker(destination) == target {
+            speakerMerges[source] = target
+        }
         applySpeakerOverlays()
     }
 
@@ -208,10 +307,19 @@ final class TranscriptStore {
 
     private func applySpeakerOverlays() {
         for i in lines.indices {
-            if let ov = speakerOverrides[lines[i].id] { lines[i].speaker = ov }
-            else if let mg = speakerMerges[lines[i].speaker] { lines[i].speaker = mg }
+            if let ov = speakerOverrides[lines[i].id] { lines[i].speaker = resolvedSpeaker(ov) }
+            else { lines[i].speaker = resolvedSpeaker(lines[i].speaker) }
         }
         scheduleRender()
+    }
+
+    private func resolvedSpeaker(_ speaker: Int) -> Int {
+        var current = speaker
+        var seen = Set<Int>()
+        while let next = speakerMerges[current], seen.insert(current).inserted, next != current {
+            current = next
+        }
+        return current
     }
     /// Regroup from whatever label set currently applies (live vs finalized).
     private func rebuildFromCurrentLabels() {
@@ -236,14 +344,24 @@ final class TranscriptStore {
     func load(_ newLines: [Line]) {
         reset()
         lines = newLines
+        for line in newLines where !line.translations.isEmpty {
+            let revision = TextRevision.of(line.text)
+            translationsByLine[line.id] = line.translations.mapValues {
+                TranslationRecord(text: $0, sourceRevision: revision, userEdited: true)
+            }
+        }
         flushRenderNow()
     }
 
     /// Re-apply id-keyed overlays after any (re)grouping.
     private func applyOverlays() {
         for i in lines.indices {
-            if let tr = translationsByLine[lines[i].id] { lines[i].translations = tr }
             if let e = editsByLine[lines[i].id] { lines[i].editedText = e }
+            let revision = TextRevision.of(lines[i].text)
+            let valid = (translationsByLine[lines[i].id] ?? [:]).filter { $0.value.sourceRevision == revision }
+            translationsByLine[lines[i].id] = valid
+            lines[i].translations = valid.mapValues(\.text)
+            lines[i].editedTranslations = Set(valid.compactMap { $0.value.userEdited ? $0.key : nil })
         }
         applySpeakerOverlays()
     }

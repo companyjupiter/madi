@@ -4,6 +4,7 @@
 import Foundation
 
 enum Exporters {
+    private static let confidenceThreshold = 0.55
     /// Markdown: low-confidence words become *italic* (markdown has no color) so
     /// the SAVED doc still flags exactly the words to double-check — the export
     /// keeps the live view's confidence signal instead of dropping it.
@@ -16,11 +17,14 @@ enum Exporters {
         s += "> *기울임* 표시된 단어는 인식 신뢰도가 낮습니다 — 검토 권장.\n\n"
         for l in lines {
             let who = SpeakerID.display(l.speaker, names: names, fallback: "Speaker \(l.speaker)")
-            let body = renderWords(l.words)
+            let body = l.isEdited ? l.text : renderWords(l.words)
             let mark = l.overlapSpeakers
                 .map { " ⟨+\(SpeakerID.display($0, names: names, fallback: "Speaker \($0)")) 겹침⟩" }
                 .joined()
             s += "- **[\(timecode(l.start))] \(who)** \(body)\(mark)\n"
+            for (lang, text) in l.translations.sorted(by: { $0.key < $1.key }) {
+                s += "  - [번역:\(lang)] \(text.replacingOccurrences(of: "\n", with: " "))\n"
+            }
         }
         return s
     }
@@ -31,7 +35,7 @@ enum Exporters {
         for (i, w) in words.enumerated() {
             if i > 0, w.text.first.map({ !",.!?…".contains($0) }) ?? true { s += " " }
             let t = w.text.trimmingCharacters(in: .whitespaces)
-            s += (w.conf < Theme.confThreshold && !t.isEmpty) ? "*\(t)*" : w.text
+            s += (w.conf < confidenceThreshold && !t.isEmpty) ? "*\(t)*" : w.text
         }
         return s
     }
@@ -57,6 +61,7 @@ enum Exporters {
                 "name": SpeakerID.display(l.speaker, names: names, fallback: "Speaker \(l.speaker)"),
                 "start": l.start, "end": l.end,
                 "text": l.text,
+                "translations": l.translations,
                 "overlap_speakers": l.overlapSpeakers,
                 "words": l.words.map { ["text": $0.text, "t0": $0.t0, "t1": $0.t1, "conf": $0.conf] as [String: Any] },
             ]
@@ -134,7 +139,7 @@ enum Exporters {
         var prevSpeaker: Int? = nil
 
         for l in lines {
-            let words = l.words.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+            let words = captionWords(for: l)
             if words.isEmpty { continue }
             let prefix = (label && l.speaker != prevSpeaker)
                 ? "\(SpeakerID.display(l.speaker, names: names, fallback: "Speaker \(l.speaker)")): " : ""
@@ -181,6 +186,23 @@ enum Exporters {
             }
         }
         return cues
+    }
+
+    /// Edited source text is authoritative. Synthesize monotonic word timings
+    /// across the original line span so SRT/VTT cannot resurrect raw ASR words.
+    private static func captionWords(for line: Line) -> [Word] {
+        guard line.isEdited else {
+            return line.words.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        }
+        let tokens = line.text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard !tokens.isEmpty else { return [] }
+        let start = max(0, line.start)
+        let duration = max(0.04 * Double(tokens.count), line.end - start)
+        return tokens.enumerated().map { index, token in
+            let t0 = start + duration * Double(index) / Double(tokens.count)
+            let t1 = start + duration * Double(index + 1) / Double(tokens.count)
+            return Word(t0: t0, t1: t1, text: token, conf: 1)
+        }
     }
 
     /// One-click "tighten" cut-list as CSV — the merged removable ranges

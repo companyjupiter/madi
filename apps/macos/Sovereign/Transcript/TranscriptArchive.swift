@@ -32,6 +32,8 @@ enum TranscriptArchive {
         pattern: #"^- \*\*\[(\d{1,2}):(\d{2})\] (.+?)\*\* ?(.*)$"#)
     private static let overlapMark = try! NSRegularExpression(pattern: #"\s*⟨\+[^⟩]*⟩"#)
     private static let speakerN = try! NSRegularExpression(pattern: #"^Speaker (\d+)$"#)
+    private static let translation = try! NSRegularExpression(
+        pattern: #"^  - \[번역:([^\]]+)\] ?(.*)$"#)
 
     static func parse(text: String) -> Parsed? {
         let rows = text.components(separatedBy: .newlines)
@@ -41,11 +43,16 @@ enum TranscriptArchive {
         var maxReserved = -1
         var whoOrder: [String] = []        // first-encounter order of who tokens
         var seenWho = Set<String>()
-        struct Raw { let start: Double; let who: String; let body: String }
+        struct Raw { let start: Double; let who: String; let body: String; var translations: [String: String] }
         var raws: [Raw] = []
 
         for row in rows {
             let r = NSRange(row.startIndex..<row.endIndex, in: row)
+            if let tm = translation.firstMatch(in: row, range: r), !raws.isEmpty,
+               let lr = Range(tm.range(at: 1), in: row), let tr = Range(tm.range(at: 2), in: row) {
+                raws[raws.count - 1].translations[String(row[lr])] = String(row[tr])
+                continue
+            }
             guard let m = bullet.firstMatch(in: row, range: r) else { continue }
             func grp(_ i: Int) -> String {
                 guard let rr = Range(m.range(at: i), in: row) else { return "" }
@@ -54,7 +61,7 @@ enum TranscriptArchive {
             let mm = Double(grp(1)) ?? 0, ss = Double(grp(2)) ?? 0
             let who = grp(3).trimmingCharacters(in: .whitespaces)
             let body = grp(4)
-            raws.append(Raw(start: mm * 60 + ss, who: who, body: body))
+            raws.append(Raw(start: mm * 60 + ss, who: who, body: body, translations: [:]))
             if seenWho.insert(who).inserted { whoOrder.append(who) }
             if let sm = speakerN.firstMatch(in: who, range: NSRange(who.startIndex..<who.endIndex, in: who)),
                let nr = Range(sm.range(at: 1), in: who), let n = Int(who[nr]) {
@@ -91,7 +98,9 @@ enum TranscriptArchive {
             let words = parseWords(raw.body, at: raw.start)
             let id = words.first?.id ?? UUID()
             lines.append(Line(id: id, speaker: idForWho[raw.who] ?? 0,
-                              start: raw.start, end: end, words: words))
+                              start: raw.start, end: end, words: words,
+                              translations: raw.translations,
+                              editedTranslations: Set(raw.translations.keys)))
         }
         return Parsed(lines: lines, names: names)
     }

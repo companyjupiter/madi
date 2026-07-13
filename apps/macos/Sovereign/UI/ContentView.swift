@@ -419,6 +419,7 @@ struct ContentView: View {
                                    streamingTransID: session.streamingTranslation?.id,
                                    streamingTransLang: session.streamingTranslation?.lang,
                                    onEdit: { session.editLine($0, to: $1) },
+                                   onEditTranslation: { session.editTranslation($0, lang: $1, to: $2) },
                                    onEditWord: { session.editWord($0, index: $1, to: $2) },
                                    lockedLineID: isRecordingLike ? session.transcript.lines.last?.id : nil,
                                    onRequestDetailed: { contentMode = false },

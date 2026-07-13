@@ -49,6 +49,7 @@ struct TranscriptView: View {
     // safe to edit). onRequestDetailed flips content→detailed so the edit gesture
     // works from the reading view too.
     var onEdit: ((UUID, String) -> Void)? = nil
+    var onEditTranslation: ((UUID, String, String) -> Void)? = nil
     // Review flow: replace one low-confidence word (lineID, word index, new text).
     var onEditWord: ((UUID, Int, String) -> Void)? = nil
     var lockedLineID: UUID? = nil
@@ -85,6 +86,9 @@ struct TranscriptView: View {
     @State private var draftName: String = ""
     @State private var editingLine: UUID? = nil
     @State private var editDraft: String = ""
+    @State private var editingTranslationLine: UUID? = nil
+    @State private var editingTranslationLang: String = ""
+    @State private var translationDraft: String = ""
     // Typewriter buffer for the interim preview: the raw `interim` prop arrives
     // in whole-hypothesis jumps; this drips the delta out a few characters per
     // ~24ms tick so live text types smoothly instead of flashing in chunks.
@@ -556,12 +560,15 @@ struct TranscriptView: View {
     /// accent-colored insert. The language tag chip (speaker-colored, C15) only
     /// appears when the line carries 2+ target languages — with a single target
     /// it's redundant. A7: a caret ▍ trails while (line, lang) is streaming in.
+    @ViewBuilder
     private func translationLine(_ lang: String, _ text: String, speaker: Int? = nil,
-                                 lineID: UUID? = nil, showTag: Bool = false) -> some View {
+                                 lineID: UUID? = nil, showTag: Bool = false,
+                                 editable: Bool = false, userEdited: Bool = false) -> some View {
         let tag = Self.langTag[lang] ?? lang
         let tagColor = speaker.map { Theme.Colors.speaker($0) } ?? Theme.Colors.accent
         let streaming = lineID != nil && lineID == streamingTransID && lang == streamingTransLang
-        return HStack(alignment: .top, spacing: 6) {
+        let isEditing = editable && lineID == editingTranslationLine && lang == editingTranslationLang
+        HStack(alignment: .top, spacing: 6) {
             if showTag {
                 Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
                     .foregroundStyle(tagColor).opacity(streaming ? 0.4 : 0.75)
@@ -570,11 +577,41 @@ struct TranscriptView: View {
             // While this (line, lang) is still streaming, the translation is
             // provisional — render it GRAY, exactly like the transcript's
             // uncommitted gray tail (withLiveTail). It flips to dark on commit.
-            (Text(text) + (streaming ? Text(" ▍") : Text("")))
-                .font(.system(size: fontSize * 0.875)).tracking(-0.28)
-                .lineSpacing(fontSize * 0.875 * 0.4)
-                .foregroundStyle(streaming ? Theme.Colors.textTertiary
-                                           : Theme.Colors.textPrimary.opacity(0.85))
+            if isEditing {
+                TextField("번역 교정", text: $translationDraft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: fontSize * 0.875))
+                    .onSubmit {
+                        guard let lineID else { return }
+                        onEditTranslation?(lineID, lang, translationDraft)
+                        editingTranslationLine = nil
+                    }
+                Button("저장") {
+                    guard let lineID else { return }
+                    onEditTranslation?(lineID, lang, translationDraft)
+                    editingTranslationLine = nil
+                }
+                .controlSize(.small)
+            } else {
+                (Text(text) + (streaming ? Text(" ▍") : Text("")))
+                    .font(.system(size: fontSize * 0.875)).tracking(-0.28)
+                    .lineSpacing(fontSize * 0.875 * 0.4)
+                    .foregroundStyle(streaming ? Theme.Colors.textTertiary
+                                               : Theme.Colors.textPrimary.opacity(0.85))
+                if userEdited {
+                    Image(systemName: "pencil")
+                        .font(.system(size: fontSize * 0.65, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                        .help("사용자 교정 번역")
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            guard editable, !streaming, let lineID, onEditTranslation != nil else { return }
+            editingTranslationLine = lineID
+            editingTranslationLang = lang
+            translationDraft = text
         }
     }
 
@@ -609,7 +646,8 @@ struct TranscriptView: View {
                     .multilineTextAlignment(side == .leading ? .leading : .trailing)
                 ForEach(line.translations.keys.sorted(), id: \.self) { lang in
                     translationLine(lang, line.translations[lang]!, speaker: line.speaker,
-                                    lineID: line.id, showTag: line.translations.count > 1)
+                                    lineID: line.id, showTag: line.translations.count > 1,
+                                    editable: true, userEdited: line.editedTranslations.contains(lang))
                 }
                 segmentStatusRow(line)
             }
@@ -739,7 +777,8 @@ struct TranscriptView: View {
             }
             ForEach(line.translations.keys.sorted(), id: \.self) { lang in
                 translationLine(lang, line.translations[lang]!, speaker: line.speaker,
-                                lineID: line.id, showTag: line.translations.count > 1)
+                                lineID: line.id, showTag: line.translations.count > 1,
+                                editable: true, userEdited: line.editedTranslations.contains(lang))
             }
             segmentStatusRow(line)
         }

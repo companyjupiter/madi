@@ -53,4 +53,14 @@ final class TranscriptArchiveTests: XCTestCase {
         XCTAssertNil(TranscriptArchive.parse(text: "# Notes\n\njust prose, no bullets"))
         XCTAssertNil(TranscriptArchive.parse(text: ""))
     }
+
+    func testTranslationsRoundTripThroughCanonicalMarkdown() {
+        let line = Line(id: UUID(), speaker: 0, start: 3, end: 5,
+                        words: [Word(t0: 3, t1: 5, text: "안녕하세요")],
+                        translations: ["English": "Hello", "Japanese": "こんにちは"])
+        let markdown = Exporters.markdown([line])
+        guard let parsed = TranscriptArchive.parse(text: markdown) else { return XCTFail() }
+        XCTAssertEqual(parsed.lines.first?.translations["English"], "Hello")
+        XCTAssertEqual(parsed.lines.first?.translations["Japanese"], "こんにちは")
+    }
 }

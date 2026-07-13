@@ -21,6 +21,7 @@ let package = Package(
                 "AppInfo/AppVersion.swift",
                 "Transcript/SpeakerID.swift",
                 "Transcript/TranscriptStore.swift",
+                "Transcript/Exporters.swift",
                 "Transcript/WordMerger.swift",
                 "Transcript/EditorCuts.swift",
                 "Transcript/Retrieval.swift",
