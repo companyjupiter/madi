@@ -34,6 +34,8 @@ final class SummaryEngine {
     private var foldRemaining = 0
     private var foldAcc: [String] = []
     private var foldRound = 0                       // safety cap against a non-converging fold
+    private var reconcileRemaining = 0
+    private var reconcileAcc: [String] = []
 
     func start(engine: URL, model: URL) -> Bool {
         broker.attach(client: clientID, engine: engine, model: model, onReady: {})
@@ -82,9 +84,13 @@ final class SummaryEngine {
     /// TranscriptReconciler.parse. "reconcile" tag. `numbered` is the full prompt
     /// input from TranscriptReconciler.promptInput.
     func reconcile(numbered: String) {
-        let body = String(numbered.suffix(chunkChars))
-        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { onResult?("reconcile", nil); return }
-        enqueue("reconcile", TranscriptReconciler.instruction() + " " + body)
+        let batches = TranscriptReconciler.promptBatches(numbered, budget: chunkChars)
+        guard !batches.isEmpty else { onResult?("reconcile", nil); return }
+        reconcileRemaining = batches.count
+        reconcileAcc = []
+        for body in batches {
+            enqueue("reconcile-part", TranscriptReconciler.instruction() + " " + body)
+        }
     }
 
     // The final-format prompt (single fitting text → the user-facing output).
@@ -193,6 +199,15 @@ final class SummaryEngine {
 
     private func complete(_ tag: String, _ text: String?) {
         let out = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if tag == "reconcile-part" {
+            if !out.isEmpty, out.uppercased() != "OK" { reconcileAcc.append(out) }
+            reconcileRemaining -= 1
+            if reconcileRemaining <= 0 {
+                let joined = reconcileAcc.joined(separator: "\n")
+                onResult?("reconcile", joined.isEmpty ? "OK" : joined)
+            }
+            return
+        }
         if tag == "fold" {
             if !out.isEmpty { foldAcc.append(out) }
             foldRemaining -= 1

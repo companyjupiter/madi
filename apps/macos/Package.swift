@@ -47,6 +47,7 @@ let package = Package(
                 "Transcript/PrepBriefData.swift",
                 "Transcript/ReviewController.swift",
                 "Engine/EngineProtocol.swift",
+                "Engine/EngineEvents.swift",
                 "UI/ClinicDisplaySupport.swift",
                 "Audio/WavWriter.swift",
                 "Audio/Segmenter.swift",

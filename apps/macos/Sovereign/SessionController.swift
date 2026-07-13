@@ -31,6 +31,7 @@ final class SessionController: EngineProcessDelegate {
         case transcribing                 // recording, segments decoding
         case fileTranscribing(Int?)       // file mode, optional % done
         case diarizing                    // AI speaker/language reconcile pass
+        case correcting(Int)              // N forced-language line decodes remain
         case translating(Int)             // N lines queued (live)
         case translatingBacklogged(Int)   // live queue shed N lines under load — filled at stop
         case completed
@@ -40,6 +41,7 @@ final class SessionController: EngineProcessDelegate {
 
     var pipeline: PipelineState {
         if case .error(let e) = phase { return .error(e) }
+        if languageCorrectionsPending > 0 { return .correcting(languageCorrectionsPending) }
         if reconciling { return .diarizing }
         if case .processing = phase {
             return .fileTranscribing(chunksTotal > 0
@@ -392,6 +394,10 @@ final class SessionController: EngineProcessDelegate {
     private var midReconcileTimer: Timer?
     private var reconcileSnapshot: [UUID] = []   // prompt line order → line ids
     private var reconcileIsMid = false
+    private var decodeRiskRanges: [(start: Double, end: Double)] = []
+    private(set) var languageCorrectionsPending = 0
+    private var reconcileSpeakerNamesBefore: [Int: String]?
+    private var reconcileAutoNamesBefore: Set<Int>?
 
     private var attributedLines: [String] {
         transcript.lines.map { "\(SpeakerID.display($0.speaker, names: speakerNames, fallback: "화자\($0.speaker)")): \($0.text)" }
@@ -1191,7 +1197,8 @@ final class SessionController: EngineProcessDelegate {
         backlogKeys.removeAll(); translateBacklog = 0
         backfillPendingKeys.removeAll(); backfillRemaining = 0
         interimRequests.removeAll(); activeInterimID = nil
-        segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
+        segmentAudio.removeAll(); decodeRiskRanges.removeAll(); reconcileNote = nil; reconciling = false; languageCorrectionsPending = 0
+        reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
         stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0
         phase = .idle
     }
@@ -1293,7 +1300,8 @@ final class SessionController: EngineProcessDelegate {
             self.updatePreviewAdmission()
         }
         streamingTranslation = nil; translateQueueDepth = 0; lastCommitAt = Date()
-        segmentAudio.removeAll(); reconcileNote = nil; reconciling = false
+        segmentAudio.removeAll(); decodeRiskRanges.removeAll(); reconcileNote = nil; reconciling = false; languageCorrectionsPending = 0
+        reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
         // T11 prewarm: spawn the translate engine during the dead time between
         // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
         // first caption's translation doesn't pay the cold start.
@@ -1563,6 +1571,16 @@ final class SessionController: EngineProcessDelegate {
         }
     }
 
+    /// Structured decode evidence is authoritative for language-review targeting;
+    /// stdout remains the rendering contract. Rescue, drop, or avg_logprob below
+    /// the engine's −1.0 rescue threshold marks overlapping transcript lines ◇.
+    func engine(didEmitStructured event: StructuredEvent) {
+        guard case .segment(let info) = event else { return }
+        if info.dropped || info.fallback != "none" || info.avgLogprob < -1.0 {
+            decodeRiskRanges.append((start: info.t0, end: info.t1))
+        }
+    }
+
     func engineDidFlush() { finalizeOnce() }
 
     func engine(didTerminate code: Int32) {
@@ -1637,8 +1655,10 @@ final class SessionController: EngineProcessDelegate {
         autoSaveMarkdown()   //회의/전사 완료 → .md 자동저장 (켜져 있을 때)
         // Broker priority keeps backfill captions ahead of post-session work,
         // without a second process or an 8GB-specific reload/deferral path.
-        startPostSessionSummary()
-        kickReconcile()   // opt-in: LLM reviews speaker/language after the session
+        // Summary must read the corrected transcript. Keep the immediate Markdown
+        // durability save above, then defer summary/title until reconcile (and any
+        // bounded language re-decodes) completes.
+        if !kickReconcile() { startPostSessionSummary() }
     }
 
     /// Post-session AI title + summary. Broker priority keeps it below captions.
@@ -1719,15 +1739,16 @@ final class SessionController: EngineProcessDelegate {
 
     private var pendingFinalReconcile = false
 
-    private func kickReconcile(mid: Bool = false) {
+    @discardableResult
+    private func kickReconcile(mid: Bool = false) -> Bool {
         // mid 응답 대기 중 final 킥이 스냅샷을 덮으면 mid 응답이 final로 오적용
         // 된다 (역검증 fusion-1/watchdog-conc-4) — in-flight면 final을 예약.
-        if reconciling { if !mid { pendingFinalReconcile = true }; return }
+        if reconciling { if !mid { pendingFinalReconcile = true }; return true }
         guard aiReconcileEnabled, transcript.lines.count >= 4,
-              let s = ensureSummaryEngine() else { return }
+              let s = ensureSummaryEngine() else { return false }
         // B1 mid-session: only the STABLE prefix (the last 2 lines may still grow)
         let lines = mid ? Array(transcript.lines.dropLast(2)) : transcript.lines
-        guard lines.count >= 4 else { return }
+        guard lines.count >= 4 else { return false }
         reconciling = true
         if !mid { reconcileNote = nil }
         reconcileIsMid = mid
@@ -1735,11 +1756,15 @@ final class SessionController: EngineProcessDelegate {
         let uncertain = Set(lines.enumerated().compactMap { i, l in
             l.speakerMargin < Self.uncertainMargin ? i : nil
         })
+        let languageRisk = Set(lines.enumerated().compactMap { i, line in
+            decodeRiskRanges.contains(where: { $0.end > line.start && $0.start < line.end }) ? i : nil
+        })
         let numbered = TranscriptReconciler.promptInput(
             lines: lines.map { (speaker: $0.speaker, text: $0.text) },
             speakerName: { [weak self] in SpeakerID.display($0, names: self?.speakerNames ?? [:], fallback: "화자 \($0)") },
-            uncertain: uncertain)
+            uncertain: uncertain, languageRisk: languageRisk)
         s.reconcile(numbered: numbered)
+        return true
     }
 
     /// Apply the parsed correction plan: speaker merges/relabels immediately
@@ -1748,7 +1773,11 @@ final class SessionController: EngineProcessDelegate {
     private func applyReconcile(_ reply: String?) {
         reconciling = false
         let mid = reconcileIsMid
-        guard let reply else { if !mid { reconcileNote = nil }; return }
+        guard let reply else {
+            if !mid { reconcileNote = nil }
+            completeReconcileCycle(mid: mid)
+            return
+        }
         let snapshot = reconcileSnapshot
         // Exclude the Unknown bucket: the on-device LLM reconciler must never
         // MERGE/RELABEL 미확인 into (or out of) a real speaker — its guard is
@@ -1763,13 +1792,21 @@ final class SessionController: EngineProcessDelegate {
         }
         let plan = TranscriptReconciler.parse(reply, speakers: speakers, lineCount: snapshot.count,
                                               relabelAllowed: allowed)
-        guard !plan.isEmpty else { if !mid { reconcileNote = nil }; return }
+        guard !plan.isEmpty else {
+            if !mid { reconcileNote = nil }
+            completeReconcileCycle(mid: mid)
+            return
+        }
 
         var merged = 0, relabeled = 0
         // mid-session: merges are deferred to the final pass (a wrong merge
         // mid-meeting is disruptive; relabels are line-local and gated).
         if !mid {
-            for c in plan.merges { if case let .merge(from, into) = c { transcript.mergeSpeaker(from: from, into: into); merged += 1 } }
+            for c in plan.merges {
+                if case let .merge(from, into) = c, mergeSpeakerIdentity(from: from, into: into) {
+                    merged += 1
+                }
+            }
         }
         for c in plan.relabels {
             if case let .relabel(line, sp) = c, line < snapshot.count {
@@ -1783,13 +1820,13 @@ final class SessionController: EngineProcessDelegate {
             }
             return nil
         }
-        reTranscribeLanguage(langFlags)
-
         var parts: [String] = []
         if merged > 0 { parts.append("화자 \(merged)건 병합") }
         if relabeled > 0 { parts.append("화자 \(relabeled)건 재지정") }
-        if !langFlags.isEmpty { parts.append("언어 \(langFlags.count)줄 재전사") }
-        if !parts.isEmpty {
+        var languageAsync = false
+        if !langFlags.isEmpty {
+            languageAsync = reTranscribeLanguage(langFlags, completedParts: parts, mid: mid)
+        } else if !parts.isEmpty {
             reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ") + parts.joined(separator: " · ")
         } else if !mid {
             reconcileNote = nil
@@ -1798,15 +1835,51 @@ final class SessionController: EngineProcessDelegate {
             calendar.matchToSpeakers(speakerNames)   // speaker set changed → rematch attendees
             recomputeCoach()
         }
+        if !languageAsync { completeReconcileCycle(mid: mid) }
+    }
+
+    private func completeReconcileCycle(mid: Bool) {
+        if !mid { autoSaveMarkdown() }
         if pendingFinalReconcile {
             pendingFinalReconcile = false
-            kickReconcile()
+            _ = kickReconcile()
+        } else if !mid {
+            startPostSessionSummary()
         }
+    }
+
+    /// Merge transcript labels and every attached identity surface as one
+    /// transaction. Distinct explicit names are counter-evidence, so that merge
+    /// is rejected instead of silently destroying a person's identity.
+    private func mergeSpeakerIdentity(from: Int, into: Int) -> Bool {
+        let fromName = speakerNames[from]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let intoName = speakerNames[into]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let fromName, !fromName.isEmpty, let intoName, !intoName.isEmpty,
+           fromName.caseInsensitiveCompare(intoName) != .orderedSame { return false }
+        if reconcileSpeakerNamesBefore == nil {
+            reconcileSpeakerNamesBefore = speakerNames
+            reconcileAutoNamesBefore = autoRecognizedSpeakers
+        }
+        transcript.mergeSpeaker(from: from, into: into)
+        let survivingName = (intoName?.isEmpty == false ? intoName : fromName)
+        speakerNames[from] = nil
+        if let survivingName, !survivingName.isEmpty {
+            speakerNames[into] = survivingName
+            pendingEnrollment.remove(id: from)
+            pendingEnrollment.add(id: into, name: survivingName)
+            enrollVoiceprint(speaker: into, name: survivingName)
+        }
+        if autoRecognizedSpeakers.contains(from) { autoRecognizedSpeakers.insert(into) }
+        autoRecognizedSpeakers.remove(from)
+        return true
     }
 
     /// Revert all AI speaker corrections in one step (UI "되돌리기").
     func revertReconcile() {
         transcript.revertSpeakerCorrections()
+        if let names = reconcileSpeakerNamesBefore { speakerNames = names }
+        if let auto = reconcileAutoNamesBefore { autoRecognizedSpeakers = auto }
+        reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
         reconcileNote = nil
         calendar.matchToSpeakers(speakerNames)
     }
@@ -1817,26 +1890,93 @@ final class SessionController: EngineProcessDelegate {
     /// per-segment audio, so they are flagged only (no re-transcription).
     /// Best-effort: a segment ≈ one utterance in the short-turn clinic case; a
     /// multi-line segment yields the whole window's text for the flagged line.
-    private func reTranscribeLanguage(_ flags: [(id: UUID, lang: String)]) {
-        guard !flags.isEmpty, !segmentAudio.isEmpty else { return }
+    @discardableResult
+    private func reTranscribeLanguage(_ flags: [(id: UUID, lang: String)],
+                                      completedParts: [String], mid: Bool) -> Bool {
+        guard !flags.isEmpty else { return false }
         let bin = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/transcribe")
         let model = AssetManifest.modelURL
         let bpe = AssetManifest.bundledBPE
         let assets = AssetManifest.bundledAssetsDir
         let segs = segmentAudio
+        struct Job: Sendable {
+            let id: UUID; let langToken: Int; let source: URL
+            let relativeStart: Double; let relativeEnd: Double; let expectedRevision: UInt64
+        }
+        var jobs: [Job] = []
         for f in flags {
             guard let line = transcript.lines.first(where: { $0.id == f.id }),
                   let tok = TranscriptReconciler.languageToken(f.lang),
                   let seg = (segs.last(where: { $0.offset <= line.start + 0.05 }) ?? segs.first),
                   FileManager.default.fileExists(atPath: seg.url.path) else { continue }
-            let id = f.id
-            Task.detached {
-                guard let text = Self.runOneShotTranscribe(
-                    bin: bin, model: model, wav: seg.url, bpe: bpe, assets: assets, langToken: tok),
-                    !text.isEmpty else { return }
-                await MainActor.run { [weak self] in self?.transcript.editLine(id, text) }
+            jobs.append(Job(id: f.id, langToken: tok, source: seg.url,
+                            relativeStart: max(0, line.start - seg.offset),
+                            relativeEnd: max(line.start - seg.offset + 0.08, line.end - seg.offset),
+                            expectedRevision: lineHash(line.text)))
+        }
+        let unavailable = flags.count - jobs.count
+        guard !jobs.isEmpty else {
+            let failed = unavailable > 0 ? unavailable : flags.count
+            reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ")
+                + (completedParts + ["언어 \(failed)건 검증만(보존 오디오 없음)"]).joined(separator: " · ")
+            return false
+        }
+        languageCorrectionsPending = jobs.count
+        reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ")
+            + (completedParts + ["언어 0/\(jobs.count)줄 교정 중"]).joined(separator: " · ")
+        Task.detached { [weak self] in
+            var applied = 0
+            var failed = unavailable
+            for (index, job) in jobs.enumerated() {
+                var clip: URL?
+                do {
+                    clip = try WavWriter.crop16kMonoPCM(source: job.source,
+                                                        start: job.relativeStart, end: job.relativeEnd)
+                } catch {
+                    failed += 1
+                }
+                var didApply = false
+                if let clip {
+                    let text = Self.runOneShotTranscribe(
+                        bin: bin, model: model, wav: clip, bpe: bpe, assets: assets,
+                        langToken: job.langToken)
+                    try? FileManager.default.removeItem(at: clip)
+                    if let text, !text.isEmpty {
+                        didApply = await MainActor.run { [weak self] in
+                            self?.applyTextCorrection(job.id, to: text,
+                                                      expectedRevision: job.expectedRevision, learn: false) ?? false
+                        }
+                    }
+                    if didApply { applied += 1 } else { failed += 1 }
+                }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.languageCorrectionsPending = jobs.count - index - 1
+                    self.reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ")
+                        + (completedParts + ["언어 \(index + 1)/\(jobs.count)줄 처리"]).joined(separator: " · ")
+                }
+            }
+            let appliedCount = applied
+            let failedCount = failed
+            await MainActor.run { [weak self] in
+                self?.finishLanguageCorrections(applied: appliedCount, failed: failedCount,
+                                                completedParts: completedParts, mid: mid)
             }
         }
+        return true
+    }
+
+    private func finishLanguageCorrections(applied: Int, failed: Int,
+                                           completedParts: [String], mid: Bool) {
+        languageCorrectionsPending = 0
+        var parts = completedParts
+        if applied > 0 { parts.append("언어 \(applied)건 교정") }
+        if failed > 0 { parts.append("언어 \(failed)건 원문 유지") }
+        reconcileNote = parts.isEmpty ? nil
+            : (mid ? "AI 교정(진행 중): " : "AI 교정: ") + parts.joined(separator: " · ")
+        autoSaveMarkdown()
+        recomputeCoach()
+        completeReconcileCycle(mid: mid)
     }
 
     /// Run the bundled `transcribe` binary once on a single wav in plain FILE

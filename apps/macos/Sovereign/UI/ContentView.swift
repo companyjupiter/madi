@@ -1993,6 +1993,7 @@ struct ContentView: View {
     private var transcriptActivity: String? {
         switch session.pipeline {
         case .diarizing:                 "AI가 화자·언어를 검토하는 중"
+        case .correcting(let n):         "언어 교정 재전사 \(n)줄 남음"
         case .fileTranscribing(let pct): pct.map { "파일 전사 중 · \($0)%" } ?? "파일 전사 중"
         case .translating(let n):        "번역 중 · \(n)줄 대기"
         case .translatingBacklogged:     "말이 빨라 번역이 밀렸어요 · 정지 후 자동으로 채워요"

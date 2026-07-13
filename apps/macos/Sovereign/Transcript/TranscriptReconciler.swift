@@ -46,21 +46,43 @@ enum TranscriptReconciler {
     /// they get a △ so the model knows which attributions are fair game.
     static func promptInput(lines: [(speaker: Int, text: String)],
                             speakerName: (Int) -> String,
-                            uncertain: Set<Int> = []) -> String {
+                            uncertain: Set<Int> = [], languageRisk: Set<Int> = []) -> String {
         var out = ""
         for (i, l) in lines.enumerated() {
-            let mark = uncertain.contains(i) ? "△" : ""
+            let mark = (uncertain.contains(i) ? "△" : "") + (languageRisk.contains(i) ? "◇" : "")
             out += "\(i + 1)\(mark) [S\(l.speaker)·\(speakerName(l.speaker))] \(l.text)\n"
         }
+        return out
+    }
+
+    /// Split a numbered prompt without renumbering or suffix-truncating it. The
+    /// former `suffix(800)` path examined only the meeting tail; these batches
+    /// cover every line exactly once while preserving global line numbers.
+    static func promptBatches(_ numbered: String, budget: Int = 800) -> [String] {
+        guard budget > 0 else { return [] }
+        let rows = numbered.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        var out: [String] = []
+        var current = ""
+        for row in rows {
+            let bounded = row.count <= budget ? row : String(row.prefix(budget))
+            let candidate = current.isEmpty ? bounded : current + "\n" + bounded
+            if candidate.count > budget, !current.isEmpty {
+                out.append(current)
+                current = bounded
+            } else {
+                current = candidate
+            }
+        }
+        if !current.isEmpty { out.append(current) }
         return out
     }
 
     /// The single-line instruction wrapping the transcript. Kept terse and
     /// example-anchored so the 4B follows the command grammar.
     static func instruction() -> String {
-        return "다음은 화자별로 라벨된 대화 전사다. △ 표시 줄은 화자 판정이 불확실한 줄이다. 명백히 잘못된 것만 아래 문법으로 한 줄씩 교정하라. "
+        return "다음은 화자별로 라벨된 대화 전사다. △는 화자 판정 불확실, ◇는 디코드 저신뢰/구제 발생 줄이다. 명백히 잘못된 것만 아래 문법으로 한 줄씩 교정하라. "
             + "확실하지 않으면 아무것도 출력하지 마라. 문법: "
-            + "MERGE <화자A> <화자B> (같은 사람이면 B를 A로 합침) / "
+            + "MERGE <없앨화자> <남길화자> (같은 사람이면 첫째를 둘째로 합침) / "
             + "RELABEL <줄번호> <화자> (그 줄이 다른 화자면) / "
             + "LANG <줄번호> <ko|en|ja|zh> (그 줄이 다른 언어인데 잘못 받아써졌으면). "
             + "예: MERGE 1 3 / RELABEL 5 2 / LANG 4 ja. 교정 없으면 OK 한 줄."
@@ -77,7 +99,8 @@ enum TranscriptReconciler {
     static func parse(_ reply: String, speakers: Set<Int>, lineCount: Int,
                       maxCorrections: Int = 24, relabelAllowed: Set<Int>? = nil) -> ReconcilePlan {
         var plan = ReconcilePlan()
-        var mergedAway = Set<Int>()   // ids already merged into another (avoid chains/cycles)
+        var mergeSources = Set<Int>() // ids already merged away
+        var mergeTargets = Set<Int>() // surviving ids (may accept multiple sources)
         var relabeled = Set<Int>()    // line indices already relabeled (first wins)
         var langged = Set<Int>()      // line indices already language-flagged
         var accepted = 0
@@ -97,10 +120,13 @@ enum TranscriptReconciler {
             case "MERGE":
                 guard let a = Int(toks[1]), let b = Int(toks[2]),
                       a != b, speakers.contains(a), speakers.contains(b),
-                      !mergedAway.contains(a), !mergedAway.contains(b) else { continue }
-                // merge the higher id into the lower (deterministic, id-stable)
-                let into = min(a, b), from = max(a, b)
-                mergedAway.insert(from)
+                      !mergeSources.contains(a), !mergeTargets.contains(a),
+                      !mergeSources.contains(b) else { continue }
+                // Grammar is directional: MERGE <from> <into>. Never silently
+                // reverse the model's explicit identity choice by numeric id.
+                let from = a, into = b
+                mergeSources.insert(from)
+                mergeTargets.insert(into)
                 plan.merges.append(.merge(from: from, into: into))
                 accepted += 1
             case "RELABEL":
