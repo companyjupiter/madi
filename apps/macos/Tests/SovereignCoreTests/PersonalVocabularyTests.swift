@@ -17,9 +17,8 @@ final class PersonalVocabularyTests: XCTestCase {
     func testDiffPairsSwappedToken() {
         let pairs = PersonalVocabulary.diff(before: "김방장 회의 진행", after: "김부장 회의 진행")
         XCTAssertEqual(pairs.count, 1)
-        // WRONG side = particle-stripped stem (the lookup key, so inflected forms
-        // match); RIGHT side = full replacement text (never truncated).
-        XCTAssertEqual(pairs.first?.wrong, "김방")
+        // 김방장 has no particle: the full lexeme is retained.
+        XCTAssertEqual(pairs.first?.wrong, "김방장")
         XCTAssertEqual(pairs.first?.right, "김부장")
     }
 
@@ -29,11 +28,11 @@ final class PersonalVocabularyTests: XCTestCase {
         // normalizeKeys produces that stem for the bare form too → exact-key hit.
         let pairs = PersonalVocabulary.diff(before: "소버림을 씁니다", after: "소버린을 씁니다")
         XCTAssertEqual(pairs.first?.wrong, "소버림")   // stem of "소버림을"
-        XCTAssertEqual(pairs.first?.right, "소버린을")  // full replacement, particle kept
-        var g = Glossary(); g.enabled = true
+        XCTAssertEqual(pairs.first?.right, "소버린")
+        var g = Glossary(); g.enabled = true; g.minHits = 1
         g.learn(wrong: pairs[0].wrong, right: pairs[0].right)
-        // future BARE "소버림" (conf low, no exact full-key) corrects via the stem key
-        XCTAssertEqual(PersonalVocabulary.correctIncomingText("소버림", conf: 0.5, g), "소버린을")
+        XCTAssertEqual(PersonalVocabulary.correctIncomingText("소버림", conf: 0.5, g), "소버린")
+        XCTAssertEqual(PersonalVocabulary.correctIncomingText("소버림을", conf: 0.5, g), "소버린을")
     }
 
     func testDiffSkipsLengthChange() {
@@ -50,8 +49,8 @@ final class PersonalVocabularyTests: XCTestCase {
 
     func testDiffNormalizesPunctuation() {
         let pairs = PersonalVocabulary.diff(before: "소버림, 좋아요", after: "소버린, 좋아요")
-        // surrounding punctuation stripped; WRONG = stem, RIGHT = full surface form.
-        XCTAssertEqual(pairs.first?.wrong, "소버")     // stem of "소버림"
+        // surrounding punctuation stripped; a lexeme without a particle is intact.
+        XCTAssertEqual(pairs.first?.wrong, "소버림")
         XCTAssertEqual(pairs.first?.right, "소버린")
     }
 
@@ -86,7 +85,7 @@ final class PersonalVocabularyTests: XCTestCase {
 
     // ── correctLine: gates ─────────────────────────────────────────────────────────
     private func glossary(enabled: Bool = true, _ rules: [(String, String)]) -> Glossary {
-        var g = Glossary(); g.enabled = enabled
+        var g = Glossary(); g.enabled = enabled; g.minHits = 1
         for (w, r) in rules { g.learn(wrong: w, right: r) }
         return g
     }
@@ -106,7 +105,7 @@ final class PersonalVocabularyTests: XCTestCase {
     }
 
     func testIncomingShortTokenNotRewritten() {
-        var g = Glossary(); g.enabled = true
+        var g = Glossary(); g.enabled = true; g.minHits = 1
         g.entries["네"] = GlossaryEntry(wrong: "네", right: "예")   // force a short rule
         XCTAssertEqual(PersonalVocabulary.correctIncomingText("네", conf: 0.4, g), "네")
     }
@@ -114,7 +113,7 @@ final class PersonalVocabularyTests: XCTestCase {
     func testIncomingPhoneticOnLongToken() {
         // A LONG term mis-heard with a one-syllable slip and NO exact key is corrected
         // via Jaro-Winkler (the safe regime for phonetic matching).
-        var g = Glossary(); g.enabled = true
+        var g = Glossary(); g.enabled = true; g.minHits = 1
         g.learn(wrong: "쿠버네티수", right: "쿠버네티스")   // a prior slip the user fixed
         // a NEW, different slip with no exact key:
         XCTAssertEqual(PersonalVocabulary.correctIncomingText("쿠버네티슈", conf: 0.5, g), "쿠버네티스")
@@ -123,7 +122,7 @@ final class PersonalVocabularyTests: XCTestCase {
     func testIncomingShortTokenNoPhoneticGuess() {
         // A short mishearing with NO exact key must NOT be phonetically rewritten
         // (would risk 회의록→회의실 class false positives).
-        var g = Glossary(); g.enabled = true
+        var g = Glossary(); g.enabled = true; g.minHits = 1
         g.learn(wrong: "소버린이", right: "소버린")   // exact key is 소버린이, not 소버림
         XCTAssertEqual(PersonalVocabulary.correctIncomingText("소버림", conf: 0.5, g), "소버림",
                        "no exact key + short → left alone")
@@ -159,7 +158,7 @@ final class PersonalVocabularyTests: XCTestCase {
     }
 
     func testCorrectedLineTextLeavesEditedLineAlone() {
-        var g = Glossary(); g.enabled = true
+        var g = Glossary(); g.enabled = true; g.minHits = 1
         g.learn(wrong: "소버림", right: "소버린")
         var l = line([(0, 1, "소버림", 0.3)])
         l.editedText = "사용자가 직접 고친 텍스트"
@@ -173,5 +172,19 @@ final class PersonalVocabularyTests: XCTestCase {
         let l = line([(0, 1, "소버림", 0.5), (1, 2, ",", 1.0)])
         // "," has conf 1.0 (not rewritten); spacing convention: no space before ","
         XCTAssertEqual(PersonalVocabulary.correctedLineText(l, g), "소버린,")
+    }
+
+    func testLexemeCollisionsAndLatinAcronymNeverTruncate() {
+        XCTAssertEqual(PersonalVocabulary.normalizeKeys("회의실"), ["회의실"])
+        XCTAssertEqual(PersonalVocabulary.normalizeKeys("회의록"), ["회의록"])
+        XCTAssertEqual(PersonalVocabulary.normalizeKeys("AWS"), ["aws"])
+        XCTAssertEqual(PersonalVocabulary.normalizeKeys("회의실에서"), ["회의실에서", "회의실"])
+    }
+
+    func testLegacyTruncatedKeyCannotMatchUnrelatedLexemes() {
+        var g = Glossary(); g.enabled = true; g.minHits = 1
+        g.entries["회의"] = GlossaryEntry(wrong: "회의", right: "회의장")
+        XCTAssertEqual(PersonalVocabulary.correctIncomingText("회의실", conf: 0.4, g), "회의실")
+        XCTAssertEqual(PersonalVocabulary.correctIncomingText("회의록", conf: 0.4, g), "회의록")
     }
 }
