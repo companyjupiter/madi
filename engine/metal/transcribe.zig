@@ -1240,6 +1240,11 @@ pub fn main() !void {
     // periodic live re-clustering: every N accepted windows, re-run batch
     // k-means over all accumulated embeddings (DIAR_RECLUSTER=0 disables).
     const recluster_every: usize = envU("DIAR_RECLUSTER", 16);
+    // Auto live birth lock: the first recluster runs early (8 windows) to fix
+    // obvious bad ids, but locking speaker births that early collapses 3-4
+    // speaker panel audio into K=2. Keep births open until the session has enough
+    // accepted windows to have likely seen every participant.
+    const birth_lock_win: usize = envU("DIAR_BIRTH_LOCK_WIN", 64);
     var live_emb = std.ArrayList(f32).init(alloc); // accepted windows, unit-normalized
     var live_ids = std.ArrayList(u8).init(alloc); // each window's emitted stable id
     var live_t0 = std.ArrayList(f32).init(alloc); // each window's global time (for SPKFIX)
@@ -1353,24 +1358,48 @@ pub fn main() !void {
                         }
                         nclaim += 1;
                     }
-                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
+                    const final_active = try alloc.alloc(bool, 64);
+                    defer alloc.free(final_active);
+                    @memset(final_active, false);
+                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, final_active);
                     if (n_anchor > 0) {
                         const awf: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
                         for (0..@min(n_anchor, cents.items.len)) |vi| {
                             for (0..diar.EMB) |kf| cents.items[vi].sum[kf] += vp_vecs.items[vi][kf] * awf;
                         }
                     }
-                    // normalized centroid directions; reassign against ALL ids —
-                    // restricting to final-kmeans ids was reverse-verified worse
-                    // (stale centroids absorb coherent subsets; md-eval -3.7pt)
-                    const nc = cents.items.len;
+                    // normalized centroid directions. Prefer ids that the final
+                    // whole-session recluster actually touched; if auto-K collapses
+                    // a panel to K<3, fall back to robust online-birthed ids.
+                    const final_min_win = envU("DIAR_FINAL_MIN_WIN", 3);
+                    const final_min_active = envU("DIAR_FINAL_MIN_ACTIVE", 3);
+                    const final_ids = try alloc.alloc(usize, cents.items.len); defer alloc.free(final_ids);
+                    const broad_ids = try alloc.alloc(usize, cents.items.len); defer alloc.free(broad_ids);
+                    var nc: usize = 0;
+                    var nbroad: usize = 0;
+                    for (cents.items, 0..) |*c, sidx| {
+                        if (sidx >= n_anchor and c.count < final_min_win) continue;
+                        broad_ids[nbroad] = sidx; nbroad += 1;
+                        if (sidx < final_active.len and final_active[sidx]) { final_ids[nc] = sidx; nc += 1; }
+                    }
+                    if (diar_k == 0 and n_anchor == 0 and nc < final_min_active and nbroad >= final_min_active) {
+                        @memcpy(final_ids[0..nbroad], broad_ids[0..nbroad]);
+                        nc = nbroad;
+                    }
+                    if (nc == 0) {
+                        for (cents.items, 0..) |*c, sidx| {
+                            if (c.count == 0) continue;
+                            final_ids[nc] = sidx; nc += 1;
+                        }
+                    }
                     const dirs = try alloc.alloc(f32, nc * diar.EMB);
                     defer alloc.free(dirs);
-                    for (cents.items, 0..) |*c, sidx| {
+                    for (final_ids[0..nc], 0..) |sidx, j| {
+                        const c = &cents.items[sidx];
                         var ss: f32 = 0;
                         for (c.sum) |x| ss += x * x;
                         const inv = 1.0 / (@sqrt(ss) + 1e-9);
-                        for (0..diar.EMB) |d| dirs[sidx * diar.EMB + d] = c.sum[d] * inv;
+                        for (0..diar.EMB) |d| dirs[j * diar.EMB + d] = c.sum[d] * inv;
                     }
                     const fix_ids = try alloc.alloc(i32, mwin);
                     defer alloc.free(fix_ids);
@@ -1395,7 +1424,7 @@ pub fn main() !void {
                             for (0..diar.EMB) |d| dt += v[d] * dirs[sidx * diar.EMB + d];
                             if (dt > best) { second = best; best = dt; bs = sidx; } else if (dt > second) second = dt;
                         }
-                        fix_ids[i] = @intCast(bs);
+                        fix_ids[i] = @intCast(final_ids[bs]);
                         wbest[i] = best;
                         wmar[i] = if (nc >= 2) best - second else 1.0;
                         if (live_do_unk and best < live_unk_thr) n_unk += 1;
@@ -1633,7 +1662,9 @@ pub fn main() !void {
                         // conversational speakers), so a 2명 session never shows 8
                         // transient speakers before the first recluster.
                         const born_cap: u32 = if (diar_k >= 1) @max(diar_k, @as(u32, @intCast(n_anchor))) else diar_max;
-                        const eff_max: u32 = if (recl_done and n_anchor == 0) @intCast(cents.items.len) else born_cap;
+                        const seen_before = live_emb.items.len / diar.EMB;
+                        const auto_birth_locked = diar_k == 0 and recl_done and n_anchor == 0 and seen_before >= birth_lock_win;
+                        const eff_max: u32 = if (auto_birth_locked) @intCast(cents.items.len) else born_cap;
                         const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
                         const spk = ar.id;
                         // far-field silence inside the 1.5 s grid window was
@@ -1685,7 +1716,10 @@ pub fn main() !void {
                                     }
                                     nclaim += 1;
                                 }
-                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, null);
+                                const livefix_active = try alloc.alloc(bool, 64);
+                                defer alloc.free(livefix_active);
+                                @memset(livefix_active, false);
+                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, livefix_active);
                                 recl_done = true;
                                 // S1: re-inject anchor directions after recluster so the
                                 // enrolled reference never washes out of its centroid.
@@ -1717,15 +1751,30 @@ pub fn main() !void {
                                 // FLUSH. Changed labels only (bounded output). DIAR_LIVEFIX=0
                                 // disables.
                                 if (!std.mem.eql(u8, std.posix.getenv("DIAR_LIVEFIX") orelse "1", "0")) {
-                                    const ncl = cents.items.len;
+                                    const livefix_min_win = envU("DIAR_LIVEFIX_MIN_WIN", 3);
+                                    const livefix_min_active = envU("DIAR_LIVEFIX_MIN_ACTIVE", 3);
+                                    const livefix_ids = try alloc.alloc(usize, cents.items.len); defer alloc.free(livefix_ids);
+                                    const livefix_broad_ids = try alloc.alloc(usize, cents.items.len); defer alloc.free(livefix_broad_ids);
+                                    var ncl: usize = 0;
+                                    var nbroad_livefix: usize = 0;
+                                    for (cents.items, 0..) |*c, sidx| {
+                                        if (sidx >= n_anchor and c.count < livefix_min_win) continue;
+                                        livefix_broad_ids[nbroad_livefix] = sidx; nbroad_livefix += 1;
+                                        if (sidx < livefix_active.len and livefix_active[sidx]) { livefix_ids[ncl] = sidx; ncl += 1; }
+                                    }
+                                    if (diar_k == 0 and n_anchor == 0 and ncl < livefix_min_active and nbroad_livefix >= livefix_min_active) {
+                                        @memcpy(livefix_ids[0..nbroad_livefix], livefix_broad_ids[0..nbroad_livefix]);
+                                        ncl = nbroad_livefix;
+                                    }
                                     if (ncl > 0) {
                                         const dirsl = try alloc.alloc(f32, ncl * diar.EMB);
                                         defer alloc.free(dirsl);
-                                        for (cents.items, 0..) |*c, sidx| {
+                                        for (livefix_ids[0..ncl], 0..) |sidx, j| {
+                                            const c = &cents.items[sidx];
                                             var ss2: f32 = 0;
                                             for (c.sum) |x| ss2 += x * x;
                                             const inv2 = 1.0 / (@sqrt(ss2) + 1e-9);
-                                            for (0..diar.EMB) |dd| dirsl[sidx * diar.EMB + dd] = c.sum[dd] * inv2;
+                                            for (0..diar.EMB) |dd| dirsl[j * diar.EMB + dd] = c.sum[dd] * inv2;
                                         }
                                         for (0..acc_total) |wi| {
                                             const v = live_emb.items[wi * diar.EMB ..][0..diar.EMB];
@@ -1737,9 +1786,10 @@ pub fn main() !void {
                                                 for (0..diar.EMB) |dd| dt += v[dd] * dirsl[sidx * diar.EMB + dd];
                                                 if (dt > b1) { b2 = b1; b1 = dt; bs = sidx; } else if (dt > b2) b2 = dt;
                                             }
-                                            if (bs != live_ids.items[wi]) {
-                                                live_ids.items[wi] = @intCast(@min(bs, 255));
-                                                try emitClippedSpk(out, "SPKFIX", live_t0.items[wi], @intCast(bs), if (ncl >= 2) b1 - b2 else 1.0);
+                                            const stable_bs = livefix_ids[bs];
+                                            if (stable_bs != live_ids.items[wi]) {
+                                                live_ids.items[wi] = @intCast(@min(stable_bs, 255));
+                                                try emitClippedSpk(out, "SPKFIX", live_t0.items[wi], @intCast(stable_bs), if (ncl >= 2) b1 - b2 else 1.0);
                                             }
                                         }
                                     }

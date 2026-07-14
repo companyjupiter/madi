@@ -22,6 +22,26 @@ curl -sL https://raw.githubusercontent.com/nryant/dscore/master/scorelib/md-eval
 perl bench/md-eval.pl -c 0.25 -r bench/ES2004a.ref.rttm -s /tmp/sys.rttm | grep "OVERALL SPEAKER DIARIZATION ERROR"
 ```
 
+## Focused 3-4 speaker panel gate
+`diar_panel_eval.py` compares auto-K against forced-K on the same clip and
+prints DER components (miss / false alarm / speaker confusion). This is the
+triage harness for YouTube or panel-style failures where a 3-4 speaker clip
+collapses to too few speakers.
+
+```bash
+# Reproduce known VoxConverse tail cases. Add --live to score the user-visible
+# STREAM path; --live-no-recluster is a diagnostic for recluster regressions.
+python3 bench/diar_panel_eval.py --vox-id migzj --vox-id jnivh --speakers-from-ref \
+  --live --live-no-recluster
+
+# Local or YouTube input needs a reference RTTM for objective DER.
+python3 bench/diar_panel_eval.py --audio panel.wav --ref panel.rttm --id panel --speakers 4 --live
+python3 bench/diar_panel_eval.py --youtube-url 'https://youtu.be/...' --ref panel.rttm --id panel --speakers 4 --live
+```
+
+Outputs are written under `bench/runs/diar_panel_<timestamp>/`:
+`results.jsonl`, `summary.md`, and the generated system RTTMs.
+
 ## Offline clustering sweep (fast iteration without the encoder pass)
 `DIAR_DUMP=/tmp/raw.bin ./out/transcribe ... ` dumps raw-mel segment features;
 `bench/mel_k.py`, `bench/mel_validate.py` sweep clustering params + score DER via
