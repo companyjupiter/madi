@@ -24,7 +24,7 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             recording.tabItem { Label("녹음", systemImage: "mic") }
-            editor.tabItem { Label("편집·저장", systemImage: "scissors") }
+            editor.tabItem { Label("저장", systemImage: "square.and.arrow.down") }
             if translateEngineBundled {
                 translate.tabItem { Label("번역", systemImage: "character.bubble") }
             }
@@ -193,10 +193,12 @@ struct SettingsView: View {
                 set: { var c = session.captionSettings; c[keyPath: kp] = $0; session.captionSettings = c })
     }
 
-    // MARK: 편집·저장 — editor analysis thresholds + auto-save
+    // MARK: 저장 — auto-save + recognition thresholds.
+    // BETA: the editor-analysis sections (편집 기능 / 필러·무음 타이튼 / 챕터 /
+    // 리테이크·하이라이트) are removed — the feature is unwired for the public beta
+    // (SessionController.editorFeaturesEnabled). Restore them together with the flag.
     private var editor: some View {
-        let on = session.editorSettings.enabled
-        return Form {
+        Form {
             Section("자동 저장") {
                 Toggle("완료 시 .md 자동저장", isOn: $session.autoSaveEnabled)
                 if session.autoSaveEnabled {
@@ -213,27 +215,6 @@ struct SettingsView: View {
                 Text("이 신뢰도 미만 단어를 ‘검토 필요’로 표시합니다. 기본 0.55.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("편집 기능") {
-                Toggle("편집 기능 사용", isOn: $session.editorSettings.enabled)
-                Text("필러·무음 타이튼, 챕터, 리테이크, 하이라이트 분석. 기본은 꺼짐 — 필요할 때만 켜세요.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("필러 · 무음 (타이튼)") {
-                Toggle("필러 컷", isOn: $session.editorSettings.fillers)
-                Toggle("무음 컷", isOn: $session.editorSettings.silences)
-                slider("무음 최소초", $session.editorSettings.silenceMinGap, 0.2...3.0)
-            }.disabled(!on)
-            Section("챕터") {
-                Toggle("자동 챕터", isOn: $session.editorSettings.chapters)
-                slider("휴지 경계초", $session.editorSettings.chapterGap, 1...10)
-                slider("최소 간격초", $session.editorSettings.chapterMinLen, 10...120, "%.0f")
-            }.disabled(!on)
-            Section("리테이크 · 하이라이트") {
-                Toggle("리테이크 감지", isOn: $session.editorSettings.retakes)
-                slider("유사도", $session.editorSettings.retakeSim, 0.5...0.95, "%.2f")
-                Toggle("하이라이트", isOn: $session.editorSettings.highlights)
-                slider("최소 신뢰도", $session.editorSettings.hlMinConf, 0.5...0.99, "%.2f")
-            }.disabled(!on)
         }
         .formStyle(.grouped)
     }

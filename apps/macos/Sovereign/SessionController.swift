@@ -123,6 +123,21 @@ final class SessionController: EngineProcessDelegate {
     /// The (line, language) whose translation is CURRENTLY streaming in — drives
     /// the typing caret (A7). Set on the first diverged partial, cleared on the
     /// final result. Struct so SwiftUI diffs it cheaply.
+    // ── BETA feature gates (0.9.0-beta) ─────────────────────────────────────
+    // Incomplete features are UNWIRED for the public beta rather than deleted:
+    // their code stays (views, stores, engine flags) but nothing reaches it, so
+    // re-enabling post-beta is a one-line flip once the feature is fixed.
+    //
+    // Voiceprints (사람 지문): enrollment can't be undone, cross-session matching
+    // misidentifies speakers. OFF ⇒ no VOICEPRINTS/DIAR_ANCHOR to the engine (no
+    // load, no centroid dump, no SPKNAME auto-naming), no .vec written on rename.
+    // Renaming a speaker still works — it just stays local to the transcript.
+    static let voiceprintsEnabled = false
+    // Editor analysis (편집: 무음·필러·타이튼·리테이크·하이라이트·챕터 — all share
+    // the one `EditorSettings.enabled` master gate). OFF ⇒ no cut/chapter analysis
+    // and the editor Settings tab + its exports are hidden.
+    static let editorFeaturesEnabled = false
+
     struct TranslationRef: Equatable { let id: UUID; let lang: String }
     private struct TranslationWorkKey: Hashable {
         let id: UUID
@@ -839,9 +854,16 @@ final class SessionController: EngineProcessDelegate {
         }
     }
 
-    /// Editor-feature toggles + thresholds (persisted). The UI binds to this; all
-    /// editor exports/stats read from it.
-    var editorSettings = EditorSettings.load() { didSet { editorSettings.save() } }
+    /// Editor-feature toggles + thresholds (persisted). All editor exports/stats
+    /// read from it. BETA: `enabled` is forced OFF at load (Self.editorFeaturesEnabled)
+    /// so every consumer — tightenStat, cut/chapter analysis, the JSON export's
+    /// editor annotations — sees the feature as off even if a previous build left
+    /// `enabled: true` on disk. The Settings tab that used to bind here is removed.
+    var editorSettings: EditorSettings = {
+        var s = EditorSettings.load()
+        if !SessionController.editorFeaturesEnabled { s.enabled = false }
+        return s
+    }() { didSet { editorSettings.save() } }
 
     // ── auto-save: write a .md when a session finishes (live stop or file done) ──
     var autoSaveEnabled: Bool = (UserDefaults.standard.object(forKey: "autoSaveEnabled") as? Bool) ?? true {
@@ -1052,6 +1074,9 @@ final class SessionController: EngineProcessDelegate {
         let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty { speakerNames[id] = nil; pendingEnrollment.remove(id: id); autoRecognizedSpeakers.remove(id); return }
         speakerNames[id] = t
+        // BETA: voiceprints are unwired — naming a speaker labels THIS transcript
+        // only, it never enrolls a voice (see Self.voiceprintsEnabled).
+        guard Self.voiceprintsEnabled else { return }
         // BUFFER, don't enroll now: the engine dumps this session's centroid to
         // .last/spk<id>.vec only after flush, so an immediate copy finds no source
         // and silently no-ops. finalizeOnce() drains this after engine flush.
@@ -1066,6 +1091,7 @@ final class SessionController: EngineProcessDelegate {
     /// next live session recognizes the voice. No-op if no centroid was dumped
     /// (e.g. file-mode transcription, or the speaker never stabilized).
     private func enrollVoiceprint(speaker id: Int, name: String) {
+        guard Self.voiceprintsEnabled else { return }   // BETA: unwired
         let safe = name.replacingOccurrences(of: "/", with: "_")
         let src = voiceprintsDir.appendingPathComponent(".last/spk\(id).vec")
         let dst = voiceprintsDir.appendingPathComponent("\(safe).vec")
@@ -1110,10 +1136,13 @@ final class SessionController: EngineProcessDelegate {
             diarize: diarize, osd: osd,
             languageTokenID: languageTokenID, maxSpeakers: speakerCount.maxSpeakers,
             fixedK: speakerCount.fixedK,
-            vadProb: speakerCount.vadProb, voiceprintsDir: voiceprintsDir,
+            // BETA: nil ⇒ engine gets no VOICEPRINTS dir → no enrolled-voice load,
+            // no per-speaker centroid dump, no SPKNAME auto-naming (the 오인식 source).
+            vadProb: speakerCount.vadProb,
+            voiceprintsDir: Self.voiceprintsEnabled ? voiceprintsDir : nil,
             streamWavRoots: [capture.segmentDirectory],
             langCandidates: langCandidatePair,
-            anchorVoiceprints: isBidirectionalClinicPair && hasEnrolledVoiceprints,
+            anchorVoiceprints: Self.voiceprintsEnabled && isBidirectionalClinicPair && hasEnrolledVoiceprints,
             encoderF16Cache: ProcessInfo.processInfo.physicalMemory >= 24 * (1 << 30))
     }
 

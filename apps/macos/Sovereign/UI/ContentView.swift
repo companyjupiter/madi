@@ -810,9 +810,18 @@ struct ContentView: View {
             }
             .overlay(alignment: .topLeading) {
                 if let which = openLangDropdown, let f = langPillFrames[which] {
-                    langDropdownPanel(which)
+                    // The input panel now lists every mic PLUS the 음원 rows, which
+                    // no longer fit under the pill (the start card leaves ~130 px
+                    // there) — they were clipped off the window edge. Flip the panel
+                    // ABOVE the pill when it doesn't fit below and there IS room
+                    // above; otherwise cap it to the room below and let it scroll.
+                    let isMic = (which == "mic" || which == "side-mic")
+                    let natural = isMic ? micPanelNaturalHeight : 0
+                    let below = geo.size.height - f.maxY - 16
+                    let flipUp = isMic && natural > below && f.minY - 8 > natural
+                    langDropdownPanel(which, maxHeight: flipUp ? .infinity : max(120, below))
                         .frame(width: f.width)
-                        .offset(x: f.minX, y: f.maxY + 4)
+                        .offset(x: f.minX, y: flipUp ? (f.minY - natural - 4) : (f.maxY + 4))
                 }
             }
             .coordinateSpace(name: "startCard")
@@ -904,13 +913,28 @@ struct ContentView: View {
     /// the language dropdowns (check row, closes on pick). Selection routes
     /// through setInputDevice so a live session hot-swaps.
     @ViewBuilder private var micPanelRows: some View {
-        langCheckRow("시스템 기본", checked: session.inputDeviceID == nil, dimmed: false) {
+        // 1) Mic devices. Picking one leaves system-audio-only mode so the mic is
+        //    actually captured; in 마이크+시스템 it just swaps which mic is used.
+        langCheckRow("시스템 기본", checked: session.audioSource != .system && session.inputDeviceID == nil, dimmed: false) {
+            if session.audioSource == .system { session.audioSource = .mic }
             session.setInputDevice(nil); openLangDropdown = nil
         }
         ForEach(session.availableInputs) { dev in
-            langCheckRow(dev.name, checked: session.inputDeviceID == dev.id, dimmed: false) {
+            langCheckRow(dev.name, checked: session.audioSource != .system && session.inputDeviceID == dev.id, dimmed: false) {
+                if session.audioSource == .system { session.audioSource = .mic }
                 session.setInputDevice(dev.id); openLangDropdown = nil
             }
+        }
+        // 2) 음원 — the picker is the INPUT picker, not a mic-only picker: system
+        //    audio (Teams·Zoom·YouTube 등 Mac에서 재생되는 소리) was previously
+        //    reachable only from Settings, so the start screen looked like it
+        //    couldn't capture it at all.
+        Divider().padding(.vertical, 4).padding(.horizontal, 12)
+        langCheckRow(AudioSource.system.label, checked: session.audioSource == .system, dimmed: false) {
+            session.audioSource = .system; openLangDropdown = nil
+        }
+        langCheckRow(AudioSource.both.label, checked: session.audioSource == .both, dimmed: false) {
+            session.audioSource = .both; openLangDropdown = nil
         }
     }
 
@@ -939,15 +963,25 @@ struct ContentView: View {
         .background(Capsule().fill(Theme.Colors.surface))
         // Outline unified with the 회의 정보 pills (surfaceSunken, not meterTrack).
         .overlay(Capsule().strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
-        .help("녹음에 사용할 마이크")
+        .help("녹음에 사용할 입력 — 마이크, 또는 시스템 오디오(Teams·Zoom·YouTube 등 Mac에서 재생되는 소리). 시스템 오디오는 첫 사용 시 ‘화면 기록’ 권한을 요청합니다 (오디오 전용).")
         .background(GeometryReader { g in
             Color.clear.preference(key: LangPillFrameKey.self,
                                    value: ["mic": g.frame(in: .named("startCard"))])
         })
     }
 
-    /// Collapsed mic label: the chosen device, else the system default's name.
+    /// Collapsed input label: the audio SOURCE when it isn't a plain mic, else the
+    /// chosen mic (falling back to the system default's name).
     private var micLabel: String {
+        switch session.audioSource {
+        case .system: return AudioSource.system.label            // 시스템 오디오
+        case .both:   return "\(micDeviceLabel) + 시스템"
+        case .mic:    return micDeviceLabel
+        }
+    }
+
+    /// Just the mic device part of the label.
+    private var micDeviceLabel: String {
         let inputs = session.availableInputs
         if let id = session.inputDeviceID,
            let d = inputs.first(where: { $0.id == id }) { return d.name }
@@ -1076,11 +1110,20 @@ struct ContentView: View {
     /// The floating panel (Figma 246:1222/1244): white card, radius 12, rows of
     /// px14/py8. Input = single-select (closes on pick); output = checkbox
     /// multi-select topped by an exclusive "번역 안 함" row (stays open).
+    /// Estimated natural height of the mic/input panel: one row per mic + the
+    /// 시스템 기본 row, the 음원 divider, and the two 음원 rows.
+    private var micPanelNaturalHeight: CGFloat {
+        let rows = CGFloat(1 + session.availableInputs.count + 2)
+        return rows * 29 + 9 + 12          // rows + divider + panel v-padding
+    }
+
     @ViewBuilder
-    private func langDropdownPanel(_ which: String) -> some View {
+    private func langDropdownPanel(_ which: String, maxHeight: CGFloat = .infinity) -> some View {
         VStack(spacing: 0) {
             if which == "mic" || which == "side-mic" {
-                micPanelRows
+                // Scrolls only when the rows can't fit the room under the pill.
+                ScrollView(.vertical) { VStack(spacing: 0) { micPanelRows } }
+                    .frame(height: min(micPanelNaturalHeight, maxHeight))
             } else if which == "input" {
                 ForEach(Self.inputLangOptions, id: \.label) { opt in
                     Button { setLanguage(opt.id) } label: {
@@ -2049,9 +2092,8 @@ struct ContentView: View {
             Button("Subtitles (.vtt)") { export(.init(filenameExtension: "vtt")!, session.exportVTT) }
             Button("Plain text (.txt)") { export(.plainText, session.exportText) }
             Button("JSON (.json)") { export(.json, session.exportJSON) }
-            Divider()
-            Button("타이튼 컷 목록 (.csv)") { export(.commaSeparatedText, session.exportCutList) }
-            Button("유튜브 챕터 (.txt)") { export(.plainText, session.exportChapters) }
+            // BETA: 타이튼 컷 목록 / 유튜브 챕터 exports are hidden — they are outputs
+            // of the unwired editor analysis (SessionController.editorFeaturesEnabled).
         } label: { Label("내보내기", systemImage: "square.and.arrow.up") }
         .menuStyle(.borderlessButton).fixedSize()
         .disabled(session.transcript.lines.isEmpty)
