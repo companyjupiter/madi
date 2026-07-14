@@ -335,7 +335,9 @@ final class SessionController: EngineProcessDelegate {
     static let translateLangLabels: [(code: String, label: String)] =
         [("Korean", "한국어"), ("English", "English"), ("Japanese", "日本語"), ("Chinese", "中文")]
     /// View-safe derivation of "clinic bidirectional pair" — targets are exactly
-    /// {Korean, X}, so both sides transcribe+translate (langCandidatePair active).
+    /// {Korean, X}. Drives the two-party clinic UI + the voiceprint-anchor trigger
+    /// only. (Per-segment language re-probe is NO LONGER gated on this pair: the
+    /// engine whitelist is now targets ∪ input language — see langCandidatePair.)
     var isBidirectionalKoPair: Bool { translateTargets.count == 2 && translateTargets.contains("Korean") }
 
     private var translate: TranslateEngine?
