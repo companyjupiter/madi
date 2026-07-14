@@ -202,6 +202,16 @@ final class SessionController: EngineProcessDelegate {
     var diarize = true
     var inputDeviceID: AudioDeviceID?          // nil = system default mic
     var availableInputs: [AudioInputDevice] { AudioDevices.inputs() }
+
+    /// Change the input mic. Live session (recording/paused) → hot-swaps the
+    /// capture device in place; otherwise it just applies at the next start.
+    func setInputDevice(_ id: AudioDeviceID?) {
+        inputDeviceID = id
+        switch phase {
+        case .recording, .paused: capture.switchInput(to: id)
+        default: break
+        }
+    }
     /// Capture source: 마이크 / 시스템 오디오(Teams·Slack·YouTube) / 마이크+시스템.
     /// Persisted; applied at the next record start.
     var audioSource: AudioSource = AudioSource(rawValue: UserDefaults.standard.string(forKey: "audioSource") ?? "mic") ?? .mic {

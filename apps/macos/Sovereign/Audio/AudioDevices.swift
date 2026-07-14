@@ -27,7 +27,11 @@ enum AudioDevices {
 
         var out: [AudioInputDevice] = []
         for id in ids where inputChannelCount(id) > 0 {
-            out.append(AudioInputDevice(id: id, name: name(of: id) ?? "Device \(id)"))
+            let n = name(of: id) ?? "Device \(id)"
+            // Skip the system's internal aggregates (e.g. Continuity's
+            // "CADefaultDeviceAggregate-…") — not real user-facing mics.
+            if n.hasPrefix("CADefaultDeviceAggregate") { continue }
+            out.append(AudioInputDevice(id: id, name: n))
         }
         return out
     }
