@@ -20,14 +20,17 @@ struct WorkspaceExplorer: View {
     @State private var mode: ExplorerMode = .files
     @State private var showExportDialog = false
     private let minWidth = 180.0, maxWidth = 460.0
+    // BETA: the 음성(voiceprints) mode is GONE — the voiceprint feature is unwired
+    // (SessionController.voiceprintsEnabled): enrollment couldn't be undone and
+    // cross-session matching misidentified speakers. VoiceprintManagementView is
+    // kept in the source, just unreferenced; restore this case with the flag.
     private enum ExplorerMode: String, CaseIterable {
-        case files, people, openLoops, voiceprints
+        case files, people, openLoops
         var label: String {
             switch self {
             case .files: return "파일"
             case .people: return "사람"
             case .openLoops: return "열린 항목"
-            case .voiceprints: return "음성"
             }
         }
     }
@@ -112,8 +115,6 @@ struct WorkspaceExplorer: View {
                     autoRecognizedNames: Set(session.autoRecognizedSpeakers.compactMap { session.speakerNames[$0] }))
             case .openLoops:
                 OpenLoopsView(session: session)
-            case .voiceprints:
-                VoiceprintManagementView(session: session)
             }
             Spacer(minLength: 0)
             bottomBlock
