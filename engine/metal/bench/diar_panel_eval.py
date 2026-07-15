@@ -300,6 +300,12 @@ def eval_case(case: Case, mode: str, wav: Path, out_dir: Path, extra_env: dict[s
 
 def build_cases(args: argparse.Namespace) -> list[Case]:
     cases: list[Case] = []
+    if args.vox_all:
+        for ref in sorted(VOX.glob("*.rttm")):
+            audio = VOX_AUDIO / f"{ref.stem}.wav"
+            require(audio, "VoxConverse audio")
+            speakers = ref_speakers(ref) if args.speakers_from_ref else args.speakers
+            cases.append(Case(ref.stem, audio, ref, speakers))
     for vid in args.vox_id:
         ref = VOX / f"{vid}.rttm"
         audio = VOX_AUDIO / f"{vid}.wav"
@@ -331,6 +337,7 @@ def build_cases(args: argparse.Namespace) -> list[Case]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--vox-id", action="append", default=[], help="VoxConverse dev id, e.g. migzj")
+    ap.add_argument("--vox-all", action="store_true", help="evaluate every VoxConverse dev RTTM/audio pair")
     ap.add_argument("--audio", help="local audio/video file")
     ap.add_argument("--youtube-url", help="download a YouTube audio track with yt-dlp")
     ap.add_argument("--ref", help="reference RTTM for --audio/--youtube-url")
