@@ -615,7 +615,37 @@ const DiarCentroid = struct { count: u32, sum: [diar.EMB]f32 };
 /// similarity). The margin is the app's acoustic-confidence signal — a low
 /// margin means "this window could be either speaker", which is exactly where
 /// the LLM's dialogue-context correction is allowed to override (S2/S3 fusion).
-const DiarAssign = struct { id: usize, margin: f32 };
+const DiarAssign = struct { id: usize, fallback: usize, margin: f32 };
+
+// Delay exposing a newly-born auto speaker until it has repeated acoustic
+// evidence. Internally the raw id keeps learning; externally its first windows
+// stay folded into the nearest existing visible speaker. On confirmation,
+// repair those earlier windows through the already-shipped SPKFIX contract.
+fn liveVisibleSpeaker(out: anytype, spk: usize, fallback: usize, count: u32, enabled: bool, confirm_win: usize, raw_ids: []const u8, visible_ids: []u8, pending: []bool, times: []const f32, margins: []const f32) !usize {
+    if (!enabled or confirm_win <= 1) return spk;
+    const need: u32 = @intCast(@min(confirm_win, std.math.maxInt(u32)));
+    if (count < need) {
+        // A fallback centroid may itself still be tentative. Resolve through
+        // its most recent visible id so hidden prototype chains never leak.
+        var visible_fallback = fallback;
+        var i = raw_ids.len;
+        while (i > 0) {
+            i -= 1;
+            if (raw_ids[i] == fallback) { visible_fallback = visible_ids[i]; break; }
+        }
+        return visible_fallback;
+    }
+    if (count == need) {
+        for (raw_ids, 0..) |raw, i| {
+            if (raw != spk or !pending[i]) continue;
+            visible_ids[i] = @intCast(spk);
+            pending[i] = false;
+            try emitClippedSpk(out, "SPKFIX", times[i], @intCast(spk), margins[i]);
+        }
+    }
+    return spk;
+}
+
 fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k: u32, anchor_n: usize, anchor_sim: f32) !DiarAssign {
     var s: f64 = 0;
     for (v) |x| s += @as(f64, x) * x;
@@ -645,7 +675,7 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
         var c2 = &cents.items[second_i];
         for (0..diar.EMB) |k| c2.sum[k] += v[k];
         c2.count += 1;
-        return .{ .id = second_i, .margin = second - best };
+        return .{ .id = second_i, .fallback = second_i, .margin = second - best };
     }
     // S1: an ANCHORED centroid (enrolled voiceprint, ids < anchor_n) demands a
     // HIGHER similarity to claim a window — "if it isn't clearly the enrolled
@@ -657,12 +687,12 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
         var c: DiarCentroid = .{ .count = 1, .sum = undefined };
         for (0..diar.EMB) |k| c.sum[k] = v[k];
         try cents.append(c);
-        return .{ .id = spk, .margin = 1.0 };
+        return .{ .id = spk, .fallback = if (spk == 0) spk else best_i, .margin = 1.0 };
     }
     var c = &cents.items[best_i];
     for (0..diar.EMB) |k| c.sum[k] += v[k];
     c.count += 1;
-    return .{ .id = best_i, .margin = if (cents.items.len >= 2) best - second else 1.0 };
+    return .{ .id = best_i, .fallback = best_i, .margin = if (cents.items.len >= 2) best - second else 1.0 };
 }
 
 // Periodic live re-clustering: batch k-means + silhouette auto-K over the
@@ -1250,7 +1280,10 @@ pub fn main() !void {
     // accepted windows to have likely seen every participant.
     const birth_lock_win: usize = envU("DIAR_BIRTH_LOCK_WIN", 64);
     var live_emb = std.ArrayList(f32).init(alloc); // accepted windows, unit-normalized
-    var live_ids = std.ArrayList(u8).init(alloc); // each window's emitted stable id
+    var live_ids = std.ArrayList(u8).init(alloc); // each window's visible stable/fallback id
+    var live_raw_ids = std.ArrayList(u8).init(alloc); // internal pre-confirmation id
+    var live_pending = std.ArrayList(bool).init(alloc); // visible id still folded into fallback
+    var live_margins = std.ArrayList(f32).init(alloc); // original acoustic margin
     var live_t0 = std.ArrayList(f32).init(alloc); // each window's global time (for SPKFIX)
     var live_since: usize = 0;
     var recl_done = false; // after the first recluster, k-means owns K (no online births)
@@ -1365,7 +1398,7 @@ pub fn main() !void {
                     const final_active = try alloc.alloc(bool, 64);
                     defer alloc.free(final_active);
                     @memset(final_active, false);
-                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, final_active);
+                    try liveRecluster(&cents, live_emb.items, live_raw_ids.items, diar_max, diar_k, nclaim, final_active);
                     if (n_anchor > 0) {
                         const awf: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
                         for (0..@min(n_anchor, cents.items.len)) |vi| {
@@ -1671,11 +1704,24 @@ pub fn main() !void {
                         const eff_max: u32 = if (auto_birth_locked) @intCast(cents.items.len) else born_cap;
                         const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
                         const spk = ar.id;
+                        const visible_spk = try liveVisibleSpeaker(
+                            out,
+                            spk,
+                            ar.fallback,
+                            cents.items[spk].count,
+                            recluster_every > 0 and diar_k == 0 and n_anchor == 0,
+                            envU("DIAR_CONFIRM_WIN", 2),
+                            live_raw_ids.items,
+                            live_ids.items,
+                            live_pending.items,
+                            live_t0.items,
+                            live_margins.items,
+                        );
                         // far-field silence inside the 1.5 s grid window was
                         // the live FA driver (live 44.7% vs file 18.8%) —
                         // emit silero-clipped pieces; extra duration field is
                         // ignored by the runner's awk (backward compatible)
-                        try emitClippedSpk(out, "SPK", gt, @intCast(spk), ar.margin);
+                        try emitClippedSpk(out, "SPK", gt, @intCast(visible_spk), ar.margin);
                         // voiceprint match: once a speaker's centroid has ≥2
                         // windows, compare to unclaimed prints; announce once.
                         while (spk_named.items.len < cents.items.len) try spk_named.append(false);
@@ -1703,7 +1749,10 @@ pub fn main() !void {
                         // and periodically re-cluster the whole session.
                         if (recluster_every > 0) {
                             try live_emb.appendSlice(cemb[wsg * diar.EMB ..][0 .. diar.EMB]);
-                            try live_ids.append(@intCast(@min(spk, 255)));
+                            try live_ids.append(@intCast(@min(visible_spk, 255)));
+                            try live_raw_ids.append(@intCast(@min(spk, 255)));
+                            try live_pending.append(visible_spk != spk);
+                            try live_margins.append(ar.margin);
                             try live_t0.append(gt);
                             live_since += 1;
                             const acc_total = live_emb.items.len / diar.EMB;
@@ -1723,7 +1772,7 @@ pub fn main() !void {
                                 const livefix_active = try alloc.alloc(bool, 64);
                                 defer alloc.free(livefix_active);
                                 @memset(livefix_active, false);
-                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, livefix_active);
+                                try liveRecluster(&cents, live_emb.items, live_raw_ids.items, diar_max, diar_k, nclaim, livefix_active);
                                 recl_done = true;
                                 // S1: re-inject anchor directions after recluster so the
                                 // enrolled reference never washes out of its centroid.
@@ -1791,6 +1840,8 @@ pub fn main() !void {
                                                 if (dt > b1) { b2 = b1; b1 = dt; bs = sidx; } else if (dt > b2) b2 = dt;
                                             }
                                             const stable_bs = livefix_ids[bs];
+                                            live_raw_ids.items[wi] = @intCast(@min(stable_bs, 255));
+                                            live_pending.items[wi] = false;
                                             if (stable_bs != live_ids.items[wi]) {
                                                 live_ids.items[wi] = @intCast(@min(stable_bs, 255));
                                                 try emitClippedSpk(out, "SPKFIX", live_t0.items[wi], @intCast(stable_bs), if (ncl >= 2) b1 - b2 else 1.0);
