@@ -724,6 +724,10 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         // absolute-separation gate (same as file mode): a presenter whose voice
         // varies splits with high silhouette but close centroids → one speaker
         if (K >= 2 and maxCentroidCosDist(X, m, segd, asg, K) < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); }
+        if (try maybePromoteSpherical4(X, m, segd, maxK, K, asg)) |promotion| {
+            K = 4;
+            bestSil = promotion.sil;
+        }
         // voiceprint lower bound: every CLAIMED print is a speaker the session
         // has already voice-matched — auto-K may not merge below that count
         if (K < kmin) {
@@ -2448,11 +2452,28 @@ fn d2(a: []const f32, b: []const f32) f32 {
     for (0..a.len) |j| { const t = a[j] - b[j]; s += t * t; }
     return s;
 }
-// k-means (cosine via L2-normed X) with deterministic farthest-point init.
-fn kmeansFit(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize) !void {
+// k-means over L2-normalized embeddings. The spherical candidate removes the
+// input-order bias of seeding from X[0] and reprojects updated centroids onto
+// the unit sphere; the shipped legacy path stays byte-stable when false.
+fn kmeansFitMode(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize, spherical: bool) !void {
     if (K <= 1) { @memset(asg, 0); return; }
     const cent = try alloc.alloc(f32, K * segd); defer alloc.free(cent);
-    @memcpy(cent[0..segd], X[0..segd]);
+    if (spherical) {
+        @memset(cent[0..segd], 0);
+        for (0..m) |i| {
+            for (0..segd) |j| cent[j] += X[i * segd + j];
+        }
+        const inv_m = 1.0 / @as(f32, @floatFromInt(m));
+        for (0..segd) |j| cent[j] *= inv_m;
+        var far: usize = 0; var far_d = d2(X[0..segd], cent[0..segd]);
+        for (1..m) |i| {
+            const dd = d2(X[i * segd ..][0..segd], cent[0..segd]);
+            if (dd > far_d) { far_d = dd; far = i; }
+        }
+        @memcpy(cent[0..segd], X[far * segd ..][0..segd]);
+    } else {
+        @memcpy(cent[0..segd], X[0..segd]);
+    }
     const dmin = try alloc.alloc(f32, m); defer alloc.free(dmin);
     for (0..m) |i| dmin[i] = d2(X[i * segd ..][0..segd], cent[0..segd]);
     for (1..K) |c| {
@@ -2471,8 +2492,21 @@ fn kmeansFit(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize) !voi
         }
         @memset(csum, 0); @memset(ccnt, 0);
         for (0..m) |i| { ccnt[asg[i]] += 1; for (0..segd) |j| csum[asg[i] * segd + j] += X[i * segd + j]; }
-        for (0..K) |c| if (ccnt[c] > 0) for (0..segd) |j| { cent[c * segd + j] = csum[c * segd + j] / @as(f32, @floatFromInt(ccnt[c])); };
+        for (0..K) |c| if (ccnt[c] > 0) {
+            if (spherical) {
+                var norm2: f32 = 0;
+                for (0..segd) |j| norm2 += csum[c * segd + j] * csum[c * segd + j];
+                const inv = 1.0 / (@sqrt(norm2) + 1e-9);
+                for (0..segd) |j| cent[c * segd + j] = csum[c * segd + j] * inv;
+            } else {
+                const inv = 1.0 / @as(f32, @floatFromInt(ccnt[c]));
+                for (0..segd) |j| cent[c * segd + j] = csum[c * segd + j] * inv;
+            }
+        };
     }
+}
+fn kmeansFit(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize) !void {
+    return kmeansFitMode(X, m, segd, K, asg, false);
 }
 // Max pairwise centroid cosine distance — ABSOLUTE speaker separation. The
 // silhouette is RELATIVE ((b-a)/max), so a single speaker whose delivery varies
@@ -2516,6 +2550,31 @@ fn silhouetteSimplified(X: []const f32, m: usize, segd: usize, asg: []const usiz
         if (mx > 1e-9) sil += @as(f64, (b - a) / mx);
     }
     return @floatCast(sil / @as(f64, @floatFromInt(m)));
+}
+
+const SphericalPromotion = struct { sil: f32, sep: f32 };
+
+// Narrow auto-K challenger for the measured 3-4-person panel failure. Preserve
+// every legacy K=1 decision and every K>=4 result. Only promote a surviving
+// legacy K=2/3 when a full spherical sweep independently selects K=4 with a
+// strong silhouette and the existing absolute-separation safety gate passes.
+fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, legacy_k: usize, asg: []usize) !?SphericalPromotion {
+    if (envU("DIAR_PROMOTE4", 1) == 0 or legacy_k < 2 or legacy_k >= 4 or maxK < 4) return null;
+    const best_asg = try alloc.alloc(usize, m); defer alloc.free(best_asg);
+    const tmp = try alloc.alloc(usize, m); defer alloc.free(tmp);
+    var best_k: usize = 2;
+    var best_sil: f32 = -2;
+    var kk: usize = 2;
+    while (kk <= maxK) : (kk += 1) {
+        try kmeansFitMode(X, m, segd, kk, tmp, true);
+        const sil = try silhouetteSimplified(X, m, segd, tmp, kk);
+        if (sil > best_sil) { best_sil = sil; best_k = kk; @memcpy(best_asg, tmp); }
+    }
+    if (best_k != 4 or best_sil < envF("DIAR_PROMOTE4_SIL", 0.50)) return null;
+    const sep = maxCentroidCosDist(X, m, segd, best_asg, 4);
+    if (sep < envF("DIAR_MIN_SEP", 0.50)) return null;
+    @memcpy(asg, best_asg);
+    return .{ .sil = best_sil, .sep = sep };
 }
 
 // Reserved speaker id for the single "Unknown" (미확인) bucket used ONLY in
@@ -2672,6 +2731,11 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
             const sep = maxCentroidCosDist(X, m, segd, asg, K);
             ev_sep = sep;
             if (sep < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); bestSil = -2; }
+        }
+        if (try maybePromoteSpherical4(X, m, segd, maxK, K, asg)) |promotion| {
+            K = 4;
+            bestSil = promotion.sil;
+            ev_sep = promotion.sep;
         }
         ev_sil = bestSil; ev_tau = tau;
         try out.print("  [auto-K] K={d} (silhouette {d:.3}, tau {d:.2})\n", .{ K, bestSil, tau });
