@@ -2862,14 +2862,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
                 }
             }
         }
-        var loc2glob: [3]i32 = .{ -1, -1, -1 };
-        for (0..3) |k| {
-            var bg: usize = 0;
-            for (1..16) |g| {
-                if (votes[k][g] > votes[k][bg]) bg = g;
-            }
-            if (votes[k][bg] >= 3) loc2glob[k] = @intCast(bg); // ≥3 solo frames (50 ms) to trust
-        }
+        const loc2glob = mapOsdTracks(&votes, false); // file calibration keeps independent argmax
         // overlap runs → second-speaker rows
         const pairs = [3][2]usize{ .{ 0, 1 }, .{ 0, 2 }, .{ 1, 2 } };
         var run_s: f32 = -1;
@@ -2941,6 +2934,54 @@ fn speakerAt(t: f32) i32 {
         const d = if (t < s.a) s.a - t else t - s.b;
         if (d < bestd) { bestd = d; best = s.spk; }
     }
+    return best;
+}
+
+// Map the powerset model's at-most-three LOCAL tracks to session-global
+// speakers. Legacy mode independently takes each row's argmax. Constrained
+// mode maximizes total SOLO votes under a one-to-one assignment:
+// local tracks in the same powerset window are definitionally different
+// speakers, so mapping two of them to one global ID discards useful overlap.
+fn mapOsdTracks(votes: *const [3][16]u32, default_bijective: bool) [3]i32 {
+    var legacy: [3]i32 = .{ -1, -1, -1 };
+    var row_best: [3]u32 = .{ 0, 0, 0 };
+    for (0..3) |k| {
+        var bg: usize = 0;
+        for (1..16) |g| if (votes[k][g] > votes[k][bg]) { bg = g; };
+        row_best[k] = votes[k][bg];
+        if (votes[k][bg] >= 3) legacy[k] = @intCast(bg); // ≥3 SOLO frames (~50 ms)
+    }
+    const bijective = if (std.posix.getenv("OSD_BIJECTIVE")) |v|
+        !std.mem.eql(u8, v, "0")
+    else
+        default_bijective;
+    if (!bijective) return legacy;
+
+    const ratio = envF("OSD_BIJECTIVE_RATIO", 0.25);
+    var best = [_]i32{-1} ** 3;
+    var best_score: u32 = 0;
+    // 0 means unassigned; 1..16 mean global 0..15.
+    for (0..17) |aa| for (0..17) |bb| for (0..17) |cc| {
+        const cand = [3]i32{
+            if (aa == 0) -1 else @as(i32, @intCast(aa - 1)),
+            if (bb == 0) -1 else @as(i32, @intCast(bb - 1)),
+            if (cc == 0) -1 else @as(i32, @intCast(cc - 1)),
+        };
+        if ((cand[0] >= 0 and cand[0] == cand[1]) or
+            (cand[0] >= 0 and cand[0] == cand[2]) or
+            (cand[1] >= 0 and cand[1] == cand[2])) continue;
+        var valid = true;
+        var score: u32 = 0;
+        for (0..3) |k| if (cand[k] >= 0) {
+            const v = votes[k][@intCast(cand[k])];
+            if (v < 3 or @as(f32, @floatFromInt(v)) < ratio * @as(f32, @floatFromInt(row_best[k]))) {
+                valid = false;
+                break;
+            }
+            score += v;
+        };
+        if (valid and score > best_score) { best_score = score; best = cand; }
+    };
     return best;
 }
 fn attributeTranscript(out: anytype) !void {
@@ -3034,14 +3075,7 @@ fn emitOsdOverlap(out: anytype, t0s: []const f32, ids: []const i32) !void {
                 }
             }
         }
-        var loc2glob: [3]i32 = .{ -1, -1, -1 };
-        for (0..3) |k| {
-            var bg: usize = 0;
-            for (1..16) |g| {
-                if (votes[k][g] > votes[k][bg]) bg = g;
-            }
-            if (votes[k][bg] >= 3) loc2glob[k] = @intCast(bg);
-        }
+        const loc2glob = mapOsdTracks(&votes, true); // measured live-FLUSH default
         var run_s: f32 = -1;
         var run_e: f32 = -1;
         var run_sec: i32 = -1;
