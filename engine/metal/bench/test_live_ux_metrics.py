@@ -89,6 +89,34 @@ SPKFIX 0.0 2 1.5 0.5
         self.assertAlmostEqual(traces[0].margin, -0.03)
         self.assertAlmostEqual(traces[0].update_weight, 0.25)
 
+    def test_causal_overlap_excludes_flush_and_scores_visibility(self) -> None:
+        stdout = """\
+SPK 0.0 0 1.5 1.0
+SPK 1.5 0 1.5 1.0
+SPK 3.0 1 1.0 1.0
+SPKOV 1.0 1 1.0
+SPKOV 0.0 1 0.5
+<<SEG_END>>
+SPKOV 1.0 1 1.0
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = Path(tmp) / "overlap.rttm"
+            ref.write_text(
+                "SPEAKER overlap 1 0.000 3.000 <NA> <NA> A <NA> <NA>\n"
+                "SPEAKER overlap 1 1.000 1.000 <NA> <NA> B <NA> <NA>\n"
+                "SPEAKER overlap 1 3.000 1.000 <NA> <NA> B <NA> <NA>\n"
+            )
+            metrics = analyze_live_ux(stdout, [5.0], ref)
+
+        self.assertEqual(metrics["causal_overlap_rows"], 2)
+        self.assertAlmostEqual(metrics["causal_overlap_reference_sec"], 1.0)
+        self.assertAlmostEqual(metrics["causal_overlap_correct_sec"], 1.0)
+        self.assertAlmostEqual(metrics["causal_overlap_wrong_sec"], 0.5)
+        self.assertAlmostEqual(metrics["causal_overlap_unresolved_sec"], 0.0)
+        self.assertAlmostEqual(metrics["causal_overlap_coverage_pct"], 100.0)
+        self.assertAlmostEqual(metrics["causal_overlap_precision_pct"], 100.0 / 1.5)
+        self.assertAlmostEqual(metrics["causal_overlap_latency_p90_sec"], 3.0)
+
 
 if __name__ == "__main__":
     unittest.main()

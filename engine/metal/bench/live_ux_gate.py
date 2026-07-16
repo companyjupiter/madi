@@ -3,6 +3,7 @@
 
 Usage:
   python3 bench/live_ux_gate.py RUN_BASELINE RUN_CANDIDATE --require-win
+  python3 bench/live_ux_gate.py RUN_WITH_CAUSAL_OSD --causal-self --require-win
 
 Each argument may be a results.jsonl file or its containing run directory.
 The verdict is deliberately asymmetric: a candidate must preserve first-seen
@@ -29,6 +30,7 @@ MEAN_REGRESSION_LIMITS = {
     "label_churn_per_min": 0.25,
     "first_label_latency_p90_sec": 0.10,
     "time_to_correct_p90_sec": 5.00,
+    "causal_osd_der": 0.05,
 }
 
 CASE_REGRESSION_LIMITS = {
@@ -36,6 +38,7 @@ CASE_REGRESSION_LIMITS = {
     "wrong_visible_ratio_pct": 0.25,
     "unresolved_wrong_windows": 0.00,
     "speaker_overcount_peak": 0.00,
+    "causal_osd_der": 0.10,
 }
 
 WIN_LIMITS = {
@@ -44,6 +47,8 @@ WIN_LIMITS = {
     "unresolved_wrong_windows": -0.25,
     "label_churn_per_min": -0.25,
     "time_to_correct_p90_sec": -2.00,
+    "causal_osd_der": -0.10,
+    "causal_overlap_unresolved_sec": -0.25,
 }
 
 
@@ -77,7 +82,15 @@ def fmt(value: float | None) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("baseline", type=Path)
-    parser.add_argument("candidate", type=Path)
+    parser.add_argument("candidate", type=Path, nargs="?")
+    parser.add_argument(
+        "--causal-self",
+        action="store_true",
+        help=(
+            "within one run, compare primary DER with causal OSD DER and "
+            "reference overlap duration with unresolved overlap duration"
+        ),
+    )
     parser.add_argument(
         "--require-win",
         action="store_true",
@@ -85,8 +98,25 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    baseline = load(args.baseline)
-    candidate = load(args.candidate)
+    if args.causal_self:
+        if args.candidate is not None:
+            parser.error("--causal-self accepts one run, not a candidate run")
+        candidate = load(args.baseline)
+        baseline = {}
+        for case_id, record in candidate.items():
+            if record.get("causal_osd_der") is None:
+                raise ValueError(f"{case_id} has no causal_osd_der")
+            before = dict(record)
+            before["causal_osd_der"] = record.get("der")
+            before["causal_overlap_unresolved_sec"] = record.get(
+                "causal_overlap_reference_sec"
+            )
+            baseline[case_id] = before
+    else:
+        if args.candidate is None:
+            parser.error("candidate run is required unless --causal-self is used")
+        baseline = load(args.baseline)
+        candidate = load(args.candidate)
     ids = sorted(set(baseline) & set(candidate))
     if not ids:
         raise ValueError("baseline and candidate have no matching live cases")

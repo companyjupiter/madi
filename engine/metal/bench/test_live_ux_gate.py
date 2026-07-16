@@ -42,6 +42,22 @@ class LiveUxGateTests(unittest.TestCase):
                 capture_output=True,
             )
 
+    def run_causal_self(self, candidate: dict) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "candidate.jsonl"
+            path.write_text(json.dumps(candidate) + "\n")
+            return subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    str(path),
+                    "--causal-self",
+                    "--require-win",
+                ],
+                text=True,
+                capture_output=True,
+            )
+
     def test_smaller_error_denominator_does_not_fake_unresolved_regression(self) -> None:
         result = self.run_gate(
             record(der=20.0, initially_wrong=10, unresolved=5),
@@ -57,6 +73,28 @@ class LiveUxGateTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("unresolved_wrong_windows", result.stdout)
+
+    def test_causal_self_compares_osd_with_primary_in_one_run(self) -> None:
+        candidate = record(der=10.0, initially_wrong=5, unresolved=3)
+        candidate.update(
+            causal_osd_der=8.0,
+            causal_overlap_reference_sec=5.0,
+            causal_overlap_unresolved_sec=3.0,
+        )
+        result = self.run_causal_self(candidate)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("causal_osd_der | 10.00 | 8.00 | -2.00", result.stdout)
+
+    def test_causal_self_blocks_per_case_tail(self) -> None:
+        candidate = record(der=10.0, initially_wrong=5, unresolved=3)
+        candidate.update(
+            causal_osd_der=10.2,
+            causal_overlap_reference_sec=5.0,
+            causal_overlap_unresolved_sec=5.0,
+        )
+        result = self.run_causal_self(candidate)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("panel causal_osd_der", result.stdout)
 
 
 if __name__ == "__main__":

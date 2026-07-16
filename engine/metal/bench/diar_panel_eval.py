@@ -152,6 +152,45 @@ def write_rttm(labels: dict[float, tuple[int, float]], path: Path, fid: str) -> 
             f.write(f"SPEAKER {fid} 1 {t:.3f} {dur:.3f} <NA> <NA> spk{sid} <NA> <NA>\n")
 
 
+def merge_overlap_rows(
+    rows: list[tuple[float, int, float]],
+) -> list[tuple[float, int, float]]:
+    """Union same-speaker intervals, mirroring TranscriptStore's Set semantics."""
+    merged: list[tuple[float, int, float]] = []
+    for sid in sorted({sid for _, sid, _ in rows}):
+        intervals = sorted((start, start + dur) for start, row_sid, dur in rows if row_sid == sid)
+        if not intervals:
+            continue
+        start, end = intervals[0]
+        for next_start, next_end in intervals[1:]:
+            if next_start <= end + 0.001:
+                end = max(end, next_end)
+            else:
+                merged.append((start, sid, end - start))
+                start, end = next_start, next_end
+        merged.append((start, sid, end - start))
+    return sorted(merged)
+
+
+def write_rttm_with_overlaps(
+    labels: dict[float, tuple[int, float]],
+    overlaps: list[tuple[float, int, float]],
+    path: Path,
+    fid: str,
+) -> int:
+    """Write the union of primary and overlap rows without duplicate speakers."""
+    rows = [(t, sid, dur) for t, (sid, dur) in labels.items()]
+    rows.extend(overlaps)
+    merged = merge_overlap_rows(rows)
+    with path.open("w") as f:
+        for t, sid, dur in merged:
+            f.write(
+                f"SPEAKER {fid} 1 {t:.3f} {dur:.3f} "
+                f"<NA> <NA> spk{sid} <NA> <NA>\n"
+            )
+    return len(merge_overlap_rows(overlaps))
+
+
 def live_feed(
     wav: Path, out_dir: Path, seg_sec: float, overlap_sec: float
 ) -> tuple[str, list[float]]:
@@ -225,12 +264,19 @@ def eval_live_case(
     spk: dict[float, tuple[int, float]] = {}
     spkfix: dict[float, tuple[int, float]] = {}
     spkov: list[tuple[float, int, float]] = []
+    causal_spkov: list[tuple[float, int, float]] = []
     for line_no, line in enumerate(output_lines):
+        if line.strip() == "SPKOVRESET":
+            spkov.clear()
+            continue
         m = re.match(r"(SPKFIX|SPKOV|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?(?: [0-9.]+)?$", line)
         if not m:
             continue
         if m.group(1) == "SPKOV":
-            spkov.append((float(m.group(2)), int(m.group(3)), float(m.group(4) or 1.5)))
+            overlap_row = (float(m.group(2)), int(m.group(3)), float(m.group(4) or 1.5))
+            spkov.append(overlap_row)
+            if line_no <= last_segment_end:
+                causal_spkov.append(overlap_row)
         else:
             labels = spkfix if m.group(1) == "SPKFIX" else spk
             labels[round(float(m.group(2)), 2)] = (int(m.group(3)), float(m.group(4) or 1.5))
@@ -263,13 +309,21 @@ def eval_live_case(
             rec.update(score(case.ref, sys_rttm))
         if suffix == "stream":
             rec.update(live_ux)
+            causal_rttm = out_dir / f"{case.case_id}.{mode_prefix}.stream_osd.rttm"
+            causal_rows = merge_overlap_rows(causal_spkov)
+            write_rttm_with_overlaps(labels, causal_rows, causal_rttm, fid)
+            rec["causal_osd_raw_rows"] = len(causal_spkov)
+            rec["causal_osd_rows"] = len(causal_rows)
+            if case.ref:
+                causal_score = score(case.ref, causal_rttm)
+                rec["causal_osd_der"] = causal_score.get("der")
+                rec["causal_osd_miss"] = causal_score.get("miss")
+                rec["causal_osd_fa"] = causal_score.get("fa")
+                rec["causal_osd_conf"] = causal_score.get("conf")
         records.append(rec)
     if spkfix and spkov:
         sys_rttm = out_dir / f"{case.case_id}.{mode_prefix}.relabel_osd.rttm"
-        write_rttm(spkfix, sys_rttm, fid)
-        with sys_rttm.open("a") as f:
-            for t, sid, dur in spkov:
-                f.write(f"SPEAKER {fid} 1 {t:.3f} {dur:.3f} <NA> <NA> spk{sid} <NA> <NA>\n")
+        write_rttm_with_overlaps(spkfix, spkov, sys_rttm, fid)
         rec = {
             "id": case.case_id,
             "mode": f"{mode_prefix}_relabel_osd",
@@ -459,6 +513,21 @@ def main() -> None:
                 f"{fmt(r, 'wrong_visible_ratio_pct')} | {pair('time_to_correct_p50_sec', 'time_to_correct_p90_sec')} | "
                 f"{fmt(r, 'unresolved_initial_wrong_pct')} | {fmt(r, 'label_churn_per_min')} | "
                 f"{pair('visible_speakers_peak', 'visible_speakers_final_mid')} | {fmt(r, 'speaker_overcount_peak')} |"
+            )
+        lines.extend([
+            "",
+            "## Causal live overlap UX",
+            "",
+            "Only SPKOV rows emitted before FLUSH are scored. The baseline therefore has zero causal rows and causal DER equal to primary live DER.",
+            "",
+            "| id | primary DER | +causal OSD DER | overlap coverage % | wrong overlap s | latency p90 s | rows |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ])
+        for r in live_records:
+            lines.append(
+                f"| {r['id']} | {fmt(r, 'der')} | {fmt(r, 'causal_osd_der')} | "
+                f"{fmt(r, 'causal_overlap_coverage_pct')} | {fmt(r, 'causal_overlap_wrong_sec')} | "
+                f"{fmt(r, 'causal_overlap_latency_p90_sec')} | {fmt(r, 'causal_osd_rows')} |"
             )
     (out_dir / "summary.md").write_text("\n".join(lines) + "\n")
     print(f"summary: {out_dir / 'summary.md'}")

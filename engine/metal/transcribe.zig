@@ -1376,6 +1376,7 @@ pub fn main() !void {
     var live_confirm = std.ArrayList(DiarConfirmState).init(alloc); // tentative-birth display lifecycle
     var live_margins = std.ArrayList(f32).init(alloc); // original acoustic margin
     var live_t0 = std.ArrayList(f32).init(alloc); // each window's global time (for SPKFIX)
+    var live_osd_emitted: usize = 0; // OsdWin prefix already exposed before FLUSH
     var live_since: usize = 0;
     var recl_done = false; // after the first recluster, k-means owns K (no online births)
     const stream_diar = stream and !std.mem.eql(u8, std.posix.getenv("DIAR") orelse "1", "0");
@@ -1562,6 +1563,9 @@ pub fn main() !void {
                         if (emit_unk and wbest[i] < live_unk_thr) fix_ids[i] = DIAR_UNK_ID;
                         try emitClippedSpk(out, "SPKFIX", live_t0.items[i], @intCast(fix_ids[i]), wmar[i]);
                     }
+                    // Replace any causal overlap rows with the final whole-session
+                    // attribution before the app freezes/exports the transcript.
+                    if (live_osd_emitted > 0) try out.print("SPKOVRESET\n", .{});
                     // overlap rows for the saved transcript: same local-track
                     // identity as diarizeEmb, against the RELABELED windows
                     try emitOsdOverlap(out, live_t0.items[0..mwin], fix_ids);
@@ -1975,6 +1979,27 @@ pub fn main() !void {
                                 @intCast(live_ids.items[wi]),
                                 live_margins.items[wi],
                             );
+                        }
+                    }
+                    // Causal overlap display. Keep OSD's local powerset tracks
+                    // and the existing full-window ResNet embeddings separate:
+                    // once two global visible ids exist, map each newly-closed
+                    // OSD window through SOLO votes and expose only its second
+                    // speaker rows. FLUSH resets and replaces these provisional
+                    // rows with the final whole-session attribution.
+                    const live_osd = !std.mem.eql(u8, std.posix.getenv("DIAR_LIVE_OSD") orelse "1", "0");
+                    if (live_osd and live_osd_emitted < g_osd_win.items.len) {
+                        var seen_ids: [32]bool = .{false} ** 32;
+                        var n_visible: usize = 0;
+                        for (live_ids.items) |sid| {
+                            if (sid < seen_ids.len and !seen_ids[sid]) {
+                                seen_ids[sid] = true;
+                                n_visible += 1;
+                            }
+                        }
+                        if (n_visible >= 2) {
+                            try emitOsdOverlapFrom(out, live_t0.items, live_ids.items, live_osd_emitted, true);
+                            live_osd_emitted = g_osd_win.items.len;
                         }
                     }
                 } else {
@@ -3179,14 +3204,30 @@ fn emitClippedSpk(out: anytype, tag: []const u8, gt: f32, id: u32, margin: f32) 
 }
 
 // Live-session OSD overlap emission: same local-track identity as the
-// file-mode diarizeEmb block, but against the FLUSH-relabeled 1.5 s windows;
-// emits "SPKOV <t> <global_id> <dur>" pieces clipped to silero speech.
-fn emitOsdOverlap(out: anytype, t0s: []const f32, ids: []const i32) !void {
+// file-mode diarizeEmb block, mapped against causal or FLUSH-relabeled 1.5 s
+// windows; emits "SPKOV <t> <global_id> <dur>" clipped to silero speech.
+fn emitOsdOverlap(out: anytype, t0s: []const f32, ids: anytype) !void {
+    try emitOsdOverlapFrom(out, t0s, ids, 0, false);
+}
+
+fn hasNearbyPrimary(t0s: []const f32, ids: anytype, sp: i32, a: f32, b: f32, max_gap: f32) bool {
+    for (t0s, 0..) |t0, i| {
+        const sid: i32 = @intCast(ids[i]);
+        if (sid != sp) continue;
+        const end = t0 + 1.5;
+        const gap = if (end < a) a - end else if (t0 > b) t0 - b else 0;
+        if (gap <= max_gap) return true;
+    }
+    return false;
+}
+
+fn emitOsdOverlapFrom(out: anytype, t0s: []const f32, ids: anytype, first_win: usize, causal: bool) !void {
     if (g_osd_win.items.len == 0) return;
-    const osd_thr = envF("OSD_THR", 0.25);
+    const osd_thr = if (causal) envF("DIAR_LIVE_OSD_THR", 0.75) else envF("OSD_THR", 0.25);
+    const support_gap = envF("DIAR_LIVE_OSD_SUPPORT_GAP", 0.0);
     const pairs = [3][2]usize{ .{ 0, 1 }, .{ 0, 2 }, .{ 1, 2 } };
     var n_ov: usize = 0;
-    for (g_osd_win.items) |*w| {
+    for (g_osd_win.items[@min(first_win, g_osd_win.items.len)..]) |*w| {
         var votes: [3][16]u32 = .{ .{0} ** 16, .{0} ** 16, .{0} ** 16 };
         for (0..w.nf) |fi| {
             const c = w.cls[fi];
@@ -3194,13 +3235,23 @@ fn emitOsdOverlap(out: anytype, t0s: []const f32, ids: []const i32) !void {
             const ft = w.t + (@as(f32, @floatFromInt(osd.RFIELD)) / 2.0 + @as(f32, @floatFromInt(fi * osd.SHIFT))) / 16000.0;
             for (t0s, 0..) |t0, i| {
                 if (ft >= t0 and ft < t0 + 1.5) {
-                    const g: usize = @intCast(@max(ids[i], 0));
+                    const gi: i32 = @intCast(ids[i]);
+                    const g: usize = @intCast(@max(gi, 0));
                     if (g < 16) votes[c - 1][g] += 1;
                     break;
                 }
             }
         }
         const loc2glob = mapOsdTracks(&votes, true); // measured live-FLUSH default
+        if (std.posix.getenv("DIAR_OSD_TRACE") != null) {
+            for (0..3) |local| {
+                var total: u32 = 0;
+                for (votes[local]) |v| total += v;
+                const gid = loc2glob[local];
+                const assigned: u32 = if (gid >= 0) votes[local][@intCast(gid)] else 0;
+                try out.print("OSDMAP {d:.2} {d} {d} {d} {d}\n", .{ w.t, local, gid, assigned, total });
+            }
+        }
         var run_s: f32 = -1;
         var run_e: f32 = -1;
         var run_sec: i32 = -1;
@@ -3214,7 +3265,7 @@ fn emitOsdOverlap(out: anytype, t0s: []const f32, ids: []const i32) !void {
                 var prim: i32 = -1;
                 for (t0s, 0..) |t0, i| {
                     if (ft >= t0 and ft < t0 + 1.5) {
-                        prim = ids[i];
+                        prim = @intCast(ids[i]);
                         break;
                     }
                 }
@@ -3226,14 +3277,16 @@ fn emitOsdOverlap(out: anytype, t0s: []const f32, ids: []const i32) !void {
             if (sec >= 0 and sec == run_sec) {
                 run_e = ft + 0.017;
             } else {
-                if (run_sec >= 0 and run_e - run_s >= 0.1)
+                if (run_sec >= 0 and run_e - run_s >= 0.1 and
+                    (!causal or hasNearbyPrimary(t0s, ids, run_sec, run_s, run_e, support_gap)))
                     n_ov += try emitOvPieces(out, run_s, run_e, run_sec);
                 run_sec = sec;
                 run_s = ft;
                 run_e = ft + 0.017;
             }
         }
-        if (run_sec >= 0 and run_e - run_s >= 0.1)
+        if (run_sec >= 0 and run_e - run_s >= 0.1 and
+            (!causal or hasNearbyPrimary(t0s, ids, run_sec, run_s, run_e, support_gap)))
             n_ov += try emitOvPieces(out, run_s, run_e, run_sec);
     }
     if (n_ov > 0) try out.print("[osd] {d} live overlap rows\n", .{n_ov});

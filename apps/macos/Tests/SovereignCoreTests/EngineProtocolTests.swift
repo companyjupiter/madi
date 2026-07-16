@@ -9,6 +9,7 @@ final class EngineProtocolTests: XCTestCase {
         let d = EngineProtocol.Decoder()
         XCTAssertEqual(d.decode(line: "[stream] ready"), .ready)
         XCTAssertEqual(d.decode(line: "<<FLUSH_END>>"), .flushEnd)
+        XCTAssertEqual(d.decode(line: "SPKOVRESET"), .speakerOverlapReset)
     }
 
     func testDecodesFileModeProgressTotal() {
