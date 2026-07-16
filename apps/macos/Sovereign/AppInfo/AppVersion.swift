@@ -254,15 +254,21 @@ enum ReleaseFeed {
             var dmgURL: URL?
             var dmgSize: Int64 = 0
             if let assets = obj["assets"] as? [[String: Any]] {
-                for a in assets {
-                    guard let name = a["name"] as? String,
-                          name.lowercased().hasSuffix(".dmg"),
-                          let urlStr = a["browser_download_url"] as? String,
-                          let url = URL(string: urlStr) else { continue }
+                // A release may also contain the much larger offline DMG. The
+                // in-app updater must prefer the standard installer regardless
+                // of the order returned by GitHub.
+                let dmgAssets = assets.filter {
+                    (($0["name"] as? String)?.lowercased().hasSuffix(".dmg")) == true
+                }
+                let selected = dmgAssets.first {
+                    (($0["name"] as? String)?.lowercased().contains("offline")) == false
+                } ?? dmgAssets.first
+                if let a = selected,
+                   let urlStr = a["browser_download_url"] as? String,
+                   let url = URL(string: urlStr) {
                     dmgURL = url
                     if let n = a["size"] as? Int64 { dmgSize = n }
                     else if let n = a["size"] as? Int { dmgSize = Int64(n) }
-                    break
                 }
             }
             let info = ReleaseInfo(version: ver, tag: tag, notes: notes,

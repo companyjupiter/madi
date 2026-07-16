@@ -1,0 +1,266 @@
+name: Release macOS (Developer ID)
+
+# Disabled until Developer ID signing and notarization credentials are ready.
+# Disable release-macos-free.yml, then rename this file to
+# release-macos-paid.yml to enable it in GitHub Actions.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Full SemVer without v (for example 0.9.1-beta.2)"
+        required: true
+        type: string
+      include_offline:
+        description: "Also build a DMG with the 867 MB speech model bundled"
+        required: true
+        default: false
+        type: boolean
+      publish:
+        description: "Publish immediately; otherwise create a draft release"
+        required: true
+        default: false
+        type: boolean
+      beta_expiry:
+        description: "Beta expiry date (yyyy-MM-dd)"
+        required: true
+        default: "2026-12-01"
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: macos-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, notarize, and publish
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: release
+    env:
+      ASSETS_URL: ${{ vars.MADI_RELEASE_ASSETS_URL }}
+      ASSETS_SHA256: ${{ vars.MADI_RELEASE_ASSETS_SHA256 }}
+      TRANSLATE_ENGINE_URL: ${{ secrets.MADI_TRANSLATE_ENGINE_URL }}
+      TRANSLATE_ENGINE_SHA256: ${{ secrets.MADI_TRANSLATE_ENGINE_SHA256 }}
+      SIGN_ID: ${{ secrets.MACOS_SIGN_ID }}
+      CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+      CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+      NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      RELEASE_BUCKET: ${{ vars.MADI_RELEASE_BUCKET }}
+      RELEASE_PREFIX: ${{ vars.MADI_RELEASE_PREFIX }}
+      DOWNLOAD_BASE_URL: ${{ vars.MADI_DOWNLOAD_BASE_URL }}
+      SPEECH_MODEL_URL: https://huggingface.co/jupitersong/madi-whisper-turbo-v3-q8/resolve/main/model.q8.safetensors
+      SPEECH_MODEL_SHA256: 1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_INCLUDE_OFFLINE: ${{ inputs.include_offline }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          INPUT_BETA_EXPIRY: ${{ inputs.beta_expiry }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+            include_offline=false
+            publish=true
+            beta_expiry="$(/usr/libexec/PlistBuddy -c 'Print :MADIBetaExpiry' apps/macos/Sovereign/Info.plist)"
+          else
+            version="$INPUT_VERSION"
+            tag="v$version"
+            include_offline="${INPUT_INCLUDE_OFFLINE:-false}"
+            publish="${INPUT_PUBLISH:-false}"
+            beta_expiry="$INPUT_BETA_EXPIRY"
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
+          [[ "$beta_expiry" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]
+          channel=stable
+          [[ "$version" == *-beta.* ]] && channel=beta
+          [[ "$version" == *-rc.* ]] && channel=rc
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "channel=$channel"
+            echo "include_offline=$include_offline"
+            echo "publish=$publish"
+            echo "beta_expiry=$beta_expiry"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in ASSETS_URL ASSETS_SHA256 AWS_REGION AWS_ROLE_ARN RELEASE_BUCKET DOWNLOAD_BASE_URL; do
+            [ -n "${!name:-}" ] || { echo "Missing GitHub Actions variable for $name" >&2; exit 1; }
+          done
+          required_secrets=(SIGN_ID CERTIFICATE_P12_BASE64 CERTIFICATE_PASSWORD NOTARY_KEY_ID NOTARY_ISSUER NOTARY_KEY_BASE64)
+          for name in "${required_secrets[@]}"; do
+            [ -n "${!name:-}" ] || { echo "Missing GitHub secret for $name" >&2; exit 1; }
+          done
+
+      - name: Install Zig 0.14.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$(uname -m)" = arm64 ] || { echo "arm64 runner required" >&2; exit 1; }
+          curl --fail --location --retry 3 \
+            https://ziglang.org/download/0.14.1/zig-aarch64-macos-0.14.1.tar.xz \
+            --output "$RUNNER_TEMP/zig.tar.xz"
+          tar -xf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-aarch64-macos-0.14.1" >> "$GITHUB_PATH"
+
+      - name: Install verified runtime assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 "$ASSETS_URL" --output "$RUNNER_TEMP/madi-assets.tar.gz"
+          apps/macos/scripts/prepare_release_assets.sh "$RUNNER_TEMP/madi-assets.tar.gz" "$ASSETS_SHA256"
+
+      - name: Install optional translation engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$TRANSLATE_ENGINE_URL" ]; then
+            echo "No translation engine secret configured; building transcription-only app"
+            exit 0
+          fi
+          [ -n "$TRANSLATE_ENGINE_SHA256" ] || { echo "MADI_TRANSLATE_ENGINE_SHA256 is required" >&2; exit 1; }
+          curl --fail --location --retry 3 "$TRANSLATE_ENGINE_URL" --output "$RUNNER_TEMP/translate-engine"
+          echo "$TRANSLATE_ENGINE_SHA256  $RUNNER_TEMP/translate-engine" | shasum -a 256 -c -
+          chmod +x "$RUNNER_TEMP/translate-engine"
+          echo "TRANSLATE_ENGINE=$RUNNER_TEMP/translate-engine" >> "$GITHUB_ENV"
+
+      - name: Run release gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r script; do bash -n "$script"; done < <(git ls-files '*.sh')
+          (cd apps/macos && swift test)
+
+      - name: Create signing keychain
+        shell: bash
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/madi-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$keychain_password"
+          printf '%s' "$CERTIFICATE_P12_BASE64" | base64 -D > "$RUNNER_TEMP/developer-id.p12"
+          printf '%s' "$NOTARY_KEY_BASE64" | base64 -D > "$RUNNER_TEMP/AuthKey.p8"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          echo "NOTARY_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Build standard DMG
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          BETA_EXPIRY: ${{ steps.meta.outputs.beta_expiry }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/standard"
+          STRICT_ASSETS=1 MADI_VERSION="$VERSION" MADI_BUILD="$GITHUB_RUN_NUMBER" \
+            MADI_CHANNEL="$CHANNEL" MADI_BETA_EXPIRY="$BETA_EXPIRY" \
+            apps/macos/scripts/make_app.sh "$out"
+          apps/macos/scripts/verify_release_bundle.sh "$out/Madi.app" "$VERSION"
+          apps/macos/scripts/sign_notarize.sh "$out/Madi.app"
+          mkdir -p dist
+          (cd dist && ../apps/macos/scripts/make_dmg.sh "$out/Madi.app" "$VERSION")
+          mv "dist/Madi-$VERSION.dmg" "dist/Madi-$VERSION-arm64.dmg"
+
+      - name: Build offline DMG
+        if: steps.meta.outputs.include_offline == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          BETA_EXPIRY: ${{ steps.meta.outputs.beta_expiry }}
+        run: |
+          set -euo pipefail
+          model=engine/metal/bench/runs/model.q8.safetensors
+          mkdir -p "$(dirname "$model")"
+          curl --fail --location --retry 3 "$SPEECH_MODEL_URL" --output "$model"
+          echo "$SPEECH_MODEL_SHA256  $model" | shasum -a 256 -c -
+          out="$RUNNER_TEMP/offline"
+          BUNDLE_MODEL=1 STRICT_ASSETS=1 MADI_VERSION="$VERSION" MADI_BUILD="$GITHUB_RUN_NUMBER" \
+            MADI_CHANNEL="$CHANNEL" MADI_BETA_EXPIRY="$BETA_EXPIRY" \
+            apps/macos/scripts/make_app.sh "$out"
+          apps/macos/scripts/verify_release_bundle.sh "$out/Madi.app" "$VERSION"
+          apps/macos/scripts/sign_notarize.sh "$out/Madi.app"
+          (cd dist && ../apps/macos/scripts/make_dmg.sh "$out/Madi.app" "$VERSION-offline")
+          mv "dist/Madi-$VERSION-offline.dmg" "dist/Madi-$VERSION-offline-arm64.dmg"
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && shasum -a 256 ./*.dmg > SHA256SUMS.txt)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: madi-release-${{ github.run_id }}
+
+      - name: Upload binaries to S3
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          PUBLISH: ${{ steps.meta.outputs.publish }}
+        run: |
+          apps/macos/scripts/publish_s3_release.sh dist "$RELEASE_BUCKET" \
+            "$DOWNLOAD_BASE_URL" "${RELEASE_PREFIX:-madi}" "$VERSION" "$CHANNEL" "$PUBLISH"
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          PUBLISH: ${{ steps.meta.outputs.publish }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file dist/release-notes.md
+            if [ "$PUBLISH" = true ]; then gh release edit "$TAG" --draft=false; fi
+            exit 0
+          fi
+          args=("$TAG" --target "$GITHUB_SHA" --title "Madi $VERSION" --notes-file dist/release-notes.md)
+          [ "$CHANNEL" = stable ] || args+=(--prerelease)
+          [ "$PUBLISH" = true ] || args+=(--draft)
+          gh release create "${args[@]}"
+
+      - name: Remove signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/AuthKey.p8"
+          if [ -n "${SIGNING_KEYCHAIN:-}" ]; then security delete-keychain "$SIGNING_KEYCHAIN" || true; fi

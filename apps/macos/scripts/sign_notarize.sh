@@ -8,6 +8,7 @@
 #   APPLE_ID  your Apple ID email
 #   TEAM_ID   10-char team id
 #   APP_PW    app-specific password  (or set NOTARY_PROFILE for a stored profile)
+#   NOTARY_KEY, NOTARY_KEY_ID, NOTARY_ISSUER  App Store Connect API key triplet
 set -euo pipefail
 APP="${1:?usage: sign_notarize.sh <path/to/Sovereign.app>}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,8 +16,15 @@ ENT="$HERE/../Sovereign/Sovereign.entitlements"
 : "${SIGN_ID:?set SIGN_ID}"
 
 echo "[1/4] sign embedded executables (inner first)"
-codesign --force --options runtime --timestamp \
-  --entitlements "$ENT" --sign "$SIGN_ID" "$APP/Contents/MacOS/transcribe"
+# Sign every executable except the main app executable. This includes optional
+# engines such as translate-engine and prevents a newly bundled helper from
+# being left ad-hoc signed in a release build.
+MAIN_EXEC="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
+while IFS= read -r -d '' exe; do
+  [ "$(basename "$exe")" = "$MAIN_EXEC" ] && continue
+  codesign --force --options runtime --timestamp \
+    --entitlements "$ENT" --sign "$SIGN_ID" "$exe"
+done < <(find "$APP/Contents/MacOS" -type f -perm -111 -print0)
 # metallib lives in Resources/ (make_app.sh) or MacOS/ (assemble_bundle.sh);
 # sign whichever exists. In Resources/ the outer bundle signature already seals
 # it — signing here is harmless and keeps --strict happy for the MacOS/ layout.
@@ -34,6 +42,10 @@ ZIP="${APP%.app}.zip"
 ditto -c -k --keepParent "$APP" "$ZIP"
 if [ -n "${NOTARY_PROFILE:-}" ]; then
   xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+elif [ -n "${NOTARY_KEY:-}" ]; then
+  : "${NOTARY_KEY_ID:?set NOTARY_KEY_ID}"; : "${NOTARY_ISSUER:?set NOTARY_ISSUER}"
+  xcrun notarytool submit "$ZIP" --key "$NOTARY_KEY" \
+    --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait
 else
   : "${APPLE_ID:?set APPLE_ID}"; : "${TEAM_ID:?set TEAM_ID}"; : "${APP_PW:?set APP_PW}"
   xcrun notarytool submit "$ZIP" \
