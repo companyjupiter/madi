@@ -103,7 +103,7 @@ def parse_label_events(stdout: str, frontiers: list[float]) -> list[LabelEvent]:
             completed_segments += 1
             continue
         match = LABEL_RE.fullmatch(line)
-        if not match or match.group(1) == "SPKOV":
+        if not match:
             continue
         during_flush = completed_segments >= len(frontiers)
         if during_flush or not frontiers:
@@ -153,6 +153,94 @@ def parse_assignment_traces(stdout: str) -> list[AssignmentTrace]:
 
 def overlap(a0: float, a1: float, b0: float, b1: float) -> float:
     return max(0.0, min(a1, b1) - max(a0, b0))
+
+
+def interval_union_length(intervals: list[tuple[float, float]]) -> float:
+    if not intervals:
+        return 0.0
+    total = 0.0
+    start, end = sorted(intervals)[0]
+    for next_start, next_end in sorted(intervals)[1:]:
+        if next_start <= end:
+            end = max(end, next_end)
+        else:
+            total += end - start
+            start, end = next_start, next_end
+    return total + end - start
+
+
+def reference_overlap_slices(
+    turns: list[ReferenceTurn],
+) -> list[tuple[float, float, frozenset[str]]]:
+    """Disjoint reference intervals with at least two active speakers."""
+    points = sorted({point for turn in turns for point in (turn.start, turn.end)})
+    slices: list[tuple[float, float, frozenset[str]]] = []
+    for start, end in zip(points, points[1:]):
+        if end <= start:
+            continue
+        active = frozenset(
+            turn.speaker for turn in turns if turn.start < end and turn.end > start
+        )
+        if len(active) >= 2:
+            slices.append((start, end, active))
+    return slices
+
+
+def analyze_causal_overlap(
+    events: list[LabelEvent],
+    mapping: dict[int, str],
+    turns: list[ReferenceTurn],
+) -> dict:
+    """Score only SPKOV rows emitted before FLUSH against reference overlap."""
+    reference_slices = reference_overlap_slices(turns)
+    reference_sec = interval_union_length(
+        [(start, end) for start, end, _ in reference_slices]
+    )
+    correct: list[tuple[float, float]] = []
+    wrong: list[tuple[float, float]] = []
+    latencies: list[float] = []
+    causal = [event for event in events if event.kind == "SPKOV" and not event.during_flush]
+
+    for event in causal:
+        event_end = event.time + event.duration
+        boundaries = {event.time, event_end}
+        for turn in turns:
+            if event.time < turn.start < event_end:
+                boundaries.add(turn.start)
+            if event.time < turn.end < event_end:
+                boundaries.add(turn.end)
+        ordered = sorted(boundaries)
+        mapped = mapping.get(event.speaker)
+        for start, end in zip(ordered, ordered[1:]):
+            active = {
+                turn.speaker
+                for turn in turns
+                if turn.start < end and turn.end > start
+            }
+            if len(active) >= 2 and mapped in active:
+                correct.append((start, end))
+                latencies.append(max(0.0, event.visible_at - end))
+            else:
+                wrong.append((start, end))
+
+    correct_sec = interval_union_length(correct)
+    wrong_sec = interval_union_length(wrong)
+    emitted_sec = correct_sec + wrong_sec
+    return {
+        "causal_overlap_rows": len(causal),
+        "causal_overlap_reference_sec": reference_sec,
+        "causal_overlap_correct_sec": correct_sec,
+        "causal_overlap_wrong_sec": wrong_sec,
+        "causal_overlap_unresolved_sec": max(0.0, reference_sec - correct_sec),
+        "causal_overlap_coverage_pct": (
+            100.0 * correct_sec / reference_sec if reference_sec else None
+        ),
+        "causal_overlap_precision_pct": (
+            100.0 * correct_sec / emitted_sec if emitted_sec else None
+        ),
+        "causal_overlap_latency_p50_sec": percentile(latencies, 0.50),
+        "causal_overlap_latency_p90_sec": percentile(latencies, 0.90),
+    }
 
 
 def dominant_reference(window: VisibleWindow, turns: list[ReferenceTurn]) -> str | None:
@@ -219,6 +307,8 @@ def visible_windows(events: list[LabelEvent]) -> tuple[list[VisibleWindow], int]
 
     for event in events:
         if event.during_flush:
+            continue
+        if event.kind == "SPKOV":
             continue
         if event.kind == "SPK":
             # TranscriptStore keeps every SPK and its stable sort makes the
@@ -404,4 +494,5 @@ def analyze_live_ux(stdout: str, frontiers: list[float], reference: Path) -> dic
         "prototype_quarantine_wrong_pct": trace_error("quarantine"),
         "prototype_birth_windows": len(trace_actions["birth"]),
         "prototype_birth_wrong_pct": trace_error("birth"),
+        **analyze_causal_overlap(events, mapping, turns),
     }

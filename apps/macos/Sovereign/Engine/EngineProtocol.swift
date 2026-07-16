@@ -6,7 +6,8 @@
 //   [<t0>s-<t1>s] <word>        → a word with GLOBAL timestamps (already offset)
 //   SPK <gt> <id> [dur]         → streaming speaker label (1.5s window)
 //   SPKFIX <gt> <id> [dur]      → FLUSH: recluster-corrected label
-//   SPKOV <gt> <id> [dur]       → FLUSH: overlap 2nd speaker
+//   SPKOV <gt> <id> [dur]       → causal/final overlap 2nd speaker
+//   SPKOVRESET                   → replace causal overlap with final rows
 //   <<FLUSH_END>>               → finalization done → export
 //
 // This file is pure parsing (no I/O), so it is unit-testable in isolation.
@@ -21,6 +22,7 @@ enum EngineEvent: Equatable {
     case speaker(SpeakerLabel)        // SPK
     case speakerFix(SpeakerLabel)     // SPKFIX
     case speakerOverlap(SpeakerLabel) // SPKOV
+    case speakerOverlapReset          // SPKOVRESET
     case speakerName(id: Int, name: String)  // SPKNAME — matched an enrolled voiceprint
     case flushEnd
     case progressTotal(Int)           // file mode: total 30s chunks to process
@@ -52,6 +54,7 @@ enum EngineProtocol {
             if line.hasPrefix("[stream] ready") { return .ready }
             if line == "<<FLUSH_END>>" { return .flushEnd }
             if line == "<<SEG_END>>" { return .segmentEnd }
+            if line == "SPKOVRESET" { return .speakerOverlapReset }
 
             // file-mode progress: "[8] audio: … → N chunk(s) …" / "[perf] chunk K: …"
             if line.hasPrefix("[8] audio:"), let arrow = line.range(of: "→ ") {

@@ -95,4 +95,24 @@ final class TranscriptStoreTests: XCTestCase {
         s.mergeSpeaker(from: 2, into: 1)
         XCTAssertEqual(s.lines.first?.speaker, 1)
     }
+
+    func testCausalOverlapIsVisibleAndResettable() {
+        let s = TranscriptStore()
+        s.ingest(.speaker(SpeakerLabel(time: 0, id: 0, dur: 5, margin: 1)))
+        s.ingest(.word(t0: 1, t1: 2, text: "overlap", conf: 1))
+        s.ingest(.speakerOverlap(SpeakerLabel(time: 1, id: 1, dur: 1, margin: 1)))
+        XCTAssertEqual(s.lines.first?.overlapSpeakers, [1])
+
+        s.ingest(.speakerOverlapReset)
+        XCTAssertEqual(s.lines.first?.overlapSpeakers, [])
+    }
+
+    func testCausalOverlapAppliesToWordsMaterializedLater() {
+        let s = TranscriptStore()
+        s.ingest(.speaker(SpeakerLabel(time: 0, id: 0, dur: 5, margin: 1)))
+        s.ingest(.speakerOverlap(SpeakerLabel(time: 1, id: 1, dur: 1, margin: 1)))
+        s.ingest(.word(t0: 1, t1: 2, text: "later", conf: 1))
+
+        XCTAssertEqual(s.lines.first?.overlapSpeakers, [1])
+    }
 }

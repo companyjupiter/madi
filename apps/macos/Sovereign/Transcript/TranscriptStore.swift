@@ -1,5 +1,5 @@
 // TranscriptStore.swift — assemble engine events into a live transcript, then
-// apply FLUSH-time relabel (SPKFIX) + overlap markers (SPKOV) for the final.
+// apply mid/final relabel (SPKFIX) + causal/final overlap markers (SPKOV).
 //
 // Word stream goes through WordMerger (overlap dedup + trailing-word holdback,
 // the merge_seg.awk semantics) — without it every 3s-overlap word appears twice
@@ -135,7 +135,7 @@ final class TranscriptStore {
     private var merger = WordMerger()
     private var spk: [SpeakerLabel] = []      // streaming
     private var spkFix: [SpeakerLabel] = []   // FLUSH
-    private var spkOv: [SpeakerLabel] = []     // FLUSH overlap
+    private var spkOv: [SpeakerLabel] = []     // causal rows, replaced at FLUSH
 
     // ── Frozen prefix (Phase 2) ─────────────────────────────────────────────
     // Lines whose audio is ≥ freezeMargin older than the newest word are
@@ -389,7 +389,14 @@ final class TranscriptStore {
                 touched = true
             }
             if touched { reassignFrozenSpeakers(); rebuildLive() }
-        case .speakerOverlap(let l): spkOv.append(l)
+        case .speakerOverlap(let l):
+            spkOv.append(l)
+            applyOverlapSpeakers()
+            scheduleRender()
+        case .speakerOverlapReset:
+            spkOv.removeAll()
+            applyOverlapSpeakers()
+            scheduleRender()
         default: break
         }
     }
@@ -422,17 +429,7 @@ final class TranscriptStore {
         let labels = (dedupedFix.isEmpty || diarNamespaceBroken) ? spk : dedupedFix
         lines = group(words: merger.committed, labels: labels)
         applyOverlays()
-        for i in lines.indices {
-            let l = lines[i]
-            var seen = Set<Int>()
-            for ov in spkOv where ov.id != l.speaker {
-                let os = ov.time, oe = ov.time + ov.dur
-                if oe > l.start, os < l.end, !seen.contains(ov.id) {
-                    seen.insert(ov.id)
-                    lines[i].overlapSpeakers.append(ov.id)
-                }
-            }
-        }
+        applyOverlapSpeakers()
         flushRenderNow()
     }
 
@@ -454,7 +451,26 @@ final class TranscriptStore {
         }
         lines = frozen + tail
         applyOverlays()
+        applyOverlapSpeakers()
         scheduleRender()
+    }
+
+    /// Project causal/final SPKOV rows onto every currently visible line. This
+    /// is rebuilt from the compact event list so future words also inherit an
+    /// overlap row that arrived before their line was materialized.
+    private func applyOverlapSpeakers() {
+        for i in lines.indices {
+            lines[i].overlapSpeakers.removeAll(keepingCapacity: true)
+            let line = lines[i]
+            var seen = Set<Int>()
+            for ov in spkOv where ov.id != line.speaker {
+                let os = ov.time, oe = ov.time + ov.dur
+                if oe > line.start, os < line.end, !seen.contains(ov.id) {
+                    seen.insert(ov.id)
+                    lines[i].overlapSpeakers.append(ov.id)
+                }
+            }
+        }
     }
 
     /// SPKFIX touched label windows inside the frozen region: update those

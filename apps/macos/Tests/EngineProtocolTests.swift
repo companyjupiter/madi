@@ -48,6 +48,8 @@ struct EngineProtocolTests {
               "SPKFIX with dur")
         check(d.decode(line: "SPKOV 17.00 5 0.90") == .speakerOverlap(.init(time: 17.0, id: 5, dur: 0.90)),
               "SPKOV with dur")
+        check(d.decode(line: "SPKOVRESET") == .speakerOverlapReset,
+              "SPKOV causal reset")
 
         check(d.decode(line: "<<FLUSH_END>>") == .flushEnd, "flush end")
 

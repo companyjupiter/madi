@@ -125,6 +125,35 @@ windows, latency, and peak overcount while reducing churn from 6.25 to
 churn 3.85→3.70/min, and total peak overcount 8→6 with no regression in the
 strict correctness or latency gates.
 
+### Causal live overlap gate
+
+Live OSD emits high-confidence second-speaker `SPKOV` rows as soon as each OSD
+window closes. `SPKOVRESET` clears those provisional rows at `FLUSH`, after
+which the existing whole-session overlap attribution replaces them for saved
+output. The causal path is reversible with `DIAR_LIVE_OSD=0`; its independently
+measured defaults are `DIAR_LIVE_OSD_THR=0.75` and
+`DIAR_LIVE_OSD_SUPPORT_GAP=0`. The support condition requires the proposed
+second speaker to overlap a causal primary window, preventing stale local-track
+identity from being promoted later in a session.
+
+`diar_panel_eval.py` scores both primary live DER and primary-plus-causal-OSD
+DER from the same engine run. Same-speaker intervals are unioned before RTTM
+scoring to mirror `TranscriptStore`'s per-line `Set` semantics. It also reports
+reference-overlap coverage, precision, unresolved overlap seconds, and
+time-to-visible p50/p90. Use the self gate to isolate the OSD contribution:
+
+```bash
+python3 bench/live_ux_gate.py bench/runs/<causal-run> \
+  --causal-self --require-win
+```
+
+On the 24-file four-speaker panel, causal live DER improved **9.06→8.67%**
+(−0.39 point) and mean unresolved overlap time improved **17.13→15.45 s**
+(−1.68 s): 9 files improved, 14 were exact, and the only positive delta was
+`azisu +0.05`, below the per-file +0.10 regression bound. The rejected loose
+setting (`threshold=0.45`, `support gap=1.0 s`) improved the mean more but caused
+`rcxzg +0.80` DER, which is why it is not the product default.
+
 ## Offline clustering sweep (fast iteration without the encoder pass)
 `DIAR_DUMP=/tmp/raw.bin ./out/transcribe ... ` dumps raw-mel segment features;
 `bench/mel_k.py`, `bench/mel_validate.py` sweep clustering params + score DER via
