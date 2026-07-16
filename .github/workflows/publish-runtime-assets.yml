@@ -1,0 +1,166 @@
+name: Publish macOS runtime assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      asset_version:
+        description: Immutable runtime asset version
+        required: true
+        default: v1
+        type: string
+
+concurrency:
+  group: publish-runtime-assets-${{ inputs.asset_version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Build and publish runtime assets
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      MADI_RELEASE_BUCKET: ${{ vars.MADI_RELEASE_BUCKET }}
+      MADI_RELEASE_PREFIX: ${{ vars.MADI_RELEASE_PREFIX }}
+      MADI_DOWNLOAD_BASE_URL: ${{ vars.MADI_DOWNLOAD_BASE_URL }}
+      ASSET_VERSION: ${{ inputs.asset_version }}
+      HF_REVISION: 41f01f3fe87f28c78e2fbf8b568835947dd65ed9
+      SILERO_REVISION: d566358a1d339b471dc113303d008441f2abcc39
+
+    steps:
+      - name: Validate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ASSET_VERSION" =~ ^[A-Za-z0-9._-]+$ ]] || {
+            echo "asset_version must contain only letters, numbers, dot, underscore, or hyphen" >&2
+            exit 1
+          }
+          for name in AWS_REGION AWS_ROLE_ARN MADI_RELEASE_BUCKET MADI_DOWNLOAD_BASE_URL; do
+            [[ -n "${!name}" ]] || {
+              echo "Missing repository variable: $name" >&2
+              exit 1
+            }
+          done
+
+      - uses: actions/checkout@v6
+
+      - name: Download verified source assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets_dir="$GITHUB_WORKSPACE/engine/metal/assets"
+          bench_dir="$GITHUB_WORKSPACE/engine/metal/bench"
+          whisper_dir="$RUNNER_TEMP/whisper.cpp"
+          mkdir -p "$whisper_dir/models"
+
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            -o "$assets_dir/tokenizer.json" \
+            "https://huggingface.co/openai/whisper-large-v3-turbo/resolve/$HF_REVISION/tokenizer.json"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            -o "$assets_dir/generation_config.json" \
+            "https://huggingface.co/openai/whisper-large-v3-turbo/resolve/$HF_REVISION/generation_config.json"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            -o "$whisper_dir/models/for-tests-silero-v6.2.0-ggml.bin" \
+            "https://raw.githubusercontent.com/ggml-org/whisper.cpp/$SILERO_REVISION/models/for-tests-silero-v6.2.0-ggml.bin"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            -o "$bench_dir/ES2004a.wav" \
+            "https://groups.inf.ed.ac.uk/ami/AMICorpusMirror/amicorpus/ES2004a/audio/ES2004a.Mix-Headset.wav"
+
+          printf '%s  %s\n' \
+            '297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd' "$assets_dir/tokenizer.json" \
+            'cce11bfe3aaa6ae9e072ea2637caaec8795e68d9b67e655a5af16ee509681a4c' "$assets_dir/generation_config.json" \
+            '2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987' "$whisper_dir/models/for-tests-silero-v6.2.0-ggml.bin" \
+            '3e2560b19bee6952c7c7ce041b0f1ea8a7ea9468044c4eea79d2a2c67e24ab0f' "$bench_dir/ES2004a.wav" \
+            | shasum -a 256 -c -
+
+      - name: Generate runtime assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 engine/metal/assets/gen_assets.py
+          WCPP="$RUNNER_TEMP/whisper.cpp" bash engine/metal/bench/gen_diar_assets.sh
+
+          for file in \
+            WHISPER_BPE.bin mel_filters.bin resnet34_diar.bin \
+            kaldi_melbank.bin silero_vad.bin pyannote_osd.bin \
+            suppress_tokens.bin; do
+            test -s "engine/metal/assets/$file"
+          done
+
+      - name: Package runtime assets
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_name="madi-runtime-assets-$ASSET_VERSION.tar.gz"
+          archive="$RUNNER_TEMP/$archive_name"
+          tar -C engine/metal/assets -czf "$archive" \
+            WHISPER_BPE.bin \
+            mel_filters.bin \
+            resnet34_diar.bin \
+            kaldi_melbank.bin \
+            silero_vad.bin \
+            pyannote_osd.bin \
+            suppress_tokens.bin
+
+          checksum=$(shasum -a 256 "$archive" | awk '{print $1}')
+          prefix="${MADI_RELEASE_PREFIX#/}"
+          prefix="${prefix%/}"
+          key="runtime-assets/$ASSET_VERSION/$archive_name"
+          if [[ -n "$prefix" ]]; then
+            key="$prefix/$key"
+          fi
+          public_url="${MADI_DOWNLOAD_BASE_URL%/}/runtime-assets/$ASSET_VERSION/$archive_name"
+
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "archive_name=$archive_name" >> "$GITHUB_OUTPUT"
+          echo "checksum=$checksum" >> "$GITHUB_OUTPUT"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "public_url=$public_url" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload immutable archive to S3
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          ARCHIVE_NAME: ${{ steps.package.outputs.archive_name }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          OBJECT_KEY: ${{ steps.package.outputs.key }}
+        run: |
+          set -euo pipefail
+          aws s3 cp "$ARCHIVE" "s3://$MADI_RELEASE_BUCKET/$OBJECT_KEY" \
+            --content-type application/gzip \
+            --cache-control 'public,max-age=31536000,immutable' \
+            --only-show-errors
+
+          checksum_file="$RUNNER_TEMP/$ARCHIVE_NAME.sha256"
+          printf '%s  %s\n' "$CHECKSUM" "$ARCHIVE_NAME" > "$checksum_file"
+          aws s3 cp "$checksum_file" "s3://$MADI_RELEASE_BUCKET/$OBJECT_KEY.sha256" \
+            --content-type text/plain \
+            --cache-control 'public,max-age=31536000,immutable' \
+            --only-show-errors
+
+      - name: Publish summary
+        shell: bash
+        env:
+          PUBLIC_URL: ${{ steps.package.outputs.public_url }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+        run: |
+          {
+            echo '## Runtime assets published'
+            echo
+            echo "- URL: \`$PUBLIC_URL\`"
+            echo "- SHA-256: \`$CHECKSUM\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "MADI_RELEASE_ASSETS_URL=$PUBLIC_URL"
+          echo "MADI_RELEASE_ASSETS_SHA256=$CHECKSUM"
