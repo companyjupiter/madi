@@ -78,12 +78,11 @@ The latter gate uses the absolute unresolved-window count, not
 does not yet fix the hard tail, the percentage rises only because its
 denominator became smaller.
 `REGR` also blocks on per-file tails; `NOISE` exits 2 when `--require-win` is
-set. The pinned baseline at source commit `3846dd7` is the segment-coherent
-default: immediate DER mean 17.27%, wrong-visible mean 13.04%, 39 absolute
-unresolved windows, correction p90 mean 19.73 s, churn 7.00/min, and peak
-speaker overcount `0/1/1` for `migzj/jnivh/gwtwd`. The rollback
-`DIAR_SEGMENT_COHERENT=0` exactly reproduces the prior 19.38% DER / 9.44 churn
-baseline on every case.
+set. The pinned baseline at source commit `f62e596` includes segment-coherent
+output and tentative-birth expiry: immediate DER mean 17.27%, wrong-visible
+mean 13.04%, 39 absolute unresolved windows, correction p90 mean 19.73 s,
+churn 6.25/min, and peak speaker overcount `0/1/0` for
+`migzj/jnivh/gwtwd`.
 
 The same gate also stratifies the first visible label by `diarAssign`'s
 acoustic margin. On the pinned panel, real margins below `0.20` were wrong in
@@ -101,6 +100,18 @@ This does not move the captured-audio frontier and is exactly reversible with
 19.38% to 17.27% and churn from 9.44 to 7.00/min while preserving wrong-visible
 13.04%, first-label p90 11.0 s, all 39 unresolved windows, peak overcount
 `0/1/1`, and final+OSD DER 10.87%.
+
+Tentative auto-speaker evidence also expires after 4.5 seconds by default.
+Previously, a singleton centroid could be matched by a different real speaker
+tens of seconds later and that unrelated match counted as its second
+confirmation. The expiry keeps the already-visible fallback label and starts a
+new confirmation streak; `DIAR_CONFIRM_GAP_SEC=0` restores the old lifetime.
+On the pinned panel this preserves DER, wrong-visible, all 39 unresolved
+windows, first-label latency, correction latency, and final+OSD DER exactly,
+while reducing churn from 7.00 to 6.25/min and peak overcount from `0/1/1` to
+`0/1/0`. Across all 24 four-speaker VoxConverse-dev files, 23 were exact on
+every live metric; only `gwtwd` changed, with churn 6.76→4.51/min and peak
+overcount +1→0. File, final relabel, and final+OSD metrics were exact on all 24.
 
 ## Offline clustering sweep (fast iteration without the encoder pass)
 `DIAR_DUMP=/tmp/raw.bin ./out/transcribe ... ` dumps raw-mel segment features;
