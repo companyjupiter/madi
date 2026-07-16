@@ -113,6 +113,18 @@ while reducing churn from 7.00 to 6.25/min and peak overcount from `0/1/1` to
 every live metric; only `gwtwd` changed, with churn 6.76→4.51/min and peak
 overcount +1→0. File, final relabel, and final+OSD metrics were exact on all 24.
 
+Confirmation evidence must also advance by one full 1.5-second embedding
+window. The live runner carries three seconds of left context, so a newly born
+speaker at 47.50 s can otherwise be "confirmed" by the next segment rewinding
+to 47.00 s over the same audio. The duplicate embedding still updates the raw
+centroid and remains available to reclustering; only the user-visible birth
+streak ignores it. `DIAR_CONFIRM_MIN_ADV_SEC=0` restores the legacy behavior.
+On the pinned panel this preserves DER, wrong-visible, all 39 unresolved
+windows, latency, and peak overcount while reducing churn from 6.25 to
+5.87/min. Across all 24 four-speaker files, mean DER changed 9.08→9.06,
+churn 3.85→3.70/min, and total peak overcount 8→6 with no regression in the
+strict correctness or latency gates.
+
 ## Offline clustering sweep (fast iteration without the encoder pass)
 `DIAR_DUMP=/tmp/raw.bin ./out/transcribe ... ` dumps raw-mel segment features;
 `bench/mel_k.py`, `bench/mel_validate.py` sweep clustering params + score DER via
