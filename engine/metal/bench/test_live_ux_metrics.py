@@ -4,17 +4,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from live_ux_metrics import analyze_live_ux, parse_label_events
+from live_ux_metrics import analyze_live_ux, parse_assignment_traces, parse_label_events
 
 
 class LiveUxMetricsTests(unittest.TestCase):
     def test_time_to_correct_excludes_flush_repairs(self) -> None:
         stdout = """\
+SPKTRACE 0.000 0 0 0.80 -2.00 1.00 1 2 update
 SPK 0.000 0 1.500 1.0
 <<SEG_END>>
+SPKTRACE 10.000 0 0 0.55 0.50 0.05 2 2 quarantine
+SPKTRACE 12.000 1 0 0.30 -2.00 1.00 0 1 birth
 SPK 10.000 0 1.500 0.1
 SPK 12.000 1 1.500 0.8
 <<SEG_END>>
+SPKTRACE 20.000 0 0 0.90 0.20 0.70 2 3 update
 SPK 20.000 0 1.500 0.8
 SPKFIX 10.000 1 1.500 0.7
 <<SEG_END>>
@@ -50,6 +54,14 @@ SPKFIX 0.000 1 1.500 0.9
         self.assertAlmostEqual(metrics["first_margin_confident_wrong_pct"], 0.0)
         self.assertEqual(metrics["first_margin_sentinel_windows"], 1)
         self.assertAlmostEqual(metrics["first_margin_sentinel_wrong_pct"], 0.0)
+        self.assertEqual(metrics["assign_trace_windows"], 4)
+        self.assertEqual(metrics["prototype_update_windows"], 2)
+        self.assertAlmostEqual(metrics["prototype_wrong_update_pct"], 0.0)
+        self.assertEqual(metrics["prototype_weighted_windows"], 0)
+        self.assertEqual(metrics["prototype_quarantine_windows"], 1)
+        self.assertAlmostEqual(metrics["prototype_quarantine_wrong_pct"], 100.0)
+        self.assertEqual(metrics["prototype_birth_windows"], 1)
+        self.assertAlmostEqual(metrics["prototype_birth_wrong_pct"], 0.0)
 
     def test_segment_frontier_and_flush_classification(self) -> None:
         stdout = """\
@@ -68,6 +80,14 @@ SPKFIX 0.0 2 1.5 0.5
         events = parse_label_events("SPK 1.5 2 1.5 -0.03\n", [10.0])
         self.assertEqual(len(events), 1)
         self.assertAlmostEqual(events[0].margin, -0.03)
+
+        traces = parse_assignment_traces(
+            "SPKTRACE 1.50 2 0 0.4100 0.4400 -0.0300 3 4 0.2500 weighted\n"
+        )
+        self.assertEqual(len(traces), 1)
+        self.assertEqual(traces[0].action, "weighted")
+        self.assertAlmostEqual(traces[0].margin, -0.03)
+        self.assertAlmostEqual(traces[0].update_weight, 0.25)
 
 
 if __name__ == "__main__":

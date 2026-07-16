@@ -22,7 +22,10 @@ from pathlib import Path
 MEAN_REGRESSION_LIMITS = {
     "der": 0.05,
     "wrong_visible_ratio_pct": 0.05,
-    "unresolved_initial_wrong_pct": 0.01,
+    # Compare the absolute unresolved-window count. A candidate that removes
+    # some first-seen errors while leaving the same unresolved tail is a win;
+    # the percentage alone rises because its denominator got smaller.
+    "unresolved_wrong_windows": 0.00,
     "label_churn_per_min": 0.25,
     "first_label_latency_p90_sec": 0.10,
     "time_to_correct_p90_sec": 5.00,
@@ -31,14 +34,14 @@ MEAN_REGRESSION_LIMITS = {
 CASE_REGRESSION_LIMITS = {
     "der": 0.10,
     "wrong_visible_ratio_pct": 0.25,
-    "unresolved_initial_wrong_pct": 0.01,
+    "unresolved_wrong_windows": 0.00,
     "speaker_overcount_peak": 0.00,
 }
 
 WIN_LIMITS = {
     "der": -0.10,
     "wrong_visible_ratio_pct": -0.25,
-    "unresolved_initial_wrong_pct": -2.00,
+    "unresolved_wrong_windows": -0.25,
     "label_churn_per_min": -0.25,
     "time_to_correct_p90_sec": -2.00,
 }
@@ -92,7 +95,15 @@ def main() -> int:
     regressions: list[str] = []
     wins: list[str] = []
     rows: list[tuple[str, float | None, float | None, float | None]] = []
-    metrics = list(dict.fromkeys([*MEAN_REGRESSION_LIMITS, *WIN_LIMITS]))
+    metrics = list(
+        dict.fromkeys(
+            [
+                *MEAN_REGRESSION_LIMITS,
+                *WIN_LIMITS,
+                "unresolved_initial_wrong_pct",
+            ]
+        )
+    )
     for metric in metrics:
         before = mean(baseline, ids, metric)
         after = mean(candidate, ids, metric)

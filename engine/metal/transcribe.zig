@@ -615,7 +615,16 @@ const DiarCentroid = struct { count: u32, sum: [diar.EMB]f32 };
 /// similarity). The margin is the app's acoustic-confidence signal — a low
 /// margin means "this window could be either speaker", which is exactly where
 /// the LLM's dialogue-context correction is allowed to override (S2/S3 fusion).
-const DiarAssign = struct { id: usize, fallback: usize, margin: f32 };
+const DiarAssign = struct {
+    id: usize,
+    fallback: usize,
+    margin: f32,
+    best: f32,
+    second: f32,
+    count_before: u32,
+    count_after: u32,
+    born: bool,
+};
 
 // Delay exposing a newly-born auto speaker until it has repeated acoustic
 // evidence. Internally the raw id keeps learning; externally its first windows
@@ -673,9 +682,23 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
         second_i >= anchor_n and second >= sim_thr)
     {
         var c2 = &cents.items[second_i];
+        const count_before = c2.count;
+        const margin = second - best;
+        // Keep anchor-rejection semantics exact: the selected non-anchor has
+        // already cleared sim_thr, while the negative margin only records that
+        // the rejected anchor was numerically closer.
         for (0..diar.EMB) |k| c2.sum[k] += v[k];
         c2.count += 1;
-        return .{ .id = second_i, .fallback = second_i, .margin = second - best };
+        return .{
+            .id = second_i,
+            .fallback = second_i,
+            .margin = margin,
+            .best = second,
+            .second = best,
+            .count_before = count_before,
+            .count_after = c2.count,
+            .born = false,
+        };
     }
     // S1: an ANCHORED centroid (enrolled voiceprint, ids < anchor_n) demands a
     // HIGHER similarity to claim a window — "if it isn't clearly the enrolled
@@ -687,12 +710,32 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
         var c: DiarCentroid = .{ .count = 1, .sum = undefined };
         for (0..diar.EMB) |k| c.sum[k] = v[k];
         try cents.append(c);
-        return .{ .id = spk, .fallback = if (spk == 0) spk else best_i, .margin = 1.0 };
+        return .{
+            .id = spk,
+            .fallback = if (spk == 0) spk else best_i,
+            .margin = 1.0,
+            .best = best,
+            .second = second,
+            .count_before = 0,
+            .count_after = 1,
+            .born = true,
+        };
     }
     var c = &cents.items[best_i];
+    const count_before = c.count;
+    const margin: f32 = if (cents.items.len >= 2) best - second else 1.0;
     for (0..diar.EMB) |k| c.sum[k] += v[k];
     c.count += 1;
-    return .{ .id = best_i, .fallback = best_i, .margin = if (cents.items.len >= 2) best - second else 1.0 };
+    return .{
+        .id = best_i,
+        .fallback = best_i,
+        .margin = margin,
+        .best = best,
+        .second = second,
+        .count_before = count_before,
+        .count_after = c.count,
+        .born = false,
+    };
 }
 
 // Periodic live re-clustering: batch k-means + silhouette auto-K over the
@@ -1270,6 +1313,7 @@ pub fn main() !void {
     // into a persistent centroid set → consistent speaker ids, no external proc.
     var cents = std.ArrayList(DiarCentroid).init(alloc);
     const diar_sim = envF("DIAR_SIM", 0.40);
+    const diar_assign_trace = std.posix.getenv("DIAR_ASSIGN_TRACE") != null;
     const diar_max: u32 = @intCast(envU("DIAR_MAXK", 8));
     // periodic live re-clustering: every N accepted windows, re-run batch
     // k-means over all accumulated embeddings (DIAR_RECLUSTER=0 disables).
@@ -1681,6 +1725,14 @@ pub fn main() !void {
                     }
                 }
                 if (stream_diar) {
+                    // All embeddings for this captured segment are already
+                    // available. Optionally coalesce same-segment birth and
+                    // recluster decisions before the first SPK is exposed;
+                    // this adds no audio-frontier latency and avoids emitting a
+                    // label that is immediately repaired before SEG_END.
+                    const coherent_segment_emit = recluster_every > 0 and
+                        !std.mem.eql(u8, std.posix.getenv("DIAR_SEGMENT_COHERENT") orelse "1", "0");
+                    const chunk_live_begin = live_t0.items.len;
                     // per-segment relative-energy VAD: keep windows RMS > 0.3×median
                     var rtmp: [64]f32 = undefined;
                     const m = @min(nwin, rtmp.len);
@@ -1704,6 +1756,13 @@ pub fn main() !void {
                         const eff_max: u32 = if (auto_birth_locked) @intCast(cents.items.len) else born_cap;
                         const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
                         const spk = ar.id;
+                        if (diar_assign_trace) {
+                            const action: []const u8 = if (ar.born) "birth" else "update";
+                            try out.print("SPKTRACE {d:.2} {d} {d} {d:.4} {d:.4} {d:.4} {d} {d} {s}\n", .{
+                                gt, spk, ar.fallback, ar.best, ar.second, ar.margin,
+                                ar.count_before, ar.count_after, action,
+                            });
+                        }
                         const visible_spk = try liveVisibleSpeaker(
                             out,
                             spk,
@@ -1721,7 +1780,9 @@ pub fn main() !void {
                         // the live FA driver (live 44.7% vs file 18.8%) —
                         // emit silero-clipped pieces; extra duration field is
                         // ignored by the runner's awk (backward compatible)
-                        try emitClippedSpk(out, "SPK", gt, @intCast(visible_spk), ar.margin);
+                        if (!coherent_segment_emit) {
+                            try emitClippedSpk(out, "SPK", gt, @intCast(visible_spk), ar.margin);
+                        }
                         // voiceprint match: once a speaker's centroid has ≥2
                         // windows, compare to unclaimed prints; announce once.
                         while (spk_named.items.len < cents.items.len) try spk_named.append(false);
@@ -1850,6 +1911,17 @@ pub fn main() !void {
                                     }
                                 }
                             }
+                        }
+                    }
+                    if (coherent_segment_emit) {
+                        for (chunk_live_begin..live_t0.items.len) |wi| {
+                            try emitClippedSpk(
+                                out,
+                                "SPK",
+                                live_t0.items[wi],
+                                @intCast(live_ids.items[wi]),
+                                live_margins.items[wi],
+                            );
                         }
                     }
                 } else {

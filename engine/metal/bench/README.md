@@ -73,6 +73,10 @@ python3 bench/live_ux_gate.py \
 `WIN` requires a material improvement on at least one immediate UX axis.
 Primary correctness is Pareto-strict: mean wrong-visible may regress by at
 most 0.05 point and no additional initially-wrong window may remain unresolved.
+The latter gate uses the absolute unresolved-window count, not
+`unresolved_initial_wrong_pct`: when a candidate removes first-seen errors but
+does not yet fix the hard tail, the percentage rises only because its
+denominator became smaller.
 `REGR` also blocks on per-file tails; `NOISE` exits 2 when `--require-win` is
 set. Two identical baseline runs on 2026-07-16 were exactly
 deterministic: immediate DER mean 19.38%, wrong-visible mean 13.04%, unresolved
@@ -86,6 +90,15 @@ acoustic margin. On the pinned panel, real margins below `0.20` were wrong in
 uses it as a control-state sentinel before a second centroid exists or when a
 speaker is born; it was wrong in 23/52 windows and must not be interpreted as
 high acoustic confidence.
+
+Live output is segment-coherent by default. The engine has already computed
+every diarization embedding for the captured segment, so it coalesces any
+same-segment tentative-birth/recluster repair before emitting the first `SPK`.
+This does not move the captured-audio frontier and is exactly reversible with
+`DIAR_SEGMENT_COHERENT=0`. On the pinned panel it reduced immediate DER from
+19.38% to 17.27% and churn from 9.44 to 7.00/min while preserving wrong-visible
+13.04%, first-label p90 11.0 s, all 39 unresolved windows, peak overcount
+`0/1/1`, and final+OSD DER 10.87%.
 
 ## Offline clustering sweep (fast iteration without the encoder pass)
 `DIAR_DUMP=/tmp/raw.bin ./out/transcribe ... ` dumps raw-mel segment features;

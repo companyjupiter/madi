@@ -19,6 +19,11 @@ from pathlib import Path
 LABEL_RE = re.compile(
     r"(SPKFIX|SPKOV|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?(?: ([+-]?[0-9.]+))?$"
 )
+ASSIGN_TRACE_RE = re.compile(
+    r"SPKTRACE ([0-9.]+) (\d+) (\d+) "
+    r"([+-]?[0-9.]+) ([+-]?[0-9.]+) ([+-]?[0-9.]+) "
+    r"(\d+) (\d+)(?: ([0-9.]+))? (birth|update|quarantine|weighted)$"
+)
 
 AMBIGUOUS_MARGIN = 0.20
 SENTINEL_MARGIN = 0.999
@@ -48,6 +53,20 @@ class VisibleWindow:
     duration: float
     history: list[tuple[float, int]]
     first_margin: float | None
+
+
+@dataclass(frozen=True)
+class AssignmentTrace:
+    time: float
+    speaker: int
+    fallback: int
+    best: float
+    second: float
+    margin: float
+    count_before: int
+    count_after: int
+    update_weight: float
+    action: str
 
 
 def percentile(values: list[float], q: float) -> float | None:
@@ -103,6 +122,33 @@ def parse_label_events(stdout: str, frontiers: list[float]) -> list[LabelEvent]:
             )
         )
     return events
+
+
+def parse_assignment_traces(stdout: str) -> list[AssignmentTrace]:
+    traces: list[AssignmentTrace] = []
+    for raw in stdout.splitlines():
+        match = ASSIGN_TRACE_RE.fullmatch(raw.strip())
+        if not match:
+            continue
+        traces.append(
+            AssignmentTrace(
+                time=float(match.group(1)),
+                speaker=int(match.group(2)),
+                fallback=int(match.group(3)),
+                best=float(match.group(4)),
+                second=float(match.group(5)),
+                margin=float(match.group(6)),
+                count_before=int(match.group(7)),
+                count_after=int(match.group(8)),
+                update_weight=(
+                    float(match.group(9))
+                    if match.group(9) is not None
+                    else (0.0 if match.group(10) == "quarantine" else 1.0)
+                ),
+                action=match.group(10),
+            )
+        )
+    return traces
 
 
 def overlap(a0: float, a1: float, b0: float, b1: float) -> float:
@@ -283,12 +329,41 @@ def analyze_live_ux(stdout: str, frontiers: list[float], reference: Path) -> dic
     reference_speakers = len({turn.speaker for turn in turns})
     final_visible = len({window.history[-1][1] for window in windows})
 
+    traces = parse_assignment_traces(stdout)
+    trace_windows = [
+        VisibleWindow(
+            time=trace.time,
+            duration=1.5,
+            history=[(trace.time, trace.speaker)],
+            first_margin=trace.margin,
+        )
+        for trace in traces
+    ]
+    trace_mapping = best_bijective_mapping(trace_windows, turns)
+    trace_actions: dict[str, list[bool]] = {
+        "update": [],
+        "quarantine": [],
+        "weighted": [],
+        "birth": [],
+    }
+    for trace, window in zip(traces, trace_windows):
+        target = dominant_reference(window, turns)
+        if target is None:
+            continue
+        trace_actions[trace.action].append(trace_mapping.get(trace.speaker) == target)
+
     def rate(numerator: int, denominator: int) -> float | None:
         return (100.0 * numerator / denominator) if denominator else None
 
     def bucket_error(name: str) -> float | None:
         values = margin_buckets[name]
         return rate(sum(not correct for correct in values), len(values))
+
+    def trace_error(action: str) -> float | None:
+        values = trace_actions[action]
+        return rate(sum(not correct for correct in values), len(values))
+
+    prototype_updates = trace_actions["update"] + trace_actions["weighted"]
 
     return {
         "ux_windows": len(windows),
@@ -318,4 +393,15 @@ def analyze_live_ux(stdout: str, frontiers: list[float], reference: Path) -> dic
         "first_margin_confident_wrong_pct": bucket_error("confident"),
         "first_margin_sentinel_windows": len(margin_buckets["sentinel"]),
         "first_margin_sentinel_wrong_pct": bucket_error("sentinel"),
+        "assign_trace_windows": len(traces),
+        "prototype_update_windows": len(prototype_updates),
+        "prototype_wrong_update_pct": rate(
+            sum(not correct for correct in prototype_updates), len(prototype_updates)
+        ),
+        "prototype_weighted_windows": len(trace_actions["weighted"]),
+        "prototype_weighted_wrong_pct": trace_error("weighted"),
+        "prototype_quarantine_windows": len(trace_actions["quarantine"]),
+        "prototype_quarantine_wrong_pct": trace_error("quarantine"),
+        "prototype_birth_windows": len(trace_actions["birth"]),
+        "prototype_birth_wrong_pct": trace_error("birth"),
     }
