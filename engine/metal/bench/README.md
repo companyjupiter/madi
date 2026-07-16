@@ -42,6 +42,41 @@ python3 bench/diar_panel_eval.py --youtube-url 'https://youtu.be/...' --ref pane
 Outputs are written under `bench/runs/diar_panel_<timestamp>/`:
 `results.jsonl`, `summary.md`, and the generated system RTTMs.
 
+### Live time-to-correct / immediate UX gate
+
+`--live` also reconstructs the labels visible after every `SPK` and
+mid-session `SPKFIX`. The event clock is the captured-audio frontier of the
+segment whose output precedes `<<SEG_END>>`; corrections emitted after the last
+segment (`FLUSH`) are excluded from live UX and remain part of the saved-output
+DER gate. The summary reports:
+
+- first-label latency p50/p90 and first-seen DER;
+- wrong-visible ratio: reference-wrong label exposure integrated until the end
+  of the live session;
+- time-to-stable-correct p50/p90 and the initially-wrong windows that never
+  became correct during the session;
+- label churn/minute and peak/final visible speaker count.
+
+System ids are mapped one-to-one to reference speakers by maximum overlap on
+the final mid-session visible state. Extra transient ids remain unmapped, so a
+3-person panel briefly shown as 4 speakers is penalized instead of hidden by a
+many-to-one mapping.
+
+The pinned 3-4 speaker baseline is `bench/live_ux_baseline_3to4spk.jsonl`.
+Compare a candidate run with the asymmetric no-regression gate:
+
+```bash
+python3 bench/live_ux_gate.py \
+  bench/live_ux_baseline_3to4spk.jsonl bench/runs/<candidate> --require-win
+```
+
+`WIN` requires a material improvement on at least one immediate UX axis.
+`REGR` blocks on both panel mean and per-file tail limits; `NOISE` exits 2 when
+`--require-win` is set. Two identical baseline runs on 2026-07-16 were exactly
+deterministic: immediate DER mean 19.38%, wrong-visible mean 13.04%, unresolved
+initial errors 65.42%, correction p90 mean 18.03 s, churn 9.44/min, and peak
+speaker overcount `0/1/1` for `migzj/jnivh/gwtwd`.
+
 ## Offline clustering sweep (fast iteration without the encoder pass)
 `DIAR_DUMP=/tmp/raw.bin ./out/transcribe ... ` dumps raw-mel segment features;
 `bench/mel_k.py`, `bench/mel_validate.py` sweep clustering params + score DER via
