@@ -122,6 +122,28 @@ rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/assets-small"
 cp "$OUT/Madi" "$BUNDLE/Contents/MacOS/Madi"
 cp "$APP_DIR/Sovereign/Info.plist" "$BUNDLE/Contents/Info.plist"
+
+# Release metadata can be injected by CI without modifying tracked sources.
+# MADI_VERSION is the full SemVer (for example 0.9.1-beta.2); the numeric core
+# remains CFBundleShortVersionString as required by macOS.
+if [ -n "${MADI_VERSION:-}" ]; then
+  if ! [[ "$MADI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+    echo "❌ invalid MADI_VERSION: $MADI_VERSION"; exit 1
+  fi
+  MARKETING="${MADI_VERSION%%[-+]*}"
+  CHANNEL="${MADI_CHANNEL:-stable}"
+  case "$MADI_VERSION" in
+    *-beta.*) CHANNEL="${MADI_CHANNEL:-beta}" ;;
+    *-rc.*)   CHANNEL="${MADI_CHANNEL:-rc}" ;;
+  esac
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING" "$BUNDLE/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${MADI_BUILD:-1}" "$BUNDLE/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :MADIFullVersion $MADI_VERSION" "$BUNDLE/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :MADIChannel $CHANNEL" "$BUNDLE/Contents/Info.plist"
+fi
+if [ -n "${MADI_BETA_EXPIRY:-}" ]; then
+  /usr/libexec/PlistBuddy -c "Set :MADIBetaExpiry $MADI_BETA_EXPIRY" "$BUNDLE/Contents/Info.plist"
+fi
 cp "$APP_DIR/Sovereign/Resources/logo_madi.png" "$BUNDLE/Contents/Resources/logo_madi.png"
 cp "$APP_DIR/Sovereign/Resources/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns"
 cp "$APP_DIR"/Sovereign/Resources/*.svg "$BUNDLE/Contents/Resources/"
@@ -133,13 +155,18 @@ cp "$ROOT/engine/metal/whisper.metallib" "$BUNDLE/Contents/Resources/whisper.met
 # only what the engine opens via bpe_dir(bpe_path) — verified in transcribe.zig
 ASSETS=( WHISPER_BPE.bin mel_filters.bin resnet34_diar.bin kaldi_melbank.bin
          silero_vad.bin pyannote_osd.bin suppress_tokens.bin )
+MISSING_ASSETS=0
 for f in "${ASSETS[@]}"; do
   if [ -f "$ROOT/engine/metal/assets/$f" ]; then
     cp "$ROOT/engine/metal/assets/$f" "$BUNDLE/Contents/Resources/assets-small/$f"
   else
     echo "  ⚠ missing asset: $f (engine degrades or fails — check gen_diar_assets.sh)"
+    MISSING_ASSETS=1
   fi
 done
+if [ "$MISSING_ASSETS" = "1" ] && [ "${STRICT_ASSETS:-0}" = "1" ]; then
+  echo "❌ required runtime assets are missing (STRICT_ASSETS=1)"; exit 1
+fi
 
 # ── 2a. bundle the user manual (self-contained index.html) ──────────────────
 # Regenerate from the .md sources if node is available (best-effort), then seal
@@ -180,6 +207,9 @@ if [ -x "$TRANSLATE_ENGINE" ]; then
   BUNDLED_TRANSLATE=1
 else
   echo "[2c] (translate engine not found at $TRANSLATE_ENGINE — translation off; set TRANSLATE_ENGINE)"
+  if [ "${REQUIRE_TRANSLATE_ENGINE:-0}" = "1" ]; then
+    echo "❌ translate engine is required for this build"; exit 1
+  fi
 fi
 
 # ── 3. ad-hoc sign for local development ────────────────────────────────────

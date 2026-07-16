@@ -25,6 +25,9 @@ else
   rm -rf "$STAGE"
 fi
 
-# notarized app inside is enough, but stapling the DMG too avoids first-open lag
-xcrun stapler staple "$OUT" || true
+# A free-account build is intentionally unnotarized and opts out with
+# SKIP_STAPLE=1. Developer ID releases staple the DMG to avoid first-open lag.
+if [ "${SKIP_STAPLE:-0}" != "1" ]; then
+  xcrun stapler staple "$OUT" || true
+fi
 echo "✅ DMG → $OUT"

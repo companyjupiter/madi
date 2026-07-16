@@ -198,6 +198,18 @@ final class AppVersionTests: XCTestCase {
         XCTAssertEqual(r?.pageURL.absoluteString, "https://x/12")
     }
 
+    func testNewestPrefersStandardDMGOverOfflineDMG() {
+        let data = feed("""
+        [{"tag_name":"v1.2.0","assets":[
+          {"name":"Madi-1.2.0-offline-arm64.dmg","browser_download_url":"https://x/offline.dmg","size":900},
+          {"name":"Madi-1.2.0-arm64.dmg","browser_download_url":"https://x/standard.dmg","size":30}
+        ]}]
+        """)
+        let r = ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!)
+        XCTAssertEqual(r?.dmgURL?.absoluteString, "https://x/standard.dmg")
+        XCTAssertEqual(r?.dmgSize, 30)
+    }
+
     func testNewestGarbageJSON() {
         XCTAssertNil(ReleaseFeed.newest(from: feed("not json"), current: SemVer("1.0.0")!))
         XCTAssertNil(ReleaseFeed.newest(from: feed("{}"), current: SemVer("1.0.0")!), "object, not array")

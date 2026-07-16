@@ -29,7 +29,7 @@ Sovereign/
     EditorCuts.swift         fillers / silences / tighten / chapters / retakes / highlights
     Exporters.swift          .md / .txt / .srt / .vtt / .json / tighten.csv / chapters.txt
   UI/                        ContentView, TranscriptView, ModelGate, Settings
-  Info.plist                 NSMicrophoneUsageDescription, min OS 13, arm64
+  Info.plist                 NSMicrophoneUsageDescription, min OS 14, arm64
   Sovereign.entitlements     audio-input (hardened runtime via codesign)
 scripts/
   build_engine.sh            metal/build.sh → out/transcribe
