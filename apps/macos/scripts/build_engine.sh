@@ -5,5 +5,5 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"   # apps/macos/scripts → repo root
 cd "$ROOT/engine/metal"
-./build.sh transcribe.zig transcribe
+bash ./build.sh transcribe.zig transcribe
 echo "✅ engine → $ROOT/engine/metal/out/transcribe"
