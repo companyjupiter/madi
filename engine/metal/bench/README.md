@@ -71,8 +71,10 @@ python3 bench/live_ux_gate.py \
 ```
 
 `WIN` requires a material improvement on at least one immediate UX axis.
-`REGR` blocks on both panel mean and per-file tail limits; `NOISE` exits 2 when
-`--require-win` is set. Two identical baseline runs on 2026-07-16 were exactly
+Primary correctness is Pareto-strict: mean wrong-visible may regress by at
+most 0.05 point and no additional initially-wrong window may remain unresolved.
+`REGR` also blocks on per-file tails; `NOISE` exits 2 when `--require-win` is
+set. Two identical baseline runs on 2026-07-16 were exactly
 deterministic: immediate DER mean 19.38%, wrong-visible mean 13.04%, unresolved
 initial errors 65.42%, correction p90 mean 18.03 s, churn 9.44/min, and peak
 speaker overcount `0/1/1` for `migzj/jnivh/gwtwd`.

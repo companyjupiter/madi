@@ -20,18 +20,18 @@ from pathlib import Path
 
 
 MEAN_REGRESSION_LIMITS = {
-    "der": 0.10,
-    "wrong_visible_ratio_pct": 0.50,
-    "unresolved_initial_wrong_pct": 2.00,
-    "label_churn_per_min": 0.50,
-    "first_label_latency_p90_sec": 0.50,
-    "time_to_correct_p90_sec": 10.00,
+    "der": 0.05,
+    "wrong_visible_ratio_pct": 0.05,
+    "unresolved_initial_wrong_pct": 0.01,
+    "label_churn_per_min": 0.25,
+    "first_label_latency_p90_sec": 0.10,
+    "time_to_correct_p90_sec": 5.00,
 }
 
 CASE_REGRESSION_LIMITS = {
-    "der": 0.50,
-    "wrong_visible_ratio_pct": 2.00,
-    "unresolved_initial_wrong_pct": 5.00,
+    "der": 0.10,
+    "wrong_visible_ratio_pct": 0.25,
+    "unresolved_initial_wrong_pct": 0.01,
     "speaker_overcount_peak": 0.00,
 }
 
