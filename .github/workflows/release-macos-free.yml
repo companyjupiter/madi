@@ -70,7 +70,7 @@ jobs:
   release:
     name: Build unnotarized release
     if: github.event_name != 'pull_request'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     environment: release
     permissions:

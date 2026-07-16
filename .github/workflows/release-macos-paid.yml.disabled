@@ -41,7 +41,7 @@ concurrency:
 jobs:
   release:
     name: Build, sign, notarize, and publish
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     environment: release
     env:
