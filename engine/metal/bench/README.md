@@ -78,10 +78,12 @@ The latter gate uses the absolute unresolved-window count, not
 does not yet fix the hard tail, the percentage rises only because its
 denominator became smaller.
 `REGR` also blocks on per-file tails; `NOISE` exits 2 when `--require-win` is
-set. Two identical baseline runs on 2026-07-16 were exactly
-deterministic: immediate DER mean 19.38%, wrong-visible mean 13.04%, unresolved
-initial errors 65.42%, correction p90 mean 18.03 s, churn 9.44/min, and peak
-speaker overcount `0/1/1` for `migzj/jnivh/gwtwd`.
+set. The pinned baseline at source commit `3846dd7` is the segment-coherent
+default: immediate DER mean 17.27%, wrong-visible mean 13.04%, 39 absolute
+unresolved windows, correction p90 mean 19.73 s, churn 7.00/min, and peak
+speaker overcount `0/1/1` for `migzj/jnivh/gwtwd`. The rollback
+`DIAR_SEGMENT_COHERENT=0` exactly reproduces the prior 19.38% DER / 9.44 churn
+baseline on every case.
 
 The same gate also stratifies the first visible label by `diarAssign`'s
 acoustic margin. On the pinned panel, real margins below `0.20` were wrong in
