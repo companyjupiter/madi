@@ -25,6 +25,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from live_ux_metrics import analyze_live_ux
+
 
 ROOT = Path(__file__).resolve().parents[1]  # engine/metal
 BENCH = ROOT / "bench"
@@ -150,7 +152,9 @@ def write_rttm(labels: dict[float, tuple[int, float]], path: Path, fid: str) -> 
             f.write(f"SPEAKER {fid} 1 {t:.3f} {dur:.3f} <NA> <NA> spk{sid} <NA> <NA>\n")
 
 
-def live_feed(wav: Path, out_dir: Path, seg_sec: float, overlap_sec: float) -> str:
+def live_feed(
+    wav: Path, out_dir: Path, seg_sec: float, overlap_sec: float
+) -> tuple[str, list[float]]:
     p = run([
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
         "-of", "default=nk=1:nw=1", str(wav),
@@ -159,6 +163,7 @@ def live_feed(wav: Path, out_dir: Path, seg_sec: float, overlap_sec: float) -> s
         die("ffprobe failed:\n" + p.stderr[-2000:])
     dur = float(p.stdout.strip())
     jobs = []
+    frontiers = []
     i = 0
     while i * seg_sec < dur:
         s = max(i * seg_sec - (overlap_sec if i > 0 else 0), 0)
@@ -171,8 +176,12 @@ def live_feed(wav: Path, out_dir: Path, seg_sec: float, overlap_sec: float) -> s
         if q.returncode != 0:
             die("ffmpeg segmenting failed:\n" + q.stderr[-2000:])
         jobs.append((s, seg))
+        # A segment is dispatched after audio through `e` has been captured.
+        # Ordered SPK/SPKFIX output before its SEG_END becomes visible at this
+        # frontier; this is the algorithmic clock for live UX metrics.
+        frontiers.append(e)
         i += 1
-    return "".join(f"{s} {p}\n" for s, p in jobs) + "FLUSH\n"
+    return "".join(f"{s} {p}\n" for s, p in jobs) + "FLUSH\n", frontiers
 
 
 def eval_live_case(
@@ -186,7 +195,7 @@ def eval_live_case(
 ) -> list[dict]:
     live_dir = out_dir / (case.case_id + (".live_norecluster" if no_recluster else ".live"))
     live_dir.mkdir(exist_ok=True)
-    feed = live_feed(wav, live_dir, seg_sec, overlap_sec)
+    feed, frontiers = live_feed(wav, live_dir, seg_sec, overlap_sec)
     env = {**os.environ, "STREAM": "1", "DIAR": "1", "STREAM_WAV_ROOTS": str(live_dir), **extra_env}
     if no_recluster:
         env["DIAR_RECLUSTER"] = "0"
@@ -198,6 +207,9 @@ def eval_live_case(
     ], cwd=str(ROOT), env=env, input=feed)
     if p.returncode != 0:
         die(f"live engine failed for {case.case_id}:\n{p.stderr[-2000:]}")
+
+    (live_dir / "engine.stdout.log").write_text(p.stdout)
+    live_ux = analyze_live_ux(p.stdout, frontiers, case.ref) if case.ref else {}
 
     output_lines = p.stdout.splitlines()
     last_segment_end = max((i for i, line in enumerate(output_lines) if line.strip() == "<<SEG_END>>"), default=-1)
@@ -242,6 +254,8 @@ def eval_live_case(
         }
         if case.ref:
             rec.update(score(case.ref, sys_rttm))
+        if suffix == "stream":
+            rec.update(live_ux)
         records.append(rec)
     if spkfix and spkov:
         sys_rttm = out_dir / f"{case.case_id}.{mode_prefix}.relabel_osd.rttm"
@@ -407,15 +421,38 @@ def main() -> None:
         "| id | mode | ref spk | engine spk | auto-K | DER | miss | FA | conf | osd | mid fixes |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
+    def fmt(record: dict, key: str) -> str:
+        value = record.get(key)
+        return "" if value is None else (f"{value:.2f}" if isinstance(value, float) else str(value))
+
     for r in records:
-        def fmt(k: str) -> str:
-            v = r.get(k)
-            return "" if v is None else (f"{v:.2f}" if isinstance(v, float) else str(v))
         lines.append(
-            f"| {r['id']} | {r['mode']} | {fmt('speakers_ref')} | {fmt('engine_speakers')} | "
-            f"{fmt('auto_k')} | {fmt('der')} | {fmt('miss')} | {fmt('fa')} | {fmt('conf')} | "
-            f"{fmt('osd_rows')} | {fmt('mid_fix_windows')} |"
+            f"| {r['id']} | {r['mode']} | {fmt(r, 'speakers_ref')} | {fmt(r, 'engine_speakers')} | "
+            f"{fmt(r, 'auto_k')} | {fmt(r, 'der')} | {fmt(r, 'miss')} | {fmt(r, 'fa')} | {fmt(r, 'conf')} | "
+            f"{fmt(r, 'osd_rows')} | {fmt(r, 'mid_fix_windows')} |"
         )
+
+    live_records = [r for r in records if r["mode"] == "live_stream" and "ux_windows" in r]
+    if live_records:
+        lines.extend([
+            "",
+            "## Live immediate UX",
+            "",
+            "`wrong-visible` integrates how long reference-wrong labels remained on screen. "
+            "Time-to-correct excludes FLUSH-only repairs.",
+            "",
+            "| id | first DER | first label p50/p90 s | wrong-visible % | TTC p50/p90 s | unresolved % | churn/min | visible peak/final | overcount peak |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ])
+        for r in live_records:
+            def pair(a: str, b: str) -> str:
+                return f"{fmt(r, a)}/{fmt(r, b)}"
+            lines.append(
+                f"| {r['id']} | {fmt(r, 'der')} | {pair('first_label_latency_p50_sec', 'first_label_latency_p90_sec')} | "
+                f"{fmt(r, 'wrong_visible_ratio_pct')} | {pair('time_to_correct_p50_sec', 'time_to_correct_p90_sec')} | "
+                f"{fmt(r, 'unresolved_initial_wrong_pct')} | {fmt(r, 'label_churn_per_min')} | "
+                f"{pair('visible_speakers_peak', 'visible_speakers_final_mid')} | {fmt(r, 'speaker_overcount_peak')} |"
+            )
     (out_dir / "summary.md").write_text("\n".join(lines) + "\n")
     print(f"summary: {out_dir / 'summary.md'}")
 
