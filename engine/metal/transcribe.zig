@@ -615,7 +615,37 @@ const DiarCentroid = struct { count: u32, sum: [diar.EMB]f32 };
 /// similarity). The margin is the app's acoustic-confidence signal — a low
 /// margin means "this window could be either speaker", which is exactly where
 /// the LLM's dialogue-context correction is allowed to override (S2/S3 fusion).
-const DiarAssign = struct { id: usize, margin: f32 };
+const DiarAssign = struct { id: usize, fallback: usize, margin: f32 };
+
+// Delay exposing a newly-born auto speaker until it has repeated acoustic
+// evidence. Internally the raw id keeps learning; externally its first windows
+// stay folded into the nearest existing visible speaker. On confirmation,
+// repair those earlier windows through the already-shipped SPKFIX contract.
+fn liveVisibleSpeaker(out: anytype, spk: usize, fallback: usize, count: u32, enabled: bool, confirm_win: usize, raw_ids: []const u8, visible_ids: []u8, pending: []bool, times: []const f32, margins: []const f32) !usize {
+    if (!enabled or confirm_win <= 1) return spk;
+    const need: u32 = @intCast(@min(confirm_win, std.math.maxInt(u32)));
+    if (count < need) {
+        // A fallback centroid may itself still be tentative. Resolve through
+        // its most recent visible id so hidden prototype chains never leak.
+        var visible_fallback = fallback;
+        var i = raw_ids.len;
+        while (i > 0) {
+            i -= 1;
+            if (raw_ids[i] == fallback) { visible_fallback = visible_ids[i]; break; }
+        }
+        return visible_fallback;
+    }
+    if (count == need) {
+        for (raw_ids, 0..) |raw, i| {
+            if (raw != spk or !pending[i]) continue;
+            visible_ids[i] = @intCast(spk);
+            pending[i] = false;
+            try emitClippedSpk(out, "SPKFIX", times[i], @intCast(spk), margins[i]);
+        }
+    }
+    return spk;
+}
+
 fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k: u32, anchor_n: usize, anchor_sim: f32) !DiarAssign {
     var s: f64 = 0;
     for (v) |x| s += @as(f64, x) * x;
@@ -645,7 +675,7 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
         var c2 = &cents.items[second_i];
         for (0..diar.EMB) |k| c2.sum[k] += v[k];
         c2.count += 1;
-        return .{ .id = second_i, .margin = second - best };
+        return .{ .id = second_i, .fallback = second_i, .margin = second - best };
     }
     // S1: an ANCHORED centroid (enrolled voiceprint, ids < anchor_n) demands a
     // HIGHER similarity to claim a window — "if it isn't clearly the enrolled
@@ -657,12 +687,12 @@ fn diarAssign(cents: *std.ArrayList(DiarCentroid), v: []f32, sim_thr: f32, max_k
         var c: DiarCentroid = .{ .count = 1, .sum = undefined };
         for (0..diar.EMB) |k| c.sum[k] = v[k];
         try cents.append(c);
-        return .{ .id = spk, .margin = 1.0 };
+        return .{ .id = spk, .fallback = if (spk == 0) spk else best_i, .margin = 1.0 };
     }
     var c = &cents.items[best_i];
     for (0..diar.EMB) |k| c.sum[k] += v[k];
     c.count += 1;
-    return .{ .id = best_i, .margin = if (cents.items.len >= 2) best - second else 1.0 };
+    return .{ .id = best_i, .fallback = best_i, .margin = if (cents.items.len >= 2) best - second else 1.0 };
 }
 
 // Periodic live re-clustering: batch k-means + silhouette auto-K over the
@@ -724,6 +754,10 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         // absolute-separation gate (same as file mode): a presenter whose voice
         // varies splits with high silhouette but close centroids → one speaker
         if (K >= 2 and maxCentroidCosDist(X, m, segd, asg, K) < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); }
+        if (try maybePromoteSpherical4(X, m, segd, maxK, K, asg)) |promotion| {
+            K = 4;
+            bestSil = promotion.sil;
+        }
         // voiceprint lower bound: every CLAIMED print is a speaker the session
         // has already voice-matched — auto-K may not merge below that count
         if (K < kmin) {
@@ -1246,7 +1280,10 @@ pub fn main() !void {
     // accepted windows to have likely seen every participant.
     const birth_lock_win: usize = envU("DIAR_BIRTH_LOCK_WIN", 64);
     var live_emb = std.ArrayList(f32).init(alloc); // accepted windows, unit-normalized
-    var live_ids = std.ArrayList(u8).init(alloc); // each window's emitted stable id
+    var live_ids = std.ArrayList(u8).init(alloc); // each window's visible stable/fallback id
+    var live_raw_ids = std.ArrayList(u8).init(alloc); // internal pre-confirmation id
+    var live_pending = std.ArrayList(bool).init(alloc); // visible id still folded into fallback
+    var live_margins = std.ArrayList(f32).init(alloc); // original acoustic margin
     var live_t0 = std.ArrayList(f32).init(alloc); // each window's global time (for SPKFIX)
     var live_since: usize = 0;
     var recl_done = false; // after the first recluster, k-means owns K (no online births)
@@ -1361,7 +1398,7 @@ pub fn main() !void {
                     const final_active = try alloc.alloc(bool, 64);
                     defer alloc.free(final_active);
                     @memset(final_active, false);
-                    try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, final_active);
+                    try liveRecluster(&cents, live_emb.items, live_raw_ids.items, diar_max, diar_k, nclaim, final_active);
                     if (n_anchor > 0) {
                         const awf: f32 = @floatFromInt(envU("DIAR_ANCHOR_W", 4));
                         for (0..@min(n_anchor, cents.items.len)) |vi| {
@@ -1667,11 +1704,24 @@ pub fn main() !void {
                         const eff_max: u32 = if (auto_birth_locked) @intCast(cents.items.len) else born_cap;
                         const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
                         const spk = ar.id;
+                        const visible_spk = try liveVisibleSpeaker(
+                            out,
+                            spk,
+                            ar.fallback,
+                            cents.items[spk].count,
+                            recluster_every > 0 and diar_k == 0 and n_anchor == 0,
+                            envU("DIAR_CONFIRM_WIN", 2),
+                            live_raw_ids.items,
+                            live_ids.items,
+                            live_pending.items,
+                            live_t0.items,
+                            live_margins.items,
+                        );
                         // far-field silence inside the 1.5 s grid window was
                         // the live FA driver (live 44.7% vs file 18.8%) —
                         // emit silero-clipped pieces; extra duration field is
                         // ignored by the runner's awk (backward compatible)
-                        try emitClippedSpk(out, "SPK", gt, @intCast(spk), ar.margin);
+                        try emitClippedSpk(out, "SPK", gt, @intCast(visible_spk), ar.margin);
                         // voiceprint match: once a speaker's centroid has ≥2
                         // windows, compare to unclaimed prints; announce once.
                         while (spk_named.items.len < cents.items.len) try spk_named.append(false);
@@ -1699,7 +1749,10 @@ pub fn main() !void {
                         // and periodically re-cluster the whole session.
                         if (recluster_every > 0) {
                             try live_emb.appendSlice(cemb[wsg * diar.EMB ..][0 .. diar.EMB]);
-                            try live_ids.append(@intCast(@min(spk, 255)));
+                            try live_ids.append(@intCast(@min(visible_spk, 255)));
+                            try live_raw_ids.append(@intCast(@min(spk, 255)));
+                            try live_pending.append(visible_spk != spk);
+                            try live_margins.append(ar.margin);
                             try live_t0.append(gt);
                             live_since += 1;
                             const acc_total = live_emb.items.len / diar.EMB;
@@ -1719,7 +1772,7 @@ pub fn main() !void {
                                 const livefix_active = try alloc.alloc(bool, 64);
                                 defer alloc.free(livefix_active);
                                 @memset(livefix_active, false);
-                                try liveRecluster(&cents, live_emb.items, live_ids.items, diar_max, diar_k, nclaim, livefix_active);
+                                try liveRecluster(&cents, live_emb.items, live_raw_ids.items, diar_max, diar_k, nclaim, livefix_active);
                                 recl_done = true;
                                 // S1: re-inject anchor directions after recluster so the
                                 // enrolled reference never washes out of its centroid.
@@ -1787,6 +1840,8 @@ pub fn main() !void {
                                                 if (dt > b1) { b2 = b1; b1 = dt; bs = sidx; } else if (dt > b2) b2 = dt;
                                             }
                                             const stable_bs = livefix_ids[bs];
+                                            live_raw_ids.items[wi] = @intCast(@min(stable_bs, 255));
+                                            live_pending.items[wi] = false;
                                             if (stable_bs != live_ids.items[wi]) {
                                                 live_ids.items[wi] = @intCast(@min(stable_bs, 255));
                                                 try emitClippedSpk(out, "SPKFIX", live_t0.items[wi], @intCast(stable_bs), if (ncl >= 2) b1 - b2 else 1.0);
@@ -2448,11 +2503,28 @@ fn d2(a: []const f32, b: []const f32) f32 {
     for (0..a.len) |j| { const t = a[j] - b[j]; s += t * t; }
     return s;
 }
-// k-means (cosine via L2-normed X) with deterministic farthest-point init.
-fn kmeansFit(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize) !void {
+// k-means over L2-normalized embeddings. The spherical candidate removes the
+// input-order bias of seeding from X[0] and reprojects updated centroids onto
+// the unit sphere; the shipped legacy path stays byte-stable when false.
+fn kmeansFitMode(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize, spherical: bool) !void {
     if (K <= 1) { @memset(asg, 0); return; }
     const cent = try alloc.alloc(f32, K * segd); defer alloc.free(cent);
-    @memcpy(cent[0..segd], X[0..segd]);
+    if (spherical) {
+        @memset(cent[0..segd], 0);
+        for (0..m) |i| {
+            for (0..segd) |j| cent[j] += X[i * segd + j];
+        }
+        const inv_m = 1.0 / @as(f32, @floatFromInt(m));
+        for (0..segd) |j| cent[j] *= inv_m;
+        var far: usize = 0; var far_d = d2(X[0..segd], cent[0..segd]);
+        for (1..m) |i| {
+            const dd = d2(X[i * segd ..][0..segd], cent[0..segd]);
+            if (dd > far_d) { far_d = dd; far = i; }
+        }
+        @memcpy(cent[0..segd], X[far * segd ..][0..segd]);
+    } else {
+        @memcpy(cent[0..segd], X[0..segd]);
+    }
     const dmin = try alloc.alloc(f32, m); defer alloc.free(dmin);
     for (0..m) |i| dmin[i] = d2(X[i * segd ..][0..segd], cent[0..segd]);
     for (1..K) |c| {
@@ -2471,8 +2543,21 @@ fn kmeansFit(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize) !voi
         }
         @memset(csum, 0); @memset(ccnt, 0);
         for (0..m) |i| { ccnt[asg[i]] += 1; for (0..segd) |j| csum[asg[i] * segd + j] += X[i * segd + j]; }
-        for (0..K) |c| if (ccnt[c] > 0) for (0..segd) |j| { cent[c * segd + j] = csum[c * segd + j] / @as(f32, @floatFromInt(ccnt[c])); };
+        for (0..K) |c| if (ccnt[c] > 0) {
+            if (spherical) {
+                var norm2: f32 = 0;
+                for (0..segd) |j| norm2 += csum[c * segd + j] * csum[c * segd + j];
+                const inv = 1.0 / (@sqrt(norm2) + 1e-9);
+                for (0..segd) |j| cent[c * segd + j] = csum[c * segd + j] * inv;
+            } else {
+                const inv = 1.0 / @as(f32, @floatFromInt(ccnt[c]));
+                for (0..segd) |j| cent[c * segd + j] = csum[c * segd + j] * inv;
+            }
+        };
     }
+}
+fn kmeansFit(X: []const f32, m: usize, segd: usize, K: usize, asg: []usize) !void {
+    return kmeansFitMode(X, m, segd, K, asg, false);
 }
 // Max pairwise centroid cosine distance — ABSOLUTE speaker separation. The
 // silhouette is RELATIVE ((b-a)/max), so a single speaker whose delivery varies
@@ -2516,6 +2601,31 @@ fn silhouetteSimplified(X: []const f32, m: usize, segd: usize, asg: []const usiz
         if (mx > 1e-9) sil += @as(f64, (b - a) / mx);
     }
     return @floatCast(sil / @as(f64, @floatFromInt(m)));
+}
+
+const SphericalPromotion = struct { sil: f32, sep: f32 };
+
+// Narrow auto-K challenger for the measured 3-4-person panel failure. Preserve
+// every legacy K=1 decision and every K>=4 result. Only promote a surviving
+// legacy K=2/3 when a full spherical sweep independently selects K=4 with a
+// strong silhouette and the existing absolute-separation safety gate passes.
+fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, legacy_k: usize, asg: []usize) !?SphericalPromotion {
+    if (envU("DIAR_PROMOTE4", 1) == 0 or legacy_k < 2 or legacy_k >= 4 or maxK < 4) return null;
+    const best_asg = try alloc.alloc(usize, m); defer alloc.free(best_asg);
+    const tmp = try alloc.alloc(usize, m); defer alloc.free(tmp);
+    var best_k: usize = 2;
+    var best_sil: f32 = -2;
+    var kk: usize = 2;
+    while (kk <= maxK) : (kk += 1) {
+        try kmeansFitMode(X, m, segd, kk, tmp, true);
+        const sil = try silhouetteSimplified(X, m, segd, tmp, kk);
+        if (sil > best_sil) { best_sil = sil; best_k = kk; @memcpy(best_asg, tmp); }
+    }
+    if (best_k != 4 or best_sil < envF("DIAR_PROMOTE4_SIL", 0.50)) return null;
+    const sep = maxCentroidCosDist(X, m, segd, best_asg, 4);
+    if (sep < envF("DIAR_MIN_SEP", 0.50)) return null;
+    @memcpy(asg, best_asg);
+    return .{ .sil = best_sil, .sep = sep };
 }
 
 // Reserved speaker id for the single "Unknown" (미확인) bucket used ONLY in
@@ -2673,6 +2783,11 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
             ev_sep = sep;
             if (sep < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); bestSil = -2; }
         }
+        if (try maybePromoteSpherical4(X, m, segd, maxK, K, asg)) |promotion| {
+            K = 4;
+            bestSil = promotion.sil;
+            ev_sep = promotion.sep;
+        }
         ev_sil = bestSil; ev_tau = tau;
         try out.print("  [auto-K] K={d} (silhouette {d:.3}, tau {d:.2})\n", .{ K, bestSil, tau });
     }
@@ -2747,14 +2862,7 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
                 }
             }
         }
-        var loc2glob: [3]i32 = .{ -1, -1, -1 };
-        for (0..3) |k| {
-            var bg: usize = 0;
-            for (1..16) |g| {
-                if (votes[k][g] > votes[k][bg]) bg = g;
-            }
-            if (votes[k][bg] >= 3) loc2glob[k] = @intCast(bg); // ≥3 solo frames (50 ms) to trust
-        }
+        const loc2glob = mapOsdTracks(&votes, false); // file calibration keeps independent argmax
         // overlap runs → second-speaker rows
         const pairs = [3][2]usize{ .{ 0, 1 }, .{ 0, 2 }, .{ 1, 2 } };
         var run_s: f32 = -1;
@@ -2826,6 +2934,54 @@ fn speakerAt(t: f32) i32 {
         const d = if (t < s.a) s.a - t else t - s.b;
         if (d < bestd) { bestd = d; best = s.spk; }
     }
+    return best;
+}
+
+// Map the powerset model's at-most-three LOCAL tracks to session-global
+// speakers. Legacy mode independently takes each row's argmax. Constrained
+// mode maximizes total SOLO votes under a one-to-one assignment:
+// local tracks in the same powerset window are definitionally different
+// speakers, so mapping two of them to one global ID discards useful overlap.
+fn mapOsdTracks(votes: *const [3][16]u32, default_bijective: bool) [3]i32 {
+    var legacy: [3]i32 = .{ -1, -1, -1 };
+    var row_best: [3]u32 = .{ 0, 0, 0 };
+    for (0..3) |k| {
+        var bg: usize = 0;
+        for (1..16) |g| if (votes[k][g] > votes[k][bg]) { bg = g; };
+        row_best[k] = votes[k][bg];
+        if (votes[k][bg] >= 3) legacy[k] = @intCast(bg); // ≥3 SOLO frames (~50 ms)
+    }
+    const bijective = if (std.posix.getenv("OSD_BIJECTIVE")) |v|
+        !std.mem.eql(u8, v, "0")
+    else
+        default_bijective;
+    if (!bijective) return legacy;
+
+    const ratio = envF("OSD_BIJECTIVE_RATIO", 0.25);
+    var best = [_]i32{-1} ** 3;
+    var best_score: u32 = 0;
+    // 0 means unassigned; 1..16 mean global 0..15.
+    for (0..17) |aa| for (0..17) |bb| for (0..17) |cc| {
+        const cand = [3]i32{
+            if (aa == 0) -1 else @as(i32, @intCast(aa - 1)),
+            if (bb == 0) -1 else @as(i32, @intCast(bb - 1)),
+            if (cc == 0) -1 else @as(i32, @intCast(cc - 1)),
+        };
+        if ((cand[0] >= 0 and cand[0] == cand[1]) or
+            (cand[0] >= 0 and cand[0] == cand[2]) or
+            (cand[1] >= 0 and cand[1] == cand[2])) continue;
+        var valid = true;
+        var score: u32 = 0;
+        for (0..3) |k| if (cand[k] >= 0) {
+            const v = votes[k][@intCast(cand[k])];
+            if (v < 3 or @as(f32, @floatFromInt(v)) < ratio * @as(f32, @floatFromInt(row_best[k]))) {
+                valid = false;
+                break;
+            }
+            score += v;
+        };
+        if (valid and score > best_score) { best_score = score; best = cand; }
+    };
     return best;
 }
 fn attributeTranscript(out: anytype) !void {
@@ -2919,14 +3075,7 @@ fn emitOsdOverlap(out: anytype, t0s: []const f32, ids: []const i32) !void {
                 }
             }
         }
-        var loc2glob: [3]i32 = .{ -1, -1, -1 };
-        for (0..3) |k| {
-            var bg: usize = 0;
-            for (1..16) |g| {
-                if (votes[k][g] > votes[k][bg]) bg = g;
-            }
-            if (votes[k][bg] >= 3) loc2glob[k] = @intCast(bg);
-        }
+        const loc2glob = mapOsdTracks(&votes, true); // measured live-FLUSH default
         var run_s: f32 = -1;
         var run_e: f32 = -1;
         var run_sec: i32 = -1;

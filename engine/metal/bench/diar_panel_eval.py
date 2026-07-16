@@ -199,10 +199,14 @@ def eval_live_case(
     if p.returncode != 0:
         die(f"live engine failed for {case.case_id}:\n{p.stderr[-2000:]}")
 
+    output_lines = p.stdout.splitlines()
+    last_segment_end = max((i for i, line in enumerate(output_lines) if line.strip() == "<<SEG_END>>"), default=-1)
+    mid_fix_count = 0
+    mid_fix_windows: set[float] = set()
     spk: dict[float, tuple[int, float]] = {}
     spkfix: dict[float, tuple[int, float]] = {}
     spkov: list[tuple[float, int, float]] = []
-    for line in p.stdout.splitlines():
+    for line_no, line in enumerate(output_lines):
         m = re.match(r"(SPKFIX|SPKOV|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?(?: [0-9.]+)?$", line)
         if not m:
             continue
@@ -211,6 +215,9 @@ def eval_live_case(
         else:
             labels = spkfix if m.group(1) == "SPKFIX" else spk
             labels[round(float(m.group(2)), 2)] = (int(m.group(3)), float(m.group(4) or 1.5))
+            if m.group(1) == "SPKFIX" and line_no <= last_segment_end:
+                mid_fix_count += 1
+                mid_fix_windows.add(round(float(m.group(2)), 2))
 
     fid = ref_recording_id(case.ref) if case.ref else case.case_id
     mode_prefix = "live_norecluster" if no_recluster else "live"
@@ -229,6 +236,8 @@ def eval_live_case(
             "engine_speakers": len({sid for sid, _ in labels.values()}),
             "auto_k": None,
             "osd_rows": 0,
+            "mid_fix_count": mid_fix_count,
+            "mid_fix_windows": len(mid_fix_windows),
             "rttm": str(sys_rttm),
         }
         if case.ref:
@@ -248,6 +257,8 @@ def eval_live_case(
             "engine_speakers": len({sid for sid, _ in spkfix.values()}),
             "auto_k": None,
             "osd_rows": len(spkov),
+            "mid_fix_count": mid_fix_count,
+            "mid_fix_windows": len(mid_fix_windows),
             "rttm": str(sys_rttm),
         }
         if case.ref:
@@ -289,6 +300,12 @@ def eval_case(case: Case, mode: str, wav: Path, out_dir: Path, extra_env: dict[s
 
 def build_cases(args: argparse.Namespace) -> list[Case]:
     cases: list[Case] = []
+    if args.vox_all:
+        for ref in sorted(VOX.glob("*.rttm")):
+            audio = VOX_AUDIO / f"{ref.stem}.wav"
+            require(audio, "VoxConverse audio")
+            speakers = ref_speakers(ref) if args.speakers_from_ref else args.speakers
+            cases.append(Case(ref.stem, audio, ref, speakers))
     for vid in args.vox_id:
         ref = VOX / f"{vid}.rttm"
         audio = VOX_AUDIO / f"{vid}.wav"
@@ -320,6 +337,7 @@ def build_cases(args: argparse.Namespace) -> list[Case]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--vox-id", action="append", default=[], help="VoxConverse dev id, e.g. migzj")
+    ap.add_argument("--vox-all", action="store_true", help="evaluate every VoxConverse dev RTTM/audio pair")
     ap.add_argument("--audio", help="local audio/video file")
     ap.add_argument("--youtube-url", help="download a YouTube audio track with yt-dlp")
     ap.add_argument("--ref", help="reference RTTM for --audio/--youtube-url")
@@ -386,8 +404,8 @@ def main() -> None:
     lines = [
         "# Diarization Panel Eval",
         "",
-        "| id | mode | ref spk | engine spk | auto-K | DER | miss | FA | conf | osd |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| id | mode | ref spk | engine spk | auto-K | DER | miss | FA | conf | osd | mid fixes |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for r in records:
         def fmt(k: str) -> str:
@@ -395,7 +413,8 @@ def main() -> None:
             return "" if v is None else (f"{v:.2f}" if isinstance(v, float) else str(v))
         lines.append(
             f"| {r['id']} | {r['mode']} | {fmt('speakers_ref')} | {fmt('engine_speakers')} | "
-            f"{fmt('auto_k')} | {fmt('der')} | {fmt('miss')} | {fmt('fa')} | {fmt('conf')} | {fmt('osd_rows')} |"
+            f"{fmt('auto_k')} | {fmt('der')} | {fmt('miss')} | {fmt('fa')} | {fmt('conf')} | "
+            f"{fmt('osd_rows')} | {fmt('mid_fix_windows')} |"
         )
     (out_dir / "summary.md").write_text("\n".join(lines) + "\n")
     print(f"summary: {out_dir / 'summary.md'}")
