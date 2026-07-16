@@ -191,7 +191,7 @@ jobs:
           apps/macos/scripts/sign_notarize.sh "$out/Madi.app"
           mkdir -p dist
           (cd dist && ../apps/macos/scripts/make_dmg.sh "$out/Madi.app" "$VERSION")
-          mv "dist/Madi-$VERSION.dmg" "dist/Madi-$VERSION-arm64.dmg"
+          mv "dist/Madi-$VERSION.dmg" "dist/madi-$VERSION-arm64.dmg"
 
       - name: Build offline DMG
         if: steps.meta.outputs.include_offline == 'true'
@@ -213,7 +213,7 @@ jobs:
           apps/macos/scripts/verify_release_bundle.sh "$out/Madi.app" "$VERSION"
           apps/macos/scripts/sign_notarize.sh "$out/Madi.app"
           (cd dist && ../apps/macos/scripts/make_dmg.sh "$out/Madi.app" "$VERSION-offline")
-          mv "dist/Madi-$VERSION-offline.dmg" "dist/Madi-$VERSION-offline-arm64.dmg"
+          mv "dist/Madi-$VERSION-offline.dmg" "dist/madi-$VERSION-offline-arm64.dmg"
 
       - name: Generate checksums
         shell: bash

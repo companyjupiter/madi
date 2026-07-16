@@ -123,10 +123,10 @@ Two release workflows are maintained:
 | `.github/workflows/release-macos-paid.yml.disabled` | disabled | Developer ID signing, notarization, stapled DMG |
 
 Both paths run tests, build the engine/app, validate the bundle, create DMGs and
-checksums, and upload a GitHub Release. The free path names every artifact
-`*-unnotarized-arm64.dmg` so it cannot be mistaken for an official signed build.
-It uses the standard `macos-15` Apple-silicon runner rather than a billable larger
-runner.
+checksums, and upload a GitHub Release. Both paths use the customer-facing
+`madi-<version>-arm64.dmg` filename convention; the free build remains clearly
+marked as unnotarized in the GitHub Release title and notes. They use the
+standard `macos-26` Apple-silicon runner rather than a billable larger runner.
 
 After Developer ID and notarization credentials are ready, switch workflows:
 
@@ -205,8 +205,8 @@ The resulting layout is:
 s3://devart-teamjupiter-downloads-artdapne2/madi/
   runtime-assets/v1/madi-runtime-assets-v1.tar.gz
   releases/0.9.1/
-    Madi-0.9.1-unnotarized-arm64.dmg
-    Madi-0.9.1-offline-unnotarized-arm64.dmg
+    madi-0.9.1-arm64.dmg
+    madi-0.9.1-offline-arm64.dmg
     SHA256SUMS.txt
     release.json
   channels/beta/latest.json
