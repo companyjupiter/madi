@@ -44,6 +44,12 @@ SPKFIX 0.000 1 1.500 0.9
         self.assertAlmostEqual(metrics["label_churn_per_min"], 2.0)
         self.assertEqual(metrics["visible_speakers_peak"], 2)
         self.assertEqual(metrics["visible_speakers_final_mid"], 2)
+        self.assertEqual(metrics["first_margin_ambiguous_windows"], 1)
+        self.assertAlmostEqual(metrics["first_margin_ambiguous_wrong_pct"], 100.0)
+        self.assertEqual(metrics["first_margin_confident_windows"], 2)
+        self.assertAlmostEqual(metrics["first_margin_confident_wrong_pct"], 0.0)
+        self.assertEqual(metrics["first_margin_sentinel_windows"], 1)
+        self.assertAlmostEqual(metrics["first_margin_sentinel_wrong_pct"], 0.0)
 
     def test_segment_frontier_and_flush_classification(self) -> None:
         stdout = """\
@@ -56,6 +62,12 @@ SPKFIX 0.0 2 1.5 0.5
         events = parse_label_events(stdout, [10.0, 20.0])
         self.assertEqual([event.visible_at for event in events], [10.0, 20.0, 20.0])
         self.assertEqual([event.during_flush for event in events], [False, False, True])
+        self.assertEqual([event.margin for event in events], [1.0, 0.5, 0.5])
+
+    def test_negative_margin_is_preserved_as_ambiguous(self) -> None:
+        events = parse_label_events("SPK 1.5 2 1.5 -0.03\n", [10.0])
+        self.assertEqual(len(events), 1)
+        self.assertAlmostEqual(events[0].margin, -0.03)
 
 
 if __name__ == "__main__":

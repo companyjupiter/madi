@@ -79,6 +79,14 @@ deterministic: immediate DER mean 19.38%, wrong-visible mean 13.04%, unresolved
 initial errors 65.42%, correction p90 mean 18.03 s, churn 9.44/min, and peak
 speaker overcount `0/1/1` for `migzj/jnivh/gwtwd`.
 
+The same gate also stratifies the first visible label by `diarAssign`'s
+acoustic margin. On the pinned panel, real margins below `0.20` were wrong in
+30/84 windows (35.7%), while margins in `[0.20, 1.0)` were wrong in only 3/181
+(1.7%). A margin of exactly `1.0` is reported separately because the engine
+uses it as a control-state sentinel before a second centroid exists or when a
+speaker is born; it was wrong in 23/52 windows and must not be interpreted as
+high acoustic confidence.
+
 ## Offline clustering sweep (fast iteration without the encoder pass)
 `DIAR_DUMP=/tmp/raw.bin ./out/transcribe ... ` dumps raw-mel segment features;
 `bench/mel_k.py`, `bench/mel_validate.py` sweep clustering params + score DER via

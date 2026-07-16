@@ -17,8 +17,11 @@ from pathlib import Path
 
 
 LABEL_RE = re.compile(
-    r"(SPKFIX|SPKOV|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?(?: [0-9.]+)?$"
+    r"(SPKFIX|SPKOV|SPK) ([0-9.]+) (\d+)(?: ([0-9.]+))?(?: ([+-]?[0-9.]+))?$"
 )
+
+AMBIGUOUS_MARGIN = 0.20
+SENTINEL_MARGIN = 0.999
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,7 @@ class LabelEvent:
     speaker: int
     visible_at: float
     during_flush: bool
+    margin: float | None
 
 
 @dataclass
@@ -43,6 +47,7 @@ class VisibleWindow:
     time: float
     duration: float
     history: list[tuple[float, int]]
+    first_margin: float | None
 
 
 def percentile(values: list[float], q: float) -> float | None:
@@ -94,6 +99,7 @@ def parse_label_events(stdout: str, frontiers: list[float]) -> list[LabelEvent]:
                 speaker=int(match.group(3)),
                 visible_at=visible_at,
                 during_flush=during_flush,
+                margin=float(match.group(5)) if match.group(5) is not None else None,
             )
         )
     return events
@@ -177,6 +183,7 @@ def visible_windows(events: list[LabelEvent]) -> tuple[list[VisibleWindow], int]
                     time=event.time,
                     duration=event.duration,
                     history=[(event.visible_at, event.speaker)],
+                    first_margin=event.margin,
                 )
                 update_peak()
             continue
@@ -218,6 +225,11 @@ def analyze_live_ux(stdout: str, frontiers: list[float], reference: Path) -> dic
     first_latencies: list[float] = []
     correction_latencies: list[float] = []
     settle_latencies: list[float] = []
+    margin_buckets: dict[str, list[bool]] = {
+        "ambiguous": [],
+        "confident": [],
+        "sentinel": [],
+    }
 
     for window in windows:
         target = dominant_reference(window, turns)
@@ -229,6 +241,17 @@ def analyze_live_ux(stdout: str, frontiers: list[float], reference: Path) -> dic
         first_latencies.append(max(0.0, first_at - (window.time + window.duration)))
         total_visible += max(0.0, session_end - first_at)
         correctness = [mapping.get(speaker) == target for _, speaker in history]
+        if window.first_margin is not None:
+            if window.first_margin < AMBIGUOUS_MARGIN:
+                bucket = "ambiguous"
+            elif window.first_margin >= SENTINEL_MARGIN:
+                # diarAssign emits 1.0 both before a second centroid exists and
+                # on a speaker birth. It is a control-state sentinel, not high
+                # acoustic confidence; keep it separate from real margins.
+                bucket = "sentinel"
+            else:
+                bucket = "confident"
+            margin_buckets[bucket].append(correctness[0])
         first_correct += int(correctness[0])
         final_correct += int(correctness[-1])
         label_changes += len(history) - 1
@@ -263,6 +286,10 @@ def analyze_live_ux(stdout: str, frontiers: list[float], reference: Path) -> dic
     def rate(numerator: int, denominator: int) -> float | None:
         return (100.0 * numerator / denominator) if denominator else None
 
+    def bucket_error(name: str) -> float | None:
+        values = margin_buckets[name]
+        return rate(sum(not correct for correct in values), len(values))
+
     return {
         "ux_windows": len(windows),
         "ux_ref_windows": covered,
@@ -285,4 +312,10 @@ def analyze_live_ux(stdout: str, frontiers: list[float], reference: Path) -> dic
         "visible_speakers_peak": peak_speakers,
         "visible_speakers_final_mid": final_visible,
         "speaker_overcount_peak": peak_speakers - reference_speakers,
+        "first_margin_ambiguous_windows": len(margin_buckets["ambiguous"]),
+        "first_margin_ambiguous_wrong_pct": bucket_error("ambiguous"),
+        "first_margin_confident_windows": len(margin_buckets["confident"]),
+        "first_margin_confident_wrong_pct": bucket_error("confident"),
+        "first_margin_sentinel_windows": len(margin_buckets["sentinel"]),
+        "first_margin_sentinel_wrong_pct": bucket_error("sentinel"),
     }
