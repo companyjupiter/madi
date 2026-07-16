@@ -196,7 +196,14 @@ def eval_live_case(
     live_dir = out_dir / (case.case_id + (".live_norecluster" if no_recluster else ".live"))
     live_dir.mkdir(exist_ok=True)
     feed, frontiers = live_feed(wav, live_dir, seg_sec, overlap_sec)
-    env = {**os.environ, "STREAM": "1", "DIAR": "1", "STREAM_WAV_ROOTS": str(live_dir), **extra_env}
+    env = {
+        **os.environ,
+        "STREAM": "1",
+        "DIAR": "1",
+        "DIAR_ASSIGN_TRACE": "1",
+        "STREAM_WAV_ROOTS": str(live_dir),
+        **extra_env,
+    }
     if no_recluster:
         env["DIAR_RECLUSTER"] = "0"
     p = run([
