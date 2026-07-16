@@ -626,13 +626,49 @@ const DiarAssign = struct {
     born: bool,
 };
 
+const DiarConfirmState = struct {
+    confirmed: bool = true,
+    streak: u32 = 0,
+    last_seen: f32 = 0,
+};
+
 // Delay exposing a newly-born auto speaker until it has repeated acoustic
 // evidence. Internally the raw id keeps learning; externally its first windows
 // stay folded into the nearest existing visible speaker. On confirmation,
 // repair those earlier windows through the already-shipped SPKFIX contract.
-fn liveVisibleSpeaker(out: anytype, spk: usize, fallback: usize, count: u32, enabled: bool, confirm_win: usize, raw_ids: []const u8, visible_ids: []u8, pending: []bool, times: []const f32, margins: []const f32) !usize {
+fn liveVisibleSpeaker(out: anytype, spk: usize, fallback: usize, count: u32, enabled: bool, confirm_win: usize, now: f32, max_gap_sec: f32, confirm: *DiarConfirmState, raw_ids: []const u8, visible_ids: []u8, pending: []bool, times: []const f32, margins: []const f32) !usize {
     if (!enabled or confirm_win <= 1) return spk;
     const need: u32 = @intCast(@min(confirm_win, std.math.maxInt(u32)));
+    if (max_gap_sec > 0) {
+        if (confirm.confirmed) return spk;
+        if (confirm.streak > 0 and @abs(now - confirm.last_seen) > max_gap_sec) {
+            confirm.streak = 0;
+            // Expired singleton evidence keeps its already-visible fallback,
+            // but must not be retroactively promoted by a much later match.
+            for (raw_ids, 0..) |raw, i| {
+                if (raw == spk and pending[i]) pending[i] = false;
+            }
+        }
+        confirm.last_seen = now;
+        confirm.streak += 1;
+        if (confirm.streak < need) {
+            var visible_fallback = fallback;
+            var i = raw_ids.len;
+            while (i > 0) {
+                i -= 1;
+                if (raw_ids[i] == fallback) { visible_fallback = visible_ids[i]; break; }
+            }
+            return visible_fallback;
+        }
+        confirm.confirmed = true;
+        for (raw_ids, 0..) |raw, i| {
+            if (raw != spk or !pending[i]) continue;
+            visible_ids[i] = @intCast(spk);
+            pending[i] = false;
+            try emitClippedSpk(out, "SPKFIX", times[i], @intCast(spk), margins[i]);
+        }
+        return spk;
+    }
     if (count < need) {
         // A fallback centroid may itself still be tentative. Resolve through
         // its most recent visible id so hidden prototype chains never leak.
@@ -1327,6 +1363,7 @@ pub fn main() !void {
     var live_ids = std.ArrayList(u8).init(alloc); // each window's visible stable/fallback id
     var live_raw_ids = std.ArrayList(u8).init(alloc); // internal pre-confirmation id
     var live_pending = std.ArrayList(bool).init(alloc); // visible id still folded into fallback
+    var live_confirm = std.ArrayList(DiarConfirmState).init(alloc); // tentative-birth display lifecycle
     var live_margins = std.ArrayList(f32).init(alloc); // original acoustic margin
     var live_t0 = std.ArrayList(f32).init(alloc); // each window's global time (for SPKFIX)
     var live_since: usize = 0;
@@ -1756,6 +1793,8 @@ pub fn main() !void {
                         const eff_max: u32 = if (auto_birth_locked) @intCast(cents.items.len) else born_cap;
                         const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
                         const spk = ar.id;
+                        while (live_confirm.items.len < cents.items.len) try live_confirm.append(.{});
+                        if (ar.born and spk > 0) live_confirm.items[spk] = .{ .confirmed = false };
                         if (diar_assign_trace) {
                             const action: []const u8 = if (ar.born) "birth" else "update";
                             try out.print("SPKTRACE {d:.2} {d} {d} {d:.4} {d:.4} {d:.4} {d} {d} {s}\n", .{
@@ -1770,6 +1809,9 @@ pub fn main() !void {
                             cents.items[spk].count,
                             recluster_every > 0 and diar_k == 0 and n_anchor == 0,
                             envU("DIAR_CONFIRM_WIN", 2),
+                            gt,
+                            envF("DIAR_CONFIRM_GAP_SEC", 4.5),
+                            &live_confirm.items[spk],
                             live_raw_ids.items,
                             live_ids.items,
                             live_pending.items,
