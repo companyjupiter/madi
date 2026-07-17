@@ -63,7 +63,8 @@ struct ContentView: View {
     @State private var qaInput = ""          // "ask the meeting" question
     @AppStorage("qaScope") private var qaWorkspaceScope = false   // false=이 회의, true=전체 워크스페이스
     @State private var showRecap = false     // shareable one-pager recap card sheet
-    @State private var showCommandPalette = false   // ⌘K fuzzy launcher overlay
+    // ⌘K palette visibility lives on `session` (see SessionController.showCommandPalette)
+    // so the app-scene menu command can open it — a scene shortcut is reliable app-wide.
     @State private var languagePickerOpen = false
     @State private var speakerCountPickerOpen = false
     @State private var meetingModePickerOpen = false
@@ -141,7 +142,14 @@ struct ContentView: View {
             w.titlebarSeparatorStyle = .none
             syncWindowMode()
         })
-        .onChange(of: showSetToStart) { _, _ in syncWindowMode() }
+        .onChange(of: showSetToStart) { _, _ in
+            syncWindowMode()
+            // ⌘K fires app-wide via the scene command — including on the start screen,
+            // where the palette overlay isn't mounted. Clear the flag on any start↔working
+            // transition so a start-screen ⌘K can't pop the palette open once the working
+            // layout appears.
+            session.showCommandPalette = false
+        }
         .onChange(of: session.phase) { _, new in
             if case .done = new, session.lastAutoSaved != nil {
                 showSaveToast = true
@@ -265,16 +273,28 @@ struct ContentView: View {
                 showPrepBrief = true
             }
 
-            // ⌘K — hidden button carries the shortcut; palette overlays everything.
-            Button("") { showCommandPalette = true }
-                .keyboardShortcut("k", modifiers: .command)
-                .buttonStyle(.plain).frame(width: 0, height: 0).opacity(0).accessibilityHidden(true)
-            if showCommandPalette {
-                CommandPalette(session: session, isPresented: $showCommandPalette)
+            // ⌘K opens this via the app-scene menu command (SovereignApp .commands),
+            // which flips session.showCommandPalette. The old in-view shortcut lived on
+            // a zero-size/zero-opacity Button that SwiftUI never registered.
+            if session.showCommandPalette {
+                CommandPalette(session: session, isPresented: $session.showCommandPalette,
+                               onOpenSummary: { openSummary(bySpeaker: $0) })
                     .transition(.opacity).zIndex(1)
             }
         }
-        .animation(.snappy, value: showCommandPalette)
+        .animation(.snappy, value: session.showCommandPalette)
+    }
+
+    /// The one way in to `summarySheet` — the toolbar button and ⌘K both route here
+    /// so the picker always agrees with the summary that was kicked off (⌘K's
+    /// 화자별 요약 used to leave the sheet on 전체). Generation is idempotent: each
+    /// method guards its own busy flag, so a re-entry is a no-op rather than a
+    /// second LLM run.
+    private func openSummary(bySpeaker: Bool) {
+        guard session.canSummarize else { return }
+        summaryBySpeaker = bySpeaker
+        if bySpeaker { session.summarizeBySpeaker() } else { session.summarize() }
+        showSummary = true
     }
 
     // On-device meeting intelligence — summary + action items from the local LLM.
@@ -559,6 +579,20 @@ struct ContentView: View {
             Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
                 .buttonStyle(.plain).help("글자 크게")
             Spacer(minLength: 0)
+            // On-device 회의 요약 sheet. dfa3aa7 (UX 리디자인) dropped this button
+            // and left `summarySheet` unreachable — showSummary had no writer, so
+            // ⌘K's 요약 생성 ran the LLM into a sheet nothing could open. Icon-only
+            // to match the caption button (the rev.3 toolbar de-accents).
+            if AssetManifest.translateAvailable {
+                Button { openSummary(bySpeaker: false) } label: {
+                    Image(systemName: "sparkles").font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .disabled(!session.canSummarize)
+                .opacity(session.canSummarize ? 1 : 0.4)
+                .help("회의 요약 — 로컬 LLM으로 요약·액션아이템 생성 (기기 밖으로 안 나감)")
+            }
             // A5/B9: floating live-translation caption overlay (Zoom·Teams 위,
             // 클리닉 이중 패널 포함) — translate targets picked in Settings.
             if !session.translateTargets.isEmpty {

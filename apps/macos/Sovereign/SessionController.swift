@@ -390,6 +390,11 @@ final class SessionController: EngineProcessDelegate {
     // transcript Q&A — "ask the meeting" (grounded in the transcript, on-device)
     private(set) var qaAnswer: String? = nil
     private(set) var qaAsking = false
+    /// ⌘K command-palette visibility. Lives here (not a ContentView @State) so the
+    /// app-scene menu command can toggle it: a scene `.commands` shortcut registers
+    /// app-wide regardless of view layout/focus, unlike the old zero-size in-view
+    /// button whose ⌘K never reached the responder chain (it silently no-op'd).
+    var showCommandPalette = false
 
     // ── AI reconcile (post-session diarization/language correction) ──────────
     /// Opt-in: after a session, let the on-device LLM read the dialogue and fix
@@ -482,6 +487,15 @@ final class SessionController: EngineProcessDelegate {
             summaryEngine = s
         }
         return summaryEngine
+    }
+
+    /// Whether a summary/Q&A request can do anything right now: there is something
+    /// to summarize and the session isn't still live. The methods below re-check
+    /// this themselves (defense in depth at the engine boundary); the UI gates its
+    /// 요약 affordances on it so a press can never open an empty sheet.
+    var canSummarize: Bool {
+        guard !transcript.lines.isEmpty else { return false }
+        switch phase { case .recording, .paused, .countingDown: return false; default: return true }
     }
 
     /// Structured [요약]/[액션]/[결정] from the diarized transcript, on-device.

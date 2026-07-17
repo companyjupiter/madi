@@ -50,6 +50,14 @@ struct SovereignApp: App {
         .windowResizability(.automatic)
         .defaultSize(width: 500, height: 900)
         .commands {
+            // ⌘K command palette. Registered as a scene command (not an in-view
+            // Button) so the shortcut fires app-wide regardless of view focus/layout
+            // — the old zero-size, zero-opacity in-view Button never registered its
+            // ⌘K. Bonus: it now appears in the View menu, so ⌘K is discoverable.
+            CommandGroup(after: .toolbar) {
+                Button("명령 팔레트") { session.showCommandPalette = true }
+                    .keyboardShortcut("k", modifiers: .command)
+            }
             // Replace the empty default Help menu: bundled user manual +
             // update / info (the latter two open dedicated windows).
             CommandGroup(replacing: .help) {

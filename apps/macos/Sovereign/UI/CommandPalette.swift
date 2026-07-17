@@ -52,6 +52,9 @@ private func fuzzyScore(_ haystack: String, query: String) -> Int? {
 struct CommandPalette: View {
     @Bindable var session: SessionController
     @Binding var isPresented: Bool
+    /// Host opens the 회의 요약 sheet (bySpeaker → which tab). The palette can't do
+    /// it itself: presenting the sheet and picking 전체/화자별 are the host's state.
+    var onOpenSummary: (Bool) -> Void = { _ in }
 
     @State private var query = ""
     @State private var selection = 0
@@ -62,14 +65,18 @@ struct CommandPalette: View {
         var out: [PaletteCommand] = []
 
         // (c) static actions — listed first so an empty query shows the verbs.
-        out.append(PaletteCommand(title: "요약 생성", subtitle: "동작 · AI 요약",
-                                  symbol: "sparkles", extraTerms: "summary 요약 action") {
-            session.summarize()
-        })
-        out.append(PaletteCommand(title: "화자별 요약", subtitle: "동작 · 누가 무엇을",
-                                  symbol: "person.2", extraTerms: "speaker summary 화자 요약") {
-            session.summarizeBySpeaker()
-        })
+        // 요약 only when it can actually produce something: an empty/live session
+        // would run the LLM into nothing, which is what made these look broken.
+        if session.canSummarize {
+            out.append(PaletteCommand(title: "요약 생성", subtitle: "동작 · AI 요약",
+                                      symbol: "sparkles", extraTerms: "summary 요약 action") {
+                onOpenSummary(false)
+            })
+            out.append(PaletteCommand(title: "화자별 요약", subtitle: "동작 · 누가 무엇을",
+                                      symbol: "person.2", extraTerms: "speaker summary 화자 요약") {
+                onOpenSummary(true)
+            })
+        }
         out.append(PaletteCommand(title: "새 세션", subtitle: "동작 · 현재 전사 비우기",
                                   symbol: "plus.circle", extraTerms: "new reset 초기화 세션") {
             session.reset()

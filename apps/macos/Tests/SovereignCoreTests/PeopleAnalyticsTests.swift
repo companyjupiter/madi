@@ -1,6 +1,7 @@
-// PeopleAnalyticsTests — the cross-meeting voiceprint-people aggregator. Builds
-// transcript fixtures (parsed in-memory AND via temp .md files), asserts per-person
-// meeting count + summed talk-time. GUI-free (SovereignCore + XCTest).
+// PeopleAnalyticsTests — the cross-meeting people aggregator. Builds transcript
+// fixtures (parsed in-memory AND via temp .md files), asserts per-person meeting
+// count + summed talk-time, and pins who is NOT a person (un-renamed speakers, the
+// 미확인 bucket). GUI-free (SovereignCore + XCTest).
 import XCTest
 @testable import SovereignCore
 
@@ -67,16 +68,60 @@ final class PeopleAnalyticsTests: XCTestCase {
     }
 
     func testBlankAndDuplicateNamesIgnored() {
+        // 김부장 arrives from BOTH the enrollment list (twice) and meeting1 — still one
+        // card. Blank enrollment entries never become a person.
         let people = PeopleAnalytics.aggregate(
             voiceprintNames: ["김부장", "  ", "김부장", ""],
             parsed: parsed([meeting1]))
         XCTAssertEqual(people.filter { $0.name == "김부장" }.count, 1)
-        XCTAssertEqual(people.count, 1)
+        XCTAssertEqual(Set(people.map(\.name)), ["김부장", "이대리"])   // meeting1's named speakers
     }
 
-    func testEmptyEnrollmentYieldsNoPeople() {
+    /// The beta ships with voiceprints unwired, so no .vec ever exists. Seeding from
+    /// enrollment ALONE left the People dashboard permanently blank; the transcripts'
+    /// own named speakers must carry it.
+    func testEmptyEnrollmentStillYieldsTranscriptNames() {
+        let people = PeopleAnalytics.aggregate(
+            voiceprintNames: [], parsed: parsed([meeting1, meeting2]))
+        let by = Dictionary(uniqueKeysWithValues: people.map { ($0.name, $0) })
+        XCTAssertEqual(Set(by.keys), ["김부장", "이대리"])
+        XCTAssertEqual(by["김부장"]?.meetings, 2)
+        XCTAssertEqual(by["이대리"]?.meetings, 1)
+    }
+
+    /// Un-renamed speakers ("Speaker 3" in meeting1, "Speaker 0" in meeting2) are not
+    /// people — parse keeps them out of `names`, so seeding can't invent them.
+    func testUnnamedSpeakersNeverBecomePeople() {
+        let names = PeopleAnalytics.aggregate(
+            voiceprintNames: [], parsed: parsed([meeting1, meeting2])).map(\.name)
+        XCTAssertFalse(names.contains { $0.contains("Speaker") })
+    }
+
+    /// The 미확인 (Unknown) bucket is a "nowhere to put this" marker, not a person. It
+    /// must never get a card — parse routes it to the reserved id, never into `names`.
+    func testUnknownBucketNeverBecomesAPerson() {
+        let withUnknown = """
+        # Transcript
+
+        - **[00:00] 김부장** 안건 시작합니다
+        - **[00:20] \(SpeakerID.unknownLabel)** (알 수 없는 목소리)
+        - **[00:40] 김부장** 다음 항목입니다
+        """
+        let names = PeopleAnalytics.aggregate(
+            voiceprintNames: [], parsed: parsed([withUnknown])).map(\.name)
+        XCTAssertEqual(names, ["김부장"])
+        XCTAssertFalse(names.contains(SpeakerID.unknownLabel))
+    }
+
+    func testNoNamedSpeakersYieldsNoPeople() {
+        let anonymous = """
+        # Transcript
+
+        - **[00:00] Speaker 0** 안녕하세요
+        - **[00:20] Speaker 1** 네
+        """
         XCTAssertTrue(PeopleAnalytics.aggregate(
-            voiceprintNames: [], parsed: parsed([meeting1])).isEmpty)
+            voiceprintNames: [], parsed: parsed([anonymous])).isEmpty)
     }
 
     func testURLPathParsesTempFiles() throws {
