@@ -1,49 +1,53 @@
-# System dictation (받아쓰기)
+# System dictation
 
-Dictation (받아쓰기) is Madi's system-wide voice-to-text. Hold a global hotkey anywhere in macOS, speak, then release — your speech is transcribed on-device and inserted into whatever app is frontmost (Notes, Mail, Slack, a code editor, and so on). It's 100% on-device: no cloud, no account.
+Dictation is Madi's voice input for anywhere in macOS. Hold a global hotkey, speak, release — and what you said is turned into text on-device and inserted into whatever app is frontmost (Notes, Mail, Slack, your code editor). 100% on-device — no cloud, no account.
+
+> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
 
 ## How to use it
 
-1. In **설정 → 받아쓰기** (Settings → Dictation), turn on **어디서나 받아쓰기 사용** (Use dictation anywhere).
-2. The first time you enable it, macOS asks for **손쉬운 사용** (Accessibility) permission — see below.
-3. Put your cursor wherever you want the text — in any app.
-4. Hold **Right-Option (오른쪽 ⌥)** and speak (it records only while held).
-5. Release the key, and the transcribed text is inserted.
+1. Turn on **어디서나 받아쓰기 사용** (Enable dictation anywhere) in **설정 (⌘,) → 받아쓰기** (Settings → Dictation).
+2. The first time, it asks for **Accessibility** permission (see below).
+3. Put your cursor wherever you want the text — any app.
+4. Hold the **right ⌥ (Option)** key and speak (it only records while held).
+5. Release the key and the dictated text is inserted.
 
-### Default hotkey: Right-Option
+### The hotkey: right ⌥ Option
 
-The default hotkey is the **Right-Option** key. It's push-to-talk — recording happens only while you hold it, and releasing completes the insert. Right-Option is the default because you almost never press it alone and it never collides with ⌘K (the command palette).
+The hotkey is the **right Option** key. It's push-to-talk — recording only while held, so releasing completes the insert. Right Option is rarely used on its own and doesn't collide with ⌘K (the command palette), which is why it's the default.
+
+> The hotkey can't be changed in this version.
 
 ### Your clipboard is preserved
 
-When inserting text, Madi first saves your current clipboard, pastes the transcribed text, then immediately restores your original clipboard. So anything you'd copied is left intact.
+Madi saves your current clipboard, pastes the dictated text, then immediately restores what was there. Anything you had copied is still there afterwards. (If another app changed the clipboard mid-paste, Madi leaves that content alone rather than clobbering it.)
 
 ## Required permission — Accessibility
 
-To paste text into other apps, dictation needs macOS **손쉬운 사용** (Accessibility) permission.
+To paste text into other apps, dictation needs the macOS **Accessibility** permission.
 
-1. Turn on dictation in **설정 → 받아쓰기** (Settings → Dictation).
-2. Check the status under **손쉬운 사용 권한** (Accessibility permission):
-   - **허용됨** (Granted): you're ready to go.
-   - **권한 필요** (Permission needed): click **시스템 설정에서 허용** (Allow in System Settings).
-3. That button opens System Settings → *Privacy & Security → Accessibility*. Allow Madi there.
-4. When you return to this window, the status updates to **허용됨** (Granted) automatically.
+1. Turn on dictation in **설정 (⌘,) → 받아쓰기**.
+2. Check the **손쉬운 사용 권한** (Accessibility permission) row.
+   - **허용됨** (Granted): ready to use.
+   - **권한 필요** (Permission needed): press **시스템 설정에서 허용** (Allow in System Settings).
+3. That button opens *System Settings → Privacy & Security → Accessibility*. Enable Madi there.
+4. Come back to this window and the status flips to **허용됨** automatically.
 
-Without this permission dictation won't work — but it won't fail silently. Madi tells you with "손쉬운 사용 권한이 필요합니다" (Accessibility permission is required).
+Without the permission dictation won't work — but it won't fail silently either: it tells you "손쉬운 사용 권한이 필요합니다" (Accessibility permission required).
 
-## Disabled while a meeting is recording
+## Disabled while recording a meeting
 
-While a meeting is being recorded, the dictation hotkey is turned off. Dictation and meeting recording share the same physical microphone, so this guards against a conflict. If you press Right-Option during recording you'll see a brief notice — "회의 녹음 중에는 받아쓰기를 사용할 수 없습니다" (Dictation isn't available while a meeting is recording) — and it works again once you stop recording.
+The dictation hotkey is disabled while a meeting is recording, because dictation and meeting recording use the same physical microphone. Pressing right Option then shows a brief "회의 녹음 중에는 받아쓰기를 사용할 수 없습니다" (Dictation is unavailable while recording a meeting). Stop the recording and it works again.
 
-## Fast, lightweight dictation
+## Fast and light
 
-Dictation inserts your words as-is, with no rewriting. It does not keep a large LLM in memory: it runs a short, dictation-only speech recognizer and shuts it down when done. So it stays light and fast even on Macs with little memory, and even when the meeting summary/translation model isn't loaded.
+Dictation inserts what you said verbatim, with no rewriting. It never loads a large language model — it runs a short, dictation-only speech pass and shuts down when you're done. So it stays light and fast even on a Mac with little memory, and even if you never downloaded the translation model.
 
-> The dictation language follows the language setting you chose for meeting recording (Korean by default). Auto-detect can misfire on short clips, so unless you picked auto, dictation is locked to your chosen language.
+> Dictation language follows the meeting language you picked in **설정 → 녹음 → 언어** (Settings → Recording → Language); the default is Korean. Auto-detect can miss on very short utterances, so unless you chose Auto, Madi pins recognition to the language you selected.
 
 ## Settings reference (설정 → 받아쓰기)
 
-- **어디서나 받아쓰기 사용** (Use dictation anywhere) — turn dictation on/off.
-- **단축키** (Hotkey) — shows the default (Right-Option, hold to record).
-- **손쉬운 사용 권한** (Accessibility permission) — current status plus the **시스템 설정에서 허용** (Allow in System Settings) button.
-- **상태** (Status) — the current dictation state (idle / listening / transcribing / inserting).
+- **어디서나 받아쓰기 사용** (Enable dictation anywhere) — turn dictation on/off.
+- **누르고 있는 동안 녹음** (Hold to record) — shows the hotkey (right ⌥ Option). Read-only.
+- **손쉬운 사용 권한** (Accessibility permission) — current status (허용됨 / 권한 필요) and the **시스템 설정에서 허용** button.
+- **현재** (Current) — current dictation state: 꺼짐 (Off) / 대기 중 (Idle) / 듣는 중… (Listening) / 변환 중… (Transcribing) / 입력 중… (Inserting).

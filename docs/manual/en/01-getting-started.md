@@ -1,50 +1,90 @@
-# Getting Started
+# Getting started
 
-Welcome to Madi. Madi is a Korean meeting-intelligence app that transcribes and understands your meetings **entirely on your Mac**. Live dictation, audio and video file transcription, speaker diarization, on-device translation, summaries, and Q&A — every bit of processing happens locally on your machine.
+Welcome to Madi. Madi transcribes and translates your meetings **entirely on this Mac**. Live transcription, audio and video file transcription, speaker separation, on-device translation — every step happens inside your own machine.
 
 ## What Madi does
 
-- **Live transcription** — listens to your microphone or meeting audio and shows text on screen before you even finish speaking.
-- **File and video transcription** — drag in a recording or video and Madi transcribes the whole conversation.
-- **Speaker diarization** — separates who said what, and when.
-- **On-device translation** — translates between Korean, English, Chinese, and Japanese.
-- **Summary and Q&A** — distills key points, decisions, and action items, and lets you ask questions about the content.
+- **Live transcription** — listens to your mic or meeting audio and puts text on screen almost as fast as you speak.
+- **File and video transcription** — drop in a recording and Madi writes out the whole conversation.
+- **Speaker separation** — tells apart who spoke when, and lets you name them.
+- **On-device translation** — renders Korean, English, Japanese and Chinese in real time, and can float them as captions over any window.
+- **AI summary and Q&A** — distills the summary, decisions and actions when the meeting ends, and lets you ask about it in natural language.
+- **Review and correction** — finds words it wasn't sure about, lets you fix them, and remembers your fixes for next time.
+- **System-wide dictation** — hold a key in any app, speak, and your words land in the text field.
 
-### 100% on-device — your data never leaves the Mac
+### 100% on-device — your data never leaves this Mac
 
-Madi's core promise is **sovereignty**. None of your audio, transcripts, translations, or summaries are ever sent to the cloud. It works even with the internet disconnected (once the models are downloaded). Your meeting content lives only on your device.
+Madi's core promise is **sovereignty**. No audio, no transcript, no translation is ever sent to the cloud. Once the models are downloaded it works with the internet unplugged. Your meetings exist only on your device.
 
 ## About the models
 
 Madi uses two kinds of AI model.
 
-- **Whisper speech model** — handles transcription. It is **bundled with the app**, so there is nothing to download.
-- **DNA3.0-4B language model (~2.6 GB)** — powers translation, summaries, Q&A, and title generation. To keep the app small, it is **downloaded the first time you use it.**
-  - Where to get it: the “번역 모델 다운로드 (Download translation model)” button under **설정 → 모델 (Settings → Models)** or **설정 → 번역 (Settings → Translation)**.
-  - The download is about **2.6 GB**, and it needs roughly that much disk space. (See **번역 / Translation** and **설정 / Settings** for details.)
+- **Whisper speech model** — handles transcription. **Bundled with the app**, nothing to download.
+- **DNA3.0-4B language model (~2.6 GB)** — powers **translation**, **AI correction**, and **summary / Q&A**. To keep the app small, it is **downloaded the first time you use it**.
+  - Where: **Settings (⌘,) → Translation**, the "Download translation model" button.
+  - About **2.6 GB** to download, and the same in disk space.
 
-## Memory guidance (the honest version)
+If you don't use translation, summary or Q&A you never need this model. Transcription and speaker separation run entirely on the bundled Whisper model.
 
-- **8 GB Macs (e.g. the M1 MacBook Air)** — transcription and speaker diarization run smoothly.
-- **16 GB or more recommended** — needed for features that run the language model **alongside** transcription. Examples: **라이브 액션 추출 (live action extraction)** — pulling out decisions, to-dos, and questions live while recording — or running **live translation and summary together with** transcription. You can still enable these on 8 GB, but memory will be tight.
+## About memory (honestly)
+
+- **8 GB Mac (e.g. M1 MacBook Air)** — transcription and speaker separation run comfortably.
+- **Translation adds about 3 GB.** It works on an 8 GB Mac, but memory gets tight.
+- **Live preview** adds roughly another 830 MB.
 
 ## Permissions Madi may ask for
 
-Madi does not ask for everything up front. It requests each permission **the first time the relevant feature needs it.**
+Madi doesn't ask for everything up front — it requests each permission **the first time you use that feature**.
 
-- **Microphone** — for recording. Requested the first time you start a recording.
-- **Screen Recording** — only when capturing system audio (sound playing on your Mac, e.g. Zoom, Teams, YouTube). macOS bundles audio capture under the Screen Recording permission; **Madi does not save the screen.**
-- **Calendar** — optional. Used for meeting prep and attendee matching. You can skip it entirely.
-- **Accessibility (손쉬운 사용)** — only needed for **system-wide dictation** (dictating into any app). It is required to insert dictated text into other apps. (See **받아쓰기 / Dictation**.)
+- **Microphone** — to record. Asked when you first start a recording.
+- **Screen Recording** — only to capture system audio (sound playing on your Mac, e.g. Zoom, Teams, YouTube). macOS bundles audio capture into the Screen Recording permission; **Madi never records your screen.**
+- **Accessibility** — only for **system-wide dictation**, so Madi can insert text into other apps. (See **System dictation**.)
 
-If you declined a permission and want to grant it later, open **System Settings → Privacy & Security**, find the relevant item (Microphone / Screen Recording / Accessibility / Calendar), and switch Madi on.
+If you deny a permission and want it later, open **System Settings → Privacy & Security**, find the item (Microphone / Screen Recording / Accessibility) and enable Madi.
 
-## First-run quickstart
+## First-run quick start
 
-1. Open Madi.
-2. (Optional) To use translation, summary, or Q&A, download the translation model (DNA3.0-4B, ~2.6 GB) from **설정 (Settings, ⌘,) → 모델 (Models)** or **번역 (Translation)**.
-3. Press **녹음 시작 (Start recording)**, or drag an audio or video file into the window.
-4. Watch the live transcript appear on screen.
-5. When the meeting ends, press **요약 (Summary)** for an AI summary. (Summaries require the translation model to be installed.)
+1. Open Madi. The first screen has two columns: **Meeting info** and **Get started**.
+2. Under **Meeting info**, set up this meeting — input language, output language (if you translate), meeting mode, speaker count.
+3. Under **Get started**, pick a mic and press **Start recording now**, or drop in an audio/video file.
+4. Watch the live transcript appear in the middle of the window.
+5. Press **Stop** to wrap up. If auto-save is on, the transcript is written to a file.
 
-That's it. For more detail, see the other manual pages on recording, translation, dictation, and settings.
+> To translate, first download the translation model (~2.6 GB) in **Settings (⌘,) → Translation**.
+
+## The window
+
+Once recording starts, the window splits into three columns.
+
+- **Left — session panel**: transport buttons (pause / stop), total time, the speaker bar, and the energy-flow graph. The Settings gear lives here too.
+- **Center — transcript**: what was said. You read and edit here.
+- **Right — workspace explorer**: past meetings, the auto-save switch, save folder, and export.
+
+## Keyboard shortcuts
+
+| Shortcut | What it does |
+|---|---|
+| **⌘,** | Open Settings |
+| **⌘K** | Command palette (see below) |
+| **⌘R** | Start / stop recording |
+| **⌘P** | Pause / resume |
+| **⌘?** | Open this user manual |
+
+### Command palette (⌘K)
+
+Press **⌘K** for a search box. Run things by name instead of hunting through menus. (It's also in the View menu as **명령 팔레트**.)
+
+- **Generate summary / by-speaker summary** — open the meeting-summary sheet (when a transcript exists).
+- **New session** — clear the current transcript.
+- **Change workspace folder** — pick where files are saved.
+- **A speaker's name** — jump straight to that speaker in this meeting.
+- **A past meeting's name** — reopen that saved transcript.
+
+## Help menu
+
+- **Madi User Manual (⌘?)** — opens this document. Works offline.
+- **Install update…** — checks for and installs a new version.
+- **About** — version and licenses.
+
+You're ready. See the other pages for recording, speakers, translation, dictation and settings.

@@ -31,32 +31,19 @@ struct Person: Identifiable, Hashable {
 
 enum PeopleAnalytics {
 
-    /// Aggregate enrolled people across saved transcripts.
+    /// Aggregate people across saved transcripts.
     /// - voiceprintNames: enrolled display names (caller derives from *.vec basenames).
+    ///   May be empty — voiceprints are unwired for the beta, and seeding from them
+    ///   ALONE made this dashboard permanently blank (no .vec is ever written).
     /// - mdFiles: transcript .md URLs (caller derives from the workspace folder).
-    /// Returns one Person per enrolled name, sorted by totalTalk desc then name —
+    /// Returns one Person per named speaker, sorted by totalTalk desc then name —
     /// so the busiest collaborator leads and the order is deterministic. People with
     /// zero matched meetings are kept (a 0-bar card surfaces "enrolled but unseen").
     static func aggregate(voiceprintNames: [String], mdFiles: [URL]) -> [Person] {
-        // De-dup + drop blanks; preserve nothing about input order (we sort at the end).
-        var seen = Set<String>()
-        var people: [String: Person] = [:]
-        for raw in voiceprintNames {
-            let n = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !n.isEmpty, seen.insert(n).inserted else { continue }
-            people[n] = Person(name: n)
-        }
-        guard !people.isEmpty else { return [] }
-
-        for url in mdFiles {
-            guard let parsed = TranscriptArchive.parse(url) else { continue }
-            accumulate(into: &people, parsed: parsed)
-        }
-
-        return people.values.sorted {
-            $0.totalTalk != $1.totalTalk ? $0.totalTalk > $1.totalTalk
-                                         : $0.name.localizedCompare($1.name) == .orderedAscending
-        }
+        // Seeding now needs the names out of every transcript up front, so parse
+        // first and hand the whole set to the one accumulation rule below.
+        aggregate(voiceprintNames: voiceprintNames,
+                  parsed: mdFiles.compactMap { TranscriptArchive.parse($0) })
     }
 
     /// Same as `aggregate` but over already-parsed transcripts — the unit-test seam
@@ -65,7 +52,11 @@ enum PeopleAnalytics {
     static func aggregate(voiceprintNames: [String], parsed: [TranscriptArchive.Parsed]) -> [Person] {
         var seen = Set<String>()
         var people: [String: Person] = [:]
-        for raw in voiceprintNames {
+        // Seed from enrolled voiceprints AND from every name the transcripts already
+        // carry, so naming a speaker is enough to put them on the dashboard. Parse
+        // keeps un-renamed "화자 N" and the 미확인 bucket out of `names`, so this can
+        // only ever surface real, user-named people.
+        for raw in voiceprintNames + parsed.flatMap({ $0.names.values }) {
             let n = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !n.isEmpty, seen.insert(n).inserted else { continue }
             people[n] = Person(name: n)
