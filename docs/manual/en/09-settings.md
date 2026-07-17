@@ -83,6 +83,10 @@ Where on-device translation (Korean, English, Japanese, Chinese) is turned on an
 - **한국어 / English / 日本語 / 中文** — toggle the target languages (up to 3). Every line is translated into all of them at once and shown under the original (the source language is excluded automatically).
 - Requires the model first. With 2+ targets, response speed falls to a floor of "보통 (7초)" — see the Recording tab.
 
+### 번역 반응 (실시간) — Live translation response
+
+- **마지막 줄 대기 (초)** (Wait for last line, seconds) — waits this long (0.5–5.0 s, default 3) after the last spoken line stops changing before translating it. Shorter shows captions sooner but may translate an unfinished sentence. **Committed lines (once the next line starts) translate immediately regardless of this value**, and it is independent of the STT response-speed setting.
+
 ### AI 교정 (세션 종료 후) — AI correction (after session)
 
 - **화자·언어 자동 교정** (Auto-correct speakers and language) — when recording ends, the on-device LLM reads the conversation and conservatively fixes obvious speaker mis-splits and wrong-language lines. Speaker corrections can be **undone in one click**.

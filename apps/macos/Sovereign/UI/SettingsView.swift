@@ -78,6 +78,11 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Section("번역 반응 (실시간)") {
+                slider("마지막 줄 대기 (초)", $session.translateTailSeconds, 0.5...5.0)
+                Text("말이 끝난 마지막 줄을 이 시간만큼 기다렸다 번역합니다. 짧을수록 자막이 빨리 뜨지만 미완성 문장을 번역할 수 있어요. 확정된(다음 줄이 시작된) 줄은 이 값과 무관하게 즉시 번역됩니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("AI 교정 (세션 종료 후)") {
                 Toggle("화자·언어 자동 교정", isOn: $session.aiReconcileEnabled)
                     .disabled(!AssetManifest.translateAvailable)

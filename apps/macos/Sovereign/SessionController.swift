@@ -281,6 +281,18 @@ final class SessionController: EngineProcessDelegate {
         didSet { UserDefaults.standard.set(liveWindowSeconds, forKey: "liveWindowSeconds") }
     }
 
+    /// 번역 꼬리 지연(초): the LAST line — which never loses last-line status in a
+    /// monologue — is translated this long after it stops changing (scheduleTail-
+    /// Translate). Separated from the STT window (liveWindowSeconds) so translation
+    /// eagerness tunes INDEPENDENTLY: larger = fewer premature / re-translated last
+    /// lines, smaller = snappier captions. Committed (non-last) lines translate the
+    /// instant they lose last-status regardless of this value. Default 3 s — raised
+    /// from the old hard-coded 2 s to curb premature last-line translation while
+    /// tuning; adjustable in 설정 → 번역. Persisted.
+    var translateTailSeconds: Double = (UserDefaults.standard.object(forKey: "translateTailSeconds") as? Double) ?? 3 {
+        didSet { UserDefaults.standard.set(translateTailSeconds, forKey: "translateTailSeconds") }
+    }
+
     /// 2개 이상으로 번역할 때는 반응속도 하한을 "보통"(7초)으로 둔다 — 5초만 막고
     /// 7·10초는 자유(2026-07-07 완화, 기존엔 10초 강제였음). 짧은 윈도는 원문
     /// 경계 오류가 많은데 그 오류가 모든 대상 언어 번역으로 전파되므로, 다중 번역
@@ -857,9 +869,10 @@ final class SessionController: EngineProcessDelegate {
         guard !translateTargets.isEmpty else { return }
         tailGen += 1
         let gen = tailGen
+        let delay = translateTailSeconds   // captured at schedule time (re-armed per word)
         let snapshot = transcript.lines.last.map { ($0.id, lineHash($0.text)) }
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(delay))
             guard let self, gen == self.tailGen,
                   let (id, h) = snapshot,
                   let line = self.transcript.lines.last, line.id == id,
