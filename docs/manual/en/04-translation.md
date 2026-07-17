@@ -1,88 +1,89 @@
-# Real-time translation & interpreting
+# Live translation and interpreting
 
-Madi's translation runs 100% on your device — no cloud, no account. While a meeting is in progress, each spoken line is translated into Korean, English, Japanese, and/or Chinese and shown right beneath the original. Everything is handled by the bundled on-device LLM (DNA3.0-4B).
+Madi's translation runs 100% on your device — no cloud, no account. While a meeting is in progress, each spoken line is translated into Korean, English, Japanese and/or Chinese and shown right beneath the original. Everything is handled by the on-device LLM (DNA3.0-4B).
+
+> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
 
 ## First: download the translation model
 
-Translation needs a separate model (DNA3.0-4B, ~2.6 GB) that is not bundled with the app. You download it once, on demand.
+Translation needs a separate model (DNA3.0-4B, ~2.6 GB) that isn't bundled with the app. You download it once.
 
-1. Open **설정 → 번역** (Settings → Translation) — or the **모델** (Model) tab.
-2. Click **번역 모델 다운로드** (Download translation model).
-3. When the download finishes, the real-time translation toggles become active.
+1. Open **설정 (⌘,) → 번역** (Settings → Translation).
+2. Press **번역 모델 다운로드** (Download translation model).
+3. When it finishes, the translation options become available.
 
-While in use it needs roughly 3 GB of extra memory. Until the model is downloaded the translation toggles are disabled and you'll see the note "번역 모델을 먼저 다운로드하세요." (Download the translation model first).
+It needs about 3 GB of additional memory while in use. Before the model is installed the toggles are disabled and you'll see "번역 모델을 먼저 다운로드하세요." (Download the translation model first.)
 
-## Turn on real-time translation (multi-target)
+> **If you don't see the 번역 tab** — your build doesn't include the translation engine, and translation isn't available at all.
 
-In **설정 → 번역 → 실시간 번역 (다중 대상)** (Settings → Translation → Real-time translation, multi-target), pick one or more target languages:
+## Choosing output languages
 
-- **한국어** (Korean)
-- **English**
-- **日本語** (Japanese)
-- **中文** (Chinese)
+Two places, same setting — use whichever is handy.
 
-You can enable several at once. Madi translates each line into all chosen languages simultaneously and shows them directly below the original, each tagged with its language (한 / EN / 日 / 中). The original's own language is excluded automatically.
+- **First screen → 회의 정보 → 출력 언어** (Meeting info → Output language) — as you start a meeting.
+- **설정 (⌘,) → 번역 → 실시간 번역 (다중 대상)** (Settings → Translation → Live translation, multi-target) — toggles for 한국어 / English / 日本語 / 中文.
 
-## Translation types itself out
+Every line is translated into all the languages you pick and shown directly under the original, each tagged with its language. The source language is excluded automatically.
 
-You don't wait for the whole translation to be built. Madi fills it in word by word as it's generated (about one character every 19 milliseconds). A caret **▍** blinks at the end of a line that's still being written, so a half-arrived translation reads as "still typing," not a truncated sentence.
+**Note**
+- You can pick **up to 3** output languages.
+- Without the translation model you can't pick output languages at all.
 
-While you're still speaking, a provisional translation appears first, marked **진행 중** (in-progress). When the line commits, the provisional translation is smoothly replaced by the final one — and it stays on screen until the final translation arrives, so the translation never briefly disappears.
+## Translations type themselves out
 
-## Face-to-face interpreting — bidirectional languages
+Madi doesn't wait for a translation to be finished. Words fill in on screen as they're generated. A cursor **▍** blinks at the end of a line still being written, so you know it's continuing rather than truncated.
 
-Madi is designed for a face-to-face conversation between two people who speak different languages (for example, Korean staff and a Japanese or Chinese patient).
+While someone is still speaking, an interim translation appears first, marked **진행 중** (in progress). When the line is finalized the interim smoothly becomes the final translation — and the interim stays on screen until the final arrives, so translations never blink out.
 
-Turn on **`한국어` plus exactly one other language** (e.g. Korean + 日本語) and you get bidirectional interpreting mode:
+## Face-to-face interpreting — bidirectional
 
-- **Direction is detected per line.** A line spoken in Japanese is translated only to Korean; a Korean line only to Japanese. No wasted translations, so it's faster.
-- **Both sides transcribe correctly even when the two languages alternate.** Madi re-checks the language every segment, so one person speaking Korean and another speaking Japanese are both transcribed accurately.
-- In this mode the response speed is not forced to slow down (see below).
+Madi is designed for two people speaking different languages in the same room (for example, a Korean staff member and a Japanese or Chinese visitor).
+
+Turn on **only `한국어` plus one other language** (e.g. 한국어 + 일본어) and it becomes a bidirectional interpreting mode.
+
+- **Direction is detected per line.** A Japanese line is translated only into Korean; a Korean line only into Japanese. No wasted work, so it's faster.
+- **Both sides transcribe correctly even when you alternate languages.** The language is re-checked per segment, so one person speaking Korean and the other Japanese both get accurate transcripts.
+- This combination is exempt from the latency floor below.
 
 ## Frequent-phrase dictionary (instant translation)
 
-For settings that repeat the same guidance (e.g. after-care instructions in a clinic), you can pre-save the translation of your common phrases. When a saved phrase is spoken, its translation appears **instantly (0 s)**, without going through the model.
+For places that repeat the same guidance (say, post-procedure instructions in a clinic), you can pre-store translations of common phrases. When a stored phrase comes up, the translation appears **instantly (0 s)** without going through the model.
 
-A few phrases are included by default, and you can add or edit your own (stored at `~/Library/Application Support/Sovereign/faq_translations.json`). For safety it only matches exact phrases.
+A few phrases ship by default, and you can add or edit your own.
 
-## Response speed & translation quality
+- File: `~/Library/Application Support/Sovereign/faq_translations.json`
+- For safety it only fires on an **exact match**.
 
-Choosing **two or more** target languages (e.g. 日本語 + 中文 + English) locks the response speed to **정확 (10초)** — Accurate (10s), so an error in the original line boundary doesn't propagate into every translation.
+## Latency and translation quality
 
-> Exception: in **bidirectional interpreting** mode (`한국어` + one other language), each line has only a single real target, so it is not locked to 10 s — captions appear faster in face-to-face interpreting.
+With **2 or more** output languages, boundary errors in the source line would propagate into every language — so the response speed drops to a floor of **보통 (7초)** (Normal, 7 s). If you had picked **빠름 (5초)** (Fast, 5 s), it automatically becomes 7 s. **정확 (10초)** (Accurate, 10 s) still works.
 
-When translation falls behind, **"N줄 번역 대기"** (N lines waiting to translate) appears at the top. It means the work is queued, not stuck (the model translates one line at a time).
+> **Exception:** the **bidirectional** mode (`한국어` + exactly one other language) is not forced, because each line's effective target count drops to one. Captions appear faster in face-to-face interpreting.
 
-## Caption overlay (자막 오버레이)
+When translation falls behind you'll see **"번역 중 · N줄 대기"** (Translating · N lines queued). It isn't stuck — it's working through them in order (the model translates one line at a time).
 
-The **자막 오버레이** (caption overlay) is a floating, always-on-top live-translation caption window. Place it over a Zoom/Teams call, or on a clinic display, to follow the other side's speech in real-time translation.
+## AI language correction (after recording)
 
-- Toggle it with the **자막 오버레이** button in the side panel.
-- The window stays on top but never takes focus, so your clicks and typing keep going to the call app.
-- It floats even over fullscreen apps, and you can drag it anywhere by its background.
-- The large text is the translation; the small text below is the original.
-- With more than one speaker, the caption shows a **speaker color dot and name** so you know who said it.
+When recording ends, the on-device LLM reads the conversation and conservatively fixes **lines transcribed in the wrong language**. Toggle it under **설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)** → **화자·언어 자동 교정**. See **Speakers**.
+
+## Caption overlay
+
+The **caption overlay** is a floating window of live translated captions that sits on top of everything. Park it over a Zoom or Teams call, or on a clinic display, and follow what the other person is saying in real time.
+
+Toggle it with the **speech-bubble icon** in the top toolbar. **The button only appears once you've picked at least one output language.**
+
+- The window always stays in front but never takes focus, so you can keep clicking and typing in your call app.
+- It floats above full-screen apps, and you can drag it anywhere by its background.
+- The largest text is the translation; the smaller text beneath it is the original.
+- With multiple people, captions carry the **speaker's color and name** so you know who's talking.
 - While waiting for speech, a **mic level bar** moves to confirm the system is listening.
-- The status text ("in-progress / translating… / waiting for speech") is shown **in the viewer's own language** — 「翻訳中…」 for a Japanese caption, 「翻译中…」 for a Chinese one.
+- Status text ("진행 중 / 번역 중… / 음성을 기다리는 중…") is shown **in the viewer's language** — 「翻訳中…」 on Japanese captions, 「翻译中…」 on Chinese.
 
-### Staff caption + patient caption (dual screen)
+### Staff captions + patient captions (dual display)
 
-For face-to-face clinic interpreting you can split the caption into **two** panels.
+For clinic interpreting you can split captions into **two** panels.
 
-- **Staff caption** — small, on the main screen, in the staff's language (first translate target).
-- **Patient caption** — large (for distance reading), on an external monitor, in the patient's language.
+- **Staff captions** — small, on the main display, in the staff member's language.
+- **Patient captions** — large, on an external monitor, for reading at a distance, in the patient's language.
 
-Turn it on in **설정 → 자막 오버레이(진료실)** (Settings → Caption overlay (Clinic)). You can set staff font (14–48pt), patient font (24–96pt), panel width, patient screen, and patient language separately — large type for a 1.5–2.5 m viewing distance between the chair and the display.
-
-## Chat view
-
-When exactly two people are talking, you can view the transcript **like a messenger, left and right**. The first speaker sits on the left, the other on the right — good for reading back-and-forth interpreting. The chat-view button appears in the control bar when two speakers are detected.
-
-## Performance note — it depends on your memory
-
-Live translation and the meeting-summary model share the same LLM, so behavior depends on how much memory your Mac has.
-
-- **16 GB+ Macs**: live translation and features like **라이브 액션 추출** (live action extraction) run together. Translation captions never stall.
-- **Under-16 GB Macs**: only one model fits in memory at a time. Turning on a feature like **라이브 액션 추출** pauses live translation while it runs.
-
-If you want uninterrupted translation captions on an under-16 GB Mac, leave extra features like live action extraction off.
+Turn it on in **설정 (⌘,) → 녹음 → 자막 오버레이 (진료실)** (Settings → Recording → Caption overlay (clinic)). You can set staff text size (14–48 pt), patient text size (24–96 pt), which display to use, and the patient's language. The large sizes are meant to read well across the 1.5–2.5 m between a treatment chair and the display.

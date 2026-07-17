@@ -1,152 +1,122 @@
 # Settings
 
-Open Settings with **⌘, (Command + comma)**. This is where the "set once" controls live — the things you configure rather than touch every session. The tabs across the top are **녹음 (Recording) · 편집·저장 (Editing·Save) · 번역 (Translation) · 단어장 (Personal Vocabulary) · 모델 (Models) · 받아쓰기 (Dictation)**.
+Open Settings with **⌘, (Command + comma)** — the gear button in the left panel does the same. This is where the **"set it once"** options live, rather than the things you touch every meeting. The tabs across the top are **녹음 · 저장 · 번역 · 단어장 · 모델 · 받아쓰기** (Recording · Save · Translation · Glossary · Model · Dictation).
 
-> Note: the controls on the **녹음 (Recording)** tab are locked while recording or paused. Stop the recording first, then adjust them.
+> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
+
+> **Per-meeting choices** (input/output language, meeting mode, speaker count) are **not** in Settings — they're on the first screen under **회의 정보** (Meeting info). See **Recording and transcription**.
+
+> **Note:** The **녹음** (Recording) tab is locked while recording or paused. Stop the recording to change it.
 
 ---
 
 ## 녹음 (Recording)
 
-Sets how audio is captured, how live transcription behaves, and how things are displayed.
+How audio is captured, how live transcription behaves, and how things look.
 
 ### 입력 (Input)
 
-- **음원 (Source)** — choose what Madi listens to.
-  - **마이크 (Microphone)** — your own voice / in-person meetings.
-  - **시스템 오디오 (System audio)** — sound playing on your Mac (Zoom, Teams, Slack, YouTube, etc.). Requests Screen Recording permission on first use (audio only — the screen is not saved).
-  - **마이크+시스템 (Mic + system)** — best for online meetings (your voice plus the other party).
-- **마이크 (Microphone)** — when using mic or mic+system, pick the input device. Defaults to "시스템 기본 (System default)".
-- **언어 (Language)** — **자동 감지 (Auto-detect) / 한국어 (Korean) / English** — pin the transcription language or leave it automatic.
+- **음원** (Audio source) — what to listen to.
+  - **마이크** (Microphone) — your voice / in-person meetings.
+  - **시스템 오디오** (System audio) — sound playing on the Mac (Zoom, Teams, Slack, YouTube …). The first use asks for Screen Recording permission (audio only; the screen is never saved).
+  - **마이크+시스템** (Mic + system) — best for online meetings (your voice plus the other side).
+- **마이크** (Microphone) — which input device to use (when the source is 마이크 or 마이크+시스템). Default is "시스템 기본" (System default).
+- **언어** (Language) — pin the transcription language or leave it automatic: **자동 감지** (Auto-detect) **/ 한국어 / English**. System dictation follows this setting too.
 
 ### 화자 (Speakers)
 
-- **화자 분리 (Speaker diarization)** — separates who said what.
-- **중첩 발화 감지 (Overlapping speech detection)** — detects stretches where two people talk at once.
+- **화자 분리** (Speaker separation) — tell apart who spoke.
+- **중첩 발화 감지** (Overlapping speech detection) — detect where two people talk at once (the overlap markers in Detail view).
 
 ### 실시간 (Live)
 
-- **반응 속도 (Responsiveness)** — **빠름 (Fast, 5s) / 보통 (Normal, 7s) / 정확 (Accurate, 10s)**. Fast paints text more often (feels snappier); Accurate uses longer context (better quality). *With two or more translation targets, this is automatically pinned to 정확 (Accurate, 10s).*
-- **실시간 프리뷰 (Live preview)** — shows interim text in gray before a window is finalized (no accuracy loss; ~830 MB extra memory).
+- **반응 속도** (Response speed) — **빠름 (5초)** / **보통 (7초)** / **정확 (10초)** (Fast 5 s / Normal 7 s / Accurate 10 s). Fast puts text on screen more often and feels quicker; Accurate sees more context and reads better.
+  - *With 2 or more output languages this drops to a floor of **보통 (7초)** — even if you picked Fast, it becomes 7 s. The bidirectional case (`한국어` plus exactly one other language) is exempt.*
+- **실시간 프리뷰** (Live preview) — show interim text in gray before a window is finalized (no accuracy cost, ~830 MB more memory).
 
-### 표시 (Display)
+### 표시 (Appearance)
 
-- **외관 (Appearance)** — pick the System / Light / Dark theme.
+- **외관** (Appearance) — System / Light / Dark theme.
 
-### 자막 오버레이 (Caption overlay — Clinic)
+### 자막 오버레이 (진료실) (Caption overlay — clinic)
 
-Sizing for the face-to-face interpreting captions and a second (patient) screen.
+Sizing for the interpreting caption windows and the second (patient) display. See **Live translation**.
 
-- **직원 자막 크기 (Staff caption size)** — main-screen caption text (14–48pt).
-- **환자용 대형 자막 (Large patient caption, separate screen)** — floats a second panel in the patient's language, in large type for distance reading. When on, these appear:
-  - **환자 자막 크기 (Patient caption size)** — 24–96pt.
-  - **환자 화면 (Patient screen)** — which display to use when you have more than one.
-  - **환자 언어 (Patient language)** — automatic (the other side's language) or a fixed language.
-
-### Auto-save
-
-The auto-save folder setting lives on the **편집·저장 (Editing·Save)** tab (below).
+- **직원 자막 크기** (Staff caption size) — caption text on the main display (14–48 pt).
+- **환자용 대형 자막 (별도 화면)** (Large patient captions — separate display) — puts a second panel in the patient's language at a size readable from across the room. Turning it on reveals:
+  - **환자 자막 크기** (Patient caption size) — 24–96 pt.
+  - **환자 화면** (Patient display) — which screen to use, when more than one is connected.
+  - **환자 언어** (Patient language) — automatic (the other party's language) or pinned.
 
 ---
 
-## 편집·저장 (Editing·Save)
+## 저장 (Save)
 
-Controls post-transcription analysis (tighten, chapters, etc.) and how files are saved.
+File saving and recognition thresholds.
 
 ### 자동 저장 (Auto-save)
 
-- **완료 시 .md 자동저장 (Auto-save .md when finished)** — saves a Markdown file automatically when transcription completes.
-- **폴더 / 변경… (Folder / Change…)** — choose the save folder.
+- **완료 시 .md 자동저장** (Auto-save .md on finish) — write a Markdown file when transcription ends.
+- **폴더 / 변경…** (Folder / Change…) — pick the save folder. This folder is the workspace shown in the explorer.
+
+> The same setting also lives at the bottom of the workspace explorer.
 
 ### 음성 인식 (Speech recognition)
 
-- **저신뢰 표시 기준 (VAD) (Low-confidence threshold)** — words recognized below this confidence (default 0.55) are flagged as "needs review".
-
-### 편집 기능 (Editing features)
-
-- **편집 기능 사용 (Enable editing features)** — turns on filler/silence tighten, chapters, retakes, and highlight analysis. **Off by default** — turn it on only when needed. (When off, the sections below are disabled.)
-
-### 필러 · 무음 (타이튼) (Fillers · Silence — Tighten)
-
-- **필러 컷 (Filler cut)** — detects filler words ("um…", "uh…").
-- **무음 컷 (Silence cut)** — detects long silent gaps.
-- **무음 최소초 (Min silence seconds)** — the minimum length to count as silence.
-
-### 챕터 (Chapters)
-
-- **자동 챕터 (Auto chapters)** — splits the conversation into chapters automatically.
-- **휴지 경계초 / 최소 간격초 (Pause boundary / Min gap seconds)** — tune the pause length that triggers a chapter break and the minimum chapter spacing.
-
-### 리테이크 · 하이라이트 (Retakes · Highlights)
-
-- **리테이크 감지 (Retake detection)** — finds "second take" passages where something was re-said. The **유사도 (Similarity)** slider tunes sensitivity.
-- **하이라이트 (Highlights)** — emphasizes important passages. **최소 신뢰도 (Min confidence)** sets the bar.
+- **저신뢰 표시 기준 (VAD)** (Low-confidence threshold) — words recognized below this confidence (default 0.55) are flagged as **검토 필요** (needs review). Range 0.35–0.9; raising it flags more words. See **Review and correction**.
 
 ---
 
 ## 번역 (Translation)
 
-Where you turn on-device translation (Korean, Chinese, Japanese, English) on and off.
+Where on-device translation (Korean, English, Japanese, Chinese) is turned on and off.
 
-### 번역 모델 (DNA3.0-4B · ~2.6 GB) (Translation model)
+> On builds without the translation engine this tab is hidden entirely.
 
-- **상태 (Status)** — shows Installed / download progress / Not installed.
-- **번역 모델 다운로드 (Download translation model)** — fetches the model. It is not bundled with the app and is downloaded when you enable it (~3 GB extra memory). Once installed, **Finder에서 보기 (Reveal in Finder)** opens the file location.
+### 번역 모델 (DNA3.0-4B · ~2.6 GB) — translation model
 
-### 실시간 번역 (다중 대상) (Live translation — multi-target)
+- **상태** (Status) — 설치됨 (Installed) / 검증 중 (Verifying) / download progress / 미설치 (Not installed).
+- **번역 모델 다운로드** (Download translation model) — fetches the model. It isn't bundled; you download it when you want it (~3 GB more memory in use). While downloading you can **취소** (Cancel); once installed, **Finder에서 보기** (Show in Finder) opens its location.
 
-- **한국어 (Korean) / English / 日本語 (Japanese) / 中文 (Chinese)** — toggle the target languages. Each line is translated into every selected language simultaneously and shown under the original (the source language is excluded automatically).
-- The model must be downloaded first. With two or more targets, recording responsiveness is pinned to 정확 (Accurate, 10s) — see the Recording tab.
+### 실시간 번역 (다중 대상) — live translation, multi-target
 
----
+- **한국어 / English / 日本語 / 中文** — toggle the target languages (up to 3). Every line is translated into all of them at once and shown under the original (the source language is excluded automatically).
+- Requires the model first. With 2+ targets, response speed falls to a floor of "보통 (7초)" — see the Recording tab.
 
-## 단어장 (Personal Vocabulary)
+### AI 교정 (세션 종료 후) — AI correction (after session)
 
-Madi learns the corrections you make to frequently-misheard domain terms and names, then fixes similar mis-recognitions automatically in later meetings.
-
-### 개인 단어장 (Personal vocabulary)
-
-- **학습한 교정 자동 적용 (Auto-apply learned corrections)** — the switch that decides whether learned corrections are actually applied. **Learning always runs**; this switch only enables "apply". (Off by default — turn it on yourself.)
-
-### 적용 기준 (Application threshold)
-
-- **최소 확인 횟수 (Minimum confirmations)** — a correction must be confirmed at least this many times (1–5) before it auto-applies. Higher is more conservative, so a single accidental edit won't overwrite later transcripts.
-
-### Learned corrections list
-
-- Shows each learned rule (wrong word → right word, with a hit count). Use the trash button on a row to "잊기 (Forget)" a single rule, or **전체 지우기 (Clear all)** to empty the list.
+- **화자·언어 자동 교정** (Auto-correct speakers and language) — when recording ends, the on-device LLM reads the conversation and conservatively fixes obvious speaker mis-splits and wrong-language lines. Speaker corrections can be **undone in one click**.
+- Requires the translation/summary model (DNA3.0-4B).
 
 ---
 
-## 모델 (Models)
+## 단어장 (Glossary)
 
-Check and manage the status of the speech and language models.
+Madi learns the corrections you make to frequently-misheard domain terms and names, and fixes similar errors automatically in later meetings. See **Review and correction**.
 
-- **상태 / 위치 (Status / Location)** — whether the model is installed and its file path.
-- **모델 재다운로드 (Re-download model)** — fetches the model again.
-- **Finder에서 보기 (Reveal in Finder)** — opens the model file location.
+- **학습한 교정 자동 적용** (Auto-apply learned corrections) — controls whether learned corrections are actually applied. **Learning always happens**; this switch only controls applying. (Off by default — turn it on yourself.)
+- **최소 확인 횟수** (Minimum hits) — how many times (1–5) the same correction must be seen before it's auto-applied. Higher is more conservative, so one accidental edit won't overwrite later transcripts.
+- **Learned corrections list** — shows each rule (wrong word → right word, hit count). The trash button forgets one rule; **전체 지우기** (Clear all) wipes them all.
 
-You can also download the translation model (DNA3.0-4B) from the **번역 (Translation)** tab.
+---
+
+## 모델 (Model)
+
+Status and management for the transcription (Whisper) model.
+
+- **상태 / 위치** (Status / Location) — whether the model is installed, and its file path.
+- **모델 재다운로드** (Re-download model) — fetch it again.
+- **Finder에서 보기** (Show in Finder) — open the model's location.
+
+> The translation model (DNA3.0-4B) is managed on the **번역** (Translation) tab.
 
 ---
 
 ## 받아쓰기 (Dictation)
 
-System-wide push-to-talk dictation settings that work in any app. For full usage, see the **받아쓰기 / Dictation** manual page.
+Settings for system-wide push-to-talk dictation. See the **System dictation** page for full usage.
 
-### 시스템 받아쓰기 (System dictation)
-
-- **어디서나 받아쓰기 사용 (Enable dictation everywhere)** — hold the right **⌥ (Option)** key while you speak, then release, and the dictated text lands in the frontmost input field of any app. All processing happens on-device.
-
-### 단축키 (Hotkey)
-
-- **누르고 있는 동안 녹음 (Hold to record)** — the default is the right **⌥ Option** key (chosen so it doesn't clash with the command palette, ⌘K).
-
-### 손쉬운 사용 권한 (Accessibility permission)
-
-- **상태 (Status)** — shows whether Accessibility (손쉬운 사용) permission is granted.
-- **시스템 설정에서 허용 (Grant in System Settings)** — if it isn't granted, this button opens System Settings. The permission is required to insert text into other apps; once granted, returning to this window recognizes it automatically.
-
-### 상태 (Status)
-
-- **현재 (Current)** — shows dictation's current state (idle / listening / transcribing / inserting, etc.).
+- **어디서나 받아쓰기 사용** (Enable dictation anywhere) — hold the right **⌥ (Option)** key, speak, release, and the text lands in the frontmost app's text field.
+- **누르고 있는 동안 녹음** (Hold to record) — shows the hotkey (right ⌥ Option). Read-only.
+- **손쉬운 사용 권한** (Accessibility permission) — whether it's granted, and the **시스템 설정에서 허용** (Allow in System Settings) button. Required to insert text into other apps; coming back to this window re-checks it automatically.
+- **현재** (Current) — current dictation state (꺼짐 / 대기 중 / 듣는 중… / 변환 중… / 입력 중…).
