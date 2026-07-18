@@ -25,12 +25,13 @@ struct WorkspaceExplorer: View {
     // cross-session matching misidentified speakers. VoiceprintManagementView is
     // kept in the source, just unreferenced; restore this case with the flag.
     private enum ExplorerMode: String, CaseIterable {
-        case files, people, openLoops
+        case files, people, openLoops, stats
         var label: String {
             switch self {
             case .files: return "파일"
             case .people: return "사람"
             case .openLoops: return "열린 항목"
+            case .stats: return "통계"
             }
         }
     }
@@ -40,9 +41,12 @@ struct WorkspaceExplorer: View {
     // matchedGeometryEffect instead of each segment owning its own fill.
     @Namespace private var modeSwitcherNS
 
-    // Redesign hides 열린 항목/음성 from the tab bar (features and views stay
-    // wired — restore by iterating allCases again).
-    private static let visibleModes: [ExplorerMode] = [.files, .people]
+    // Redesign hides 열린 항목/음성 from the tab bar. BETA: 사람(people) is unwired —
+    // it was built for cross-session VOICEPRINT aggregation, and with voiceprints
+    // off a name-only list just duplicates the transcript. Its slot now holds 통계
+    // (workspace activity, no voiceprints/LLM). PeopleDashboard stays in source,
+    // unreferenced; the .people/.openLoops switch branches are harmless dead code.
+    private static let visibleModes: [ExplorerMode] = [.files, .stats]
 
     // rev.2 pill (Figma 188:761): gray track, WHITE sliding thumb with a soft
     // drop shadow — matches the center 내용/상세 switch.
@@ -79,8 +83,17 @@ struct WorkspaceExplorer: View {
     // control), and a pinned bottom block: 자동저장 toggle / 폴더 row / 내보내기.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            modeSwitcher
-                .padding(.horizontal, 17).padding(.top, 19)
+            // One visible mode → no lone pill; a plain header keeps the top rhythm.
+            // Restore the switcher automatically when a second mode is re-added.
+            if Self.visibleModes.count > 1 {
+                modeSwitcher
+                    .padding(.horizontal, 17).padding(.top, 19)
+            } else {
+                Text("회의록")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .padding(.horizontal, 20).padding(.top, 21)
+            }
             switch mode {
             case .files:
                 if session.workspace.isLoading {
@@ -115,6 +128,8 @@ struct WorkspaceExplorer: View {
                     autoRecognizedNames: Set(session.autoRecognizedSpeakers.compactMap { session.speakerNames[$0] }))
             case .openLoops:
                 OpenLoopsView(session: session)
+            case .stats:
+                WorkspaceStatsView(stats: session.workspaceStats())
             }
             Spacer(minLength: 0)
             bottomBlock
