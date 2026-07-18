@@ -1,6 +1,6 @@
 # Settings
 
-Open Settings with **⌘, (Command + comma)** — the gear button in the left panel does the same. This is where the **"set it once"** options live, rather than the things you touch every meeting. The tabs across the top are **녹음 · 저장 · 번역 · 단어장 · 모델 · 받아쓰기** (Recording · Save · Translation · Glossary · Model · Dictation).
+Open Settings with **⌘, (Command + comma)** — the gear button in the left panel does the same. This is where the **"set it once"** options live, rather than the things you touch every meeting. The tabs across the top are **녹음 · 저장 · 번역 · 단어장 · 모델** (Recording · Save · Translation · Glossary · Model).
 
 > The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
 
@@ -21,7 +21,7 @@ How audio is captured, how live transcription behaves, and how things look.
   - **시스템 오디오** (System audio) — sound playing on the Mac (Zoom, Teams, Slack, YouTube …). The first use asks for Screen Recording permission (audio only; the screen is never saved).
   - **마이크+시스템** (Mic + system) — best for online meetings (your voice plus the other side).
 - **마이크** (Microphone) — which input device to use (when the source is 마이크 or 마이크+시스템). Default is "시스템 기본" (System default).
-- **언어** (Language) — pin the transcription language or leave it automatic: **자동 감지** (Auto-detect) **/ 한국어 / English**. System dictation follows this setting too.
+- **언어** (Language) — pin the transcription language or leave it automatic: **자동 감지** (Auto-detect) **/ 한국어 / English**.
 
 ### 화자 (Speakers)
 
@@ -114,13 +114,4 @@ Status and management for the transcription (Whisper) model.
 
 > The translation model (DNA3.0-4B) is managed on the **번역** (Translation) tab.
 
----
-
-## 받아쓰기 (Dictation)
-
-Settings for system-wide push-to-talk dictation. See the **System dictation** page for full usage.
-
-- **어디서나 받아쓰기 사용** (Enable dictation anywhere) — hold the right **⌥ (Option)** key, speak, release, and the text lands in the frontmost app's text field.
-- **누르고 있는 동안 녹음** (Hold to record) — shows the hotkey (right ⌥ Option). Read-only.
-- **손쉬운 사용 권한** (Accessibility permission) — whether it's granted, and the **시스템 설정에서 허용** (Allow in System Settings) button. Required to insert text into other apps; coming back to this window re-checks it automatically.
-- **현재** (Current) — current dictation state (꺼짐 / 대기 중 / 듣는 중… / 변환 중… / 입력 중…).
+> **System dictation** is coming later, so the current beta has **no 받아쓰기 (Dictation) tab.** (See **System dictation (coming later)**.)

@@ -30,7 +30,9 @@ struct SettingsView: View {
             }
             GlossarySettingsView(session: session).tabItem { Label("단어장", systemImage: "character.book.closed") }
             model.tabItem { Label("모델", systemImage: "shippingbox") }
-            DictationSettingsView(dictation: dictation).tabItem { Label("받아쓰기", systemImage: "keyboard") }
+            // BETA: the 받아쓰기 (system-wide dictation) tab is removed — the feature
+            // is unwired (DictationController.featureEnabled). DictationSettingsView is
+            // kept in the source, just unreferenced; restore it with the flag.
         }
         .frame(width: 460, height: 380)
         .padding()

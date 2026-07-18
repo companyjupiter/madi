@@ -33,6 +33,7 @@ let package = Package(
                 "Transcript/TitleGenerator.swift",
                 "Transcript/WorkspaceRetrieval.swift",
                 "Transcript/PeopleAnalytics.swift",
+                "Transcript/WorkspaceAnalytics.swift",
                 "Transcript/PendingEnrollmentStore.swift",
                 "Transcript/VoiceprintStore.swift",
                 "Transcript/LiveActionRail.swift",

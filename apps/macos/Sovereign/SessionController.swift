@@ -578,6 +578,19 @@ final class SessionController: EngineProcessDelegate {
         return PeopleAnalytics.aggregate(voiceprintNames: names, mdFiles: workspaceTranscriptURLs())
     }
 
+    /// Workspace-level activity stats for the 통계 tab — a pure rollup over every
+    /// saved transcript (summary siblings excluded). Computed on demand, like
+    /// peopleAnalytics(); each meeting's date is its file modification time.
+    func workspaceStats() -> WorkspaceStats {
+        let fm = FileManager.default
+        let meetings: [(date: Date, parsed: TranscriptArchive.Parsed)] = workspaceTranscriptURLs().compactMap { url in
+            guard let parsed = TranscriptArchive.parse(url) else { return nil }
+            let date = ((try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? Date()
+            return (date, parsed)
+        }
+        return WorkspaceAnalytics.aggregate(meetings: meetings, now: Date())
+    }
+
     /// Build the Open Loops data: every unresolved 결정/액션/질문 pulled from each
     /// archived meeting's summary block, aged by the .md creation date and flagged
     /// when a later meeting re-mentions it. Computed on demand (like peopleAnalytics()).
