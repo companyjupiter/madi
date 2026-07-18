@@ -88,7 +88,7 @@
 <a class="nav-link" data-target="ko-05-summary"><span class="nav-num">05</span>AI 요약과 질의응답</a>
 <a class="nav-link" data-target="ko-06-review"><span class="nav-num">06</span>검토와 교정</a>
 <a class="nav-link" data-target="ko-07-workspace"><span class="nav-num">07</span>작업 폴더와 내보내기</a>
-<a class="nav-link" data-target="ko-08-dictation"><span class="nav-num">08</span>시스템 받아쓰기</a>
+<a class="nav-link" data-target="ko-08-dictation"><span class="nav-num">08</span>시스템 받아쓰기 (추후 제공)</a>
 <a class="nav-link" data-target="ko-09-settings"><span class="nav-num">09</span>설정</a></nav><main class="content"><section id="ko-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">시작하기</h1><p>Madi(마디)에 오신 것을 환영합니다. Madi는 회의를 <strong>전부 이 Mac 안에서</strong> 받아쓰고 옮기는 앱입니다. 실시간 받아쓰기, 오디오·영상 파일 전사, 화자 분리, 온디바이스 번역까지 — 모든 처리가 여러분의 Mac 안에서 일어납니다.</p>
 <h2 id="madi가-하는-일">Madi가 하는 일</h2>
 <ul>
@@ -98,7 +98,7 @@
 <li><strong>온디바이스 번역·통역</strong> — 한국어·English·日本語·中文을 실시간으로 옮기고, 화면 위 자막으로 띄웁니다.</li>
 <li><strong>AI 요약·질의응답</strong> — 회의가 끝나면 요약·결정·액션을 정리하고, 회의 내용에 대해 자연어로 질문할 수 있습니다.</li>
 <li><strong>검토와 교정</strong> — 잘못 들은 단어를 찾아 고치고, 고친 내용을 기억해 다음 회의에 적용합니다.</li>
-<li><strong>시스템 받아쓰기</strong> — 어느 앱에서나 단축키를 누르고 말하면 그 자리에 글로 들어갑니다.</li>
+<li><strong>시스템 받아쓰기</strong> <em>(추후 제공)</em> — 어느 앱에서나 단축키를 누르고 말하면 그 자리에 글로 들어가는 기능을 준비 중입니다.</li>
 </ul>
 <h3 id="100-온디바이스-내-데이터는-mac을-떠나지-않습니다">100% 온디바이스 — 내 데이터는 Mac을 떠나지 않습니다</h3>
 <p>Madi의 핵심 약속은 <strong>주권(sovereign)</strong> 입니다. 음성도, 전사문도, 번역도 클라우드로 전송되지 않습니다. 모델을 받아 둔 뒤에는 인터넷이 끊겨 있어도 동작합니다. 회의 내용은 오로지 여러분의 기기 안에만 존재합니다.</p>
@@ -124,9 +124,9 @@
 <ul>
 <li><strong>마이크</strong> — 녹음할 때. 녹음을 처음 시작할 때 요청합니다.</li>
 <li><strong>화면 기록</strong> — 시스템 오디오(Mac에서 재생되는 소리, 예: Zoom·Teams·YouTube)를 녹음할 때만. macOS가 오디오 캡처를 화면 기록 권한으로 묶어두기 때문이며, <strong>화면은 저장하지 않습니다.</strong></li>
-<li><strong>손쉬운 사용(Accessibility)</strong> — <strong>시스템 받아쓰기</strong>를 쓸 때만. 받아쓴 텍스트를 다른 앱에 넣으려면 필요합니다. (<strong>시스템 받아쓰기</strong> 참고.)</li>
+<p>(<strong>손쉬운 사용(Accessibility)</strong> 권한은 <strong>시스템 받아쓰기</strong>(추후 제공)에만 필요하며, 현재 베타에서는 요청하지 않습니다.)</p>
 </ul>
-<p>권한을 거부했다가 나중에 켜고 싶으면 <strong>시스템 설정 → 개인정보 보호 및 보안</strong>에서 해당 항목(마이크 / 화면 기록 / 손쉬운 사용)을 찾아 Madi를 켜면 됩니다.</p>
+<p>권한을 거부했다가 나중에 켜고 싶으면 <strong>시스템 설정 → 개인정보 보호 및 보안</strong>에서 해당 항목(마이크 / 화면 기록)을 찾아 Madi를 켜면 됩니다.</p>
 <h2 id="처음-실행-빠른-시작">처음 실행 빠른 시작</h2>
 <ol>
 <li>Madi를 엽니다. 첫 화면에 <strong>회의 정보</strong>와 <strong>시작하기</strong> 두 칸이 보입니다.</li>
@@ -515,46 +515,18 @@
 <blockquote><strong>참고:</strong> 실시간 마이크 녹음 세션에는 원본 파일이 없으므로 줄별 재생 버튼이 나타나지 않습니다.</blockquote>
 <h2 id="지난-회의-빨리-찾기">지난 회의 빨리 찾기</h2>
 <p><strong>⌘K</strong> 명령 팔레트에 회의 이름을 입력하면 저장된 회의록으로 바로 이동합니다. 화자 이름으로도 찾을 수 있습니다.</p></section>
-<section id="ko-08-dictation" class="doc"><div class="doc-num">08</div><h1 class="doc-title">시스템 받아쓰기</h1><p>받아쓰기는 macOS 어디서나 쓸 수 있는 Madi의 음성 입력 기능입니다. 전역 단축키를 누른 채 말하고 떼면, 말한 내용이 기기 안에서 글자로 바뀌어 지금 맨 앞에 있는 앱(메모, 메일, Slack, 코드 편집기 등)의 입력란에 그대로 들어갑니다. 100% 온디바이스 — 클라우드도, 계정도 없습니다.</p>
-<h2 id="사용법">사용법</h2>
-<ol>
-<li><strong>설정(⌘,) → 받아쓰기</strong> 에서 <strong>어디서나 받아쓰기 사용</strong> 을 켭니다.</li>
-<li>처음 켜면 <strong>손쉬운 사용</strong> 권한을 요청합니다(아래 참고).</li>
-<li>텍스트를 넣고 싶은 곳에 커서를 둡니다 — 어떤 앱이든 상관없습니다.</li>
-<li><strong>오른쪽 ⌥(Option)</strong> 키를 누른 채 말합니다(누르고 있는 동안만 녹음).</li>
-<li>키에서 손을 떼면 받아쓴 텍스트가 들어갑니다.</li>
-</ol>
-<h3 id="단축키-오른쪽-option">단축키: 오른쪽 ⌥ Option</h3>
-<p>단축키는 <strong>오른쪽 Option</strong> 키입니다. 누르고 있는 동안만 녹음하는 푸시투토크 방식이라, 떼는 순간 입력이 완료됩니다. 오른쪽 Option은 단독으로 쓰는 일이 거의 없고 ⌘K(명령 팔레트)와도 겹치지 않아 기본값으로 쓰입니다.</p>
-<blockquote>단축키는 지금 버전에서는 바꿀 수 없습니다.</blockquote>
-<h3 id="클립보드는-그대로-유지됩니다">클립보드는 그대로 유지됩니다</h3>
-<p>Madi는 텍스트를 넣을 때 먼저 현재 클립보드 내용을 저장하고, 받아쓴 텍스트를 붙여넣은 뒤, 원래 클립보드를 곧바로 되돌립니다. 따라서 복사해 둔 내용은 그대로 남아 있습니다. (붙여넣는 사이에 다른 앱이 클립보드를 바꿨다면, 그 내용을 덮어쓰지 않고 그대로 둡니다.)</p>
-<h2 id="필수-권한-손쉬운-사용">필수 권한 — 손쉬운 사용</h2>
-<p>받아쓰기가 다른 앱에 텍스트를 붙여넣으려면 macOS <strong>손쉬운 사용</strong> 권한이 필요합니다.</p>
-<ol>
-<li><strong>설정(⌘,) → 받아쓰기</strong> 에서 받아쓰기를 켭니다.</li>
-<li><strong>손쉬운 사용 권한</strong> 항목에서 상태를 확인합니다.</li>
+<section id="ko-08-dictation" class="doc"><div class="doc-num">08</div><h1 class="doc-title">시스템 받아쓰기 (추후 제공)</h1><blockquote><strong>준비 중 — 현재 베타에는 포함되지 않았습니다.</strong> 아래는 앞으로 제공될 기능 소개이며, 지금 버전에서는 설정에 <strong>받아쓰기 탭이 없고</strong> 단축키도 동작하지 않습니다.</blockquote>
+<p>시스템 받아쓰기는 macOS 어디서나 쓸 수 있는 음성 입력 기능으로 준비하고 있습니다. 전역 단축키를 누른 채 말하고 떼면, 말한 내용이 <strong>기기 안에서</strong> 글자로 바뀌어 지금 맨 앞에 있는 앱(메모, 메일, Slack, 코드 편집기 등)의 입력란에 그대로 들어가도록 하는 것이 목표입니다. 회의 전사·번역과 마찬가지로 100% 온디바이스로 동작하도록 설계하고 있습니다.</p>
+<h2 id="계획된-동작">계획된 동작</h2>
 <ul>
-<li><strong>허용됨</strong>: 바로 쓸 수 있습니다.</li>
-<li><strong>권한 필요</strong>: <strong>시스템 설정에서 허용</strong> 버튼을 누릅니다.</li>
+<li><strong>푸시투토크</strong> — 전역 단축키를 누르는 동안만 녹음하고, 떼는 순간 받아쓴 텍스트가 입력됩니다.</li>
+<li><strong>가볍고 빠르게</strong> — 큰 언어 모델을 올리지 않고, 받아쓰기 전용 음성 인식만 짧게 돌렸다가 종료하는 방식이라 메모리가 적은 Mac에서도 부담이 적습니다.</li>
+<li><strong>클립보드 보존</strong> — 텍스트를 넣을 때 기존 클립보드를 저장했다 곧바로 되돌립니다.</li>
+<li><strong>회의 녹음 중 비활성</strong> — 받아쓰기와 회의 녹음이 같은 마이크를 쓰므로 충돌을 막기 위해 녹음 중에는 꺼집니다.</li>
 </ul>
-<li>버튼을 누르면 시스템 설정의 <em>개인정보 보호 및 보안 → 손쉬운 사용</em> 으로 이동합니다. 거기서 Madi를 허용합니다.</li>
-<li>허용 후 이 창으로 돌아오면 상태가 자동으로 <strong>허용됨</strong> 으로 바뀝니다.</li>
-</ol>
-<p>권한이 없으면 받아쓰기는 동작하지 않습니다. 다만 조용히 실패하지 않고 “손쉬운 사용 권한이 필요합니다”라고 알려 줍니다.</p>
-<h2 id="회의-녹음-중에는-비활성화">회의 녹음 중에는 비활성화</h2>
-<p>회의를 녹음하는 동안에는 받아쓰기 단축키가 꺼집니다. 받아쓰기와 회의 녹음이 같은 물리 마이크를 쓰기 때문에 충돌을 막기 위함입니다. 이때 오른쪽 Option을 눌러도 “회의 녹음 중에는 받아쓰기를 사용할 수 없습니다”라는 짧은 안내가 표시되고, 녹음을 멈추면 다시 쓸 수 있습니다.</p>
-<h2 id="빠르고-가벼운-받아쓰기">빠르고 가벼운 받아쓰기</h2>
-<p>받아쓰기는 받아쓴 말을 가공 없이 그대로 입력합니다. 큰 언어 모델을 메모리에 올리지 않고, 받아쓰기 전용 음성 인식만 짧게 돌렸다가 끝나면 종료합니다. 그래서 번역 모델을 받지 않았더라도, 메모리가 적은 Mac에서도 가볍고 빠르게 동작합니다.</p>
-<blockquote>받아쓰기 언어는 <strong>설정 → 녹음 → 언어</strong> 에서 고른 회의 언어 설정을 따릅니다(기본값 한국어). 짧은 음성은 자동 감지가 빗나갈 수 있어, 자동을 고르지 않은 경우 지정한 언어로 고정해 인식합니다.</blockquote>
-<h2 id="설정-항목-정리-설정-받아쓰기">설정 항목 정리 (설정 → 받아쓰기)</h2>
-<ul>
-<li><strong>어디서나 받아쓰기 사용</strong> — 받아쓰기 켜기/끄기.</li>
-<li><strong>누르고 있는 동안 녹음</strong> — 단축키 안내(오른쪽 ⌥ Option). 읽기 전용입니다.</li>
-<li><strong>손쉬운 사용 권한</strong> — 현재 상태(허용됨 / 권한 필요)와 <strong>시스템 설정에서 허용</strong> 버튼.</li>
-<li><strong>현재</strong> — 지금 받아쓰기 상태: 꺼짐 / 대기 중 / 듣는 중… / 변환 중… / 입력 중…</li>
-</ul></section>
-<section id="ko-09-settings" class="doc"><div class="doc-num">09</div><h1 class="doc-title">설정</h1><p>설정 창은 <strong>⌘,(Command + 쉼표)</strong> 로 엽니다(왼쪽 패널의 톱니 버튼도 같습니다). 매 회의마다 만지는 것이 아니라 <strong>“한 번 정해 두는”</strong> 항목들이 여기에 모여 있습니다. 창 위쪽 탭으로 <strong>녹음 · 저장 · 번역 · 단어장 · 모델 · 받아쓰기</strong> 를 오갑니다.</p>
+<h2 id="지금은">지금은?</h2>
+<p>지금 버전에서 쓸 수 있는 기능은 <strong>회의 전사·화자 분리·온디바이스 번역·검토와 교정·AI 요약</strong>입니다. 시스템 받아쓰기는 이후 업데이트에서 제공될 예정입니다. 업데이트 확인은 <strong>Madi 메뉴 → 업데이트 설치…</strong> 에서 할 수 있습니다.</p></section>
+<section id="ko-09-settings" class="doc"><div class="doc-num">09</div><h1 class="doc-title">설정</h1><p>설정 창은 <strong>⌘,(Command + 쉼표)</strong> 로 엽니다(왼쪽 패널의 톱니 버튼도 같습니다). 매 회의마다 만지는 것이 아니라 <strong>“한 번 정해 두는”</strong> 항목들이 여기에 모여 있습니다. 창 위쪽 탭으로 <strong>녹음 · 저장 · 번역 · 단어장 · 모델</strong> 을 오갑니다.</p>
 <blockquote><strong>회의마다 바뀌는 것</strong>(입력·출력 언어, 회의 모드, 화자 수)은 설정이 아니라 <strong>첫 화면의 회의 정보</strong>에 있습니다. (<strong>녹음과 전사</strong> 참고.)</blockquote>
 <blockquote><strong>참고:</strong> <strong>녹음</strong> 탭의 설정은 녹음 중·일시정지 중에는 잠깁니다. 바꾸려면 녹음을 멈춘 뒤 조정하세요.</blockquote>
 <hr>
@@ -569,7 +541,7 @@
 <li><strong>마이크+시스템</strong> — 온라인 회의(내 목소리 + 상대방 소리)에 적합합니다.</li>
 </ul>
 <li><strong>마이크</strong> — (마이크 / 마이크+시스템일 때) 사용할 입력 장치. 기본은 “시스템 기본”.</li>
-<li><strong>언어</strong> — <strong>자동 감지 / 한국어 / English</strong> 중에서 받아쓰기 언어를 고정하거나 자동으로 둡니다. 시스템 받아쓰기도 이 설정을 따릅니다.</li>
+<li><strong>언어</strong> — <strong>자동 감지 / 한국어 / English</strong> 중에서 전사 언어를 고정하거나 자동으로 둡니다.</li>
 </ul>
 <h3 id="화자">화자</h3>
 <ul>
@@ -652,15 +624,7 @@
 <li><strong>Finder에서 보기</strong> — 모델 파일 위치를 엽니다.</li>
 </ul>
 <blockquote>번역 모델(DNA3.0-4B)은 <strong>번역</strong> 탭에서 관리합니다.</blockquote>
-<hr>
-<h2 id="받아쓰기">받아쓰기</h2>
-<p>어느 앱에서나 쓰는 시스템 전역 받아쓰기(푸시투토크) 설정입니다. 자세한 사용법은 <strong>시스템 받아쓰기</strong> 페이지를 참고하세요.</p>
-<ul>
-<li><strong>어디서나 받아쓰기 사용</strong> — 오른쪽 <strong>⌥(Option)</strong> 키를 누른 채 말하고 떼면, 어떤 앱이든 맨 앞 입력란에 받아쓴 텍스트가 들어갑니다.</li>
-<li><strong>누르고 있는 동안 녹음</strong> — 단축키 안내(오른쪽 ⌥ Option). 읽기 전용입니다.</li>
-<li><strong>손쉬운 사용 권한</strong> — 허용 여부와 <strong>시스템 설정에서 허용</strong> 버튼. 다른 앱에 텍스트를 넣으려면 필요하며, 허용 후 이 창으로 돌아오면 자동으로 인식됩니다.</li>
-<li><strong>현재</strong> — 받아쓰기의 현재 상태(꺼짐 / 대기 중 / 듣는 중… / 변환 중… / 입력 중…).</li>
-</ul></section><footer class="foot">모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.</footer></main></div>
+<blockquote><strong>시스템 받아쓰기</strong>는 추후 제공 예정이라, 현재 베타에는 <strong>받아쓰기 탭이 없습니다.</strong> (<strong>시스템 받아쓰기 (추후 제공)</strong> 참고.)</blockquote></section><footer class="foot">모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.</footer></main></div>
 <div class="lang-pane" data-lang="en" hidden><nav class="toc"><div class="toc-h">Contents</div><a class="nav-link" data-target="en-01-getting-started"><span class="nav-num">01</span>Getting started</a>
 <a class="nav-link" data-target="en-02-recording"><span class="nav-num">02</span>Recording and transcription</a>
 <a class="nav-link" data-target="en-03-speakers"><span class="nav-num">03</span>Speakers</a>
@@ -668,7 +632,7 @@
 <a class="nav-link" data-target="en-05-summary"><span class="nav-num">05</span>AI summary and Q&amp;A</a>
 <a class="nav-link" data-target="en-06-review"><span class="nav-num">06</span>Review and correction</a>
 <a class="nav-link" data-target="en-07-workspace"><span class="nav-num">07</span>Workspace and export</a>
-<a class="nav-link" data-target="en-08-dictation"><span class="nav-num">08</span>System dictation</a>
+<a class="nav-link" data-target="en-08-dictation"><span class="nav-num">08</span>System dictation (coming later)</a>
 <a class="nav-link" data-target="en-09-settings"><span class="nav-num">09</span>Settings</a></nav><main class="content"><section id="en-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">Getting started</h1><p>Welcome to Madi. Madi transcribes and translates your meetings <strong>entirely on this Mac</strong>. Live transcription, audio and video file transcription, speaker separation, on-device translation — every step happens inside your own machine.</p>
 <h2 id="what-madi-does">What Madi does</h2>
 <ul>
@@ -678,7 +642,7 @@
 <li><strong>On-device translation</strong> — renders Korean, English, Japanese and Chinese in real time, and can float them as captions over any window.</li>
 <li><strong>AI summary and Q&amp;A</strong> — distills the summary, decisions and actions when the meeting ends, and lets you ask about it in natural language.</li>
 <li><strong>Review and correction</strong> — finds words it wasn't sure about, lets you fix them, and remembers your fixes for next time.</li>
-<li><strong>System-wide dictation</strong> — hold a key in any app, speak, and your words land in the text field.</li>
+<li><strong>System-wide dictation</strong> <em>(coming later)</em> — a planned feature: hold a key in any app, speak, and your words land in the text field.</li>
 </ul>
 <h3 id="100-on-device-your-data-never-leaves-this-mac">100% on-device — your data never leaves this Mac</h3>
 <p>Madi's core promise is <strong>sovereignty</strong>. No audio, no transcript, no translation is ever sent to the cloud. Once the models are downloaded it works with the internet unplugged. Your meetings exist only on your device.</p>
@@ -704,9 +668,9 @@
 <ul>
 <li><strong>Microphone</strong> — to record. Asked when you first start a recording.</li>
 <li><strong>Screen Recording</strong> — only to capture system audio (sound playing on your Mac, e.g. Zoom, Teams, YouTube). macOS bundles audio capture into the Screen Recording permission; <strong>Madi never records your screen.</strong></li>
-<li><strong>Accessibility</strong> — only for <strong>system-wide dictation</strong>, so Madi can insert text into other apps. (See <strong>System dictation</strong>.)</li>
+<p>(The <strong>Accessibility</strong> permission is only for <strong>system-wide dictation</strong> (coming later), and the current beta doesn't request it.)</p>
 </ul>
-<p>If you deny a permission and want it later, open <strong>System Settings → Privacy &amp; Security</strong>, find the item (Microphone / Screen Recording / Accessibility) and enable Madi.</p>
+<p>If you deny a permission and want it later, open <strong>System Settings → Privacy &amp; Security</strong>, find the item (Microphone / Screen Recording) and enable Madi.</p>
 <h2 id="first-run-quick-start">First-run quick start</h2>
 <ol>
 <li>Open Madi. The first screen has two columns: <strong>Meeting info</strong> and <strong>Get started</strong>.</li>
@@ -1100,47 +1064,18 @@
 <blockquote><strong>Note:</strong> Live mic sessions have no source file, so per-line play buttons don't appear.</blockquote>
 <h2 id="finding-past-meetings-fast">Finding past meetings fast</h2>
 <p>Type a meeting's name into the <strong>⌘K</strong> command palette to jump straight to that saved transcript. You can search by speaker name too.</p></section>
-<section id="en-08-dictation" class="doc"><div class="doc-num">08</div><h1 class="doc-title">System dictation</h1><p>Dictation is Madi's voice input for anywhere in macOS. Hold a global hotkey, speak, release — and what you said is turned into text on-device and inserted into whatever app is frontmost (Notes, Mail, Slack, your code editor). 100% on-device — no cloud, no account.</p>
-<blockquote>The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.</blockquote>
-<h2 id="how-to-use-it">How to use it</h2>
-<ol>
-<li>Turn on <strong>어디서나 받아쓰기 사용</strong> (Enable dictation anywhere) in <strong>설정 (⌘,) → 받아쓰기</strong> (Settings → Dictation).</li>
-<li>The first time, it asks for <strong>Accessibility</strong> permission (see below).</li>
-<li>Put your cursor wherever you want the text — any app.</li>
-<li>Hold the <strong>right ⌥ (Option)</strong> key and speak (it only records while held).</li>
-<li>Release the key and the dictated text is inserted.</li>
-</ol>
-<h3 id="the-hotkey-right-option">The hotkey: right ⌥ Option</h3>
-<p>The hotkey is the <strong>right Option</strong> key. It's push-to-talk — recording only while held, so releasing completes the insert. Right Option is rarely used on its own and doesn't collide with ⌘K (the command palette), which is why it's the default.</p>
-<blockquote>The hotkey can't be changed in this version.</blockquote>
-<h3 id="your-clipboard-is-preserved">Your clipboard is preserved</h3>
-<p>Madi saves your current clipboard, pastes the dictated text, then immediately restores what was there. Anything you had copied is still there afterwards. (If another app changed the clipboard mid-paste, Madi leaves that content alone rather than clobbering it.)</p>
-<h2 id="required-permission-accessibility">Required permission — Accessibility</h2>
-<p>To paste text into other apps, dictation needs the macOS <strong>Accessibility</strong> permission.</p>
-<ol>
-<li>Turn on dictation in <strong>설정 (⌘,) → 받아쓰기</strong>.</li>
-<li>Check the <strong>손쉬운 사용 권한</strong> (Accessibility permission) row.</li>
+<section id="en-08-dictation" class="doc"><div class="doc-num">08</div><h1 class="doc-title">System dictation (coming later)</h1><blockquote><strong>In the works — not included in the current beta.</strong> The following describes a planned feature. In this version there is <strong>no 받아쓰기 (Dictation) tab</strong> in Settings and the hotkey does nothing.</blockquote>
+<p>System dictation is a planned voice-input feature for anywhere in macOS. The goal: hold a global hotkey, speak, release — and what you said is turned into text <strong>on-device</strong> and inserted into whatever app is frontmost (Notes, Mail, Slack, your code editor). Like meeting transcription and translation, it's designed to run 100% on-device.</p>
+<h2 id="planned-behavior">Planned behavior</h2>
 <ul>
-<li><strong>허용됨</strong> (Granted): ready to use.</li>
-<li><strong>권한 필요</strong> (Permission needed): press <strong>시스템 설정에서 허용</strong> (Allow in System Settings).</li>
+<li><strong>Push-to-talk</strong> — records only while the global hotkey is held; releasing inserts the text.</li>
+<li><strong>Light and fast</strong> — no large language model; a short dictation-only recognition pass that shuts down when done, so it stays light even on low-memory Macs.</li>
+<li><strong>Clipboard preserved</strong> — saves your clipboard before inserting and restores it right after.</li>
+<li><strong>Disabled while recording a meeting</strong> — dictation and meeting recording share the mic, so it's off during recording to avoid conflicts.</li>
 </ul>
-<li>That button opens <em>System Settings → Privacy &amp; Security → Accessibility</em>. Enable Madi there.</li>
-<li>Come back to this window and the status flips to <strong>허용됨</strong> automatically.</li>
-</ol>
-<p>Without the permission dictation won't work — but it won't fail silently either: it tells you "손쉬운 사용 권한이 필요합니다" (Accessibility permission required).</p>
-<h2 id="disabled-while-recording-a-meeting">Disabled while recording a meeting</h2>
-<p>The dictation hotkey is disabled while a meeting is recording, because dictation and meeting recording use the same physical microphone. Pressing right Option then shows a brief "회의 녹음 중에는 받아쓰기를 사용할 수 없습니다" (Dictation is unavailable while recording a meeting). Stop the recording and it works again.</p>
-<h2 id="fast-and-light">Fast and light</h2>
-<p>Dictation inserts what you said verbatim, with no rewriting. It never loads a large language model — it runs a short, dictation-only speech pass and shuts down when you're done. So it stays light and fast even on a Mac with little memory, and even if you never downloaded the translation model.</p>
-<blockquote>Dictation language follows the meeting language you picked in <strong>설정 → 녹음 → 언어</strong> (Settings → Recording → Language); the default is Korean. Auto-detect can miss on very short utterances, so unless you chose Auto, Madi pins recognition to the language you selected.</blockquote>
-<h2 id="settings-reference-설정-받아쓰기">Settings reference (설정 → 받아쓰기)</h2>
-<ul>
-<li><strong>어디서나 받아쓰기 사용</strong> (Enable dictation anywhere) — turn dictation on/off.</li>
-<li><strong>누르고 있는 동안 녹음</strong> (Hold to record) — shows the hotkey (right ⌥ Option). Read-only.</li>
-<li><strong>손쉬운 사용 권한</strong> (Accessibility permission) — current status (허용됨 / 권한 필요) and the <strong>시스템 설정에서 허용</strong> button.</li>
-<li><strong>현재</strong> (Current) — current dictation state: 꺼짐 (Off) / 대기 중 (Idle) / 듣는 중… (Listening) / 변환 중… (Transcribing) / 입력 중… (Inserting).</li>
-</ul></section>
-<section id="en-09-settings" class="doc"><div class="doc-num">09</div><h1 class="doc-title">Settings</h1><p>Open Settings with <strong>⌘, (Command + comma)</strong> — the gear button in the left panel does the same. This is where the <strong>"set it once"</strong> options live, rather than the things you touch every meeting. The tabs across the top are <strong>녹음 · 저장 · 번역 · 단어장 · 모델 · 받아쓰기</strong> (Recording · Save · Translation · Glossary · Model · Dictation).</p>
+<h2 id="for-now">For now</h2>
+<p>What you can use today is <strong>meeting transcription, speaker separation, on-device translation, review &amp; correction, and AI summary</strong>. System dictation is planned for a later update. Check for updates via <strong>Madi menu → 업데이트 설치… (Install update…)</strong>.</p></section>
+<section id="en-09-settings" class="doc"><div class="doc-num">09</div><h1 class="doc-title">Settings</h1><p>Open Settings with <strong>⌘, (Command + comma)</strong> — the gear button in the left panel does the same. This is where the <strong>"set it once"</strong> options live, rather than the things you touch every meeting. The tabs across the top are <strong>녹음 · 저장 · 번역 · 단어장 · 모델</strong> (Recording · Save · Translation · Glossary · Model).</p>
 <blockquote>The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.</blockquote>
 <blockquote><strong>Per-meeting choices</strong> (input/output language, meeting mode, speaker count) are <strong>not</strong> in Settings — they're on the first screen under <strong>회의 정보</strong> (Meeting info). See <strong>Recording and transcription</strong>.</blockquote>
 <blockquote><strong>Note:</strong> The <strong>녹음</strong> (Recording) tab is locked while recording or paused. Stop the recording to change it.</blockquote>
@@ -1156,7 +1091,7 @@
 <li><strong>마이크+시스템</strong> (Mic + system) — best for online meetings (your voice plus the other side).</li>
 </ul>
 <li><strong>마이크</strong> (Microphone) — which input device to use (when the source is 마이크 or 마이크+시스템). Default is "시스템 기본" (System default).</li>
-<li><strong>언어</strong> (Language) — pin the transcription language or leave it automatic: <strong>자동 감지</strong> (Auto-detect) <strong>/ 한국어 / English</strong>. System dictation follows this setting too.</li>
+<li><strong>언어</strong> (Language) — pin the transcription language or leave it automatic: <strong>자동 감지</strong> (Auto-detect) <strong>/ 한국어 / English</strong>.</li>
 </ul>
 <h3 id="화자-speakers">화자 (Speakers)</h3>
 <ul>
@@ -1239,15 +1174,7 @@
 <li><strong>Finder에서 보기</strong> (Show in Finder) — open the model's location.</li>
 </ul>
 <blockquote>The translation model (DNA3.0-4B) is managed on the <strong>번역</strong> (Translation) tab.</blockquote>
-<hr>
-<h2 id="받아쓰기-dictation">받아쓰기 (Dictation)</h2>
-<p>Settings for system-wide push-to-talk dictation. See the <strong>System dictation</strong> page for full usage.</p>
-<ul>
-<li><strong>어디서나 받아쓰기 사용</strong> (Enable dictation anywhere) — hold the right <strong>⌥ (Option)</strong> key, speak, release, and the text lands in the frontmost app's text field.</li>
-<li><strong>누르고 있는 동안 녹음</strong> (Hold to record) — shows the hotkey (right ⌥ Option). Read-only.</li>
-<li><strong>손쉬운 사용 권한</strong> (Accessibility permission) — whether it's granted, and the <strong>시스템 설정에서 허용</strong> (Allow in System Settings) button. Required to insert text into other apps; coming back to this window re-checks it automatically.</li>
-<li><strong>현재</strong> (Current) — current dictation state (꺼짐 / 대기 중 / 듣는 중… / 변환 중… / 입력 중…).</li>
-</ul></section><footer class="foot">Everything runs on this Mac — transcripts, translation and summaries never leave the device.</footer></main></div></div>
+<blockquote><strong>System dictation</strong> is coming later, so the current beta has <strong>no 받아쓰기 (Dictation) tab.</strong> (See <strong>System dictation (coming later)</strong>.)</blockquote></section><footer class="foot">Everything runs on this Mac — transcripts, translation and summaries never leave the device.</footer></main></div></div>
 </div>
 <script>
   var TAG={ko:'온디바이스 회의 인텔리전스',en:'On-device meeting intelligence'};

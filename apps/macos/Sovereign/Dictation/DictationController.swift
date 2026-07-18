@@ -48,6 +48,13 @@ final class DictationController {
 
     static let enabledKey = "dictationEnabled"
 
+    /// BETA: system-wide dictation is unwired from the shipping UI (the 받아쓰기
+    /// Settings tab is removed and the global hotkey never installs). Code is
+    /// preserved — flip this to true to restore the feature. Guarded at the one
+    /// entry point (installMonitorsIfTrusted) so a stale `enabled=true` on disk
+    /// from an earlier build still can't arm the Right-Option monitor.
+    static let featureEnabled = false
+
     // MARK: internals
 
     private var keyMonitor: Any?
@@ -95,6 +102,7 @@ final class DictationController {
     /// Called on launch, on enable-toggle, and after a trust prompt resolves.
     func installMonitorsIfTrusted() {
         removeMonitors()
+        guard Self.featureEnabled else { return }   // BETA: dictation unwired
         guard enabled else { return }
         guard refreshTrust(prompt: false) else { return }   // no point monitoring without trust
 

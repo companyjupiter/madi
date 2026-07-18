@@ -10,7 +10,7 @@ Welcome to Madi. Madi transcribes and translates your meetings **entirely on thi
 - **On-device translation** — renders Korean, English, Japanese and Chinese in real time, and can float them as captions over any window.
 - **AI summary and Q&A** — distills the summary, decisions and actions when the meeting ends, and lets you ask about it in natural language.
 - **Review and correction** — finds words it wasn't sure about, lets you fix them, and remembers your fixes for next time.
-- **System-wide dictation** — hold a key in any app, speak, and your words land in the text field.
+- **System-wide dictation** *(coming later)* — a planned feature: hold a key in any app, speak, and your words land in the text field.
 
 ### 100% on-device — your data never leaves this Mac
 
@@ -39,9 +39,9 @@ Madi doesn't ask for everything up front — it requests each permission **the f
 
 - **Microphone** — to record. Asked when you first start a recording.
 - **Screen Recording** — only to capture system audio (sound playing on your Mac, e.g. Zoom, Teams, YouTube). macOS bundles audio capture into the Screen Recording permission; **Madi never records your screen.**
-- **Accessibility** — only for **system-wide dictation**, so Madi can insert text into other apps. (See **System dictation**.)
+(The **Accessibility** permission is only for **system-wide dictation** (coming later), and the current beta doesn't request it.)
 
-If you deny a permission and want it later, open **System Settings → Privacy & Security**, find the item (Microphone / Screen Recording / Accessibility) and enable Madi.
+If you deny a permission and want it later, open **System Settings → Privacy & Security**, find the item (Microphone / Screen Recording) and enable Madi.
 
 ## First-run quick start
 
