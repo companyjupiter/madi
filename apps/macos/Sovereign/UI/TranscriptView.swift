@@ -61,6 +61,10 @@ struct TranscriptView: View {
     // Reports whether the content is scrolled down from the very top, so the
     // caller can show its top fade only while earlier text is hidden above.
     var onScrolledFromTopChange: ((Bool) -> Void)? = nil
+    // ⌘F find: highlight every occurrence of `findQuery` (case-insensitive) in each
+    // line; the line at `findCurrentLine` (the active match) gets a stronger fill.
+    var findQuery: String = ""
+    var findCurrentLine: UUID? = nil
     private var bodyFont: Font { .system(size: fontSize) }
 
     @State private var viewportH: CGFloat = 0
@@ -859,7 +863,28 @@ struct TranscriptView: View {
             marker.font = Theme.Fonts.overlap
             s += marker
         }
+        applyFindHighlight(&s, lineID: line.id)
         return s
+    }
+
+    /// ⌘F: paint every case-insensitive occurrence of the query behind the text.
+    /// Offsets computed on `String(s.characters)` map 1:1 to the character view (same
+    /// character sequence), so highlight ranges align with what's rendered.
+    private func applyFindHighlight(_ s: inout AttributedString, lineID: UUID) {
+        let q = findQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        let strong = lineID == findCurrentLine
+        let chars = s.characters
+        let text = String(chars)
+        var from = text.startIndex
+        while let r = text.range(of: q, options: .caseInsensitive, range: from..<text.endIndex) {
+            let startOff = text.distance(from: text.startIndex, to: r.lowerBound)
+            let len = text.distance(from: r.lowerBound, to: r.upperBound)
+            let lo = chars.index(chars.startIndex, offsetBy: startOff)
+            let hi = chars.index(lo, offsetBy: len)
+            s[lo..<hi].backgroundColor = strong ? Color.orange.opacity(0.6) : Color.yellow.opacity(0.4)
+            from = r.upperBound
+        }
     }
 
     // "Speaker N" (1-based) matches the redesign's side-panel share list, so the

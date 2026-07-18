@@ -58,6 +58,12 @@ struct SovereignApp: App {
                 Button("명령 팔레트") { session.showCommandPalette = true }
                     .keyboardShortcut("k", modifiers: .command)
             }
+            // ⌘F — find within the current transcript (Edit menu). Scene command for
+            // the same reliability reason as ⌘K; ContentView owns the find bar.
+            CommandGroup(after: .textEditing) {
+                Button("전사문에서 찾기") { session.showFindBar = true }
+                    .keyboardShortcut("f", modifiers: .command)
+            }
             // Replace the empty default Help menu: bundled user manual +
             // update / info (the latter two open dedicated windows).
             CommandGroup(replacing: .help) {

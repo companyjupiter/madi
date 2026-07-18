@@ -408,6 +408,11 @@ final class SessionController: EngineProcessDelegate {
     /// button whose ⌘K never reached the responder chain (it silently no-op'd).
     var showCommandPalette = false
 
+    /// ⌘F find-in-transcript bar visibility. Same rationale as showCommandPalette:
+    /// the app-scene menu command (Edit → 전사문에서 찾기) flips it, so the shortcut
+    /// registers reliably. The query/match state lives in ContentView.
+    var showFindBar = false
+
     // ── AI reconcile (post-session diarization/language correction) ──────────
     /// Opt-in: after a session, let the on-device LLM read the dialogue and fix
     /// obvious speaker splits/mislabels and wrong-language lines. Off by default.
