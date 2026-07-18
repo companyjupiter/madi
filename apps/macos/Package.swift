@@ -34,6 +34,7 @@ let package = Package(
                 "Transcript/WorkspaceRetrieval.swift",
                 "Transcript/PeopleAnalytics.swift",
                 "Transcript/WorkspaceAnalytics.swift",
+                "Transcript/TranscriptFind.swift",
                 "Transcript/PendingEnrollmentStore.swift",
                 "Transcript/VoiceprintStore.swift",
                 "Transcript/LiveActionRail.swift",

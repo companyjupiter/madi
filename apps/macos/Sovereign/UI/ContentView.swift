@@ -36,6 +36,12 @@ struct ContentView: View {
     @State private var review = ReviewController()
     @State private var scrollTarget: UUID? = nil
     @State private var scrollTick = 0
+    // ⌘F find-in-transcript (bar visibility lives on session.showFindBar so the
+    // scene command can open it). Matches navigate via scrollTarget/scrollTick.
+    @State private var findQuery = ""
+    @State private var findMatches: [UUID] = []
+    @State private var findIndex = 0
+    @FocusState private var findFocused: Bool
     @State private var transcriptScrolled = false   // top fade shows only when scrolled
     // Set to start language dropdowns: which panel is open ("input"/"output"),
     // and each trigger pill's frame in the card space for panel anchoring.
@@ -149,6 +155,7 @@ struct ContentView: View {
             // transition so a start-screen ⌘K can't pop the palette open once the working
             // layout appears.
             session.showCommandPalette = false
+            if session.showFindBar { closeFind() }   // same: don't leave find open across layouts
         }
         .onChange(of: session.phase) { _, new in
             if case .done = new, session.lastAutoSaved != nil {
@@ -398,6 +405,60 @@ struct ContentView: View {
 
     // MARK: transcript pane (left, flexible)
 
+    // MARK: ⌘F find bar — search within the currently open transcript
+    private var findBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Theme.Colors.textTertiary)
+            TextField("전사문에서 찾기", text: $findQuery)
+                .textFieldStyle(.plain).font(.system(size: 13))
+                .focused($findFocused)
+                .onSubmit { moveFind(1) }
+                .onChange(of: findQuery) { _, _ in recomputeFind(resetIndex: true) }
+            Group {
+                if !findMatches.isEmpty {
+                    Text("\(findIndex + 1) / \(findMatches.count)").foregroundStyle(Theme.Colors.textSecondary)
+                } else if !findQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Text("없음").foregroundStyle(Theme.Colors.textTertiary)
+                }
+            }
+            .font(.system(size: 12)).monospacedDigit()
+            Button { moveFind(-1) } label: { Image(systemName: "chevron.up") }
+                .buttonStyle(.plain).disabled(findMatches.isEmpty).help("이전")
+            Button { moveFind(1) } label: { Image(systemName: "chevron.down") }
+                .buttonStyle(.plain).disabled(findMatches.isEmpty).help("다음 (↩)")
+            Button { closeFind() } label: { Image(systemName: "xmark") }
+                .buttonStyle(.plain).keyboardShortcut(.cancelAction).help("닫기 (Esc)")
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(Capsule().fill(Theme.Colors.surfaceSunken))
+        .frame(maxWidth: 440)
+        // Keep matches fresh as new lines land during a live recording.
+        .onChange(of: session.transcript.displayLines.count) { _, _ in
+            if session.showFindBar { recomputeFind(resetIndex: false) }
+        }
+    }
+
+    private func recomputeFind(resetIndex: Bool) {
+        let pairs = session.transcript.displayLines.map { (id: $0.id, text: $0.text) }
+        findMatches = TranscriptFind.matchingLineIDs(pairs, query: findQuery)
+        if resetIndex { findIndex = 0 }
+        else if findIndex >= findMatches.count { findIndex = max(0, findMatches.count - 1) }
+        scrollToCurrentFind()
+    }
+    private func moveFind(_ d: Int) {
+        guard !findMatches.isEmpty else { return }
+        findIndex = ((findIndex + d) % findMatches.count + findMatches.count) % findMatches.count
+        scrollToCurrentFind()
+    }
+    private func scrollToCurrentFind() {
+        guard findIndex < findMatches.count else { return }
+        scrollTarget = findMatches[findIndex]; scrollTick += 1
+    }
+    private func closeFind() {
+        session.showFindBar = false
+        findQuery = ""; findMatches = []; findIndex = 0
+    }
+
     private var transcriptPane: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 20)   // top breathing room above the toolbar
@@ -407,6 +468,11 @@ struct ContentView: View {
             // still empty/loading — the pane frame shouldn't jump when the first
             // line lands.
             viewModeBar
+            if session.showFindBar {
+                findBar
+                    .padding(.top, 6)
+                    .onAppear { findFocused = true; recomputeFind(resetIndex: true) }
+            }
             // reconcile RESULT only (has an undo button, so it can't be a
             // transient status line); the in-progress state is the status line's.
             if session.reconcileNote != nil { reconcileBar }
@@ -444,7 +510,9 @@ struct ContentView: View {
                                    onRequestDetailed: { contentMode = false },
                                    onPlay: session.sourceMediaURL != nil ? { session.playLine($0) } : nil,
                                    playingLine: session.linePlayer.currentLine,
-                                   onScrolledFromTopChange: { transcriptScrolled = $0 })
+                                   onScrolledFromTopChange: { transcriptScrolled = $0 },
+                                   findQuery: session.showFindBar ? findQuery : "",
+                                   findCurrentLine: (session.showFindBar && findIndex < findMatches.count) ? findMatches[findIndex] : nil)
                         .frame(maxWidth: 700)
                         .frame(maxWidth: .infinity)
                         // Top+bottom fades (Figma 188:733 / 195:1039): scrolled
