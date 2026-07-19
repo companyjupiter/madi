@@ -1,19 +1,24 @@
 # Third-Party Licenses
 
-This project reuses two third-party machine-learning models. The full license
-texts are reproduced below; a summary of components and changes is in [`NOTICE`](NOTICE).
+This project reuses the third-party machine-learning models listed below. The full
+license texts are reproduced below; a summary of components and changes is in [`NOTICE`](NOTICE).
 
 | Component | Use | License |
 |---|---|---|
+| **DNA3.0-4B** (dnotitia; Qwen3.5-4B base) — translation + summary/Q&A | downloaded GGUF · `Contents/MacOS/translate-engine` | Apache-2.0 (§A) |
 | **WeSpeaker** ResNet34 (diarization) | `metal/diar_resnet.zig`, `assets/resnet34_diar.bin` | Apache-2.0 (§A) |
 | **OpenAI Whisper** large-v3-turbo (transcription) | `metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig` | MIT (§B) |
+| **Silero VAD** (voice-activity detection) | `assets/silero_vad.bin` | MIT (§C) |
+| **pyannote** (overlapped-speech detection) | `assets/pyannote_osd.bin` | MIT (§D) |
 
 ---
 
-## §A — WeSpeaker (Apache License 2.0)
+## §A — Apache License 2.0
 
-Speaker-embedding model from https://github.com/wenet-e2e/wespeaker
-Copyright (c) the WeSpeaker authors.
+Applies to the two Apache-2.0 components below; the full license text follows.
+
+- **WeSpeaker** speaker-embedding model — https://github.com/wenet-e2e/wespeaker — Copyright (c) the WeSpeaker authors.
+- **DNA3.0-4B** translation / summary model (dnotitia; base model Qwen3.5-4B) — https://huggingface.co/dnotitia/DNA3.0-4B — Copyright (c) Dnotitia Inc.; base model Copyright (c) Alibaba Cloud (Qwen).
 
 ```
                                  Apache License
@@ -204,6 +209,67 @@ Speech-recognition model from https://github.com/openai/whisper
 MIT License
 
 Copyright (c) 2022 OpenAI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+## §C — Silero VAD (MIT License)
+
+Voice-activity-detection model from https://github.com/snakers4/silero-vad
+
+```
+MIT License
+
+Copyright (c) 2020-present Silero Team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+## §D — pyannote (MIT License)
+
+Overlapped-speech-detection model from https://github.com/pyannote/pyannote-audio
+(model: https://huggingface.co/pyannote/segmentation-3.0)
+
+```
+MIT License
+
+Copyright (c) 2020 CNRS
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

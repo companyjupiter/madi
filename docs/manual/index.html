@@ -78,7 +78,7 @@
   <aside class="side">
     <div class="brand"><span class="dot"></span><b>Madi</b></div>
     <div class="tag" data-tag></div>
-    <div class="langbar"><button class="lang-btn on" data-lang="ko">한국어</button><button class="lang-btn" data-lang="en">English</button></div>
+    <div class="langbar"><button class="lang-btn on" data-lang="ko">한국어</button><button class="lang-btn" data-lang="en">English</button><button class="lang-btn" data-lang="ja">日本語</button></div>
     <div class="toc-host"></div>
   </aside>
   <div class="panes"><div class="lang-pane" data-lang="ko"><nav class="toc"><div class="toc-h">목차</div><a class="nav-link" data-target="ko-01-getting-started"><span class="nav-num">01</span>시작하기</a>
@@ -89,7 +89,8 @@
 <a class="nav-link" data-target="ko-06-review"><span class="nav-num">06</span>검토와 교정</a>
 <a class="nav-link" data-target="ko-07-workspace"><span class="nav-num">07</span>작업 폴더와 내보내기</a>
 <a class="nav-link" data-target="ko-08-dictation"><span class="nav-num">08</span>시스템 받아쓰기 (추후 제공)</a>
-<a class="nav-link" data-target="ko-09-settings"><span class="nav-num">09</span>설정</a></nav><main class="content"><section id="ko-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">시작하기</h1><p>Madi(마디)에 오신 것을 환영합니다. Madi는 회의를 <strong>전부 이 Mac 안에서</strong> 받아쓰고 옮기는 앱입니다. 실시간 받아쓰기, 오디오·영상 파일 전사, 화자 분리, 온디바이스 번역까지 — 모든 처리가 여러분의 Mac 안에서 일어납니다.</p>
+<a class="nav-link" data-target="ko-09-settings"><span class="nav-num">09</span>설정</a>
+<a class="nav-link" data-target="ko-10-open-source"><span class="nav-num">10</span>오픈소스 라이선스</a></nav><main class="content"><section id="ko-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">시작하기</h1><p>Madi(마디)에 오신 것을 환영합니다. Madi는 회의를 <strong>전부 이 Mac 안에서</strong> 받아쓰고 옮기는 앱입니다. 실시간 받아쓰기, 오디오·영상 파일 전사, 화자 분리, 온디바이스 번역까지 — 모든 처리가 여러분의 Mac 안에서 일어납니다.</p>
 <h2 id="madi가-하는-일">Madi가 하는 일</h2>
 <ul>
 <li><strong>실시간 전사</strong> — 마이크나 회의 음성을 들으며 말이 끝나기 무섭게 텍스트가 나타납니다.</li>
@@ -624,7 +625,16 @@
 <li><strong>Finder에서 보기</strong> — 모델 파일 위치를 엽니다.</li>
 </ul>
 <blockquote>번역 모델(DNA3.0-4B)은 <strong>번역</strong> 탭에서 관리합니다.</blockquote>
-<blockquote><strong>시스템 받아쓰기</strong>는 추후 제공 예정이라, 현재 베타에는 <strong>받아쓰기 탭이 없습니다.</strong> (<strong>시스템 받아쓰기 (추후 제공)</strong> 참고.)</blockquote></section><footer class="foot">모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.</footer></main></div>
+<blockquote><strong>시스템 받아쓰기</strong>는 추후 제공 예정이라, 현재 베타에는 <strong>받아쓰기 탭이 없습니다.</strong> (<strong>시스템 받아쓰기 (추후 제공)</strong> 참고.)</blockquote></section>
+<section id="ko-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">오픈소스 라이선스</h1><p>Madi는 대부분 자체 개발한 코드로 이루어져 있지만, 일부 서드파티 구성요소를 <strong>Apache License 2.0</strong> 하에 사용합니다. 라이선스가 요구하는 저작권·귀속(attribution) 고지는 그대로 유지합니다.</p>
+<h2 id="apache-license-2-0-구성요소">Apache License 2.0 구성요소</h2>
+<table><thead><tr><th>구성요소</th><th>Madi에서의 용도</th><th>출처</th><th>라이선스</th></tr></thead><tbody><tr><td><strong>DNA3.0-4B</strong> (dnotitia · Qwen3.5-4B 기반)</td><td>온디바이스 번역 및 회의 요약·질의응답</td><td><code>dnotitia/DNA3.0-4B</code> (베이스 <code>Qwen/Qwen3.5-4B</code>)</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>화자 분리(음성 임베딩)</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
+<ul>
+<li><strong>DNA3.0-4B</strong> — 디노티시아(dnotitia)가 Qwen3.5-4B를 한국어 중심으로 후처리 학습한 온디바이스 LLM입니다. 실시간 번역과 회의 요약·질의응답에 사용됩니다. 베이스 모델인 Qwen3.5-4B(Alibaba) 역시 Apache-2.0입니다.</li>
+<li><strong>WeSpeaker</strong> — ResNet34 화자 임베딩 모델로, 누가 언제 말했는지 구분하는 화자 분리에 사용됩니다.</li>
+</ul>
+<p>Apache License 2.0 전문: <a href="https://www.apache.org/licenses/LICENSE-2.0">apache.org/licenses/LICENSE-2.0</a></p>
+<blockquote>그 밖에 번들되는 구성요소를 포함한 전체 서드파티 고지는 저장소의 <code>NOTICE</code> 및 <code>THIRD_PARTY_LICENSES.md</code>에서 확인할 수 있습니다.</blockquote></section><footer class="foot">모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.</footer></main></div>
 <div class="lang-pane" data-lang="en" hidden><nav class="toc"><div class="toc-h">Contents</div><a class="nav-link" data-target="en-01-getting-started"><span class="nav-num">01</span>Getting started</a>
 <a class="nav-link" data-target="en-02-recording"><span class="nav-num">02</span>Recording and transcription</a>
 <a class="nav-link" data-target="en-03-speakers"><span class="nav-num">03</span>Speakers</a>
@@ -633,7 +643,8 @@
 <a class="nav-link" data-target="en-06-review"><span class="nav-num">06</span>Review and correction</a>
 <a class="nav-link" data-target="en-07-workspace"><span class="nav-num">07</span>Workspace and export</a>
 <a class="nav-link" data-target="en-08-dictation"><span class="nav-num">08</span>System dictation (coming later)</a>
-<a class="nav-link" data-target="en-09-settings"><span class="nav-num">09</span>Settings</a></nav><main class="content"><section id="en-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">Getting started</h1><p>Welcome to Madi. Madi transcribes and translates your meetings <strong>entirely on this Mac</strong>. Live transcription, audio and video file transcription, speaker separation, on-device translation — every step happens inside your own machine.</p>
+<a class="nav-link" data-target="en-09-settings"><span class="nav-num">09</span>Settings</a>
+<a class="nav-link" data-target="en-10-open-source"><span class="nav-num">10</span>Open-Source Licenses</a></nav><main class="content"><section id="en-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">Getting started</h1><p>Welcome to Madi. Madi transcribes and translates your meetings <strong>entirely on this Mac</strong>. Live transcription, audio and video file transcription, speaker separation, on-device translation — every step happens inside your own machine.</p>
 <h2 id="what-madi-does">What Madi does</h2>
 <ul>
 <li><strong>Live transcription</strong> — listens to your mic or meeting audio and puts text on screen almost as fast as you speak.</li>
@@ -1174,10 +1185,579 @@
 <li><strong>Finder에서 보기</strong> (Show in Finder) — open the model's location.</li>
 </ul>
 <blockquote>The translation model (DNA3.0-4B) is managed on the <strong>번역</strong> (Translation) tab.</blockquote>
-<blockquote><strong>System dictation</strong> is coming later, so the current beta has <strong>no 받아쓰기 (Dictation) tab.</strong> (See <strong>System dictation (coming later)</strong>.)</blockquote></section><footer class="foot">Everything runs on this Mac — transcripts, translation and summaries never leave the device.</footer></main></div></div>
+<blockquote><strong>System dictation</strong> is coming later, so the current beta has <strong>no 받아쓰기 (Dictation) tab.</strong> (See <strong>System dictation (coming later)</strong>.)</blockquote></section>
+<section id="en-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">Open-Source Licenses</h1><p>Madi is almost entirely original code, but it uses a few third-party components under the <strong>Apache License 2.0</strong>. Their copyright and attribution notices are retained as the license requires.</p>
+<h2 id="apache-license-2-0-components">Apache License 2.0 components</h2>
+<table><thead><tr><th>Component</th><th>Use in Madi</th><th>Source</th><th>License</th></tr></thead><tbody><tr><td><strong>DNA3.0-4B</strong> (dnotitia · Qwen3.5-4B base)</td><td>On-device translation and meeting summary / Q&amp;A</td><td><code>dnotitia/DNA3.0-4B</code> (base <code>Qwen/Qwen3.5-4B</code>)</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>Speaker diarization (voice embedding)</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
+<ul>
+<li><strong>DNA3.0-4B</strong> — an on-device LLM from dnotitia, post-trained on Qwen3.5-4B with a focus on Korean. It powers live translation and meeting summary / Q&amp;A. Its base model, Qwen3.5-4B (Alibaba), is also Apache-2.0.</li>
+<li><strong>WeSpeaker</strong> — a ResNet34 speaker-embedding model, used for diarization (telling who spoke when).</li>
+</ul>
+<p>Full Apache License 2.0 text: <a href="https://www.apache.org/licenses/LICENSE-2.0">apache.org/licenses/LICENSE-2.0</a></p>
+<blockquote>Complete third-party notices, including all other bundled components, are in the repository's <code>NOTICE</code> and <code>THIRD_PARTY_LICENSES.md</code>.</blockquote></section><footer class="foot">Everything runs on this Mac — transcripts, translation and summaries never leave the device.</footer></main></div>
+<div class="lang-pane" data-lang="ja" hidden><nav class="toc"><div class="toc-h">目次</div><a class="nav-link" data-target="ja-01-getting-started"><span class="nav-num">01</span>はじめに</a>
+<a class="nav-link" data-target="ja-02-recording"><span class="nav-num">02</span>録音と文字起こし</a>
+<a class="nav-link" data-target="ja-03-speakers"><span class="nav-num">03</span>話者</a>
+<a class="nav-link" data-target="ja-04-translation"><span class="nav-num">04</span>リアルタイム翻訳・通訳</a>
+<a class="nav-link" data-target="ja-05-summary"><span class="nav-num">05</span>AI 要約・質疑応答</a>
+<a class="nav-link" data-target="ja-06-review"><span class="nav-num">06</span>確認と修正</a>
+<a class="nav-link" data-target="ja-07-workspace"><span class="nav-num">07</span>ワークスペースとエクスポート</a>
+<a class="nav-link" data-target="ja-08-dictation"><span class="nav-num">08</span>システムディクテーション（音声入力・今後提供予定）</a>
+<a class="nav-link" data-target="ja-09-settings"><span class="nav-num">09</span>設定</a>
+<a class="nav-link" data-target="ja-10-open-source"><span class="nav-num">10</span>オープンソースライセンス</a></nav><main class="content"><section id="ja-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">はじめに</h1><p>Madi へようこそ。Madi は会議を<strong>すべてこの Mac の中で</strong>文字起こしし、翻訳するアプリです。リアルタイムの文字起こし、音声・動画ファイルの文字起こし、話者分離、オンデバイス翻訳まで — すべての処理があなた自身の Mac の中で行われます。</p>
+<h2 id="madi">Madi でできること</h2>
+<ul>
+<li><strong>リアルタイム文字起こし</strong> — マイクや会議の音声を聞き取り、話し終わるとほぼ同時に画面へ文字が表示されます。</li>
+<li><strong>ファイル・動画の文字起こし</strong> — 録音ファイルや動画をドロップすると、Madi が会話全体を書き起こします。</li>
+<li><strong>話者分離</strong> — 誰がいつ話したかを聞き分け、名前を付けられます。</li>
+<li><strong>オンデバイス翻訳</strong> — 韓国語・英語・日本語・中国語をリアルタイムで翻訳し、任意のウィンドウの上に字幕として重ねて表示できます。</li>
+<li><strong>AI 要約・質疑応答</strong> — 会議が終わると要約・決定事項・アクションを整理し、その内容について自然言語で質問できます。</li>
+<li><strong>レビューと修正</strong> — 聞き取りに自信のない単語を見つけて修正でき、修正した内容を記憶して次回に活かします。</li>
+<li><strong>システムディクテーション（音声入力）</strong> <em>(今後提供予定)</em> — どのアプリでもキーを押しながら話すと、その言葉がテキスト欄に入力される機能を準備中です。</li>
+</ul>
+<h3 id="100-mac">100% オンデバイス — データがこの Mac を離れることはありません</h3>
+<p>Madi の中心的な約束は<strong>主権（sovereignty）</strong>です。音声も、文字起こしも、翻訳も、クラウドへ送信されることは一切ありません。モデルをダウンロードした後は、インターネットに接続していなくても動作します。会議の内容はあなたのデバイスの中だけに存在します。</p>
+<h2 id="">モデルについて</h2>
+<p>Madi は 2 種類の AI モデルを使用します。</p>
+<ul>
+<li><strong>Whisper 音声モデル</strong> — 文字起こしを担当します。<strong>アプリに標準で同梱</strong>されており、別途ダウンロードする必要はありません。</li>
+<li><strong>DNA3.0-4B 言語モデル（約 2.6 GB）</strong> — <strong>翻訳</strong>、<strong>AI 修正</strong>、<strong>要約・質疑応答</strong>に使われます。アプリを軽く保つため、<strong>初めて使うときにダウンロード</strong>します。</li>
+<ul>
+<li>入手先: <strong>設定（⌘,）→ 翻訳</strong>の「翻訳モデルをダウンロード」ボタン。</li>
+<li>ダウンロードは約 <strong>2.6 GB</strong>、ディスク容量も同じだけ必要です。</li>
+</ul>
+</ul>
+<p>翻訳・要約・質疑応答を使わないのであれば、このモデルは不要です。文字起こしと話者分離は、同梱の Whisper モデルだけで完全に動作します。</p>
+<h2 id="">メモリについて（正直なところ）</h2>
+<ul>
+<li><strong>8 GB の Mac（例: M1 MacBook Air）</strong> — 文字起こしと話者分離は快適に動作します。</li>
+<li><strong>翻訳を使うと約 3 GB が追加で必要になります。</strong> 8 GB の Mac でも使えますが、メモリの余裕は少なくなります。</li>
+<li><strong>リアルタイムプレビュー</strong>を使うと、さらに約 830 MB 必要になります。</li>
+</ul>
+<h2 id="madi">Madi が求めることのある権限</h2>
+<p>Madi は必要な権限を最初にまとめて求めることはせず、<strong>その機能を初めて使うとき</strong>に必要なものだけを要求します。</p>
+<ul>
+<li><strong>マイク</strong> — 録音のため。初めて録音を開始するときに要求します。</li>
+<li><strong>画面収録の許可</strong> — システム音声（Mac で再生される音、例: Zoom・Teams・YouTube）を取り込むときのみ。macOS が音声キャプチャを画面収録の許可に含めているためであり、<strong>Madi が画面を記録することはありません。</strong></li>
+<p>（<strong>アクセシビリティ</strong>の権限は<strong>システムディクテーション（音声入力）</strong>（今後提供予定）にのみ必要で、現在のベータ版では要求しません。）</p>
+</ul>
+<p>権限を拒否した後で有効にしたい場合は、<strong>システム設定 → プライバシーとセキュリティ</strong>を開き、該当項目（マイク / 画面収録）で Madi をオンにしてください。</p>
+<h2 id="">初回起動クイックスタート</h2>
+<ol>
+<li>Madi を開きます。最初の画面には<strong>会議情報</strong>と<strong>はじめる</strong>の 2 つの列があります。</li>
+<li><strong>会議情報</strong>で、この会議に合わせて設定しておきます — 入力言語、（翻訳する場合は）出力言語、会議モード、話者数。</li>
+<li><strong>はじめる</strong>でマイクを選び、<strong>今すぐ録音を開始</strong>を押すか、音声・動画ファイルをドロップします。</li>
+<li>ウィンドウ中央にリアルタイムの文字起こしが表示されるのを確認します。</li>
+<li><strong>停止</strong>を押して終了します。自動保存がオンの場合、文字起こしはファイルに保存されます。</li>
+</ol>
+<blockquote>翻訳するには、まず<strong>設定（⌘,）→ 翻訳</strong>で翻訳モデル（約 2.6 GB）をダウンロードしてください。</blockquote>
+<h2 id="">ウィンドウの構成</h2>
+<p>録音を開始すると、ウィンドウは 3 つの列に分かれます。</p>
+<ul>
+<li><strong>左 — セッションパネル</strong>: 録音ボタン（一時停止・停止）、合計時間、話者バー、エネルギーフローのグラフ。設定（歯車）もここにあります。</li>
+<li><strong>中央 — 文字起こし</strong>: 話された内容。ここで読んだり編集したりします。</li>
+<li><strong>右 — ワークスペースエクスプローラー</strong>: 過去の会議、自動保存スイッチ、保存フォルダ、エクスポート。</li>
+</ul>
+<h2 id="">キーボードショートカット</h2>
+<table><thead><tr><th>ショートカット</th><th>機能</th></tr></thead><tbody><tr><td><strong>⌘,</strong></td><td>設定を開く</td></tr><tr><td><strong>⌘K</strong></td><td>コマンドパレット（下記参照）</td></tr><tr><td><strong>⌘R</strong></td><td>録音の開始 / 停止</td></tr><tr><td><strong>⌘P</strong></td><td>一時停止 / 再開</td></tr><tr><td><strong>⌘?</strong></td><td>このユーザーマニュアルを開く</td></tr></tbody></table>
+<h3 id="k">コマンドパレット（⌘K）</h3>
+<p><strong>⌘K</strong> を押すと検索ボックスが表示されます。メニューを探し回らずに、名前で直接実行できます。（View メニューの <strong>명령 팔레트</strong>（コマンドパレット）からも開けます。）</p>
+<ul>
+<li><strong>要約を生成 / 話者別要約</strong> — 会議の要約シートを開きます（文字起こしがある場合）。</li>
+<li><strong>新規セッション</strong> — 現在の文字起こしをクリアします。</li>
+<li><strong>ワークスペースフォルダを変更</strong> — ファイルの保存先を選びます。</li>
+<li><strong>話者の名前</strong> — この会議のその話者へ直接移動します。</li>
+<li><strong>過去の会議名</strong> — 保存されたその会議録を開き直します。</li>
+</ul>
+<h2 id="">ヘルプメニュー</h2>
+<ul>
+<li><strong>Madi ユーザーマニュアル（⌘?）</strong> — この文書を開きます。オフラインでも動作します。</li>
+<li><strong>アップデートをインストール…</strong> — 新しいバージョンを確認してインストールします。</li>
+<li><strong>情報</strong> — バージョンとライセンスを表示します。</li>
+</ul>
+<p>これで準備完了です。録音、話者、翻訳、ディクテーション、設定については、他のページをご覧ください。</p></section>
+<section id="ja-02-recording" class="doc"><div class="doc-num">02</div><h1 class="doc-title">録音と文字起こし</h1><p>Madi は会議の音声を人が話すそばからリアルタイムで文字起こしし、すでにお持ちの音声・動画ファイルも文字起こしできます。すべての処理はこの Mac の中で行われ、文字起こしの内容がデバイスを離れることはありません。</p>
+<blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
+<h2 id="">最初の画面 — 会議情報とはじめる</h2>
+<p>アプリを開くと、最初の画面が 2 つに分かれます。左側で <strong>これがどんな会議なのか</strong> を Madi に伝え、右側で <strong>開始</strong> します。</p>
+<h3 id="회의-정보">회의 정보（会議情報）— 左</h3>
+<p>録音を始める前にこれらを設定しておくと、結果の品質が向上します。<strong>録音中はロックされます。</strong></p>
+<ul>
+<li><strong>입력 언어</strong>（入力言語）— 話されている言語。自動検出するか、特定の言語に固定します。</li>
+<li><strong>출력 언어</strong>（出力言語）— 翻訳先の言語（複数選択可）。翻訳モデルが必要です。<strong>リアルタイム翻訳</strong>を参照してください。</li>
+<li><strong>회의 모드</strong>（会議モード）— 会議の性格。下記を参照してください。</li>
+<li><strong>화자</strong>（話者）— 部屋にいる人数。下記を参照してください。</li>
+</ul>
+<h3 id="시작하기">시작하기（はじめる）— 右</h3>
+<ul>
+<li><strong>파일로 시작하기</strong>（ファイルから開始）— ファイルを選ぶかドロップした後に押します。</li>
+<li><strong>지금 녹음 시작</strong>（今すぐ録音を開始）— マイクを選んですぐに録音します。</li>
+</ul>
+<h2 id="">リアルタイムのマイク録音</h2>
+<ol>
+<li><strong>시작하기</strong>（はじめる）でマイクを選びます（初期設定は「시스템 기본」/ システム標準）。</li>
+<li><strong>지금 녹음 시작</strong>（今すぐ録音を開始）を押します。録音が始まる前に短いカウントダウンが流れ、その間に<strong>キャンセル</strong>できます。</li>
+<li>話し始めると、ウィンドウ中央に文字起こしがリアルタイムで流れます。</li>
+<li>左パネルの <strong>일시 정지</strong>（一時停止、⌘P）で一時停止し、<strong>정지</strong>（停止、⌘R）で終了します。</li>
+</ol>
+<p><strong>参考</strong></p>
+<ul>
+<li>停止すると、そこまでに取り込んだ内容がまとめられます。自動保存がオンの場合、ファイルに保存されます。</li>
+<li>自動保存がオフの場合、終了する前に Madi が確認を表示します — <strong>내보내기</strong>（エクスポート）で先に保存できます。</li>
+</ul>
+<h3 id="에너지-흐름">에너지 흐름（エネルギーフロー）</h3>
+<p>左パネル下部の <strong>에너지 흐름</strong> グラフは、会議の雰囲気を 1 本の線で示します — <strong>発言の速さ・重なり・沈黙</strong>を総合した流れです。</p>
+<ul>
+<li><strong>グラフ上の一点をクリックすると、その箇所へ移動します。</strong> 会議で最も盛り上がった場面をすぐに探し出すのに便利です。</li>
+<li>十分な発言がたまる前は「발언이 쌓이면 흐름이 표시됩니다」（発言がたまると流れが表示されます）と案内されます。</li>
+</ul>
+<h3 id="">録音中のマイク切り替え</h3>
+<p>録音中は、左パネルの <strong>입력 마이크</strong>（入力マイク）の行で、<strong>録音を中断せずに</strong>マイクを切り替えられます — 会議の途中でヘッドセットを接続したときに便利です。</p>
+<h3 id="">話し終わるとすぐに字幕が表示されます</h3>
+<p>Madi は 1 つの区間（ウィンドウ）がいっぱいになるのを待ちません。<strong>話を止めて少しの間静かになると</strong>、Madi はその区間を早めに区切り、文字起こしをすぐに送り出します — 短くやり取りする会話（例: 診療相談）では待ち時間が大きく減ります。遠くから入ってくる小さな声が途切れないよう、しきい値は自動で調整されます。</p>
+<h2 id="zoom-teams">システム音声のキャプチャ（Zoom・Teams・動画）</h2>
+<p>Mac で再生されている音声（オンライン会議、動画など）をそのまま文字起こしできます。</p>
+<ol>
+<li><strong>설정 → 녹음 → 입력</strong>（設定 → 録音 → 入力）へ進みます。</li>
+<li><strong>음원</strong>（音源）で、音声の取り込み方法を選びます。</li>
+<ul>
+<li><strong>마이크</strong>（マイク）— 目の前の音だけ</li>
+<li><strong>시스템 오디오</strong>（システム音声）— Mac で再生されている音: Zoom・Teams・Slack・YouTube など</li>
+<li><strong>마이크+시스템</strong>（マイク＋システム）— オンライン会議向け: 自分の声と相手の声を一緒に</li>
+</ul>
+<li>いつものように録音を開始します。</li>
+</ol>
+<p><strong>参考</strong></p>
+<ul>
+<li>システム音声を初めて使うとき、macOS が<strong>画面収録</strong>の許可を求めます。使用されるのは音声のみで、画面が保存されることはありません。</li>
+</ul>
+<h2 id="">ファイルと動画の文字起こし</h2>
+<ol>
+<li>ファイルをウィンドウに<strong>ドロップ</strong>するか、<strong>파일 선택 or 드래그 앤 드롭</strong>（ファイル選択 or ドラッグ＆ドロップ）の領域をクリックして選びます。ドラッグ中は <strong>드롭하여 전사</strong>（ドロップして文字起こし）と表示されます。</li>
+<li><strong>파일로 시작하기</strong>（ファイルから開始）を押します。</li>
+<li>進行状況が <strong>전사 중 · N%</strong>（文字起こし中 · N%）と表示されます。</li>
+<li>完了すると、結果が画面に表示されます。</li>
+</ol>
+<p><strong>参考</strong></p>
+<ul>
+<li>ファイルを置いただけでは文字起こしは<strong>始まりません</strong> — <strong>파일로 시작하기</strong> を押す必要があります。その間に会議情報を先に調整できます。</li>
+<li>動画（mp4・mov・m4v・mkv・webm・avi など）から音声は自動的に抽出されます。別途の変換は不要です。</li>
+<li>ファイルの文字起こしで<strong>のみ</strong>使える機能が 2 つあります — 行単位の<strong>音声再生</strong>と<strong>耳で確認</strong>です。<strong>レビューと修正</strong>および<strong>ワークスペースとエクスポート</strong>を参照してください。</li>
+</ul>
+<h2 id="회의-모드">회의 모드（会議モード）</h2>
+<p>会議の性格に合わせて、話者数と強調する項目を一括で調整するプリセットです。最初の画面の <strong>회의 정보 → 회의 모드</strong>（会議情報 → 会議モード）で選びます。</p>
+<table><thead><tr><th>モード</th><th>調整される項目</th></tr></thead><tbody><tr><td><strong>일반</strong>（一般）</td><td>標準設定 · 話者を自動検出</td></tr><tr><td><strong>1:1</strong></td><td>話者 2 名 · 決定事項とフォローアップを強調</td></tr><tr><td><strong>스탠드업</strong>（スタンドアップ）</td><td>話者は自動 · アクションとブロッカーを強調</td></tr><tr><td><strong>인터뷰</strong>（面談）</td><td>話者 2 名 · 質問と回答の流れを保持</td></tr><tr><td><strong>강의</strong>（講義）</td><td>話者 1 名 · 要点を中心に整理</td></tr></tbody></table>
+<p><strong>参考</strong></p>
+<ul>
+<li>会議モードは録音を<strong>始める前に</strong>選んでください。録音中はロックされます。</li>
+</ul>
+<h2 id="화자">화자（話者数）</h2>
+<p>部屋にいる人数がわかっている場合は、設定すると話者分離が向上します。最初の画面の <strong>회의 정보 → 화자</strong>（会議情報 → 話者）で、<strong>자동</strong>（自動）<strong>/ 1명 / 2명 / 3명 / 4명 이상</strong>（1 名 / 2 名 / 3 名 / 4 名以上）から選びます。</p>
+<p>人数が確かなときに固定すると、話者の分かれ方がより正確になります。確信がない場合は <strong>자동</strong>（自動）のままにしてください。詳しくは<strong>話者</strong>ページを参照してください。</p>
+<h2 id="">文字起こし表示の切り替え</h2>
+<p>ウィンドウ上部のトグルで、2 つの表示を切り替えます。</p>
+<ul>
+<li><strong>내용</strong>（内容）— すっきり読みやすい文字起こし。初期設定で、読むのに最適です。</li>
+<li><strong>상세</strong>（詳細）— タイムコード、信頼度の低い単語（琥珀色でハイライト）、話者の重なり表示が加わります。確認・修正に最適です。</li>
+</ul>
+<p>文字サイズは上部の <strong>A− / A+</strong> ボタンで調整します。</p>
+<h2 id="">プライバシー</h2>
+<p>Madi のすべての文字起こしは、この Mac の中で処理されます。文字起こしの内容がデバイスを離れることは決してありません。</p></section>
+<section id="ja-03-speakers" class="doc"><div class="doc-num">03</div><h1 class="doc-title">話者</h1><p>Madi は会議中に誰が話したかを自動的に判別します。これらの処理はすべてこの Mac の中で行われます。</p>
+<blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
+<h2 id="">自動話者分離</h2>
+<p>録音と文字起こしを行っている間、Madi は発言を話者ごとに自動的に分けます。</p>
+<ul>
+<li>各話者には固有の<strong>色</strong>と <strong>화자 N</strong>（話者 N）ラベルが付きます。</li>
+<li>左パネルの<strong>話者バー</strong>が、会議全体で誰がいつ話したかを 1 行で示します。</li>
+</ul>
+<p><strong>参考</strong></p>
+<ul>
+<li>話者分離は <strong>설정 (⌘,) → 녹음 → 화자</strong>（設定 → 録音 → 話者）の <strong>화자 분리</strong>（話者分離）スイッチでオフにできます。</li>
+</ul>
+<h2 id="">話者数の固定</h2>
+<p>部屋にいる人数がわかっている場合は、設定すると精度が向上します。</p>
+<ol>
+<li>最初の画面で <strong>회의 정보 → 화자</strong>（会議情報 → 話者）へ進みます。</li>
+<li><strong>자동</strong>（自動）<strong>/ 1명 / 2명 / 3명 / 4명 이상</strong>（1 名 / 2 名 / 3 名 / 4 名以上）から選びます。</li>
+</ol>
+<p><strong>参考</strong></p>
+<ul>
+<li>人数が確かなときに固定すると、話者の分かれ方がより正確になります。確信がない場合は <strong>자동</strong>（自動）のままにしてください。</li>
+<li>録音を<strong>始める前に</strong>選んでください — 録音が始まるとロックされます。</li>
+</ul>
+<h3 id="미확인">미확인（未確認）話者</h3>
+<p>話者数を<strong>固定</strong>しているとき、指定した人物の誰とも明らかに一致しない声は、<strong>미확인</strong>（未確認）としてまとめられます。これにより、通りすがりの人の一言や突発的なノイズが、実際の話者の誰かに誤って割り当てられるのを防ぎます。</p>
+<ul>
+<li><strong>미확인</strong> は人物ではなく、「ここに入れる場所がない」ことを示します。名前を付けることはできません。</li>
+<li>人数を自動のままにしている場合は表示されません。</li>
+</ul>
+<h2 id="">話者に名前を付ける</h2>
+<ol>
+<li>文字起こしで、話者ラベル（例: <strong>화자 1</strong> / 話者 1）または話者チップをクリックします。</li>
+<li><strong>이름 (예: 김부장)</strong>（名前、例: キム部長）の欄に実際の名前を入力します。</li>
+<li><strong>저장</strong>（保存）を押します。入力した名前は、<strong>その話者のすべての発言とエクスポート</strong>に適用されます。</li>
+</ol>
+<p><strong>参考</strong></p>
+<ul>
+<li>名前は<strong>この文字起こしにのみ</strong>適用されます。Madi が次の会議で同じ人物を自動的に認識することはありません — 会議ごとに付け直します。</li>
+<li><strong>미확인</strong>（未確認）には名前を付けられません。</li>
+</ul>
+<h2 id="ai">AI 話者修正（録音終了後）</h2>
+<p>録音が終わると、オンデバイスの LLM が会話を読み取り、<strong>明らかな話者の誤分離</strong>を控えめに修正します — 1 人の発言が 2 人の話者に分かれてしまった場合や、ある行が別の人物に割り当てられてしまった場合を整理します。</p>
+<ul>
+<li><strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong>（設定 → 翻訳 → AI 修正（セッション終了後））の <strong>화자·언어 자동 교정</strong>（話者・言語の自動修正）でオン・オフを切り替えます。</li>
+<li>修正が適用されると、文字起こしの上に案内が表示され、<strong>화자 교정 되돌리기</strong>（話者修正を元に戻す）ボタンが付きます — <strong>1 回のクリックですべて元に戻せます。</strong></li>
+<li>翻訳モデル（DNA3.0-4B）が必要です。</li>
+</ul>
+<h2 id="">発言の重なりマーカー</h2>
+<p>2 人が同時に話すと、<strong>상세</strong>（詳細）表示に <strong>⟨+name 겹침⟩</strong>（重なり）マーカーが現れ、割り込んだ 2 人目の話者を示します。</p>
+<p><strong>参考</strong></p>
+<ul>
+<li>重なりマーカーは <strong>상세</strong>（詳細）表示で<strong>のみ</strong>表示されます。ウィンドウ上部で <strong>내용 → 상세</strong>（内容 → 詳細）に切り替えてください。</li>
+<li><strong>설정 (⌘,) → 녹음 → 화자</strong>（設定 → 録音 → 話者）の <strong>중첩 발화 감지</strong>（重なり発話の検出）が有効になっている必要があります。</li>
+</ul></section>
+<section id="ja-04-translation" class="doc"><div class="doc-num">04</div><h1 class="doc-title">リアルタイム翻訳・通訳</h1><p>Madi の翻訳は 100% お使いのデバイス上で動作します — クラウドもアカウントも不要です。会議の進行中、話された各行を韓国語・英語・日本語・中国語に翻訳し、原文のすぐ下に表示します。すべての処理はオンデバイスの LLM（DNA3.0-4B）が行います。</p>
+<blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
+<h2 id="">まず：翻訳モデルをダウンロード</h2>
+<p>翻訳には別途モデル（DNA3.0-4B、約 2.6 GB）が必要で、アプリには同梱されていません。最初に一度だけダウンロードします。</p>
+<ol>
+<li><strong>설정 (⌘,) → 번역</strong>（設定 → 翻訳）を開きます。</li>
+<li><strong>번역 모델 다운로드</strong>（翻訳モデルをダウンロード）を押します。</li>
+<li>完了すると、翻訳のオプションが使えるようになります。</li>
+</ol>
+<p>使用中は約 3 GB のメモリが追加で必要になります。モデルをインストールする前はトグルが無効で、「번역 모델을 먼저 다운로드하세요.」（先に翻訳モデルをダウンロードしてください。）と表示されます。</p>
+<blockquote><strong>번역 タブが表示されない場合</strong> — お使いのビルドには翻訳エンジンが含まれておらず、翻訳機能自体を利用できません。</blockquote>
+<h2 id="">出力言語を選ぶ</h2>
+<p>設定は 2 か所にありますが、内容は同じです。使いやすいほうをどうぞ。</p>
+<ul>
+<li><strong>첫 화면 → 회의 정보 → 출력 언어</strong>（最初の画面 → 会議情報 → 出力言語）— 会議を始めるときに。</li>
+<li><strong>설정 (⌘,) → 번역 → 실시간 번역 (다중 대상)</strong>（設定 → 翻訳 → リアルタイム翻訳・複数ターゲット）— 한국어 / English / 日本語 / 中文 のトグル。</li>
+</ul>
+<p>選んだすべての言語に各行を同時に翻訳し、原文のすぐ下に表示します。それぞれに言語タグが付きます。原文と同じ言語は自動的に除外されます。</p>
+<p><strong>参考</strong></p>
+<ul>
+<li>出力言語は <strong>最大 3 つ</strong> まで選べます。</li>
+<li>翻訳モデルがないと、出力言語はまったく選べません。</li>
+</ul>
+<h2 id="">翻訳はタイプされるように表示されます</h2>
+<p>Madi は翻訳が完成するまで待ちません。単語は生成されるそばから画面に表示されていきます。まだ書いている途中の行末にはカーソル <strong>▍</strong> が点滅し、途中で切れたのではなく続いていることが分かります。</p>
+<p>誰かがまだ話している間は、まず暫定的な翻訳が表示され、<strong>진행 중</strong>（進行中）と示されます。その行が確定すると、暫定訳はなめらかに確定訳へと切り替わります。確定訳が届くまで暫定訳は画面に残るため、翻訳が一瞬消える空白は生じません。</p>
+<h2 id="">対面通訳 — 双方向</h2>
+<p>Madi は、同じ部屋で異なる言語を話す 2 人（例: 韓国人スタッフと日本人・中国人の来訪者）のために設計されています。</p>
+<p><strong><code>한국어</code> ともう 1 つの言語だけ</strong> を有効にすると（例: 한국어 + 일본어）、双方向通訳モードになります。</p>
+<ul>
+<li><strong>方向は行ごとに判定されます。</strong> 日本語の行は韓国語にだけ、韓国語の行は日本語にだけ翻訳します。無駄がないぶん、より高速です。</li>
+<li><strong>言語を交互に話しても、両方が正しく文字起こしされます。</strong> セグメントごとに言語を再確認するため、一方が韓国語・もう一方が日本語で話しても、それぞれの発言が正確に書き起こされます。</li>
+<li>この組み合わせは、後述の応答速度の下限の対象外です。</li>
+</ul>
+<h2 id="">よく使うフレーズ辞書（即時翻訳）</h2>
+<p>同じ案内を繰り返す現場（例: 診察室での処置後の注意事項）向けに、よく使うフレーズの翻訳をあらかじめ登録しておけます。登録したフレーズと同じ言葉が出てくると、モデルを通さずに <strong>即時（0 秒）</strong> で翻訳が表示されます。</p>
+<p>いくつかのフレーズが最初から入っており、自分で追加・編集できます。</p>
+<ul>
+<li>ファイル: <code>~/Library/Application Support/Sovereign/faq_translations.json</code></li>
+<li>安全のため、<strong>完全に一致</strong> したときだけ動作します。</li>
+</ul>
+<h2 id="">応答速度と翻訳品質</h2>
+<p>出力言語を <strong>2 つ以上</strong> にすると、原文の行の区切りの誤りがすべての言語に波及してしまうため、応答速度は下限の <strong>보통 (7초)</strong>（標準 7 秒）まで下がります。<strong>빠름 (5초)</strong>（高速 5 秒）を選んでいた場合は、自動的に 7 秒になります。<strong>정확 (10초)</strong>（正確 10 秒）はそのまま使えます。</p>
+<blockquote><strong>例外：</strong> <strong>双方向</strong> モード（<code>한국어</code> + 他の言語ちょうど 1 つだけ）は強制されません。各行の実質的な翻訳対象が 1 つに減るためです。対面通訳では字幕がより速く表示されます。</blockquote>
+<p>翻訳が遅れると、<strong>「번역 중 · N줄 대기」</strong>（翻訳中・N 行待機）と表示されます。止まっているのではなく、順番に処理しているということです（モデルは一度に 1 行ずつ翻訳します）。</p>
+<h2 id="ai">AI 言語修正（録音終了後）</h2>
+<p>録音が終わると、オンデバイスの LLM が会話を読み取り、<strong>誤った言語で文字起こしされた行</strong> を控えめに修正します。<strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong>（設定 → 翻訳 → AI 修正（セッション終了後））の <strong>화자·언어 자동 교정</strong>（話者・言語の自動修正）で切り替えます。<strong>話者</strong> を参照してください。</p>
+<h2 id="">字幕オーバーレイ</h2>
+<p><strong>字幕オーバーレイ</strong> は、すべての最前面に浮かぶリアルタイム翻訳字幕のウィンドウです。Zoom や Teams の通話画面の上や、診察室のディスプレイの上に置いて、相手の話をリアルタイムで追えます。</p>
+<p>上部ツールバーの <strong>吹き出しアイコン</strong> でオン・オフします。<strong>出力言語を 1 つ以上選んで初めて、このボタンが表示されます。</strong></p>
+<ul>
+<li>ウィンドウは常に最前面にとどまりますが、フォーカスを奪わないため、通話アプリでクリックや入力を続けられます。</li>
+<li>フルスクリーンのアプリの上にも浮かび、背景をつかんで好きな場所へドラッグできます。</li>
+<li>いちばん大きな文字が翻訳文、その下の小さな文字が原文です。</li>
+<li>複数人いるときは、字幕にも <strong>話者の色と名前</strong> が付き、誰の発言か分かります。</li>
+<li>発話を待っている間は <strong>マイク入力レベルのバー</strong> が動き、システムが聞き取り中であることを知らせます。</li>
+<li>ステータス文（「진행 중 / 번역 중… / 음성을 기다리는 중…」）は <strong>見る人の言語で</strong> 表示されます — 日本語字幕なら「翻訳中…」、中国語字幕なら「翻译中…」。</li>
+</ul>
+<h3 id="">スタッフ字幕 + 患者字幕（デュアル表示）</h3>
+<p>診察室での通訳では、字幕を <strong>2 つ</strong> のパネルに分けられます。</p>
+<ul>
+<li><strong>スタッフ字幕</strong> — メイン画面に小さく、スタッフの言語で。</li>
+<li><strong>患者字幕</strong> — 外部モニターに大きく、離れた位置から読めるように、患者の言語で。</li>
+</ul>
+<p><strong>설정 (⌘,) → 녹음 → 자막 오버레이 (진료실)</strong>（設定 → 録音 → 字幕オーバーレイ（診察室））でオンにします。スタッフの文字サイズ（14–48 pt）、患者の文字サイズ（24–96 pt）、使用するディスプレイ、患者の言語を設定できます。大きなサイズは、診察チェアとディスプレイの間の 1.5–2.5 m の距離でも読みやすいように設計されています。</p></section>
+<section id="ja-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 要約・質疑応答</h1><p>文字起こしが終わると、オンデバイスの LLM が会議を構造化された要約にまとめ、その内容について自然言語で質問できます。要約と質疑応答は翻訳と同じモデル（DNA3.0-4B）を使い、<strong>文字起こしの内容も要約も、この Mac から外に出ることはありません。</strong></p>
+<blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
+<h2 id="">まず：翻訳・要約モデル</h2>
+<p>要約と質疑応答は、翻訳と同じオンデバイスモデル（DNA3.0-4B、約 2.6 GB）を使います。これがないと、<strong>要約ボタンが表示されません。</strong> ダウンロード方法は <strong>リアルタイム翻訳・通訳</strong> または <strong>設定</strong> のページを参照してください。</p>
+<h2 id="">会議の要約を作成する</h2>
+<ol>
+<li>文字起こしが終わったあと（録音中はできません）、上部ツールバーの <strong>✦（キラキラ）ボタン</strong> を押します。または <strong>⌘K</strong> のコマンドパレットから <strong>요약 생성</strong>（要約を生成）を選びます。</li>
+<li><strong>회의 요약</strong>（会議の要約）シートが開き、ローカル LLM が要約を生成します。「文字起こしの内容はこの Mac から外に出ません」という案内も表示されます。</li>
+<li>上部の <strong>전체 / 화자별</strong>（全体 / 話者別）トグルで表示を切り替えます。</li>
+<ul>
+<li><strong>전체</strong>（全体）— 会議全体の要約・アクション項目・決定事項。</li>
+<li><strong>화자별</strong>（話者別）— 各話者が何について話したか（最初に選んだときに生成されます）。</li>
+</ul>
+</ol>
+<p><strong>参考</strong></p>
+<ul>
+<li>✦ ボタンは、文字起こしがあり、録音中でないときだけ有効になります。文字起こしが空のときは淡色表示になります。</li>
+</ul>
+<h3 id="">要約シートのボタン</h3>
+<ul>
+<li><strong>복사</strong>（コピー）— 要約テキストをクリップボードにコピーします。</li>
+<li><strong>다시 생성</strong>（再生成）— 同じ文字起こしから要約を新しく生成します。</li>
+<li><strong>슬라이드(HTML)</strong>（スライド（HTML））— オフラインで開ける HTML スライドを書き出し、Finder で表示します。</li>
+<li><strong>리캡 카드</strong>（リキャップカード）— 共有できる 1 ページの要約を開きます（下記参照）。</li>
+<li><strong>내보내기…</strong>（エクスポート…）— 要約を <code>.md</code> ファイルとして保存します。</li>
+</ul>
+<h2 id="">リキャップカード</h2>
+<p>会議を 1 ページにまとめた、共有用の要約です。要約シートの <strong>리캡 카드</strong>（リキャップカード）で開きます。次の内容が入っています。</p>
+<ul>
+<li>タイトル + 日付</li>
+<li>TL;DR（要点）</li>
+<li>決定事項のリスト</li>
+<li>担当者別のアクション項目</li>
+<li>話者ごとの発話時間</li>
+<li>一行の引用</li>
+</ul>
+<p><strong>복사</strong>（コピー）で Markdown としてコピーするか、<strong>내보내기…</strong>（エクスポート…）でファイルとして保存できます。</p>
+<h2 id="">議事録に質問（質疑応答）</h2>
+<p>会議の内容を自然言語で質問すると、ローカル LLM が文字起こしを根拠に答えます。要約シートの下部にあります。</p>
+<ol>
+<li><strong>회의록에 물어보기</strong>（議事録に質問）欄に質問を入力します。例:「무엇을 결정했나요?」（何を決めましたか？）、「김부장이 맡은 일은?」（キム部長の担当は？）。</li>
+<li>紙飛行機ボタンを押すか、Enter を押します。</li>
+<li><strong>이 회의 / 전체 워크스페이스</strong>（この会議 / ワークスペース全体）トグルで範囲を決めます。</li>
+<ul>
+<li><strong>이 회의</strong>（この会議）— いま開いている文字起こしからのみ回答します。</li>
+<li><strong>전체 워크스페이스</strong>（ワークスペース全体）— 保存された <strong>すべての</strong> 文字起こしを横断して検索します。例:「지난달 보안 결정은?」（先月のセキュリティに関する決定は？）。</li>
+</ul>
+</ol>
+<p><strong>参考</strong></p>
+<ul>
+<li>回答中は「로컬 LLM이 답하는 중…」（ローカル LLM が回答中…）と表示されます。</li>
+</ul>
+<h2 id="">プライバシー</h2>
+<p>要約も質疑応答も、この Mac 上で動作します。文字起こしの内容も要約も、この端末から外に出ることはありません。</p></section>
+<section id="ja-06-review" class="doc"><div class="doc-num">06</div><h1 class="doc-title">確認と修正</h1><p>文字起こしが終わったら、きれいに読むことも、細かく見て修正することもできます。Madi はあなたが行った修正を記憶し、次の会議で自動的に適用します。</p>
+<blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
+<h2 id="내용-상세">내용（内容）と 상세（詳細）の表示</h2>
+<p>ウィンドウ上部の切り替えスイッチで、2 つの表示を行き来します。</p>
+<ul>
+<li><strong>내용</strong>（内容）— タイムコードやマーカーのない、すっきりした表示。</li>
+<li><strong>상세</strong>（詳細）— タイムコード、低信頼度の単語（琥珀色）、話者の重なりマーカー（<strong>⟨+name 겹침⟩</strong>）を追加します。</li>
+</ul>
+<p>確認と編集は <strong>상세</strong>（詳細）表示で行います。</p>
+<h2 id="">行を編集する</h2>
+<ol>
+<li>修正したい行を <strong>ダブルクリック</strong> します（または <strong>상세</strong>（詳細）表示で鉛筆ボタン。ツールチップは <strong>「이 문장 편집」</strong>（この文を編集））。</li>
+<li><strong>내용</strong>（内容）表示からダブルクリックすると、自動的に <strong>상세</strong>（詳細）表示に切り替わり、エディターが開きます。</li>
+<li>テキストを修正して <strong>저장</strong>（保存、⌘↩）を押します。取り消すには <strong>취소</strong>（キャンセル、Esc）。</li>
+<li>編集した行には <strong>편집됨</strong>（編集済み）マークが付きます。</li>
+</ol>
+<p>原文を編集すると、古いテキストから生成中だった翻訳は破棄され、修正後のテキストで再実行されます。遅れて届いた AI の結果が、あなたの修正を上書きすることはありません。</p>
+<h2 id="">翻訳文を修正する</h2>
+<p>確定した翻訳を <strong>ダブルクリック</strong> すると、<strong>번역 교정</strong>（翻訳の修正）欄が開き、その言語の翻訳を直接修正できます。</p>
+<ul>
+<li>保存した翻訳には鉛筆マークが付き、複数ターゲット翻訳の他の言語はそのまま保たれます。</li>
+<li>修正した原文・翻訳・話者名は Markdown と JSON に保存され、Markdown の文字起こしを開き直しても翻訳は保持されます。</li>
+<li>SRT/VTT は常に、最終的に修正された原文を使います。</li>
+</ul>
+<h2 id="검토-필요">검토 필요（要確認）— 低信頼度の単語をまとめて確認</h2>
+<p><strong>상세</strong>（詳細）表示は、信頼度のしきい値（既定 0.55）を下回って認識された単語を琥珀色で強調します。</p>
+<ol>
+<li>上部のバーに <strong>검토 필요 N개</strong>（要確認 N 件）と、現在位置（<strong>N/全体</strong>）が表示されます。</li>
+<li><strong>∧</strong>（前の要確認単語）と <strong>∨</strong>（次の要確認単語）で、単語間を移動します。</li>
+<li>一つずつ確認し、必要ならその場で修正します。</li>
+</ol>
+<p>しきい値は <strong>설정 (⌘,) → 저장 → 음성 인식</strong>（設定 → 保存 → 音声認識）の <strong>저신뢰 표시 기준 (VAD)</strong>（低信頼度のしきい値（VAD））で調整します。値を上げると、より多くの単語が要確認になります。</p>
+<h2 id="">耳で確認する</h2>
+<p>ファイルから文字起こししたセッションでは、Madi が要確認の各単語の音声を再生するので、耳で確認できます。</p>
+<ol>
+<li>確認バーの再生ボタン（ツールチップ <strong>「저신뢰 단어 귀로 검토」</strong>（低信頼度の単語を耳で確認））を押します。</li>
+<li>要確認の単語が順に再生され、自動的に次へ進みます（ハンズフリー）。進行状況は <strong>재생 N/전체</strong>（再生 N/全体）と表示されます。</li>
+<li>もう一度同じボタンを押すと停止します（ツールチップ <strong>「귀로 검토 멈춤」</strong>（耳での確認を停止））。</li>
+</ol>
+<blockquote><strong>注記：</strong> 耳で確認できるのは、元のメディアが存在する <strong>ファイル文字起こしのときだけ</strong> です。リアルタイムのマイク録音には元ファイルがないため、表示されません。</blockquote>
+<h2 id="ai">AI 修正（録音終了後）</h2>
+<p>録音が終わると、オンデバイスの LLM が会話全体を読み取り、<strong>明らかな話者の誤分割</strong> と <strong>誤った言語で文字起こしされた行</strong> を控えめに修正します。</p>
+<ul>
+<li><strong>オンにする：</strong> <strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong>（設定 → 翻訳 → AI 修正（セッション終了後））の <strong>화자·언어 자동 교정</strong>（話者・言語の自動修正）。</li>
+<li>修正が適用されると、文字起こしの上に案内が表示され、<strong>화자 교정 되돌리기</strong>（話者修正を元に戻す）ボタンが付きます — <strong>1 回のクリックですべて元に戻せます。</strong></li>
+<li>翻訳モデル（DNA3.0-4B）が必要です。</li>
+</ul>
+<h2 id="">個人用語集 — あなたの修正から学習する</h2>
+<p>文字起こしの 1 行を修正すると、Madi はその修正を学習します。<strong>단어장</strong>（用語集）スイッチをオンにしておくと、次の会議で同じ専門用語や名前の誤認識を自動的に修正します。</p>
+<p><strong>オンにする：</strong> <strong>설정 (⌘,) → 단어장</strong>（設定 → 用語集）タブで、<strong>학습한 교정 자동 적용</strong>（学習した修正の自動適用）をオンにします。</p>
+<blockquote><strong>注記：</strong> 学習はスイッチに関係なく <strong>常に</strong> 行われ、このスイッチが切り替えるのは <em>適用</em> だけです。そのためオンにすると、それまでに学習した内容がただちに適用されます。</blockquote>
+<h3 id="">自動適用の基準（最小確認回数）</h3>
+<ul>
+<li><strong>최소 확인 횟수</strong>（最小確認回数）スライダーで、同じ修正を何回確認したら信頼して自動適用するか（1–5 回）を設定します。</li>
+<li>値が大きいほど控えめになります — 偶発的な編集 1 回が、あとの文字起こしを上書きしてしまうのを防ぎます。</li>
+</ul>
+<h3 id="">学習した修正の管理</h3>
+<p><strong>설정 → 단어장</strong>（設定 → 用語集）タブの一覧で、学習したルールを管理します。</p>
+<ul>
+<li>各ルールは <code>誤った単語 → 正しい単語</code> のように、確認回数とともに表示されます。</li>
+<li>ルールの隣のゴミ箱ボタンで、そのルールだけを忘れさせます。</li>
+<li><strong>전체 지우기</strong>（すべて削除）で、すべて消去します。</li>
+</ul>
+<h2 id="">テキストの選択とコピー</h2>
+<p>文字起こし全体をドラッグで選択し、<strong>⌘C</strong> でコピーできます。</p></section>
+<section id="ja-07-workspace" class="doc"><div class="doc-num">07</div><h1 class="doc-title">ワークスペースとエクスポート</h1><p>Madi は保存フォルダ全体を 1 つのワークスペースとして表示します。ウィンドウ右側の<strong>ワークスペースエクスプローラー</strong>では、過去の会議を開き直したり、保存先を変更したり、必要な形式でエクスポートしたりできます。</p>
+<blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
+<h2 id="">ワークスペースエクスプローラー</h2>
+<p>エクスプローラーはウィンドウの右側に<strong>常に表示</strong>されます。上部は会議の一覧、下部は自動保存・フォルダ・エクスポートの操作部です。</p>
+<h3 id="">会議一覧</h3>
+<ul>
+<li><strong>파일</strong>（ファイル）タブには、保存フォルダ内の会議記録が新しい順に積み重なって表示されます。</li>
+<li>会議記録をクリックすると、その会議が画面に再び開きます。</li>
+</ul>
+<h2 id="">自動保存</h2>
+<ul>
+<li><strong>자동저장</strong>（自動保存）スイッチをオンにしておくと、文字起こしが終わったときに会議記録が <strong>Markdown（.md）</strong> として保存されます。</li>
+<li><strong>폴더</strong>（フォルダ）の行に現在の保存先が表示されます。<strong>변경</strong>（変更）を押すと別のフォルダを選べます。</li>
+<li>選んだフォルダは、<strong>保存</strong>と<strong>エクスポート</strong>の両方の初期設定の保存先になります。</li>
+</ul>
+<blockquote>同じ設定は <strong>설정 (⌘,) → 저장</strong>（設定 → 保存）タブにもあります。使いやすい方で変更してください。</blockquote>
+<p><strong>ヒント</strong> — <strong>⌘K</strong> を押して <strong>작업 폴더 변경</strong>（ワークスペースフォルダを変更）と入力すれば、すぐにフォルダを選べます。</p>
+<h2 id="">エクスポート</h2>
+<p>エクスプローラー下部の <strong>내보내기</strong>（エクスポート）ボタンを押すと、<strong>내보내기 형식</strong>（エクスポート形式）を尋ねられます。形式を選ぶと、保存先を指定できます。</p>
+<table><thead><tr><th>形式</th><th>用途</th></tr></thead><tbody><tr><td><strong>Markdown (.md)</strong></td><td>Markdown 形式の会議記録。話者名・翻訳・修正も含まれます</td></tr><tr><td><strong>Subtitles (.srt)</strong></td><td>SRT 字幕</td></tr><tr><td><strong>Subtitles (.vtt)</strong></td><td>VTT 字幕</td></tr><tr><td><strong>Plain text (.txt)</strong></td><td>プレーンテキスト</td></tr><tr><td><strong>JSON (.json)</strong></td><td>JSON データ</td></tr></tbody></table>
+<p><strong>参考</strong></p>
+<ul>
+<li>文字起こしが空のときは、<strong>내보내기</strong>（エクスポート）ボタンが淡色表示になります。</li>
+<li>SRT/VTT は常に、最終的に修正された原文を使用します。<strong>レビューと修正</strong>を参照してください。</li>
+</ul>
+<h2 id="">クリックしてその瞬間を聞く</h2>
+<p>オーディオ・動画<strong>ファイルを読み込んで文字起こししたセッション</strong>（元のファイルがディスク上に残っている場合）では、各行に再生ボタンが表示されます。</p>
+<ol>
+<li>聞きたい行の再生ボタン（ツールチップ <strong>「이 구간 오디오 재생」</strong>（この区間の音声を再生））を押します。</li>
+<li>その行が話された正確な瞬間から、元のメディアが再生されます。</li>
+</ol>
+<blockquote><strong>参考：</strong> リアルタイムのマイク録音セッションには元のファイルがないため、行ごとの再生ボタンは表示されません。</blockquote>
+<h2 id="">過去の会議をすばやく探す</h2>
+<p><strong>⌘K</strong> のコマンドパレットに会議名を入力すると、保存された会議記録へ直接移動できます。話者名でも検索できます。</p></section>
+<section id="ja-08-dictation" class="doc"><div class="doc-num">08</div><h1 class="doc-title">システムディクテーション（音声入力・今後提供予定）</h1><blockquote><strong>準備中 — 現在のベータには含まれていません。</strong> 以下は今後提供予定の機能の紹介です。このバージョンでは設定に <strong>받아쓰기（ディクテーション）タブがなく</strong>、ショートカットキーも動作しません。</blockquote>
+<p>システムディクテーション（音声入力）は、macOS のどこでも使える音声入力機能として準備を進めています。グローバルショートカットキーを押したまま話し、離すと、話した内容が<strong>デバイス上で</strong>文字に変換され、そのとき最前面にあるアプリ（メモ、メール、Slack、コードエディタなど）の入力欄にそのまま入力される — これが目標です。会議の文字起こし・翻訳と同様に、100% オンデバイスで動作するように設計しています。</p>
+<h2 id="">予定している動作</h2>
+<ul>
+<li><strong>プッシュトゥトーク</strong> — グローバルショートカットキーを押している間だけ録音し、離した瞬間に書き取ったテキストが入力されます。</li>
+<li><strong>軽快で高速</strong> — 大規模言語モデルを読み込まず、ディクテーション専用の音声認識だけを短時間実行して終了する方式のため、メモリの少ない Mac でも負担が少なくて済みます。</li>
+<li><strong>クリップボードの保持</strong> — テキストを入力する際に既存のクリップボードを保存し、直後に元へ戻します。</li>
+<li><strong>会議の録音中は無効</strong> — ディクテーションと会議の録音は同じマイクを使うため、競合を防ぐために録音中はオフになります。</li>
+</ul>
+<h2 id="">現時点では</h2>
+<p>現在のバージョンで使える機能は、<strong>会議の文字起こし・話者分離・オンデバイス翻訳・レビューと修正・AI 要約</strong>です。システムディクテーションは今後のアップデートで提供予定です。アップデートの確認は <strong>Madi メニュー → 업데이트 설치…</strong>（アップデートをインストール…）から行えます。</p></section>
+<section id="ja-09-settings" class="doc"><div class="doc-num">09</div><h1 class="doc-title">設定</h1><p>設定は <strong>⌘,（Command + カンマ）</strong> で開きます（左パネルの歯車ボタンでも同じです）。ここには、会議のたびに操作するものではなく、<strong>「一度だけ決めておく」</strong> 項目がまとまっています。ウィンドウ上部のタブで <strong>녹음 · 저장 · 번역 · 단어장 · 모델</strong>（録音 · 保存 · 翻訳 · 用語集 · モデル）を切り替えます。</p>
+<blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
+<blockquote><strong>会議ごとに変わる項目</strong>（入力・出力言語、会議モード、話者数）は設定ではなく、最初の画面の <strong>회의 정보</strong>（会議情報）にあります。<strong>録音と文字起こし</strong>を参照してください。</blockquote>
+<blockquote><strong>参考：</strong> <strong>녹음</strong>（録音）タブの設定は、録音中・一時停止中はロックされます。変更するには録音を停止してから操作してください。</blockquote>
+<hr>
+<h2 id="녹음">녹음（録音）</h2>
+<p>音源の取り込み方法、リアルタイム動作、画面表示を設定します。</p>
+<h3 id="입력">입력（入力）</h3>
+<ul>
+<li><strong>음원</strong>（音源）— 何を聞き取るかを選びます。</li>
+<ul>
+<li><strong>마이크</strong>（マイク）— 自分の声 / 対面の会議。</li>
+<li><strong>시스템 오디오</strong>（システム音声）— Mac で再生されている音（Zoom・Teams・Slack・YouTube など）。初回使用時に「画面収録」の権限を要求します（音声のみ。画面は保存されません）。</li>
+<li><strong>마이크+시스템</strong>（マイク＋システム）— オンライン会議（自分の声＋相手の声）に適しています。</li>
+</ul>
+<li><strong>마이크</strong>（マイク）— （音源が 마이크 または 마이크+시스템 のとき）使用する入力デバイス。初期設定は「시스템 기본」（システム標準）です。</li>
+<li><strong>언어</strong>（言語）— <strong>자동 감지</strong>（自動検出）<strong>/ 한국어 / English</strong> から、文字起こしの言語を固定するか自動にします。</li>
+</ul>
+<h3 id="화자">화자（話者）</h3>
+<ul>
+<li><strong>화자 분리</strong>（話者分離）— 誰が話したかを話者ごとに区別します。</li>
+<li><strong>중첩 발화 감지</strong>（重なり発話の検出）— 2 人が同時に話す区間を検出します（詳細表示の重なりマーカー）。</li>
+</ul>
+<h3 id="실시간">실시간（リアルタイム）</h3>
+<ul>
+<li><strong>반응 속도</strong>（応答速度）— <strong>빠름 (5초)</strong> / <strong>보통 (7초)</strong> / <strong>정확 (10초)</strong>（高速 5 秒 / 標準 7 秒 / 正確 10 秒）。高速はテキストがより頻繁に表示され体感が速く、正確は文脈を長く見るため品質が高くなります。</li>
+<ul>
+<li><em>出力言語が 2 つ以上の場合は、最低でも <strong>보통 (7초)</strong>（標準 7 秒）まで下がります — 高速を選んでいても自動的に 7 秒になります。ただし、<code>한국어</code> と他の言語 1 つだけを有効にした双方向通訳は例外です。</em></li>
+</ul>
+<li><strong>실시간 프리뷰</strong>（リアルタイムプレビュー）— 区間が確定する前に、途中のテキストをグレーで先に表示します（精度の低下なし、メモリ約 830 MB 追加）。</li>
+</ul>
+<h3 id="표시">표시（表示）</h3>
+<ul>
+<li><strong>외관</strong>（外観）— システム / ライト / ダークのテーマを選びます。</li>
+</ul>
+<h3 id="자막-오버레이-진료실">자막 오버레이 (진료실)（字幕オーバーレイ — 診察室）</h3>
+<p>対面通訳用の字幕ウィンドウのサイズと、2 番目（患者用）の画面を設定します。<strong>リアルタイム翻訳</strong>を参照してください。</p>
+<ul>
+<li><strong>직원 자막 크기</strong>（スタッフ字幕サイズ）— メイン画面の字幕文字（14–48 pt）。</li>
+<li><strong>환자용 대형 자막 (별도 화면)</strong>（患者用の大型字幕 — 別画面）— 2 つ目のパネルを患者の言語で、離れた場所からでも読める大きな文字で表示します。オンにすると、以下の項目が現れます。</li>
+<ul>
+<li><strong>환자 자막 크기</strong>（患者字幕サイズ）— 24–96 pt。</li>
+<li><strong>환자 화면</strong>（患者画面）— モニターが 2 台以上あるとき、どの画面に表示するかを選びます。</li>
+<li><strong>환자 언어</strong>（患者言語）— 自動（相手の言語）または特定の言語に固定。</li>
+</ul>
+</ul>
+<hr>
+<h2 id="저장">저장（保存）</h2>
+<p>ファイルの保存と認識のしきい値を設定します。</p>
+<h3 id="자동-저장">자동 저장（自動保存）</h3>
+<ul>
+<li><strong>완료 시 .md 자동저장</strong>（完了時に .md を自動保存）— 文字起こしが終わると、Markdown ファイルとして自動保存します。</li>
+<li><strong>폴더 / 변경…</strong>（フォルダ / 変更…）— 保存フォルダを指定します。このフォルダが、ワークスペースエクスプローラーに表示されるワークスペースです。</li>
+</ul>
+<blockquote>同じ設定は、ワークスペースエクスプローラーの下部にもあります。</blockquote>
+<h3 id="음성-인식">음성 인식（音声認識）</h3>
+<ul>
+<li><strong>저신뢰 표시 기준 (VAD)</strong>（低信頼度のしきい値（VAD））— この信頼度（初期設定は 0.55）未満で認識された単語を <strong>검토 필요</strong>（要確認）として表示します。範囲は 0.35–0.9 で、値を上げるとより多くの単語が対象になります。<strong>レビューと修正</strong>を参照してください。</li>
+</ul>
+<hr>
+<h2 id="번역">번역（翻訳）</h2>
+<p>オンデバイス翻訳（韓国語・英語・日本語・中国語）のオン・オフを切り替える場所です。</p>
+<blockquote>翻訳エンジンを含まないビルドでは、このタブはまったく表示されません。</blockquote>
+<h3 id="번역-모델-dna3-0-4b-2-6-gb">번역 모델 (DNA3.0-4B · 約 2.6 GB)（翻訳モデル）</h3>
+<ul>
+<li><strong>상태</strong>（状態）— 설치됨（インストール済み）/ 검증 중（検証中）/ ダウンロードの進捗率 / 미설치（未インストール）を表示します。</li>
+<li><strong>번역 모델 다운로드</strong>（翻訳モデルをダウンロード）— モデルを取得します。アプリには同梱されておらず、使いたいときにダウンロードします（メモリ約 3 GB 追加）。ダウンロード中は <strong>취소</strong>（キャンセル）、インストール後は <strong>Finder에서 보기</strong>（Finder で表示）でファイルの場所を開けます。</li>
+</ul>
+<h3 id="실시간-번역-다중-대상">실시간 번역 (다중 대상)（リアルタイム翻訳・複数ターゲット）</h3>
+<ul>
+<li><strong>한국어 / English / 日本語 / 中文</strong> — トグルで対象言語を選びます（最大 3 つ）。選んだすべての言語に各行を同時に翻訳し、原文の下に表示します（原文の言語は自動的に除外されます）。</li>
+<li>先にモデルを取得する必要があります。対象が 2 つ以上の場合、応答速度は最低でも「보통 (7초)」（標準 7 秒）まで下がります（録音タブを参照）。</li>
+</ul>
+<h3 id="번역-반응-실시간">번역 반응 (실시간)（翻訳の応答・リアルタイム）</h3>
+<ul>
+<li><strong>마지막 줄 대기 (초)</strong>（最後の行を待つ（秒））— 話し終わった最後の行が変化しなくなってから、この時間（0.5–5.0 秒、初期設定は 3 秒）だけ待ってから翻訳します。短いほど字幕が早く表示されますが、未完成の文を翻訳してしまうことがあります。<strong>確定した（次の行が始まった）行は、この値に関係なく即座に翻訳</strong>され、文字起こし（STT）の応答速度とは別に動作します。</li>
+</ul>
+<h3 id="ai-교정-세션-종료-후-ai">AI 교정 (세션 종료 후)（AI 修正・セッション終了後）</h3>
+<ul>
+<li><strong>화자·언어 자동 교정</strong>（話者・言語の自動修正）— 録音が終わると、オンデバイスの LLM が会話を読み取り、明らかな話者の誤分割や言語の誤った行を控えめに修正します。話者の修正は <strong>1 回のクリックで元に戻せます</strong>。</li>
+<li>翻訳・要約モデル（DNA3.0-4B）が必要です。</li>
+</ul>
+<hr>
+<h2 id="단어장">단어장（用語集・個人用語集）</h2>
+<p>よく誤認識される専門用語や名前をご自身で修正した内容を Madi が学習し、以降の会議で同様の誤りを自動的に修正します。<strong>レビューと修正</strong>を参照してください。</p>
+<ul>
+<li><strong>학습한 교정 자동 적용</strong>（学習した修正の自動適用）— 学習した修正を実際に適用するかどうかを切り替えるスイッチです。<strong>学習は常に行われ</strong>、このスイッチは「適用」のみを切り替えます。（初期設定はオフ — ご自身でオンにしてください。）</li>
+<li><strong>최소 확인 횟수</strong>（最小確認回数）— 同じ修正をこの回数（1〜5 回）以上確認してから自動適用します。値が大きいほど控えめになり、偶発的な編集 1 回が以降の文字起こしを上書きすることがありません。</li>
+<li><strong>학습한 교정 목록</strong>（学習した修正の一覧）— 学習された規則（誤った単語 → 正しい単語、確認回数）を表示します。各行のゴミ箱ボタンで 1 つの規則だけを削除するか、<strong>전체 지우기</strong>（すべて削除）ですべて消去します。</li>
+</ul>
+<hr>
+<h2 id="모델">모델（モデル）</h2>
+<p>文字起こし（Whisper）モデルの状態を確認・管理します。</p>
+<ul>
+<li><strong>상태 / 위치</strong>（状態 / 場所）— モデルがインストールされているかどうかと、ファイルのパスを表示します。</li>
+<li><strong>모델 재다운로드</strong>（モデルを再ダウンロード）— モデルをもう一度取得します。</li>
+<li><strong>Finder에서 보기</strong>（Finder で表示）— モデルファイルの場所を開きます。</li>
+</ul>
+<blockquote>翻訳モデル（DNA3.0-4B）は <strong>번역</strong>（翻訳）タブで管理します。</blockquote>
+<blockquote><strong>システムディクテーション</strong>は今後提供予定のため、現在のベータには <strong>받아쓰기（ディクテーション）タブがありません。</strong>（<strong>システムディクテーション（音声入力・今後提供予定）</strong> を参照。）</blockquote></section>
+<section id="ja-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">オープンソースライセンス</h1><p>Madi のコードはほぼすべて自社開発ですが、一部のサードパーティコンポーネントを <strong>Apache License 2.0</strong> の下で利用しています。ライセンスが求める著作権表示・帰属（attribution）表示はそのまま保持しています。</p>
+<h2 id="apache-license-2-0">Apache License 2.0 のコンポーネント</h2>
+<table><thead><tr><th>コンポーネント</th><th>Madi での用途</th><th>出典</th><th>ライセンス</th></tr></thead><tbody><tr><td><strong>DNA3.0-4B</strong>（dnotitia・Qwen3.5-4B ベース）</td><td>オンデバイス翻訳および会議の要約・質疑応答</td><td><code>dnotitia/DNA3.0-4B</code>（ベース <code>Qwen/Qwen3.5-4B</code>）</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>話者分離（音声エンベディング）</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
+<ul>
+<li><strong>DNA3.0-4B</strong> — dnotitia が Qwen3.5-4B を韓国語中心にポストトレーニングしたオンデバイス LLM です。リアルタイム翻訳と会議の要約・質疑応答に使用します。ベースモデルの Qwen3.5-4B（Alibaba）も Apache-2.0 です。</li>
+<li><strong>WeSpeaker</strong> — ResNet34 の話者エンベディングモデルで、誰がいつ話したかを区別する話者分離に使用します。</li>
+</ul>
+<p>Apache License 2.0 の全文: <a href="https://www.apache.org/licenses/LICENSE-2.0">apache.org/licenses/LICENSE-2.0</a></p>
+<blockquote>バンドルされる他のコンポーネントを含む、すべてのサードパーティ表示は、リポジトリの <code>NOTICE</code> および <code>THIRD_PARTY_LICENSES.md</code> に記載されています。</blockquote></section><footer class="foot">すべての処理はこの Mac 内で — 文字起こし・翻訳・要約はデバイスから外に出ません。</footer></main></div></div>
 </div>
 <script>
-  var TAG={ko:'온디바이스 회의 인텔리전스',en:'On-device meeting intelligence'};
+  var TAG={ko:'온디바이스 회의 인텔리전스',en:'On-device meeting intelligence',ja:'オンデバイス会議インテリジェンス'};
   var panes=[].slice.call(document.querySelectorAll('.lang-pane'));
   var host=document.querySelector('.toc-host');
   var tagEl=document.querySelector('[data-tag]');

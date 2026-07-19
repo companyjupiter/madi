@@ -90,7 +90,7 @@ struct CommandPalette: View {
         // (b) named speakers — jump-to / context. (Naming lives elsewhere; here a
         //     speaker row is a lightweight "go" that just closes the palette.)
         for (id, name) in session.speakerNames.sorted(by: { $0.key < $1.key }) where !name.isEmpty {
-            out.append(PaletteCommand(title: name, subtitle: uiLang("화자 \(id)", "Speaker \(id)"),
+            out.append(PaletteCommand(title: name, subtitle: uiLang("화자 \(id)", "Speaker \(id)", "話者 \(id)"),
                                       symbol: "person.crop.circle", extraTerms: "speaker 화자") {
                 // no destructive side effect — selecting just dismisses to the
                 // transcript where the speaker's lines already live.
@@ -100,7 +100,7 @@ struct CommandPalette: View {
         // (a) archived meetings — every .md in the workspace tree.
         for url in transcriptURLs(session.workspace.nodes) {
             let base = url.deletingPathExtension().lastPathComponent
-            out.append(PaletteCommand(title: base, subtitle: uiLang("회의 · \(url.lastPathComponent)", "Meeting · \(url.lastPathComponent)"),
+            out.append(PaletteCommand(title: base, subtitle: uiLang("회의 · \(url.lastPathComponent)", "Meeting · \(url.lastPathComponent)", "会議 · \(url.lastPathComponent)"),
                                       symbol: "doc.text", extraTerms: "meeting transcript 회의 전사") {
                 session.openArchived(url)
             })

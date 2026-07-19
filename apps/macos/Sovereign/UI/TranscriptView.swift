@@ -451,7 +451,7 @@ struct TranscriptView: View {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.down")
                                 .font(.system(size: 11, weight: .semibold))
-                            Text(uiLang("새 전사 \(unseenCount)", "\(unseenCount) new"))
+                            Text(uiLang("새 전사 \(unseenCount)", "\(unseenCount) new", "新規 \(unseenCount)"))
                                 .font(.system(size: 12, weight: .medium)).monospacedDigit()
                         }
                         .foregroundStyle(Theme.Colors.textPrimary)
@@ -815,7 +815,7 @@ struct TranscriptView: View {
         if let idx = reviewRefIndex, idx < flaggedRefs.count {
             let total = flaggedRefs.count
             VStack(alignment: .leading, spacing: 12) {
-                Text(uiLang("검토 \(idx + 1) / \(total)", "Review \(idx + 1) / \(total)"))
+                Text(uiLang("검토 \(idx + 1) / \(total)", "Review \(idx + 1) / \(total)", "確認 \(idx + 1) / \(total)"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.Colors.textTertiary)
                 TextField(uiLang("수정할 단어", "Word to fix"), text: $reviewDraft)
@@ -859,7 +859,7 @@ struct TranscriptView: View {
             s += run
         }
         for ov in line.overlapSpeakers {
-            var marker = AttributedString(uiLang("  ⟨+\(name(ov)) 겹침⟩", "  ⟨+\(name(ov)) overlap⟩"))
+            var marker = AttributedString(uiLang("  ⟨+\(name(ov)) 겹침⟩", "  ⟨+\(name(ov)) overlap⟩", "  ⟨+\(name(ov)) 重なり⟩"))
             marker.foregroundColor = Theme.Colors.speaker(ov)
             marker.font = Theme.Fonts.overlap
             s += marker
