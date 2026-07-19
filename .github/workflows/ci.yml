@@ -1,10 +1,9 @@
 name: CI
 
+# Automatic checks are paused while the GitHub Actions account is over its
+# included plan. Run the macOS release gates through release_local_free.sh.
 on:
-  pull_request:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -28,11 +28,24 @@ ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :MADIFullVersion' "$PLIST")"
   echo "❌ bundle version is $ACTUAL_VERSION, expected $EXPECTED_VERSION" >&2
   exit 1
 }
+MINIMUM_OS="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$PLIST")"
 
-for executable in "$APP/Contents/MacOS/Madi" "$APP/Contents/MacOS/transcribe"; do
+executables=(
+  "$APP/Contents/MacOS/Madi"
+  "$APP/Contents/MacOS/transcribe"
+)
+[ ! -e "$APP/Contents/MacOS/translate-engine" ] \
+  || executables+=("$APP/Contents/MacOS/translate-engine")
+
+for executable in "${executables[@]}"; do
   file "$executable" | grep -q 'arm64' || {
     echo "❌ release executable is not arm64: $executable" >&2; exit 1;
   }
+  ACTUAL_MINIMUM="$(xcrun vtool -show-build "$executable" | awk '$1 == "minos" { print $2; exit }')"
+  [ "$ACTUAL_MINIMUM" = "$MINIMUM_OS" ] || {
+    echo "❌ $(basename "$executable") targets macOS $ACTUAL_MINIMUM, bundle declares $MINIMUM_OS" >&2
+    exit 1
+  }
 done
 
-echo "✅ release bundle structure verified ($ACTUAL_VERSION, arm64)"
+echo "✅ release bundle structure verified ($ACTUAL_VERSION, arm64, macOS $MINIMUM_OS+)"

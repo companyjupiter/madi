@@ -51,8 +51,12 @@ static MTL4VisibilityOptions mtl4_vis(void) {
 
 static int mtl4_enabled_env(void) {
     if (g_mtl4_enabled_env < 0) {
-        const char* e = getenv("SOV_MTL4");
-        g_mtl4_enabled_env = (e && e[0] && e[0] != '0') ? 1 : 0;
+        if (@available(macOS 26.0, *)) {
+            const char* e = getenv("SOV_MTL4");
+            g_mtl4_enabled_env = (e && e[0] && e[0] != '0') ? 1 : 0;
+        } else {
+            g_mtl4_enabled_env = 0;
+        }
     }
     return g_mtl4_enabled_env;
 }
@@ -405,38 +409,40 @@ void* mtl_create_argument_buffer(const void** ptrs, int n_buffers, int pipeline_
 // ── Metal 4 영속 객체 생성 (SOV_MTL4=1, mtl_load_library 에서 1회) ─────
 // g_library 가 로드된 후 호출. 실패 시 g_mtl4_init_ok=0 유지 → classic 폴백.
 static void mtl4_init_persistent(void) {
-    @autoreleasepool {
-        NSError* err = nil;
-        g_mtl4_queue = [g_device newMTL4CommandQueue];
-        if (!g_mtl4_queue) { fprintf(stderr, "[MTL4] queue FAIL\n"); return; }
+    if (@available(macOS 26.0, *)) {
+        @autoreleasepool {
+            NSError* err = nil;
+            g_mtl4_queue = [g_device newMTL4CommandQueue];
+            if (!g_mtl4_queue) { fprintf(stderr, "[MTL4] queue FAIL\n"); return; }
 
-        MTL4CompilerDescriptor* cd = [MTL4CompilerDescriptor new];
-        g_mtl4_compiler = [g_device newCompilerWithDescriptor:cd error:&err];
-        if (!g_mtl4_compiler) { fprintf(stderr, "[MTL4] compiler FAIL: %s\n", err?[[err localizedDescription] UTF8String]:"?"); return; }
+            MTL4CompilerDescriptor* cd = [MTL4CompilerDescriptor new];
+            g_mtl4_compiler = [g_device newCompilerWithDescriptor:cd error:&err];
+            if (!g_mtl4_compiler) { fprintf(stderr, "[MTL4] compiler FAIL: %s\n", err?[[err localizedDescription] UTF8String]:"?"); return; }
 
-        g_mtl4_alloc = [g_device newCommandAllocator];
-        if (!g_mtl4_alloc) { fprintf(stderr, "[MTL4] allocator FAIL\n"); return; }
+            g_mtl4_alloc = [g_device newCommandAllocator];
+            if (!g_mtl4_alloc) { fprintf(stderr, "[MTL4] allocator FAIL\n"); return; }
 
-        MTL4ArgumentTableDescriptor* atd = [MTL4ArgumentTableDescriptor new];
-        atd.maxBufferBindCount = 31;   // 현 커널 최대 바인딩 수
-        g_mtl4_argtable = [g_device newArgumentTableWithDescriptor:atd error:&err];
-        if (!g_mtl4_argtable) { fprintf(stderr, "[MTL4] argtable FAIL: %s\n", err?[[err localizedDescription] UTF8String]:"?"); return; }
+            MTL4ArgumentTableDescriptor* atd = [MTL4ArgumentTableDescriptor new];
+            atd.maxBufferBindCount = 31;   // 현 커널 최대 바인딩 수
+            g_mtl4_argtable = [g_device newArgumentTableWithDescriptor:atd error:&err];
+            if (!g_mtl4_argtable) { fprintf(stderr, "[MTL4] argtable FAIL: %s\n", err?[[err localizedDescription] UTF8String]:"?"); return; }
 
-        MTLResidencySetDescriptor* rsd = [MTLResidencySetDescriptor new];
-        g_mtl4_residency = [g_device newResidencySetWithDescriptor:rsd error:&err];
-        if (!g_mtl4_residency) { fprintf(stderr, "[MTL4] residency FAIL: %s\n", err?[[err localizedDescription] UTF8String]:"?"); return; }
-        [g_mtl4_queue addResidencySet:g_mtl4_residency];
+            MTLResidencySetDescriptor* rsd = [MTLResidencySetDescriptor new];
+            g_mtl4_residency = [g_device newResidencySetWithDescriptor:rsd error:&err];
+            if (!g_mtl4_residency) { fprintf(stderr, "[MTL4] residency FAIL: %s\n", err?[[err localizedDescription] UTF8String]:"?"); return; }
+            [g_mtl4_queue addResidencySet:g_mtl4_residency];
 
-        g_mtl4_event = [g_device newSharedEvent];
-        if (!g_mtl4_event) { fprintf(stderr, "[MTL4] event FAIL\n"); return; }
+            g_mtl4_event = [g_device newSharedEvent];
+            if (!g_mtl4_event) { fprintf(stderr, "[MTL4] event FAIL\n"); return; }
 
-        // 스칼라 인자 ring — MTL4 는 setBytes 가 없어 작은 shared 버퍼에 써넣고 gpuAddress 바인딩.
-        g_mtl4_param_buffer = [g_device newBufferWithLength:4 * 1024 * 1024 options:MTLResourceStorageModeShared];
-        if (!g_mtl4_param_buffer) { fprintf(stderr, "[MTL4] param-ring FAIL\n"); return; }
+            // 스칼라 인자 ring — MTL4 는 setBytes 가 없어 작은 shared 버퍼에 써넣고 gpuAddress 바인딩.
+            g_mtl4_param_buffer = [g_device newBufferWithLength:4 * 1024 * 1024 options:MTLResourceStorageModeShared];
+            if (!g_mtl4_param_buffer) { fprintf(stderr, "[MTL4] param-ring FAIL\n"); return; }
 
-        g_mtl4_init_ok = 1;
-        g_mtl4_res_dirty = 1;
-        MLOG("[MTL4] persistent objects ready (queue/compiler/allocator/argtable/residency/event)\n");
+            g_mtl4_init_ok = 1;
+            g_mtl4_res_dirty = 1;
+            MLOG("[MTL4] persistent objects ready (queue/compiler/allocator/argtable/residency/event)\n");
+        }
     }
 }
 
@@ -516,6 +522,13 @@ int mtl_get_function(const char* name, int* out_id) {
         if (g_n_functions >= MAX_FUNCTIONS) return -1;
         
         NSString* ns_name = [NSString stringWithUTF8String:name];
+        if ([ns_name hasPrefix:@"m4_"]) {
+            if (@available(macOS 26.0, *)) {
+                // Metal 4 kernels are available on this OS.
+            } else {
+                return -1;
+            }
+        }
         id<MTLFunction> func = [g_library newFunctionWithName:ns_name];
         if (func == nil) {
             fprintf(stderr, "[metal] ERROR: Function not found: %s\n", name);

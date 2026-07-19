@@ -77,6 +77,71 @@ Uses `create-dmg` if installed, else `hdiutil`. Staples the DMG too.
 
 ---
 
+## Local S3 release (current operational path)
+
+GitHub Actions automatic runs are paused while the account is over its included
+plan. Build and publish the free-account, ad-hoc-signed and unnotarized release
+from an Apple-silicon Mac with one local command instead:
+
+```sh
+# Build and verify only. Nothing is uploaded.
+apps/macos/scripts/release_local_free.sh 0.1.0
+
+# Upload immutable version files, but do not change the public channel/index.
+apps/macos/scripts/release_local_free.sh 0.1.0 --upload
+
+# Publish the byte-identical DMG from an existing GitHub Release.
+apps/macos/scripts/release_local_free.sh 0.1.0 --publish
+
+# Build and upload an unpublished offline variant without advancing a channel.
+apps/macos/scripts/release_local_free.sh 0.1.0 --offline --upload
+```
+
+The script validates shell files, runs the S3 publisher tests and Swift tests,
+builds and checks the app bundle, creates lowercase
+`madi-<version>-arm64.dmg` artifacts, and writes `SHA256SUMS.txt`. Output is kept
+under `build/local-release/<version>/`. `--publish` is intentionally explicit:
+it advances `channels/<channel>/latest.json` and `releases/index.json`, while
+`--upload` leaves both mutable documents unchanged.
+
+Local uploads use the credentials already available to the AWS CLI
+(`aws configure`, AWS SSO, or environment credentials); GitHub's OIDC
+`AWS_ROLE_ARN` is not used. Production defaults are built in and can be
+overridden through environment variables:
+
+```sh
+MADI_RELEASE_BUCKET=devart-teamjupiter-downloads-artdapne2
+MADI_RELEASE_PREFIX=madi
+MADI_DOWNLOAD_BASE_URL=https://madi.devart.tv
+```
+
+The script always refreshes and verifies the seven runtime assets from the
+pinned `runtime-assets/v1` archive before a new build. Set both
+`MADI_RELEASE_ASSETS_URL` and `MADI_RELEASE_ASSETS_SHA256` only when intentionally
+moving to a different immutable archive. An offline build downloads and verifies
+the Q8 speech model only when it is not already present.
+
+The engine build pins the app and transcription engine to the declared macOS
+14.0 minimum, independent of the macOS/Xcode version on the build machine.
+Bundle verification checks those executables and the optional translation
+engine, rejecting a release if any of them targets a newer OS. This prevents
+host-runner defaults from leaking into customer binaries.
+
+Completed artifacts are retained. If an S3 or metadata update fails, rerun the
+same `--upload` or `--publish` command. `--upload` reuses a locally verified DMG;
+`--publish` downloads the standard DMG from the existing `v<version>` GitHub
+Release, verifies GitHub's SHA-256 digest, and publishes those exact bytes under
+the lowercase S3 name. This prevents one version from pointing at two different
+binaries. The download uses the authenticated GitHub CLI, so private release
+assets work as well. It also appends the S3 links to the existing release notes.
+The current in-app updater still reads the GitHub asset; before retiring GitHub
+assets for a future version, switch the updater itself to the S3 channel feed.
+Run `--publish` from one operator at a time because the channel and release index
+are mutable read-modify-write documents; immutable version objects remain
+overwrite-protected by their SHA-256 metadata.
+
+---
+
 ## Release-candidate smoke checklist
 
 Build a fresh bundle, then verify each item on a clean machine / clean App Support.
@@ -113,13 +178,13 @@ See [DEMO.md](DEMO.md) for a reproducible transcript/export proof to attach to a
 
 ---
 
-## GitHub Actions release
+## GitHub Actions release definitions (automatic runs paused)
 
 Two release workflows are maintained:
 
 | workflow | current state | purpose |
 |---|---|---|
-| `.github/workflows/release-macos-free.yml` | active | Free-account build: ad-hoc signed, explicitly unnotarized DMG |
+| `.github/workflows/release-macos-free.yml` | manual only | Free-account build: ad-hoc signed, explicitly unnotarized DMG |
 | `.github/workflows/release-macos-paid.yml.disabled` | disabled | Developer ID signing, notarization, stapled DMG |
 
 Both paths run tests, build the engine/app, validate the bundle, create DMGs and
@@ -137,12 +202,10 @@ mv .github/workflows/release-macos-paid.yml.disabled \
    .github/workflows/release-macos-paid.yml
 ```
 
-It runs in either of these ways:
-
-- push a `v*.*.*` tag to publish a standard DMG immediately;
-- choose **Actions → Release macOS (free account) → Run workflow** to create a draft release,
-  optionally including the self-contained offline DMG. Check `publish` only when
-  the artifacts should become visible to the in-app updater immediately.
+The free workflow is retained for later use, but its PR and tag triggers are
+disabled. After Actions billing is restored, it can still be invoked manually
+through **Actions → Release macOS (free account) → Run workflow**. The local
+script above is the source of truth until automatic runs are explicitly restored.
 
 The runtime archive is a versioned build dependency created before an app release,
 not an output of that same app build. Its URL and digest are public metadata, so
