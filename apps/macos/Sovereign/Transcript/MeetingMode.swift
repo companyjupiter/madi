@@ -72,18 +72,23 @@ enum MeetingMode: String, CaseIterable, Identifiable, Codable {
 struct MeetingModeConfig: Equatable {
     let mode: MeetingMode
 
-    /// SpeakerCount rawValue to apply on selection (0=자동,1,2,3,4=4명 이상). The
-    /// controller maps this Int to its own SpeakerCount enum — this core stays
-    /// free of any SessionController coupling.
+    /// SpeakerCount rawValue to apply on selection (0=자동, 2/3/4 = exact, 5=5명 이상).
+    /// The controller maps this Int to its own SpeakerCount enum — this core stays
+    /// free of any SessionController coupling. Ignored when `defaultDiarize` is false.
     var defaultSpeakerCountRaw: Int {
         switch mode {
         case .general:   return 0   // 자동
         case .oneOnOne:  return 2
         case .standup:   return 0   // 자동 (team size varies)
         case .interview: return 2
-        case .lecture:   return 1
+        case .lecture:   return 0   // diar off (defaultDiarize); count is moot
         }
     }
+
+    /// Whether diarization should default ON for this shape. A lecture is a single
+    /// presenter → diarization OFF (skips the diar engine). A preset, not a lock:
+    /// the user can still toggle 화자 분리 afterward.
+    var defaultDiarize: Bool { mode != .lecture }
 
     /// Prompt suffix the SummaryEngine appends to the final summarize prompt to
     /// re-weight sections for this shape. EMPTY for `.general` (baseline — appending

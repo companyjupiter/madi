@@ -214,7 +214,21 @@ final class SessionController: EngineProcessDelegate {
     private(set) var chunksDone = 0
     private(set) var chunksTotal = 0
 
-    var diarize = true
+    /// Whether to run speaker diarization at all. OFF ⇒ the engine skips the whole
+    /// diar path (no ResNet34 embeddings, model not loaded) and attributes every
+    /// line to a single speaker (see EngineProcess DIAR + transcribe.zig). Persisted.
+    var diarize: Bool = {
+        let d = UserDefaults.standard
+        // Migration: the removed "1명" choice (fixedSpeakerCount == 1) meant a
+        // single speaker — now expressed as diarization OFF. Apply once, only if
+        // the new key has never been written.
+        if d.object(forKey: "diarizeEnabled") == nil {
+            return d.integer(forKey: "fixedSpeakerCount") != 1
+        }
+        return d.bool(forKey: "diarizeEnabled")
+    }() {
+        didSet { UserDefaults.standard.set(diarize, forKey: "diarizeEnabled") }
+    }
     var inputDeviceID: AudioDeviceID?          // nil = system default mic
     var availableInputs: [AudioInputDevice] { AudioDevices.inputs() }
 
@@ -252,8 +266,11 @@ final class SessionController: EngineProcessDelegate {
     /// Loaded once at init; auto-correction is OFF until glossary.enabled is set.
     var glossary = Glossary.load()
 
-    /// Fixed speaker count for diarization (자동/1/2/3/4명 이상). Persisted; maps to
-    /// the engine's DIAR_MAXK upper bound. 자동 and 4+ leave the cap at 8.
+    /// Fixed speaker count when diarization is ON (자동/2/3/4/5명 이상). Persisted; maps
+    /// to the engine's DIAR_MAXK upper bound. 자동 and 5명 이상 leave the cap at 8.
+    /// Ignored when `diarize` is off (the engine skips diar entirely). An old saved
+    /// value of 1 (removed "1명") no longer maps → falls back to .auto (the migration
+    /// on `diarize` turns that user's setting into diarization-off).
     var speakerCount: SpeakerCount = SpeakerCount(rawValue: UserDefaults.standard.integer(forKey: "fixedSpeakerCount")) ?? .auto {
         didSet { UserDefaults.standard.set(speakerCount.rawValue, forKey: "fixedSpeakerCount") }
     }
@@ -265,8 +282,9 @@ final class SessionController: EngineProcessDelegate {
     var meetingMode: MeetingMode = MeetingMode(rawValue: UserDefaults.standard.string(forKey: "meetingMode") ?? "") ?? .general {
         didSet {
             UserDefaults.standard.set(meetingMode.rawValue, forKey: "meetingMode")
-            // Apply the preset's diarization hint (map raw Int → SpeakerCount). A
-            // preset, not a lock — the user can still adjust 화자 수 afterward.
+            // Apply the preset's diarization hints (on/off + count). A preset, not a
+            // lock — the user can still toggle 화자 분리 / adjust 화자 수 afterward.
+            diarize = meetingMode.config.defaultDiarize
             if let sc = SpeakerCount(rawValue: meetingMode.config.defaultSpeakerCountRaw) {
                 speakerCount = sc
             }
@@ -2178,39 +2196,43 @@ final class SessionController: EngineProcessDelegate {
     }
 }
 
-/// Fixed speaker-count choice for diarization. rawValue is persisted; `maxSpeakers`
-/// is the engine DIAR_MAXK upper bound it maps to (자동/4+ → 8, else the exact N).
+/// Fixed speaker-count choice, used only WHEN diarization is on (session.diarize).
+/// "No diarization" is the separate `diarize` toggle, not a case here — turning it
+/// off skips the whole diar engine path (see EngineProcess DIAR + transcribe.zig).
+/// rawValue is persisted. Note the redesign (2026-07): the old `.one` (1명) is gone
+/// — a single speaker is now "diarization off"; `.four` is EXACTLY 4 and `.fivePlus`
+/// (5명 이상) is the open-ended auto-K bucket that `.fourPlus` used to be.
 enum SpeakerCount: Int, CaseIterable, Identifiable {
-    case auto = 0, one = 1, two = 2, three = 3, fourPlus = 4
+    case auto = 0, two = 2, three = 3, four = 4, fivePlus = 5
     var id: Int { rawValue }
     var label: String { label(.ko) }
     func label(_ lang: UILanguage) -> String {
         switch self {
-        case .auto:     return lang("자동", "Auto")
-        case .one:      return lang("1명", "1")
-        case .two:      return lang("2명", "2")
-        case .three:    return lang("3명", "3")
-        case .fourPlus: return lang("4명 이상", "4+")
+        case .auto:     return lang("자동", "Auto", "自動")
+        case .two:      return lang("2명", "2", "2名")
+        case .three:    return lang("3명", "3", "3名")
+        case .four:     return lang("4명", "4", "4名")
+        case .fivePlus: return lang("5명 이상", "5+", "5名以上")
         }
     }
     var maxSpeakers: Int {
         switch self {
-        case .auto, .fourPlus: return 8   // no tight cap — let the engine detect
-        case .one:             return 1
+        case .auto, .fivePlus: return 8   // no tight cap — let the engine detect
         case .two:             return 2
         case .three:           return 3
+        case .four:            return 4
         }
     }
     /// FIXED speaker count passed to the engine as DIAR_K. nil ⇒ auto-K
     /// (silhouette). A concrete N ⇒ cluster to EXACTLY N speakers + at most one
-    /// "Unknown" bucket for acoustically-distant windows. 자동/4명 이상 stay auto;
-    /// 1/2/3명 are hard-fixed (fixes "화자 고정해도 자동 분리").
+    /// "Unknown" bucket for acoustically-distant windows. 자동/5명 이상 stay auto;
+    /// 2/3/4명 are hard-fixed (fixes "화자 고정해도 자동 분리").
     var fixedK: Int? {
         switch self {
-        case .auto, .fourPlus: return nil
-        case .one:             return 1
+        case .auto, .fivePlus: return nil
         case .two:             return 2
         case .three:           return 3
+        case .four:            return 4
         }
     }
     /// Per-speaker-count Silero speech-gate (VAD_PROB) default — each bucket's
@@ -2222,9 +2244,9 @@ enum SpeakerCount: Int, CaseIterable, Identifiable {
     /// which is heterogeneous — see VAD_TUNING.md.)
     var vadProb: Double {
         switch self {
-        case .auto, .one:        return 0.5
-        case .two:               return 0.65
-        case .three, .fourPlus:  return 0.8
+        case .auto:                     return 0.5
+        case .two:                      return 0.65
+        case .three, .four, .fivePlus:  return 0.8
         }
     }
 }

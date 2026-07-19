@@ -1018,12 +1018,15 @@ pub fn main() !void {
     // ── one-time weights: conv front-end + positional ───────────────
     const mel_filters = try readBinF32(bpe_dir(bpe_path), "mel_filters.bin");
     const mel_buf = try mtl.allocSlice(f32, mel.N_MELS * mel.N_FRAMES);
-    // diarization speaker-embedding model (sovereign ResNet34, CPU)
+    // diarization speaker-embedding model (sovereign ResNet34, CPU).
+    // DIAR=0 (화자 분리 off) skips the whole diar path: the model is NOT loaded, no
+    // ResNet34 embeddings are computed, and every line is attributed to one speaker.
+    const diar_on = !std.mem.eql(u8, std.posix.getenv("DIAR") orelse "1", "0");
     var kb_d: [256]u8 = undefined;
     const diar_w = std.fmt.bufPrint(&kb_d, "{s}/resnet34_diar.bin", .{bpe_dir(bpe_path)}) catch unreachable;
     var kb_d2: [256]u8 = undefined;
     const diar_mb = std.fmt.bufPrint(&kb_d2, "{s}/kaldi_melbank.bin", .{bpe_dir(bpe_path)}) catch unreachable;
-    var diar_model = try diar.Model.load(alloc, diar_w, diar_mb);
+    var diar_model: ?diar.Model = if (diar_on) try diar.Model.load(alloc, diar_w, diar_mb) else null;
     // Silero-VAD (sovereign CPU port) — trained speech/non-speech verdict.
     // Energy/relative-RMS cannot reject music (pqmho music RMS > close-mic
     // speech RMS) and <|nospeech|> is dead in large-v3-turbo; Silero is the
@@ -1702,19 +1705,23 @@ pub fn main() !void {
             if (!stream or stream_diar) {
             const nwin = got / SEG_SAMP;
             if (nwin > 0) {
-                const nt = @min(diar_nthreads, nwin);
-                const per = (nwin + nt - 1) / nt;
-                var jobs: [16]DiarJob = undefined;
-                var threads: [16]std.Thread = undefined;
-                var spawned: usize = 0;
-                for (0..nt) |ti| {
-                    const lo = ti * per;
-                    if (lo >= nwin) break;
-                    jobs[ti] = .{ .m = &diar_model, .samples = samples[0 .. nwin * SEG_SAMP], .emb = cemb, .rms = crms, .lo = lo, .hi = @min(lo + per, nwin) };
-                    threads[ti] = try std.Thread.spawn(.{}, diarWorker, .{&jobs[ti]});
-                    spawned += 1;
+                // Diar embeddings (ResNet34) — skipped entirely when 화자 분리 is off.
+                // VAD/OSD/crms below still run (they gate transcription, not diar).
+                if (diar_on) {
+                    const nt = @min(diar_nthreads, nwin);
+                    const per = (nwin + nt - 1) / nt;
+                    var jobs: [16]DiarJob = undefined;
+                    var threads: [16]std.Thread = undefined;
+                    var spawned: usize = 0;
+                    for (0..nt) |ti| {
+                        const lo = ti * per;
+                        if (lo >= nwin) break;
+                        jobs[ti] = .{ .m = &diar_model.?, .samples = samples[0 .. nwin * SEG_SAMP], .emb = cemb, .rms = crms, .lo = lo, .hi = @min(lo + per, nwin) };
+                        threads[ti] = try std.Thread.spawn(.{}, diarWorker, .{&jobs[ti]});
+                        spawned += 1;
+                    }
+                    for (0..spawned) |ti| threads[ti].join();
                 }
-                for (0..spawned) |ti| threads[ti].join();
                 if (vad_thread) |vt| {
                     vt.join();
                     vad_thread = null;
@@ -2579,8 +2586,13 @@ pub fn main() !void {
             try out.print("  [vad dump → {s}: {d} win × ({d} emb + {d} pf)]\n", .{ dp, diar_n, SEGD, FPW });
         }
         var diart = try std.time.Timer.start();
-        try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
-        try attributeTranscript(out);
+        // 화자 분리 off → no embeddings were computed; skip clustering + attribution.
+        // g_segs stays empty, so the APP_FILE re-emit below sends no SPK lines and
+        // every word falls back to a single speaker (0).
+        if (diar_on) {
+            try diarizeEmb(out, diar_emb.items, diar_bm.items, diar_t0.items, diar_n, SEGD, SEG_SEC, diar_k, rttm_out, file_id);
+            try attributeTranscript(out);
+        }
         g_t_diar += diart.read();
         if (std.posix.getenv("PROF") != null) {
             const ms = struct { fn f(ns: u64) f64 { return @as(f64, @floatFromInt(ns)) / 1e6; } }.f;
