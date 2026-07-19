@@ -26,7 +26,7 @@ struct ModelGateView: View {
             case .downloading(let p):
                 VStack(spacing: 10) {
                     ProgressView(value: p) {
-                        Text(uiLang("음성 모델 다운로드 중 (\(Int(p * 100))%)", "Downloading speech model (\(Int(p * 100))%)"))
+                        Text(uiLang("음성 모델 다운로드 중 (\(Int(p * 100))%)", "Downloading speech model (\(Int(p * 100))%)", "音声モデルをダウンロード中 (\(Int(p * 100))%)"))
                     }
                     .tint(Theme.Colors.accent)
                     .frame(width: Theme.Size.gateProgressW)

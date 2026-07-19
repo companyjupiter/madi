@@ -33,4 +33,44 @@ in source and binary redistributions.
                format-converted (safetensors F16). No substantive change.
 
 -------------------------------------------------------------------------------
+3. DNA3.0-4B — translation + summary/Q&A language model
+-------------------------------------------------------------------------------
+   Component : DNA3.0-4B (dnotitia) — a Korean-focused post-training of Qwen3.5-4B
+   Used in   : on-device live translation + post-session summary / Q&A, run by the
+               bundled sovereign Metal LLM engine (Contents/MacOS/translate-engine)
+   Source    : https://huggingface.co/dnotitia/DNA3.0-4B
+               Base model: https://huggingface.co/Qwen/Qwen3.5-4B (Qwen3, Apache-2.0)
+               Downloaded as the i1-Q4_K_M GGUF quant:
+               https://huggingface.co/mradermacher/DNA3.0-4B-i1-GGUF
+   Copyright : Copyright (c) Dnotitia Inc.; base model (c) Alibaba Cloud (Qwen)
+   License   : Apache License, Version 2.0  (see THIRD_PARTY_LICENSES.md §A)
+   Changes   : Weights format-converted to a Q4_K_M GGUF quant; inference runs on an
+               independent Zig/Metal engine. No change to architecture or weights.
+   Note      : NOT bundled in the app/DMG — downloaded on demand (~2.6 GB) when the
+               user turns on translation.
+
+-------------------------------------------------------------------------------
+4. Silero VAD — voice-activity detection
+-------------------------------------------------------------------------------
+   Component : Silero VAD model + weights
+   Used in   : metal/assets/silero_vad.bin (format-converted weights); speech-gating
+               in the transcription pipeline
+   Source    : https://github.com/snakers4/silero-vad
+   Copyright : Copyright (c) 2020-present Silero Team
+   License   : MIT License  (see THIRD_PARTY_LICENSES.md §C)
+   Changes   : Weights converted to a flat binary for the Zig/Metal runtime.
+
+-------------------------------------------------------------------------------
+5. pyannote — overlapped-speech detection
+-------------------------------------------------------------------------------
+   Component : pyannote segmentation model (overlapped-speech detection)
+   Used in   : metal/assets/pyannote_osd.bin (format-converted weights); overlap
+               detection in diarization
+   Source    : https://github.com/pyannote/pyannote-audio
+               Model: https://huggingface.co/pyannote/segmentation-3.0
+   Copyright : Copyright (c) 2020 CNRS
+   License   : MIT License  (see THIRD_PARTY_LICENSES.md §D)
+   Changes   : Weights converted to a flat binary for the Zig/Metal runtime.
+
+-------------------------------------------------------------------------------
 All other code in this repository is original work of this project.

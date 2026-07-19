@@ -12,6 +12,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const LANGS = [
   { code: 'ko', label: '한국어' },
   { code: 'en', label: 'English' },
+  { code: 'ja', label: '日本語' },
 ];
 
 // ── minimal, dependency-free Markdown → HTML (enough for a manual) ──
@@ -110,6 +111,7 @@ const data = Object.fromEntries(LANGS.map((l) => [l.code, sections(l.code)]));
 const UI = {
   ko: { brand: 'Madi 사용자 매뉴얼', tagline: '온디바이스 회의 인텔리전스', toc: '목차', foot: '모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.' },
   en: { brand: 'Madi User Manual', tagline: 'On-device meeting intelligence', toc: 'Contents', foot: 'Everything runs on this Mac — transcripts, translation and summaries never leave the device.' },
+  ja: { brand: 'Madi ユーザーマニュアル', tagline: 'オンデバイス会議インテリジェンス', toc: '目次', foot: 'すべての処理はこの Mac 内で — 文字起こし・翻訳・要約はデバイスから外に出ません。' },
 };
 
 const navFor = (lang) => data[lang].map((s, n) =>
@@ -215,7 +217,7 @@ const HTML = `<!DOCTYPE html>
   <div class="panes">${langPanes}</div>
 </div>
 <script>
-  var TAG={ko:'온디바이스 회의 인텔리전스',en:'On-device meeting intelligence'};
+  var TAG={ko:'온디바이스 회의 인텔리전스',en:'On-device meeting intelligence',ja:'オンデバイス会議インテリジェンス'};
   var panes=[].slice.call(document.querySelectorAll('.lang-pane'));
   var host=document.querySelector('.toc-host');
   var tagEl=document.querySelector('[data-tag]');

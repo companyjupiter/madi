@@ -9,9 +9,26 @@ final class L10nTests: XCTestCase {
         XCTAssertEqual(UILanguage.en("녹음 시작", "Start recording"), "Start recording")
     }
 
+    func testJapaneseResolutionOrder() {
+        // Resolution order for .ja: inline ja > L10nJa.table[en] > en.
+        // 1. En NOT in the table → English fallback (never Korean).
+        XCTAssertEqual(UILanguage.ja("가나다", "zzz not a real ui string"), "zzz not a real ui string")
+        // 2. En IN the table → the Japanese translation.
+        XCTAssertEqual(UILanguage.ja("녹음 시작", "Start recording"), "録音開始")
+        XCTAssertEqual(L10nJa.table["Start recording"], "録音開始")
+        // 3. Inline ja argument wins over the table.
+        XCTAssertEqual(UILanguage.ja("녹음 시작", "Start recording", "インライン"), "インライン")
+        // ko/en are unaffected by the 3rd arg / the table.
+        XCTAssertEqual(UILanguage.ko("녹음 시작", "Start recording", "録音開始"), "녹음 시작")
+        XCTAssertEqual(UILanguage.en("녹음 시작", "Start recording", "録音開始"), "Start recording")
+    }
+
     func testNativeNames() {
         XCTAssertEqual(UILanguage.ko.nativeName, "한국어")
         XCTAssertEqual(UILanguage.en.nativeName, "English")
+        XCTAssertEqual(UILanguage.ja.nativeName, "日本語")
+        // The picker iterates allCases — all three languages must be selectable.
+        XCTAssertEqual(UILanguage.allCases, [.ko, .en, .ja])
     }
 
     func testEnumLabelLocalizes() {

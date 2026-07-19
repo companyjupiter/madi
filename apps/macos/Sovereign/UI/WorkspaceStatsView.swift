@@ -65,9 +65,9 @@ struct WorkspaceStatsView: View {
         let maxV = max(1, stats.weeklyTrend.max() ?? 1)
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(uiLang("최근 \(stats.weeklyTrend.count)주", "Last \(stats.weeklyTrend.count) wks")).font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
+                Text(uiLang("최근 \(stats.weeklyTrend.count)주", "Last \(stats.weeklyTrend.count) wks", "直近 \(stats.weeklyTrend.count)週")).font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
                 Spacer()
-                Text(uiLang("이번 주 \(stats.thisWeekCount)", "This week \(stats.thisWeekCount)"))
+                Text(uiLang("이번 주 \(stats.thisWeekCount)", "This week \(stats.thisWeekCount)", "今週 \(stats.thisWeekCount)"))
                     .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.Colors.textSecondary)
             }
             HStack(alignment: .bottom, spacing: 5) {
@@ -85,6 +85,6 @@ struct WorkspaceStatsView: View {
     /// Seconds → "Nh Mm" / "Nm" (compact for the narrow tile).
     private func hoursMinutes(_ s: Double) -> String {
         let m = Int((s / 60).rounded())
-        return m >= 60 ? uiLang("\(m / 60)시간 \(m % 60)분", "\(m / 60)h \(m % 60)m") : uiLang("\(m)분", "\(m)m")
+        return m >= 60 ? uiLang("\(m / 60)시간 \(m % 60)분", "\(m / 60)h \(m % 60)m", "\(m / 60)時間 \(m % 60)分") : uiLang("\(m)분", "\(m)m", "\(m)分")
     }
 }

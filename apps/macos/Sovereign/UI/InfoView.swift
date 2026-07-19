@@ -109,12 +109,10 @@ struct InfoView: View {
 
     static func expiryText(_ lang: UILanguage) -> String {
         let f = DateFormatter()
-        if lang == .en {
-            f.locale = Locale(identifier: "en_US")
-            f.dateFormat = "MMM d, yyyy"
-        } else {
-            f.locale = Locale(identifier: "ko_KR")
-            f.dateFormat = "yyyy년 M월 d일"
+        switch lang {
+        case .en: f.locale = Locale(identifier: "en_US"); f.dateFormat = "MMM d, yyyy"
+        case .ja: f.locale = Locale(identifier: "ja_JP"); f.dateFormat = "yyyy年M月d日"
+        case .ko: f.locale = Locale(identifier: "ko_KR"); f.dateFormat = "yyyy년 M월 d일"
         }
         return f.string(from: AppVersion.betaExpiryDate)
     }

@@ -36,7 +36,7 @@ struct ReviewControlView: View {
                 .help(controller.isListening ? uiLang("귀로 검토 멈춤", "Stop listen-review") : uiLang("저신뢰 단어 귀로 검토", "Listen-review low-confidence words"))
 
                 if controller.isListening, !controller.queue.isEmpty {
-                    Text(uiLang("재생 \(controller.index + 1)/\(controller.queue.count)", "Playing \(controller.index + 1)/\(controller.queue.count)"))
+                    Text(uiLang("재생 \(controller.index + 1)/\(controller.queue.count)", "Playing \(controller.index + 1)/\(controller.queue.count)", "再生 \(controller.index + 1)/\(controller.queue.count)"))
                         .font(Theme.Fonts.status)
                         .foregroundStyle(Theme.Colors.lowConf)
                         .monospacedDigit()

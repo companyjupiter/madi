@@ -731,7 +731,7 @@ struct ContentView: View {
         return HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(Theme.Colors.lowConf)
-            Text(uiLang("검토 필요 \(flagged.count)개", "\(flagged.count) to review")).font(Theme.Fonts.status)
+            Text(uiLang("검토 필요 \(flagged.count)개", "\(flagged.count) to review", "要確認 \(flagged.count)件")).font(Theme.Fonts.status)
             if !flagged.isEmpty {
                 Text("· \(flagged[idx].text)").font(Theme.Fonts.status)
                     .foregroundStyle(Theme.Colors.textSecondary).lineLimit(1)
@@ -788,7 +788,7 @@ struct ContentView: View {
             if case .countingDown(let n) = session.phase {
                 // Same warn-gradient as the status rows, NO exclamation icon —
                 // reads as an eager "about to start", not a warning.
-                GradientText(uiLang("곧 녹음이 시작됩니다 \(n)", "Recording starts in \(n)"))
+                GradientText(uiLang("곧 녹음이 시작됩니다 \(n)", "Recording starts in \(n)", "録音開始まで \(n)"))
                 LoadingDots(color: Color(red: 136/255, green: 145/255, blue: 234/255))
                     .padding(.top, 4)
             } else {
@@ -1081,7 +1081,7 @@ struct ContentView: View {
     private var micLabel: String {
         switch session.audioSource {
         case .system: return AudioSource.system.label(uiLang)
-        case .both:   return uiLang("\(micDeviceLabel) + 시스템", "\(micDeviceLabel) + system")
+        case .both:   return uiLang("\(micDeviceLabel) + 시스템", "\(micDeviceLabel) + system", "\(micDeviceLabel) + システム")
         case .mic:    return micDeviceLabel
         }
     }
@@ -1160,7 +1160,7 @@ struct ContentView: View {
         case 0: return uiLang("번역 안 함", "No translation")
         case 1: return picked[0]
         case 2: return picked.joined(separator: " · ")
-        default: return uiLang("\(picked[0]) 외 \(picked.count - 1)", "\(picked[0]) +\(picked.count - 1)")
+        default: return uiLang("\(picked[0]) 외 \(picked.count - 1)", "\(picked[0]) +\(picked.count - 1)", "\(picked[0]) 他\(picked.count - 1)")
         }
     }
 
@@ -1645,7 +1645,7 @@ struct ContentView: View {
                     .keyboardShortcut("r")
             }
         case .countingDown(let n):
-            bigControl(uiLang("시작까지 \(n) · 취소", "Starts in \(n) · cancel"), action: { session.cancelCountdown() }) {
+            bigControl(uiLang("시작까지 \(n) · 취소", "Starts in \(n) · cancel", "開始まで \(n) · キャンセル"), action: { session.cancelCountdown() }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
             }
@@ -1654,7 +1654,7 @@ struct ContentView: View {
             busyCard(phaseText)
         case .processing:
             busyCard(session.chunksTotal > 0
-                     ? uiLang("전사 중 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%", "Transcribing · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%")
+                     ? uiLang("전사 중 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%", "Transcribing · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%", "文字起こし中 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%")
                      : phaseText)
         default:
             // done / error: the session is over — the only forward move is a new
@@ -1754,7 +1754,7 @@ struct ContentView: View {
     private var fileCardSubtitle: String {
         if case .processing = session.phase, session.sourceMediaURL != nil {
             if session.chunksTotal > 0 {
-                return uiLang("전사 중 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%", "Transcribing · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%")
+                return uiLang("전사 중 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%", "Transcribing · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%", "文字起こし中 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%")
             }
             return uiLang("전사 중…", "Transcribing…")
         }
@@ -2001,7 +2001,7 @@ struct ContentView: View {
                 }.keyboardShortcut("r")
             }
         case .countingDown(let n):
-            pillButton(uiLang("시작까지 \(n)… (취소)", "Starts in \(n)… (cancel)"), icon: "xmark.circle", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
+            pillButton(uiLang("시작까지 \(n)… (취소)", "Starts in \(n)… (cancel)", "開始まで \(n)… (キャンセル)"), icon: "xmark.circle", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
                 session.cancelCountdown()
             }.keyboardShortcut(.cancelAction)
         case .engineStarting, .ready, .processing, .flushing:
@@ -2152,7 +2152,7 @@ struct ContentView: View {
             Image(systemName: "tray.and.arrow.down")
                 .font(.system(size: 19))
                 .foregroundStyle(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary)
-            Text(uiLang("오디오 영상 파일\n드래그 앤 드롭", "Audio · video files\nDrag & drop"))
+            Text(uiLang("오디오 영상 파일\n드래그 앤 드롭", "Audio · video files\nDrag & drop", "音声・動画ファイル\nドラッグ＆ドロップ"))
                 .multilineTextAlignment(.center)
                 .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.Colors.textSecondary)
             Button { chooseFile() } label: {
@@ -2228,8 +2228,8 @@ struct ContentView: View {
     private var transcriptWarning: String? {
         if session.micSilent { return uiLang("소리가 감지되지 않아요 — 마이크를 확인해주세요", "No sound detected — check your microphone") }
         var parts: [String] = []
-        if !session.coverageGaps.isEmpty { parts.append(uiLang("누락 의심 \(session.coverageGaps.count)구간", "\(session.coverageGaps.count) suspected gaps")) }
-        if session.hangRecoveries > 0 { parts.append(uiLang("복구 \(session.hangRecoveries)회", "\(session.hangRecoveries) recoveries")) }
+        if !session.coverageGaps.isEmpty { parts.append(uiLang("누락 의심 \(session.coverageGaps.count)구간", "\(session.coverageGaps.count) suspected gaps", "欠落の疑い \(session.coverageGaps.count)区間")) }
+        if session.hangRecoveries > 0 { parts.append(uiLang("복구 \(session.hangRecoveries)회", "\(session.hangRecoveries) recoveries", "復旧 \(session.hangRecoveries)回")) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -2248,13 +2248,13 @@ struct ContentView: View {
     private var transcriptActivity: String? {
         switch session.pipeline {
         case .diarizing:                 uiLang("AI가 화자·언어를 검토하는 중", "AI is reviewing speakers & language")
-        case .correcting(let n):         uiLang("언어 교정 재전사 \(n)줄 남음", "Language re-transcribe · \(n) lines left")
-        case .fileTranscribing(let pct): pct.map { uiLang("파일 전사 중 · \($0)%", "Transcribing file · \($0)%") } ?? uiLang("파일 전사 중", "Transcribing file")
-        case .translating(let n):        uiLang("번역 중 · \(n)줄 대기", "Translating · \(n) queued")
+        case .correcting(let n):         uiLang("언어 교정 재전사 \(n)줄 남음", "Language re-transcribe · \(n) lines left", "言語修正の再文字起こし · 残り\(n)行")
+        case .fileTranscribing(let pct): pct.map { uiLang("파일 전사 중 · \($0)%", "Transcribing file · \($0)%", "ファイル文字起こし中 · \($0)%") } ?? uiLang("파일 전사 중", "Transcribing file")
+        case .translating(let n):        uiLang("번역 중 · \(n)줄 대기", "Translating · \(n) queued", "翻訳中 · \(n)行待機")
         case .translatingBacklogged:     uiLang("말이 빨라 번역이 밀렸어요 · 정지 후 자동으로 채워요", "Translation is behind fast speech · fills in after you stop")
         case .transcribing:              uiLang("전사 중", "Transcribing")
         case .listening:                 uiLang("듣는 중", "Listening")
-        case .backfilling(let n):        uiLang("번역 채우는 중 · \(n)줄 남음", "Filling in translations · \(n) left")
+        case .backfilling(let n):        uiLang("번역 채우는 중 · \(n)줄 남음", "Filling in translations · \(n) left", "翻訳を補完中 · 残り\(n)行")
         case .idle, .completed, .error:  nil   // error surfaces via phase UI, silence via warning row
         }
     }
@@ -2294,7 +2294,7 @@ struct ContentView: View {
     private var phaseText: String {
         switch session.phase {
         case .idle: uiLang("준비됨", "Ready")
-        case .countingDown(let n): uiLang("\(n)초 후 시작…", "Starting in \(n)s…")
+        case .countingDown(let n): uiLang("\(n)초 후 시작…", "Starting in \(n)s…", "\(n)秒後に開始…")
         case .engineStarting: uiLang("모델 로딩…", "Loading model…")
         case .ready: uiLang("마이크 시작…", "Starting mic…")
         case .recording: uiLang("녹음 중", "Recording")
@@ -2302,7 +2302,7 @@ struct ContentView: View {
         case .processing: uiLang("파일 전사 중…", "Transcribing file…")
         case .flushing: uiLang("마무리…", "Wrapping up…")
         case .done: uiLang("완료", "Done")
-        case .error(let m): uiLang("오류: \(m)", "Error: \(m)")
+        case .error(let m): uiLang("오류: \(m)", "Error: \(m)", "エラー: \(m)")
         }
     }
 }

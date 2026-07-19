@@ -51,6 +51,7 @@ let package = Package(
                 "Engine/EngineProtocol.swift",
                 "Engine/EngineEvents.swift",
                 "UI/L10n.swift",
+                "UI/L10nJa.swift",
                 "UI/ClinicDisplaySupport.swift",
                 "Audio/WavWriter.swift",
                 "Audio/Segmenter.swift",
