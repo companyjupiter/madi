@@ -22,7 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 enum Appearance: String, CaseIterable, Identifiable {
     case system, light, dark
     var id: String { rawValue }
-    var label: String { self == .system ? "시스템" : self == .light ? "라이트" : "다크" }
+    var label: String { label(.ko) }
+    func label(_ lang: UILanguage) -> String {
+        switch self {
+        case .system: return lang("시스템", "System")
+        case .light:  return lang("라이트", "Light")
+        case .dark:   return lang("다크", "Dark")
+        }
+    }
     var colorScheme: ColorScheme? { self == .light ? .light : self == .dark ? .dark : nil }
 }
 

@@ -2183,13 +2183,14 @@ final class SessionController: EngineProcessDelegate {
 enum SpeakerCount: Int, CaseIterable, Identifiable {
     case auto = 0, one = 1, two = 2, three = 3, fourPlus = 4
     var id: Int { rawValue }
-    var label: String {
+    var label: String { label(.ko) }
+    func label(_ lang: UILanguage) -> String {
         switch self {
-        case .auto:     return "자동"
-        case .one:      return "1명"
-        case .two:      return "2명"
-        case .three:    return "3명"
-        case .fourPlus: return "4명 이상"
+        case .auto:     return lang("자동", "Auto")
+        case .one:      return lang("1명", "1")
+        case .two:      return lang("2명", "2")
+        case .three:    return lang("3명", "3")
+        case .fourPlus: return lang("4명 이상", "4+")
         }
     }
     var maxSpeakers: Int {

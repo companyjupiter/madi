@@ -84,6 +84,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/AppInfo/UpdateChecker.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
   "$APP_DIR"/Sovereign/UI/ClinicDisplaySupport.swift
+  "$APP_DIR"/Sovereign/UI/L10n.swift
   "$APP_DIR"/Sovereign/UI/Theme.swift
   "$APP_DIR"/Sovereign/UI/Theme+Conf.swift
   "$APP_DIR"/Sovereign/UI/BrandLogo.swift
