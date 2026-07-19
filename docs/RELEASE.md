@@ -204,6 +204,7 @@ The resulting layout is:
 ```text
 s3://devart-teamjupiter-downloads-artdapne2/madi/
   runtime-assets/v1/madi-runtime-assets-v1.tar.gz
+  releases/index.json
   releases/0.9.1/
     madi-0.9.1-arm64.dmg
     madi-0.9.1-offline-arm64.dmg
@@ -216,7 +217,16 @@ s3://devart-teamjupiter-downloads-artdapne2/madi/
 Version paths are immutable: CI stores each object's SHA-256 in S3 metadata and
 refuses to overwrite an existing key with different bytes. When `publish` is
 enabled, the workflow uploads all versioned objects first and updates the small
-channel `latest.json` last.
+channel `latest.json` and `releases/index.json` documents afterward. Draft runs
+with `publish=false` upload versioned artifacts but do not expose them in either
+mutable document.
+
+`releases/index.json` is the download site's source of truth. The publisher adds
+the standard `macos-arm64` DMG with its object key, SHA-256, byte size, and first
+publication timestamp. Republishing the same version replaces its entry instead
+of duplicating it. A stable publication advances `channels.stable`; beta and RC
+publications are added to the version list while leaving the stable pointer
+unchanged. The first indexed publication must therefore use the stable channel.
 
 Keep the bucket private and expose downloads through CloudFront with Origin
 Access Control. Set the CloudFront origin path to `/<MADI_RELEASE_PREFIX>` (for

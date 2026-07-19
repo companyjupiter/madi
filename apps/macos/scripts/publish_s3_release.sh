@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Upload versioned DMGs/checksums to S3, then atomically advance a channel feed.
+# Upload versioned DMGs/checksums to S3, then advance public release metadata.
 set -euo pipefail
 
 DIST="${1:?usage: publish_s3_release.sh <dist> <bucket> <base-url> <prefix> <version> <channel> <publish>}"
@@ -28,7 +28,7 @@ done
 
 STANDARD_NAME="$(basename "$STANDARD")"
 STANDARD_SHA="$(shasum -a 256 "$STANDARD" | awk '{print $1}')"
-STANDARD_SIZE="$(stat -f '%z' "$STANDARD")"
+STANDARD_SIZE="$(wc -c < "$STANDARD" | tr -d '[:space:]')"
 STANDARD_URL="$HTTP_ROOT/$STANDARD_NAME"
 
 jq -n \
@@ -52,6 +52,79 @@ upload_immutable() {
     --cache-control 'public,max-age=31536000,immutable' --metadata "sha256=$digest" --only-show-errors
 }
 
+update_release_index() {
+  local key="$PREFIX/releases/index.json"
+  local current="$DIST/release-index.current.json"
+  local next="$DIST/release-index.json"
+  local download_error="$DIST/release-index.download-error.txt"
+  local object_key="$PREFIX/releases/$VERSION/$STANDARD_NAME"
+  local published_at
+
+  if aws s3 cp "s3://$BUCKET/$key" "$current" --only-show-errors 2>"$download_error"; then
+    rm -f "$download_error"
+  elif grep -Eq '(^|[^0-9])404([^0-9]|$)|NoSuchKey|Not Found|does not exist' "$download_error"; then
+    if [ "$CHANNEL" != stable ]; then
+      echo "❌ cannot publish $CHANNEL release before the first stable release index exists" >&2
+      return 1
+    fi
+    jq -n --arg stable "$VERSION" '{channels:{stable:$stable},releases:[]}' > "$current"
+    rm -f "$download_error"
+  else
+    echo "❌ unable to read s3://$BUCKET/$key" >&2
+    cat "$download_error" >&2
+    return 1
+  fi
+
+  jq -e '
+    type == "object"
+    and (.channels | type == "object")
+    and (.releases | type == "array")
+  ' "$current" >/dev/null || {
+    echo "❌ existing release index is invalid" >&2
+    return 1
+  }
+
+  published_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  jq \
+    --arg version "$VERSION" \
+    --arg channel "$CHANNEL" \
+    --arg object_key "$object_key" \
+    --arg sha256 "$STANDARD_SHA" \
+    --arg published_at "$published_at" \
+    --argjson size "$STANDARD_SIZE" \
+    '
+      ([.releases[]
+        | select(.version == $version and .platform == "macos-arm64")
+        | .publishedAt][0] // $published_at) as $release_date
+      | .releases = (
+          [{
+            version: $version,
+            platform: "macos-arm64",
+            objectKey: $object_key,
+            sha256: $sha256,
+            size: $size,
+            publishedAt: $release_date
+          }]
+          + [.releases[]
+            | select(.version != $version or .platform != "macos-arm64")]
+        )
+      | if $channel == "stable" then .channels.stable = $version else . end
+      | . as $index
+      | if (
+          (.channels.stable | type) == "string"
+          and any(.releases[];
+            .version == $index.channels.stable and .platform == "macos-arm64")
+        ) then .
+        else error("stable channel must reference a macos-arm64 release")
+        end
+    ' "$current" > "$next"
+
+  aws s3 cp "$next" "s3://$BUCKET/$key" \
+    --content-type application/json \
+    --cache-control 'no-cache, no-store, must-revalidate' \
+    --only-show-errors
+}
+
 for path in "$DIST"/*.dmg "$DIST/SHA256SUMS.txt"; do
   [ -f "$path" ] || continue
   content_type=application/octet-stream
@@ -61,6 +134,7 @@ done
 upload_immutable "$DIST/release.json" application/json "$PREFIX/releases/$VERSION/release.json"
 
 if [ "$PUBLISH" = true ]; then
+  update_release_index
   aws s3 cp "$DIST/release.json" "s3://$BUCKET/$PREFIX/channels/$CHANNEL/latest.json" \
     --content-type application/json --cache-control 'no-cache, no-store, must-revalidate' --only-show-errors
 fi
@@ -76,4 +150,6 @@ fi
 } > "$DIST/release-notes.md"
 
 echo "✅ uploaded immutable release to $S3_ROOT"
-[ "$PUBLISH" = true ] && echo "✅ advanced $CHANNEL channel feed"
+if [ "$PUBLISH" = true ]; then
+  echo "✅ advanced $CHANNEL channel feed and release index"
+fi

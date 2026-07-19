@@ -25,6 +25,10 @@ jobs:
             bash -n "$script"
           done < <(git ls-files '*.sh')
 
+      - name: Test S3 release publication
+        shell: bash
+        run: apps/macos/scripts/tests/publish_s3_release_test.sh
+
       - name: Validate Python syntax
         shell: bash
         run: |
