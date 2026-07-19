@@ -1323,11 +1323,44 @@ struct ContentView: View {
     private var speakerChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                ForEach(SpeakerCount.allCases) { s in
-                    setupChip(s.label(uiLang), selected: session.speakerCount == s) { session.speakerCount = s }
+                // 화자 분리 O/X — off skips the whole diar engine path (all one speaker).
+                diarToggleChip
+                // Count only matters WITH diarization → dim + disable when it's off.
+                HStack(spacing: 4) {
+                    ForEach(SpeakerCount.allCases) { s in
+                        setupChip(s.label(uiLang), selected: session.speakerCount == s) { session.speakerCount = s }
+                    }
                 }
+                .disabled(!session.diarize)
+                .opacity(session.diarize ? 1 : 0.35)
             }
         }
+    }
+
+    /// Speaker-separation on/off pill with a colored O/✓ (on) / ✕ (off) badge, so
+    /// the state reads at a glance. Off = no diarization: the engine skips the
+    /// ResNet34 path and every line is one speaker (faster, lighter).
+    private var diarToggleChip: some View {
+        let on = session.diarize
+        let tint = on ? Theme.Colors.accent : Theme.Colors.recording   // green-ish accent / red
+        return Button { session.diarize.toggle() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: on ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(tint)
+                Text(uiLang("화자 분리", "Speaker separation"))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Capsule().fill(tint.opacity(0.10)))
+            .overlay(Capsule().strokeBorder(tint.opacity(0.55), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(uiLang("끄면 화자를 나누지 않고 전부 한 사람으로 처리합니다 (더 빠르고 가벼움).",
+                     "Off = no speaker separation; everything is one speaker (faster, lighter).",
+                     "オフにすると話者を分けず、すべて一人として処理します（より速く軽量）。"))
     }
 
     // Figma 246:771 chip: both states keep the white fill and 12px medium ink —
@@ -2135,7 +2168,8 @@ struct ContentView: View {
         }
     }
 
-    // 화자 수 고정 — 자동/1/2/3/4명 이상. Maps to the engine's DIAR_MAXK cap.
+    // 화자 수 고정 — 자동/2/3/4/5명 이상 (diar on일 때만). Maps to the engine's DIAR_MAXK cap.
+    // (Currently unused — the start screen uses `speakerChips`; kept for the side panel.)
     private var speakerCountPicker: some View {
         pillDropdown(session.speakerCount.label(uiLang), isOpen: $speakerCountPickerOpen, width: $speakerCountPickerWidth) {
             ForEach(SpeakerCount.allCases) { c in

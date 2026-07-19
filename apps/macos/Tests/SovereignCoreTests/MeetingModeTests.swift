@@ -39,19 +39,29 @@ final class MeetingModeTests: XCTestCase {
     }
 
     func testDefaultSpeakerCountsAreSensible() {
-        // 1:1 and 인터뷰 fix two speakers; 강의 is one; 일반/스탠드업 stay 자동(0).
+        // 1:1 and 인터뷰 fix two speakers; 일반/스탠드업/강의 stay 자동(0).
         XCTAssertEqual(MeetingMode.general.config.defaultSpeakerCountRaw, 0)
         XCTAssertEqual(MeetingMode.oneOnOne.config.defaultSpeakerCountRaw, 2)
         XCTAssertEqual(MeetingMode.standup.config.defaultSpeakerCountRaw, 0)
         XCTAssertEqual(MeetingMode.interview.config.defaultSpeakerCountRaw, 2)
-        XCTAssertEqual(MeetingMode.lecture.config.defaultSpeakerCountRaw, 1)
+        XCTAssertEqual(MeetingMode.lecture.config.defaultSpeakerCountRaw, 0)   // count moot — diar off
+    }
+
+    func testLectureDefaultsToDiarizationOff() {
+        // 강의 = single presenter → diarization off (skips the diar engine); the rest on.
+        XCTAssertFalse(MeetingMode.lecture.config.defaultDiarize)
+        for m in [MeetingMode.general, .oneOnOne, .standup, .interview] {
+            XCTAssertTrue(m.config.defaultDiarize, "\(m) should default diarization on")
+        }
     }
 
     func testSpeakerCountRawsAreInValidRange() {
-        // Must be a valid SpeakerCount rawValue (0=자동,1,2,3,4=4명 이상).
+        // Must be a valid SpeakerCount rawValue (0=자동, 2/3/4, 5=5명 이상 — note: no 1).
+        // Hardcoded because SpeakerCount lives in the app target, not SovereignCore.
+        let valid: Set<Int> = [0, 2, 3, 4, 5]
         for m in MeetingMode.allCases {
             let raw = m.config.defaultSpeakerCountRaw
-            XCTAssertTrue((0...4).contains(raw), "\(m) raw \(raw) out of SpeakerCount range")
+            XCTAssertTrue(valid.contains(raw), "\(m) raw \(raw) not a SpeakerCount rawValue")
         }
     }
 
