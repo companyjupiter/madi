@@ -50,14 +50,16 @@ enum MeetingMode: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// One-line description of what the preset does.
-    var summaryDescription: String {
+    /// One-line description of what the preset does (Korean; kept for
+    /// not-yet-localized call sites).
+    var summaryDescription: String { summaryDescription(.ko) }
+    func summaryDescription(_ lang: UILanguage) -> String {
         switch self {
-        case .general:   return "기본 설정 · 발화자 자동 감지"
-        case .oneOnOne:  return "발화자 2명 · 결정과 후속 조치 강조"
-        case .standup:   return "발화자 자동 · 액션과 블로커 강조"
-        case .interview: return "발화자 2명 · 질문·답변 흐름 보존"
-        case .lecture:   return "발화자 1명 · 핵심 요점 위주 정리"
+        case .general:   return lang("기본 설정 · 발화자 자동 감지", "Default · auto-detect speakers")
+        case .oneOnOne:  return lang("발화자 2명 · 결정과 후속 조치 강조", "2 speakers · emphasize decisions & follow-ups")
+        case .standup:   return lang("발화자 자동 · 액션과 블로커 강조", "Auto speakers · emphasize actions & blockers")
+        case .interview: return lang("발화자 2명 · 질문·답변 흐름 보존", "2 speakers · preserve question-answer flow")
+        case .lecture:   return lang("발화자 1명 · 핵심 요점 위주 정리", "1 speaker · focus on key takeaways")
         }
     }
 

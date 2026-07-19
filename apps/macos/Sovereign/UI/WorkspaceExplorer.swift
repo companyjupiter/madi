@@ -12,6 +12,7 @@ import AppKit
 struct WorkspaceExplorer: View {
     @Bindable var session: SessionController
     @Binding var isVisible: Bool
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     // Resizable column width — drag the trailing edge; persisted across launches.
     @AppStorage("explorerWidth") private var explorerWidth = 260.0
@@ -26,12 +27,12 @@ struct WorkspaceExplorer: View {
     // kept in the source, just unreferenced; restore this case with the flag.
     private enum ExplorerMode: String, CaseIterable {
         case files, people, openLoops, stats
-        var label: String {
+        func label(_ lang: UILanguage) -> String {
             switch self {
-            case .files: return "파일"
-            case .people: return "사람"
-            case .openLoops: return "열린 항목"
-            case .stats: return "통계"
+            case .files: return lang("파일", "Files")
+            case .people: return lang("사람", "People")
+            case .openLoops: return lang("열린 항목", "Open items")
+            case .stats: return lang("통계", "Stats")
             }
         }
     }
@@ -56,7 +57,7 @@ struct WorkspaceExplorer: View {
                 Button {
                     withAnimation(.snappy(duration: 0.25)) { mode = m }
                 } label: {
-                    Text(m.label)
+                    Text(m.label(uiLang))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(mode == m ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
                         .lineLimit(1)
@@ -89,7 +90,7 @@ struct WorkspaceExplorer: View {
                 modeSwitcher
                     .padding(.horizontal, 17).padding(.top, 19)
             } else {
-                Text("회의록")
+                Text(uiLang("회의록", "Meetings"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(.horizontal, 20).padding(.top, 21)
@@ -174,13 +175,13 @@ struct WorkspaceExplorer: View {
         VStack(alignment: .leading, spacing: 18) {
             Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
             HStack {
-                Text("자동저장")
+                Text(uiLang("자동저장", "Auto-save"))
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 BlackToggle(isOn: $session.autoSaveEnabled)
             }
             HStack(spacing: 6) {
-                Text("폴더")
+                Text(uiLang("폴더", "Folder"))
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Text(session.autoSaveFolder.lastPathComponent)
                     .font(.system(size: 13))
@@ -188,7 +189,7 @@ struct WorkspaceExplorer: View {
                     .lineLimit(1).truncationMode(.middle)
                     .help(session.autoSaveFolder.path)
                 Spacer()
-                Button("변경") { chooseFolder() }
+                Button(uiLang("변경", "Change")) { chooseFolder() }
                     .buttonStyle(.plain)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.Colors.textPrimary)   // de-accent
@@ -205,7 +206,7 @@ struct WorkspaceExplorer: View {
         Button { showExportDialog = true } label: {
             HStack(spacing: 4) {
                 Image(systemName: "square.and.arrow.up").font(.system(size: 12, weight: .semibold))
-                Text("내보내기").font(.system(size: 12, weight: .semibold))
+                Text(uiLang("내보내기", "Export")).font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(Theme.Colors.textPrimary)
             .frame(maxWidth: .infinity).frame(height: 36)
@@ -216,13 +217,13 @@ struct WorkspaceExplorer: View {
         .buttonStyle(.plain)
         .disabled(session.transcript.lines.isEmpty)
         .opacity(session.transcript.lines.isEmpty ? 0.4 : 1)
-        .confirmationDialog("내보내기 형식", isPresented: $showExportDialog, titleVisibility: .visible) {
+        .confirmationDialog(uiLang("내보내기 형식", "Export format"), isPresented: $showExportDialog, titleVisibility: .visible) {
             Button("Markdown (.md)") { export("md", session.exportMarkdown) }
             Button("Subtitles (.srt)") { export("srt", session.exportSRT) }
             Button("Subtitles (.vtt)") { export("vtt", session.exportVTT) }
             Button("Plain text (.txt)") { export("txt", session.exportText) }
             Button("JSON (.json)") { export("json", session.exportJSON) }
-            Button("취소", role: .cancel) { }
+            Button(uiLang("취소", "Cancel"), role: .cancel) { }
         }
     }
 
@@ -283,14 +284,14 @@ struct WorkspaceExplorer: View {
             Button { session.autoSaveFolder = session.workspace.root.deletingLastPathComponent() } label: {
                 Image(systemName: "arrow.up")
             }
-            .buttonStyle(.plain).help("상위 폴더로")
+            .buttonStyle(.plain).help(uiLang("상위 폴더로", "To parent folder"))
             .disabled(session.workspace.root.path == "/")
             Button { session.workspace.reload() } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.plain).help("새로고침")
+                .buttonStyle(.plain).help(uiLang("새로고침", "Refresh"))
             Button { chooseFolder() } label: { Image(systemName: "folder.badge.gearshape") }
-                .buttonStyle(.plain).help("작업 폴더 변경…")
+                .buttonStyle(.plain).help(uiLang("작업 폴더 변경…", "Change working folder…"))
             Button { isVisible = false } label: { Image(systemName: "sidebar.right") }
-                .buttonStyle(.plain).help("탐색기 닫기")
+                .buttonStyle(.plain).help(uiLang("탐색기 닫기", "Close explorer"))
         }
         .font(.system(size: 12))
         .foregroundStyle(Theme.Colors.textSecondary)
@@ -303,7 +304,7 @@ struct WorkspaceExplorer: View {
         VStack(spacing: 8) {
             Spacer()
             ProgressView().controlSize(.small)
-            Text("폴더를 읽는 중…")
+            Text(uiLang("폴더를 읽는 중…", "Reading folder…"))
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
             Spacer()
         }
@@ -315,7 +316,7 @@ struct WorkspaceExplorer: View {
             Spacer()
             Image(systemName: "folder")
                 .font(.system(size: 26, weight: .light)).foregroundStyle(Theme.Colors.textTertiary)
-            Text("이 폴더에 저장된 회의록이 없습니다")
+            Text(uiLang("이 폴더에 저장된 회의록이 없습니다", "No meetings saved in this folder"))
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
                 .multilineTextAlignment(.center)
             Spacer()
@@ -351,11 +352,11 @@ struct WorkspaceExplorer: View {
         }
         .contextMenu {
             if node.isDir {
-                Button("이 폴더 열기 (작업 폴더로)") { session.autoSaveFolder = node.url }
+                Button(uiLang("이 폴더 열기 (작업 폴더로)", "Open this folder (as working folder)")) { session.autoSaveFolder = node.url }
             } else if node.isTranscript {
-                Button("회의록 열기") { session.openArchived(node.url) }
+                Button(uiLang("회의록 열기", "Open meeting")) { session.openArchived(node.url) }
             }
-            Button("Finder에서 보기") { reveal(node.url) }
+            Button(uiLang("Finder에서 보기", "Show in Finder")) { reveal(node.url) }
         }
         .help(node.url.path)
     }

@@ -10,6 +10,7 @@ import AppKit
 
 /// Full-window blocking screen for an expired beta. No path back into the app.
 struct ExpiredGateView: View {
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "hourglass.bottomhalf.filled")
@@ -20,12 +21,13 @@ struct ExpiredGateView: View {
 
             VStack(spacing: 6) {
                 Text("Madi").font(Theme.Fonts.appTitle).foregroundStyle(Theme.Colors.brandMark)
-                Text("베타 기간이 종료되었습니다")
+                Text(uiLang("베타 기간이 종료되었습니다", "The beta period has ended"))
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.Colors.textPrimary)
             }
 
-            Text("이 베타(\(AppVersion.full))는 \(Self.expiryText) 사용 기간이 끝났습니다.\n계속 사용하려면 정식판을 내려받아 주세요.")
+            Text(uiLang("이 베타(\(AppVersion.full))는 \(Self.expiryText(uiLang)) 사용 기간이 끝났습니다.\n계속 사용하려면 정식판을 내려받아 주세요.",
+                        "This beta (\(AppVersion.full)) expired on \(Self.expiryText(uiLang)).\nPlease download the full version to keep using Madi."))
                 .font(Theme.Fonts.status)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -35,7 +37,7 @@ struct ExpiredGateView: View {
             Button {
                 NSWorkspace.shared.open(AppVersion.releasesURL)
             } label: {
-                Label("정식판 받기", systemImage: "arrow.down.circle.fill")
+                Label(uiLang("정식판 받기", "Get the full version"), systemImage: "arrow.down.circle.fill")
                     .font(Theme.Fonts.cta)
                     .padding(.horizontal, 6)
             }
@@ -52,10 +54,15 @@ struct ExpiredGateView: View {
         .padding(40)
     }
 
-    static var expiryText: String {
+    static func expiryText(_ lang: UILanguage) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ko_KR")
-        f.dateFormat = "yyyy년 M월 d일"
+        if lang == .en {
+            f.locale = Locale(identifier: "en_US")
+            f.dateFormat = "MMM d, yyyy"
+        } else {
+            f.locale = Locale(identifier: "ko_KR")
+            f.dateFormat = "yyyy년 M월 d일"
+        }
         return f.string(from: AppVersion.betaExpiryDate)
     }
 }
@@ -65,6 +72,7 @@ struct BetaWarningBanner: View {
     let daysLeft: Int
     /// Opens the in-app update window (Help → 업데이트 설치).
     var onCheckUpdate: () -> Void
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     var body: some View {
         HStack(spacing: 10) {
@@ -74,11 +82,11 @@ struct BetaWarningBanner: View {
             Text(dDayText)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(Theme.Colors.textPrimary)
-            Text("정식판으로 이전을 준비해 주세요")
+            Text(uiLang("정식판으로 이전을 준비해 주세요", "Please prepare to move to the full version"))
                 .font(Theme.Fonts.status)
                 .foregroundStyle(Theme.Colors.textSecondary)
             Spacer(minLength: 8)
-            Button("업데이트 확인", action: onCheckUpdate)
+            Button(uiLang("업데이트 확인", "Check for updates"), action: onCheckUpdate)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .buttonStyle(.borderless)
                 .foregroundStyle(Theme.Colors.accent)
@@ -93,6 +101,6 @@ struct BetaWarningBanner: View {
     }
 
     private var dDayText: String {
-        daysLeft <= 0 ? "베타 종료 D-Day" : "베타 종료 D-\(daysLeft)"
+        daysLeft <= 0 ? uiLang("베타 종료 D-Day", "Beta ends today") : uiLang("베타 종료 D-\(daysLeft)", "Beta ends in \(daysLeft)d")
     }
 }

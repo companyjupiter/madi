@@ -313,15 +313,15 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles").foregroundStyle(Theme.Colors.textSecondary)   // de-accent
-                Text("회의 요약").font(Theme.Fonts.appTitle)
-                Text("온디바이스").font(Theme.Fonts.status)
+                Text(uiLang("회의 요약", "Meeting summary")).font(Theme.Fonts.appTitle)
+                Text(uiLang("온디바이스", "On-device")).font(Theme.Fonts.status)
                     .foregroundStyle(Theme.Colors.textTertiary)
                 Spacer()
-                Button("닫기") { showSummary = false }
+                Button(uiLang("닫기", "Close")) { showSummary = false }
             }
             Picker("", selection: $summaryBySpeaker) {
-                Text("전체").tag(false)
-                Text("화자별").tag(true)
+                Text(uiLang("전체", "Overall")).tag(false)
+                Text(uiLang("화자별", "By speaker")).tag(true)
             }
             .pickerStyle(.segmented).fixedSize()
             .onChange(of: summaryBySpeaker) { _, on in
@@ -333,9 +333,10 @@ struct ContentView: View {
             if busy {
                 VStack(spacing: 10) {
                     ProgressView()
-                    Text("로컬 LLM이 \(summaryBySpeaker ? "화자별 요약" : "요약")을 생성하는 중…")
+                    Text(uiLang("로컬 LLM이 \(summaryBySpeaker ? "화자별 요약" : "요약")을 생성하는 중…",
+                                "The local LLM is generating the \(summaryBySpeaker ? "per-speaker summary" : "summary")…"))
                         .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
-                    Text("전사 내용은 이 Mac을 떠나지 않습니다.")
+                    Text(uiLang("전사 내용은 이 Mac을 떠나지 않습니다.", "The transcript never leaves this Mac."))
                         .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let text {
@@ -345,14 +346,14 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 HStack {
-                    Button { copy(text) } label: { Label("복사", systemImage: "doc.on.doc") }
+                    Button { copy(text) } label: { Label(uiLang("복사", "Copy"), systemImage: "doc.on.doc") }
                     Button { summaryBySpeaker ? session.summarizeBySpeaker() : session.summarize() } label: {
-                        Label("다시 생성", systemImage: "arrow.clockwise")
+                        Label(uiLang("다시 생성", "Regenerate"), systemImage: "arrow.clockwise")
                     }
-                    Button { exportDeck() } label: { Label("슬라이드(HTML)", systemImage: "rectangle.on.rectangle.angled") }
-                    Button { showRecap = true } label: { Label("리캡 카드", systemImage: "rectangle.portrait.on.rectangle.portrait") }
+                    Button { exportDeck() } label: { Label(uiLang("슬라이드(HTML)", "Slides (HTML)"), systemImage: "rectangle.on.rectangle.angled") }
+                    Button { showRecap = true } label: { Label(uiLang("리캡 카드", "Recap card"), systemImage: "rectangle.portrait.on.rectangle.portrait") }
                     Spacer()
-                    Button("내보내기…") { export(.init(filenameExtension: "md")!) { try text.write(to: $0, atomically: true, encoding: .utf8) } }
+                    Button(uiLang("내보내기…", "Export…")) { export(.init(filenameExtension: "md")!) { try text.write(to: $0, atomically: true, encoding: .utf8) } }
                 }.font(Theme.Fonts.status)
             }
             qaBlock
@@ -365,21 +366,21 @@ struct ContentView: View {
     private var qaBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             Divider().overlay(Theme.Colors.separator)
-            Text("회의록에 물어보기").font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
+            Text(uiLang("회의록에 물어보기", "Ask the transcript")).font(Theme.Fonts.section).foregroundStyle(Theme.Colors.textSecondary)
             Picker("", selection: $qaWorkspaceScope) {
-                Text("이 회의").tag(false)
-                Text("전체 워크스페이스").tag(true)
+                Text(uiLang("이 회의", "This meeting")).tag(false)
+                Text(uiLang("전체 워크스페이스", "Whole workspace")).tag(true)
             }
             .pickerStyle(.segmented).labelsHidden()
             HStack(spacing: 6) {
-                TextField(qaWorkspaceScope ? "전체 회의록에서 검색 — 예: 지난달 보안 결정은?" : "예: 무엇을 결정했나요? / 김부장이 맡은 일은?", text: $qaInput)
+                TextField(qaWorkspaceScope ? uiLang("전체 회의록에서 검색 — 예: 지난달 보안 결정은?", "Search all meetings — e.g. What did we decide on security last month?") : uiLang("예: 무엇을 결정했나요? / 김부장이 맡은 일은?", "e.g. What did we decide? / What is Alex responsible for?"), text: $qaInput)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { ask() }
                 Button { ask() } label: { Image(systemName: "paperplane.fill") }
                     .disabled(qaInput.trimmingCharacters(in: .whitespaces).isEmpty || session.qaAsking)
             }
             if session.qaAsking {
-                HStack(spacing: 6) { ProgressView().controlSize(.small); Text("로컬 LLM이 답하는 중…").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary) }
+                HStack(spacing: 6) { ProgressView().controlSize(.small); Text(uiLang("로컬 LLM이 답하는 중…", "The local LLM is answering…")).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary) }
             } else if let a = session.qaAnswer {
                 Text(a).font(.system(size: max(12, fontSize - 3)))
                     .foregroundStyle(Theme.Colors.textPrimary).textSelection(.enabled)
@@ -412,7 +413,7 @@ struct ContentView: View {
     private var findBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(Theme.Colors.textTertiary)
-            TextField("전사문에서 찾기", text: $findQuery)
+            TextField(uiLang("전사문에서 찾기", "Find in transcript"), text: $findQuery)
                 .textFieldStyle(.plain).font(.system(size: 13))
                 .focused($findFocused)
                 .onSubmit { moveFind(1) }
@@ -421,16 +422,16 @@ struct ContentView: View {
                 if !findMatches.isEmpty {
                     Text("\(findIndex + 1) / \(findMatches.count)").foregroundStyle(Theme.Colors.textSecondary)
                 } else if !findQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text("없음").foregroundStyle(Theme.Colors.textTertiary)
+                    Text(uiLang("없음", "None")).foregroundStyle(Theme.Colors.textTertiary)
                 }
             }
             .font(.system(size: 12)).monospacedDigit()
             Button { moveFind(-1) } label: { Image(systemName: "chevron.up") }
-                .buttonStyle(.plain).disabled(findMatches.isEmpty).help("이전")
+                .buttonStyle(.plain).disabled(findMatches.isEmpty).help(uiLang("이전", "Previous"))
             Button { moveFind(1) } label: { Image(systemName: "chevron.down") }
-                .buttonStyle(.plain).disabled(findMatches.isEmpty).help("다음 (↩)")
+                .buttonStyle(.plain).disabled(findMatches.isEmpty).help(uiLang("다음 (↩)", "Next (↩)"))
             Button { closeFind() } label: { Image(systemName: "xmark") }
-                .buttonStyle(.plain).keyboardShortcut(.cancelAction).help("닫기 (Esc)")
+                .buttonStyle(.plain).keyboardShortcut(.cancelAction).help(uiLang("닫기 (Esc)", "Close (Esc)"))
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
         .background(Capsule().fill(Theme.Colors.surfaceSunken))
@@ -542,7 +543,7 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(Theme.Colors.accent, style: StrokeStyle(lineWidth: 2, dash: [8]))
                         .background(RoundedRectangle(cornerRadius: 12).fill(Theme.Colors.accent.opacity(0.06)))
-                        .overlay(Label("드롭하여 전사", systemImage: "tray.and.arrow.down")
+                        .overlay(Label(uiLang("드롭하여 전사", "Drop to transcribe"), systemImage: "tray.and.arrow.down")
                             .font(Theme.Fonts.body).foregroundStyle(Theme.Colors.accent))
                         .padding(8).allowsHitTesting(false)
                 }
@@ -575,7 +576,7 @@ struct ContentView: View {
                 if let u = session.lastAutoSaved { NSWorkspace.shared.open(u) }
             } label: {
                 HStack(spacing: 5) {
-                    Text("파일 열기")
+                    Text(uiLang("파일 열기", "Open file"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white)   // de-accent: was #889CFF
                     SVGIcon(name: "chevron-left", size: 12, tint: .white)
@@ -598,9 +599,9 @@ struct ContentView: View {
 
     private var saveToastText: String {
         if let u = session.lastAutoSaved {
-            return "회의록이 자동 저장되었어요 · \(u.lastPathComponent)"
+            return uiLang("회의록이 자동 저장되었어요 · \(u.lastPathComponent)", "Meeting saved automatically · \(u.lastPathComponent)")
         }
-        return "회의록이 자동 저장되었어요"
+        return uiLang("회의록이 자동 저장되었어요", "Meeting saved automatically")
     }
 
     // 내용/상세 toggle — keeps the clean reading view (default) free of the
@@ -616,7 +617,7 @@ struct ContentView: View {
                 Button {
                     withAnimation(.snappy(duration: 0.25)) { contentMode = isContent }
                 } label: {
-                    Text(isContent ? "내용" : "상세")
+                    Text(isContent ? uiLang("내용", "Content") : uiLang("상세", "Detail"))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(contentMode == isContent ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
                         .lineLimit(1).fixedSize(horizontal: true, vertical: false)
@@ -644,11 +645,11 @@ struct ContentView: View {
     private var viewModeBar: some View {
         HStack(spacing: 10) {
             Button { fontSize = max(12, fontSize - 2) } label: { Text("A").font(.system(size: 11)) }
-                .buttonStyle(.plain).help("글자 작게")
+                .buttonStyle(.plain).help(uiLang("글자 작게", "Smaller text"))
             Text("\(Int(fontSize))").font(Theme.Fonts.status)
                 .foregroundStyle(Theme.Colors.textTertiary).monospacedDigit()
             Button { fontSize = min(34, fontSize + 2) } label: { Text("A").font(.system(size: 17)) }
-                .buttonStyle(.plain).help("글자 크게")
+                .buttonStyle(.plain).help(uiLang("글자 크게", "Larger text"))
             Spacer(minLength: 0)
             // On-device 회의 요약 sheet. dfa3aa7 (UX 리디자인) dropped this button
             // and left `summarySheet` unreachable — showSummary had no writer, so
@@ -662,7 +663,7 @@ struct ContentView: View {
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .disabled(!session.canSummarize)
                 .opacity(session.canSummarize ? 1 : 0.4)
-                .help("회의 요약 — 로컬 LLM으로 요약·액션아이템 생성 (기기 밖으로 안 나감)")
+                .help(uiLang("회의 요약 — 로컬 LLM으로 요약·액션아이템 생성 (기기 밖으로 안 나감)", "Meeting summary — the local LLM makes a summary + action items (never leaves the device)"))
             }
             // A5/B9: floating live-translation caption overlay (Zoom·Teams 위,
             // 클리닉 이중 패널 포함) — translate targets picked in Settings.
@@ -673,7 +674,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(session.captionOverlayOn ? Theme.Colors.accent : Theme.Colors.textSecondary)
-                .help(session.captionOverlayOn ? "자막 오버레이 끄기" : "자막 오버레이 — 화면 위 실시간 번역 자막 창")
+                .help(session.captionOverlayOn ? uiLang("자막 오버레이 끄기", "Turn off caption overlay") : uiLang("자막 오버레이 — 화면 위 실시간 번역 자막 창", "Caption overlay — a floating live-translation window"))
             }
             // C18: chat layout toggle (two-party only) — hidden from the toolbar
             // (the 말풍선 icon). The .chat mode still exists in code but isn't
@@ -686,12 +687,12 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(chatLayout ? Theme.Colors.accent : Theme.Colors.textSecondary)
-                .help("대화 레이아웃 (직원 왼쪽 · 환자 오른쪽)")
+                .help(uiLang("대화 레이아웃 (직원 왼쪽 · 환자 오른쪽)", "Chat layout (staff left · patient right)"))
             }
             contentModeSwitch
                 .disabled(chatLayout && twoSpeakers)
                 .opacity(chatLayout && twoSpeakers ? 0.45 : 1)
-                .help("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시")
+                .help(uiLang("내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시", "Content: clean transcript · Detail: timecodes, confidence, overlap"))
         }
         .padding(.leading, 21).padding(.trailing, 16).padding(.vertical, 8)
         .padding(.top, 5)
@@ -706,7 +707,7 @@ struct ContentView: View {
                 Text(note).font(.system(size: 12)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 if session.transcript.hasSpeakerCorrections {
-                    Button("화자 교정 되돌리기") { session.revertReconcile() }
+                    Button(uiLang("화자 교정 되돌리기", "Undo speaker correction")) { session.revertReconcile() }
                         .controlSize(.small).buttonStyle(.plain).foregroundStyle(Theme.Colors.accent)
                 }
             }
@@ -730,7 +731,7 @@ struct ContentView: View {
         return HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(Theme.Colors.lowConf)
-            Text("검토 필요 \(flagged.count)개").font(Theme.Fonts.status)
+            Text(uiLang("검토 필요 \(flagged.count)개", "\(flagged.count) to review")).font(Theme.Fonts.status)
             if !flagged.isEmpty {
                 Text("· \(flagged[idx].text)").font(Theme.Fonts.status)
                     .foregroundStyle(Theme.Colors.textSecondary).lineLimit(1)
@@ -743,9 +744,9 @@ struct ContentView: View {
                                   scrollTick: $scrollTick,
                                   flaggedCount: flagged.count)
                 Button { jump(-1) } label: { Image(systemName: "chevron.up") }
-                    .buttonStyle(.plain).help("이전 검토 단어")
+                    .buttonStyle(.plain).help(uiLang("이전 검토 단어", "Previous flagged word"))
                 Button { jump(1) } label: { Image(systemName: "chevron.down") }
-                    .buttonStyle(.plain).help("다음 검토 단어")
+                    .buttonStyle(.plain).help(uiLang("다음 검토 단어", "Next flagged word"))
             } else { Spacer() }
         }
         .padding(.horizontal, 16).padding(.vertical, 7)
@@ -808,7 +809,7 @@ struct ContentView: View {
                 Text(uiLang("기록할 준비가 되었어요", "Ready to record"))
                     .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text("‘녹음 시작’을 누르거나, 오디오·영상 파일을 끌어다 놓으세요.")
+                Text(uiLang("‘녹음 시작’을 누르거나, 오디오·영상 파일을 끌어다 놓으세요.", "Press ‘Start recording’, or drop in an audio/video file."))
                     .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
             }
@@ -825,7 +826,7 @@ struct ContentView: View {
                 .multilineTextAlignment(.center).padding(.horizontal, 32)
             HStack(spacing: 8) {
                 if msg.contains("마이크 권한") {
-                    Button("시스템 설정 열기") {
+                    Button(uiLang("시스템 설정 열기", "Open System Settings")) {
                         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
                             NSWorkspace.shared.open(url)
                         }
@@ -833,9 +834,9 @@ struct ContentView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 if msg.contains("모델이 준비되지") {
-                    SettingsLink { Text("설정 열기") }.buttonStyle(.borderedProminent)
+                    SettingsLink { Text(uiLang("설정 열기", "Open Settings")) }.buttonStyle(.borderedProminent)
                 }
-                Button("처음으로") { session.reset() }.buttonStyle(.bordered)
+                Button(uiLang("처음으로", "Start over")) { session.reset() }.buttonStyle(.bordered)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1068,7 +1069,7 @@ struct ContentView: View {
         .background(Capsule().fill(Theme.Colors.surface))
         // Outline unified with the 회의 정보 pills (surfaceSunken, not meterTrack).
         .overlay(Capsule().strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
-        .help("녹음에 사용할 입력 — 마이크, 또는 시스템 오디오(Teams·Zoom·YouTube 등 Mac에서 재생되는 소리). 시스템 오디오는 첫 사용 시 ‘화면 기록’ 권한을 요청합니다 (오디오 전용).")
+        .help(uiLang("녹음에 사용할 입력 — 마이크, 또는 시스템 오디오(Teams·Zoom·YouTube 등 Mac에서 재생되는 소리). 시스템 오디오는 첫 사용 시 ‘화면 기록’ 권한을 요청합니다 (오디오 전용).", "Input to record — a microphone, or system audio (Teams·Zoom·YouTube … whatever plays on the Mac). System audio asks for ‘Screen Recording’ permission on first use (audio only)."))
         .background(GeometryReader { g in
             Color.clear.preference(key: LangPillFrameKey.self,
                                    value: ["mic": g.frame(in: .named("startCard"))])
@@ -1457,23 +1458,23 @@ struct ContentView: View {
                         SVGIcon(name: "chevron-left", size: 22)
                     }
                     .buttonStyle(.plain)
-                    .help("시작 화면으로")
-                    .confirmationDialog("녹음이 진행 중이에요", isPresented: $showStopConfirm, titleVisibility: .visible) {
-                        Button("정지하기", role: .destructive) { session.stop() }
-                        Button("계속 녹음", role: .cancel) {}
+                    .help(uiLang("시작 화면으로", "Back to start"))
+                    .confirmationDialog(uiLang("녹음이 진행 중이에요", "Recording in progress"), isPresented: $showStopConfirm, titleVisibility: .visible) {
+                        Button(uiLang("정지하기", "Stop"), role: .destructive) { session.stop() }
+                        Button(uiLang("계속 녹음", "Keep recording"), role: .cancel) {}
                     } message: {
-                        Text("정지하면 여기까지의 기록이 정리돼요. 자동저장이 켜져 있으면 파일로 저장됩니다.")
+                        Text(uiLang("정지하면 여기까지의 기록이 정리돼요. 자동저장이 켜져 있으면 파일로 저장됩니다.", "Stopping wraps up what's captured so far. If auto-save is on, it's written to a file."))
                     }
-                    .confirmationDialog("저장되지 않은 기록이 있어요", isPresented: $showBackDiscardConfirm, titleVisibility: .visible) {
-                        Button("삭제하고 나가기", role: .destructive) { session.reset() }
-                        Button("취소", role: .cancel) {}
+                    .confirmationDialog(uiLang("저장되지 않은 기록이 있어요", "You have an unsaved transcript"), isPresented: $showBackDiscardConfirm, titleVisibility: .visible) {
+                        Button(uiLang("삭제하고 나가기", "Discard and leave"), role: .destructive) { session.reset() }
+                        Button(uiLang("취소", "Cancel"), role: .cancel) {}
                     } message: {
-                        Text("자동저장이 꺼져 있어 나가면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요.")
+                        Text(uiLang("자동저장이 꺼져 있어 나가면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요.", "Auto-save is off, so leaving discards this transcript. You can Export to save it first."))
                     }
                     Spacer()
                     SettingsLink { SVGIcon(name: "setting", size: 22) }
                         .buttonStyle(.plain)
-                        .help("설정 (⌘,)")
+                        .help(uiLang("설정 (⌘,)", "Settings (⌘,)"))
                 }
             }
             .padding(.horizontal, 16).padding(.top, 18)
@@ -1572,7 +1573,7 @@ struct ContentView: View {
     /// "입력 마이크 · <device> ⌄" — swaps the capture device mid-recording.
     private var micRow: some View {
         HStack(spacing: 8) {
-            Text("입력 마이크")
+            Text(uiLang("입력 마이크", "Input mic"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.Colors.textPrimary)
             Spacer(minLength: 8)
@@ -1593,7 +1594,7 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .help("녹음 중에도 입력 마이크를 바꿀 수 있어요")
+            .help(uiLang("녹음 중에도 입력 마이크를 바꿀 수 있어요", "Swap the input mic even while recording"))
         }
         // The panel anchors to the WHOLE row's frame (panel width = row width).
         .background(GeometryReader { g in
@@ -1626,25 +1627,25 @@ struct ContentView: View {
         switch session.phase {
         case .recording:
             HStack(spacing: 5) {
-                bigControl("일시 정지", action: { session.pauseRecording() }) { pauseGlyph }
+                bigControl(uiLang("일시 정지", "Pause"), action: { session.pauseRecording() }) { pauseGlyph }
                     .keyboardShortcut("p")
-                bigControl("정지", action: { session.stop() }) { stopGlyph }
+                bigControl(uiLang("정지", "Stop"), action: { session.stop() }) { stopGlyph }
                     .keyboardShortcut("r")
             }
         case .paused:
             HStack(spacing: 5) {
                 // rev.3 (Figma 188:714): 재개 is a BLACK play triangle, matching
                 // the pause glyph's ink — only 정지 stays red.
-                bigControl("재개", action: { session.resumeRecording() }) {
+                bigControl(uiLang("재개", "Resume"), action: { session.resumeRecording() }) {
                     Image(systemName: "play.fill")
                         .font(.system(size: 15)).foregroundStyle(Theme.Colors.textPrimary)
                 }
                 .keyboardShortcut("p")
-                bigControl("정지", action: { session.stop() }) { stopGlyph }
+                bigControl(uiLang("정지", "Stop"), action: { session.stop() }) { stopGlyph }
                     .keyboardShortcut("r")
             }
         case .countingDown(let n):
-            bigControl("시작까지 \(n) · 취소", action: { session.cancelCountdown() }) {
+            bigControl(uiLang("시작까지 \(n) · 취소", "Starts in \(n) · cancel"), action: { session.cancelCountdown() }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
             }
@@ -1653,12 +1654,12 @@ struct ContentView: View {
             busyCard(phaseText)
         case .processing:
             busyCard(session.chunksTotal > 0
-                     ? "전사 중 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%"
+                     ? uiLang("전사 중 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%", "Transcribing · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%")
                      : phaseText)
         default:
             // done / error: the session is over — the only forward move is a new
             // one, which routes back through the Set to start screen via reset().
-            bigControl("새 기록 시작", action: { session.reset() }) {
+            bigControl(uiLang("새 기록 시작", "New recording"), action: { session.reset() }) {
                 Image(systemName: "plus")
                     .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
             }
@@ -1693,7 +1694,7 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 9).padding(.trailing, 11)
-            .help("닫기")
+            .help(uiLang("닫기", "Close"))
         }
         .frame(maxWidth: .infinity).frame(height: 118)
         .background(
@@ -1702,11 +1703,11 @@ struct ContentView: View {
                 .fill(Theme.Colors.surface)
                 .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
         )
-        .confirmationDialog("저장되지 않은 기록이 있어요", isPresented: $showDiscardConfirm, titleVisibility: .visible) {
-            Button("삭제하고 닫기", role: .destructive) { session.reset() }
-            Button("취소", role: .cancel) {}
+        .confirmationDialog(uiLang("저장되지 않은 기록이 있어요", "You have an unsaved transcript"), isPresented: $showDiscardConfirm, titleVisibility: .visible) {
+            Button(uiLang("삭제하고 닫기", "Discard and close"), role: .destructive) { session.reset() }
+            Button(uiLang("취소", "Cancel"), role: .cancel) {}
         } message: {
-            Text("자동저장이 꺼져 있어 닫으면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요.")
+            Text(uiLang("자동저장이 꺼져 있어 닫으면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요.", "Auto-save is off, so closing discards this transcript. You can Export to save it first."))
         }
     }
 
@@ -1747,15 +1748,15 @@ struct ContentView: View {
         // fileName covers file mode, opened archives, and AI-titled live sessions;
         // otherwise fall back to the auto-saved .md name (live w/o title).
         if !session.fileName.isEmpty { return session.fileName }
-        return session.lastAutoSaved?.lastPathComponent ?? "회의 기록"
+        return session.lastAutoSaved?.lastPathComponent ?? uiLang("회의 기록", "Meeting record")
     }
 
     private var fileCardSubtitle: String {
         if case .processing = session.phase, session.sourceMediaURL != nil {
             if session.chunksTotal > 0 {
-                return "전사 중 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%"
+                return uiLang("전사 중 · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%", "Transcribing · \(Int(Double(session.chunksDone) / Double(session.chunksTotal) * 100))%")
             }
-            return "전사 중…"
+            return uiLang("전사 중…", "Transcribing…")
         }
         // Size of whichever file backs this session; fall back to the duration
         // for a live session that wasn't auto-saved.
@@ -1825,7 +1826,7 @@ struct ContentView: View {
                 Text(totalTimeText)
                     .font(.system(size: 30)).monospacedDigit()
                     .foregroundStyle(Theme.Colors.textPrimary)
-                Text("총 시간")
+                Text(uiLang("총 시간", "Total time"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.Colors.textSecondary)
                 // (CommitCadenceRing removed — the accent commit-cadence spinner
@@ -1877,7 +1878,7 @@ struct ContentView: View {
             .animation(.snappy(duration: 0.35), value: total)
         }
         .frame(height: 26)
-        .help("발언 비율 — 화자별 점유")
+        .help(uiLang("발언 비율 — 화자별 점유", "Speaking share — by speaker"))
     }
 
     private var speakerShareList: some View {
@@ -1918,7 +1919,7 @@ struct ContentView: View {
             Button(url.lastPathComponent) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 .font(Theme.Fonts.status).buttonStyle(.plain)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .lineLimit(1).truncationMode(.middle).help("Finder에서 보기")
+                .lineLimit(1).truncationMode(.middle).help(uiLang("Finder에서 보기", "Show in Finder"))
         }
     }
 
@@ -1929,11 +1930,13 @@ struct ContentView: View {
         return HStack(spacing: 6) {
             Image(systemName: "scissors").font(Theme.Fonts.status)
                 .foregroundStyle(Theme.Colors.textSecondary)   // de-accent
-            Text("타이튼: \(s.cuts)컷 · \(String(format: "%.0f", s.seconds))초 절감 가능")
+            Text(uiLang("타이튼: \(s.cuts)컷 · \(String(format: "%.0f", s.seconds))초 절감 가능",
+                        "Tighten: \(s.cuts) cuts · \(String(format: "%.0f", s.seconds))s recoverable"))
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textSecondary)
             Spacer()
         }
-        .help("필러 + 무음 컷 목록을 내보내기 메뉴의 ‘타이튼 컷 목록 (.csv)’로 저장")
+        .help(uiLang("필러 + 무음 컷 목록을 내보내기 메뉴의 ‘타이튼 컷 목록 (.csv)’로 저장",
+                     "Save the filler + silence cut list via the export menu’s ‘Tighten cut list (.csv)’"))
     }
 
     private func mmss(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
@@ -1968,7 +1971,7 @@ struct ContentView: View {
                             .foregroundStyle(absent ? Theme.Colors.textTertiary : Theme.Colors.textSecondary)
                             .lineLimit(1)
                         if absent {
-                            Text("발언 없음").font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
+                            Text(uiLang("발언 없음", "No speech")).font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
                         }
                         Spacer(minLength: 0)
                     }
@@ -1981,24 +1984,24 @@ struct ContentView: View {
         switch session.phase {
         case .recording:
             HStack(spacing: 8) {
-                pillButton("일시정지", icon: "pause.fill", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
+                pillButton(uiLang("일시정지", "Pause"), icon: "pause.fill", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
                     session.pauseRecording()
                 }.keyboardShortcut("p")
-                pillButton("정지", icon: "stop.fill", fill: Theme.Colors.recording, textColor: .white) {
+                pillButton(uiLang("정지", "Stop"), icon: "stop.fill", fill: Theme.Colors.recording, textColor: .white) {
                     session.stop()
                 }.keyboardShortcut("r")
             }
         case .paused:
             HStack(spacing: 8) {
-                pillButton("재개", icon: "record.circle.fill", fill: Theme.Colors.recording, textColor: .white) {
+                pillButton(uiLang("재개", "Resume"), icon: "record.circle.fill", fill: Theme.Colors.recording, textColor: .white) {
                     session.resumeRecording()
                 }.keyboardShortcut("p")
-                pillButton("정지", icon: "stop.fill", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
+                pillButton(uiLang("정지", "Stop"), icon: "stop.fill", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
                     session.stop()
                 }.keyboardShortcut("r")
             }
         case .countingDown(let n):
-            pillButton("시작까지 \(n)… (취소)", icon: "xmark.circle", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
+            pillButton(uiLang("시작까지 \(n)… (취소)", "Starts in \(n)… (cancel)"), icon: "xmark.circle", fill: Theme.Colors.surfaceSunken, textColor: Theme.Colors.textPrimary) {
                 session.cancelCountdown()
             }.keyboardShortcut(.cancelAction)
         case .engineStarting, .ready, .processing, .flushing:
@@ -2011,7 +2014,7 @@ struct ContentView: View {
             // A loaded file occupies the session (Figma node 30:118: 30%-opacity
             // accent fill) — recording and file transcription are mutually exclusive.
             let fileLoaded = session.sourceMediaURL != nil
-            pillButton("녹음 시작", icon: "play.fill",
+            pillButton(uiLang("녹음 시작", "Start recording"), icon: "play.fill",
                        fill: fileLoaded ? Theme.Colors.accent.opacity(0.3) : Theme.Colors.accent,
                        textColor: .white) {
                 session.startCountdown()
@@ -2105,11 +2108,11 @@ struct ContentView: View {
             set: { session.languageTokenID = $0
                    UserDefaults.standard.set($0 ?? 0, forKey: "languageTokenID") }
         )
-        let label = binding.wrappedValue == WhisperLang.ko ? "한국어"
-            : binding.wrappedValue == WhisperLang.en ? "English" : "자동 감지"
+        let label = binding.wrappedValue == WhisperLang.ko ? uiLang("한국어", "Korean")
+            : binding.wrappedValue == WhisperLang.en ? "English" : uiLang("자동 감지", "Auto-detect")
         return pillDropdown(label, isOpen: $languagePickerOpen, width: $languagePickerWidth) {
-            dropdownRow("자동 감지", selected: binding.wrappedValue == nil) { binding.wrappedValue = nil; languagePickerOpen = false }
-            dropdownRow("한국어", selected: binding.wrappedValue == WhisperLang.ko) { binding.wrappedValue = WhisperLang.ko; languagePickerOpen = false }
+            dropdownRow(uiLang("자동 감지", "Auto-detect"), selected: binding.wrappedValue == nil) { binding.wrappedValue = nil; languagePickerOpen = false }
+            dropdownRow(uiLang("한국어", "Korean"), selected: binding.wrappedValue == WhisperLang.ko) { binding.wrappedValue = WhisperLang.ko; languagePickerOpen = false }
             dropdownRow("English", selected: binding.wrappedValue == WhisperLang.en) { binding.wrappedValue = WhisperLang.en; languagePickerOpen = false }
         }
         .disabled(isBusy)
@@ -2117,16 +2120,16 @@ struct ContentView: View {
 
     private var meetingModePicker: some View {
         VStack(alignment: .leading, spacing: 4) {
-            pillDropdown(session.meetingMode.label, isOpen: $meetingModePickerOpen, width: $meetingModePickerWidth) {
+            pillDropdown(session.meetingMode.label(uiLang), isOpen: $meetingModePickerOpen, width: $meetingModePickerWidth) {
                 ForEach(MeetingMode.allCases) { mode in
-                    dropdownRow(mode.label, selected: mode == session.meetingMode) {
+                    dropdownRow(mode.label(uiLang), selected: mode == session.meetingMode) {
                         session.meetingMode = mode; meetingModePickerOpen = false
                     }
                 }
             }
             .disabled(isBusy || isRecordingLike)
             .zIndex(1)
-            Text(session.meetingMode.config.mode.summaryDescription)
+            Text(session.meetingMode.config.mode.summaryDescription(uiLang))
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
                 .lineLimit(1).truncationMode(.tail)
         }
@@ -2134,9 +2137,9 @@ struct ContentView: View {
 
     // 화자 수 고정 — 자동/1/2/3/4명 이상. Maps to the engine's DIAR_MAXK cap.
     private var speakerCountPicker: some View {
-        pillDropdown(session.speakerCount.label, isOpen: $speakerCountPickerOpen, width: $speakerCountPickerWidth) {
+        pillDropdown(session.speakerCount.label(uiLang), isOpen: $speakerCountPickerOpen, width: $speakerCountPickerWidth) {
             ForEach(SpeakerCount.allCases) { c in
-                dropdownRow(c.label, selected: c == session.speakerCount) { session.speakerCount = c; speakerCountPickerOpen = false }
+                dropdownRow(c.label(uiLang), selected: c == session.speakerCount) { session.speakerCount = c; speakerCountPickerOpen = false }
             }
         }
         .disabled(isBusy)
@@ -2149,11 +2152,11 @@ struct ContentView: View {
             Image(systemName: "tray.and.arrow.down")
                 .font(.system(size: 19))
                 .foregroundStyle(dropTargeted ? Theme.Colors.accent : Theme.Colors.textTertiary)
-            Text("오디오 영상 파일\n드래그 앤 드롭")
+            Text(uiLang("오디오 영상 파일\n드래그 앤 드롭", "Audio · video files\nDrag & drop"))
                 .multilineTextAlignment(.center)
                 .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.Colors.textSecondary)
             Button { chooseFile() } label: {
-                Text("파일 선택")
+                Text(uiLang("파일 선택", "Choose file"))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .padding(.horizontal, 10).padding(.vertical, 4)
@@ -2199,7 +2202,7 @@ struct ContentView: View {
             Button("JSON (.json)") { export(.json, session.exportJSON) }
             // BETA: 타이튼 컷 목록 / 유튜브 챕터 exports are hidden — they are outputs
             // of the unwired editor analysis (SessionController.editorFeaturesEnabled).
-        } label: { Label("내보내기", systemImage: "square.and.arrow.up") }
+        } label: { Label(uiLang("내보내기", "Export"), systemImage: "square.and.arrow.up") }
         .menuStyle(.borderlessButton).fixedSize()
         .disabled(session.transcript.lines.isEmpty)
     }
@@ -2223,10 +2226,10 @@ struct ContentView: View {
     /// Gradient WARNING row (Figma 260:1316): silence takes priority; otherwise
     /// the 누락 의심/복구 summary (which is expandable via coverageGapTimes).
     private var transcriptWarning: String? {
-        if session.micSilent { return "소리가 감지되지 않아요 — 마이크를 확인해주세요" }
+        if session.micSilent { return uiLang("소리가 감지되지 않아요 — 마이크를 확인해주세요", "No sound detected — check your microphone") }
         var parts: [String] = []
-        if !session.coverageGaps.isEmpty { parts.append("누락 의심 \(session.coverageGaps.count)구간") }
-        if session.hangRecoveries > 0 { parts.append("복구 \(session.hangRecoveries)회") }
+        if !session.coverageGaps.isEmpty { parts.append(uiLang("누락 의심 \(session.coverageGaps.count)구간", "\(session.coverageGaps.count) suspected gaps")) }
+        if session.hangRecoveries > 0 { parts.append(uiLang("복구 \(session.hangRecoveries)회", "\(session.hangRecoveries) recoveries")) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -2244,14 +2247,14 @@ struct ContentView: View {
     /// machine (Phase 4) — no signal-priority logic lives in the view anymore.
     private var transcriptActivity: String? {
         switch session.pipeline {
-        case .diarizing:                 "AI가 화자·언어를 검토하는 중"
-        case .correcting(let n):         "언어 교정 재전사 \(n)줄 남음"
-        case .fileTranscribing(let pct): pct.map { "파일 전사 중 · \($0)%" } ?? "파일 전사 중"
-        case .translating(let n):        "번역 중 · \(n)줄 대기"
-        case .translatingBacklogged:     "말이 빨라 번역이 밀렸어요 · 정지 후 자동으로 채워요"
-        case .transcribing:              "전사 중"
-        case .listening:                 "듣는 중"
-        case .backfilling(let n):        "번역 채우는 중 · \(n)줄 남음"
+        case .diarizing:                 uiLang("AI가 화자·언어를 검토하는 중", "AI is reviewing speakers & language")
+        case .correcting(let n):         uiLang("언어 교정 재전사 \(n)줄 남음", "Language re-transcribe · \(n) lines left")
+        case .fileTranscribing(let pct): pct.map { uiLang("파일 전사 중 · \($0)%", "Transcribing file · \($0)%") } ?? uiLang("파일 전사 중", "Transcribing file")
+        case .translating(let n):        uiLang("번역 중 · \(n)줄 대기", "Translating · \(n) queued")
+        case .translatingBacklogged:     uiLang("말이 빨라 번역이 밀렸어요 · 정지 후 자동으로 채워요", "Translation is behind fast speech · fills in after you stop")
+        case .transcribing:              uiLang("전사 중", "Transcribing")
+        case .listening:                 uiLang("듣는 중", "Listening")
+        case .backfilling(let n):        uiLang("번역 채우는 중 · \(n)줄 남음", "Filling in translations · \(n) left")
         case .idle, .completed, .error:  nil   // error surfaces via phase UI, silence via warning row
         }
     }
@@ -2290,16 +2293,16 @@ struct ContentView: View {
 
     private var phaseText: String {
         switch session.phase {
-        case .idle: "준비됨"
-        case .countingDown(let n): "\(n)초 후 시작…"
-        case .engineStarting: "모델 로딩…"
-        case .ready: "마이크 시작…"
-        case .recording: "녹음 중"
-        case .paused: "일시정지"
-        case .processing: "파일 전사 중…"
-        case .flushing: "마무리…"
-        case .done: "완료"
-        case .error(let m): "오류: \(m)"
+        case .idle: uiLang("준비됨", "Ready")
+        case .countingDown(let n): uiLang("\(n)초 후 시작…", "Starting in \(n)s…")
+        case .engineStarting: uiLang("모델 로딩…", "Loading model…")
+        case .ready: uiLang("마이크 시작…", "Starting mic…")
+        case .recording: uiLang("녹음 중", "Recording")
+        case .paused: uiLang("일시정지", "Paused")
+        case .processing: uiLang("파일 전사 중…", "Transcribing file…")
+        case .flushing: uiLang("마무리…", "Wrapping up…")
+        case .done: uiLang("완료", "Done")
+        case .error(let m): uiLang("오류: \(m)", "Error: \(m)")
         }
     }
 }
@@ -2383,6 +2386,7 @@ private struct WindowAccessor: NSViewRepresentable {
 struct CommitCadenceRing: View {
     let since: Date
     let window: Double
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.1)) { ctx in
             let elapsed = ctx.date.timeIntervalSince(since)
@@ -2394,7 +2398,7 @@ struct CommitCadenceRing: View {
                     .rotationEffect(.degrees(-90))
             }
             .frame(width: 14, height: 14)
-            .help("다음 확정까지 진행도")
+            .help(uiLang("다음 확정까지 진행도", "Progress to the next commit"))
         }
     }
 }

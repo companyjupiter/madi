@@ -65,6 +65,7 @@ struct TranscriptView: View {
     // line; the line at `findCurrentLine` (the active match) gets a stronger fill.
     var findQuery: String = ""
     var findCurrentLine: UUID? = nil
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
     private var bodyFont: Font { .system(size: fontSize) }
 
     @State private var viewportH: CGFloat = 0
@@ -450,7 +451,7 @@ struct TranscriptView: View {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.down")
                                 .font(.system(size: 11, weight: .semibold))
-                            Text("새 전사 \(unseenCount)")
+                            Text(uiLang("새 전사 \(unseenCount)", "\(unseenCount) new"))
                                 .font(.system(size: 12, weight: .medium)).monospacedDigit()
                         }
                         .foregroundStyle(Theme.Colors.textPrimary)
@@ -493,15 +494,15 @@ struct TranscriptView: View {
             }
             .onChange(of: interim) { _, v in syncInterim(v) }
             .onAppear { shownInterim = interim }
-            .alert("화자 이름", isPresented: Binding(
+            .alert(uiLang("화자 이름", "Speaker name"), isPresented: Binding(
                 get: { editingSpeaker != nil },
                 set: { if !$0 { editingSpeaker = nil } })
             ) {
-                TextField("이름 (예: 김부장)", text: $draftName)
-                Button("저장") { if let s = editingSpeaker { onRename?(s, draftName) }; editingSpeaker = nil }
-                Button("취소", role: .cancel) { editingSpeaker = nil }
+                TextField(uiLang("이름 (예: 김부장)", "Name (e.g. Alex)"), text: $draftName)
+                Button(uiLang("저장", "Save")) { if let s = editingSpeaker { onRename?(s, draftName) }; editingSpeaker = nil }
+                Button(uiLang("취소", "Cancel"), role: .cancel) { editingSpeaker = nil }
             } message: {
-                Text("이 화자의 모든 발언과 내보내기에 적용됩니다.")
+                Text(uiLang("이 화자의 모든 발언과 내보내기에 적용됩니다.", "Applies to all of this speaker’s lines and exports."))
             }
         }
     }
@@ -521,16 +522,16 @@ struct TranscriptView: View {
                         Text(name(b.speaker)).font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Theme.Colors.textPrimary)
                         if autoRecognizedSpeakers.contains(b.speaker) {
-                            Label("음성 인식됨", systemImage: "checkmark.seal.fill")
+                            Label(uiLang("음성 인식됨", "Voice matched"), systemImage: "checkmark.seal.fill")
                                 .labelStyle(.iconOnly)
                                 .font(.system(size: 10))
                                 .foregroundStyle(Theme.Colors.textTertiary)   // de-accent
-                                .help("음성 인식됨 — 등록된 목소리와 일치")
+                                .help(uiLang("음성 인식됨 — 등록된 목소리와 일치", "Voice matched — matches a registered voice"))
                         }
                     }
                 }
                 .buttonStyle(.plain)
-                .help("클릭하여 이름 지정")
+                .help(uiLang("클릭하여 이름 지정", "Click to name"))
             }
             // double-click in the reading view flips to 상세 so the per-line edit
             // gesture is available (editing is line-granular; blocks join lines).
@@ -582,7 +583,7 @@ struct TranscriptView: View {
             // provisional — render it GRAY, exactly like the transcript's
             // uncommitted gray tail (withLiveTail). It flips to dark on commit.
             if isEditing {
-                TextField("번역 교정", text: $translationDraft, axis: .vertical)
+                TextField(uiLang("번역 교정", "Correct translation"), text: $translationDraft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: fontSize * 0.875))
                     .onSubmit {
@@ -590,7 +591,7 @@ struct TranscriptView: View {
                         onEditTranslation?(lineID, lang, translationDraft)
                         editingTranslationLine = nil
                     }
-                Button("저장") {
+                Button(uiLang("저장", "Save")) {
                     guard let lineID else { return }
                     onEditTranslation?(lineID, lang, translationDraft)
                     editingTranslationLine = nil
@@ -606,7 +607,7 @@ struct TranscriptView: View {
                     Image(systemName: "pencil")
                         .font(.system(size: fontSize * 0.65, weight: .semibold))
                         .foregroundStyle(Theme.Colors.textTertiary)
-                        .help("사용자 교정 번역")
+                        .help(uiLang("사용자 교정 번역", "User-corrected translation"))
                 }
             }
         }
@@ -684,16 +685,16 @@ struct TranscriptView: View {
                         Text(name(line.speaker)).font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Theme.Colors.textPrimary)
                         if autoRecognizedSpeakers.contains(line.speaker) {
-                            Label("음성 인식됨", systemImage: "checkmark.seal.fill")
+                            Label(uiLang("음성 인식됨", "Voice matched"), systemImage: "checkmark.seal.fill")
                                 .labelStyle(.iconOnly)
                                 .font(.system(size: 10))
                                 .foregroundStyle(Theme.Colors.textTertiary)   // de-accent
-                                .help("음성 인식됨 — 등록된 목소리와 일치")
+                                .help(uiLang("음성 인식됨 — 등록된 목소리와 일치", "Voice matched — matches a registered voice"))
                         }
                     }
                 }
                 .buttonStyle(.plain)
-                .help("클릭하여 이름 지정")
+                .help(uiLang("클릭하여 이름 지정", "Click to name"))
                 Text(timecode(line.start))
                     .font(.system(size: 12, weight: .medium)).monospacedDigit()
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -704,10 +705,10 @@ struct TranscriptView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(playingLine == line.id ? Theme.Colors.accent : Theme.Colors.textTertiary)
-                    .help("이 구간 오디오 재생")
+                    .help(uiLang("이 구간 오디오 재생", "Play this segment’s audio"))
                 }
                 if line.isEdited {
-                    Text("편집됨").font(Theme.Fonts.timestamp).foregroundStyle(Theme.Colors.textTertiary)   // de-accent
+                    Text(uiLang("편집됨", "Edited")).font(Theme.Fonts.timestamp).foregroundStyle(Theme.Colors.textTertiary)   // de-accent
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 16) {
@@ -715,13 +716,13 @@ struct TranscriptView: View {
                         SVGIcon(name: "squares", size: 16, tint: Theme.Colors.textSecondary)
                     }
                     .buttonStyle(.plain)
-                    .help("이 문장 복사")
+                    .help(uiLang("이 문장 복사", "Copy this line"))
                     if canEdit(line) {
                         Button { beginEdit(line) } label: {
                             SVGIcon(name: "pen", size: 16, tint: Theme.Colors.textSecondary)
                         }
                         .buttonStyle(.plain)
-                        .help("이 문장 편집")
+                        .help(uiLang("이 문장 편집", "Edit this line"))
                     }
                 }
             }
@@ -760,8 +761,8 @@ struct TranscriptView: View {
                     )
                     .onSubmit { commitEdit() }
                 HStack(spacing: 6) {
-                    Button("저장") { commitEdit() }.controlSize(.small).keyboardShortcut(.return, modifiers: .command)
-                    Button("취소") { editingLine = nil }.controlSize(.small).keyboardShortcut(.cancelAction)
+                    Button(uiLang("저장", "Save")) { commitEdit() }.controlSize(.small).keyboardShortcut(.return, modifiers: .command)
+                    Button(uiLang("취소", "Cancel")) { editingLine = nil }.controlSize(.small).keyboardShortcut(.cancelAction)
                 }
                 .padding(.top, -2)
             } else {
@@ -814,21 +815,21 @@ struct TranscriptView: View {
         if let idx = reviewRefIndex, idx < flaggedRefs.count {
             let total = flaggedRefs.count
             VStack(alignment: .leading, spacing: 12) {
-                Text("검토 \(idx + 1) / \(total)")
+                Text(uiLang("검토 \(idx + 1) / \(total)", "Review \(idx + 1) / \(total)"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.Colors.textTertiary)
-                TextField("수정할 단어", text: $reviewDraft)
+                TextField(uiLang("수정할 단어", "Word to fix"), text: $reviewDraft)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
                     .frame(width: 240)
                     .onSubmit { applyReview() }
                 HStack(spacing: 8) {
                     Button { moveReview(-1) } label: { Image(systemName: "chevron.left") }
-                        .help("이전")
+                        .help(uiLang("이전", "Previous"))
                     Button { moveReview(1) } label: { Image(systemName: "chevron.right") }
-                        .help("다음")
+                        .help(uiLang("다음", "Next"))
                     Spacer()
-                    Button("적용 후 다음") { applyReview() }
+                    Button(uiLang("적용 후 다음", "Apply & next")) { applyReview() }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.return, modifiers: [])
                 }
@@ -858,7 +859,7 @@ struct TranscriptView: View {
             s += run
         }
         for ov in line.overlapSpeakers {
-            var marker = AttributedString("  ⟨+\(name(ov)) 겹침⟩")
+            var marker = AttributedString(uiLang("  ⟨+\(name(ov)) 겹침⟩", "  ⟨+\(name(ov)) overlap⟩"))
             marker.foregroundColor = Theme.Colors.speaker(ov)
             marker.font = Theme.Fonts.overlap
             s += marker

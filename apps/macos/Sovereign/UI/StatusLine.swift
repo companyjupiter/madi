@@ -16,6 +16,7 @@ struct StatusArea: View {
     let gapTimes: [String]
     let activityText: String?
     @Binding var expanded: Bool
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     private static let warnOrange = Color(red: 242/255, green: 153/255, blue: 74/255)
     private static let warnPurple = Color(red: 201/255, green: 151/255, blue: 227/255)
@@ -42,7 +43,7 @@ struct StatusArea: View {
                                 .rotationEffect(.degrees(expanded ? 90 : 0))
                         }
                         .buttonStyle(.plain)
-                        .help(expanded ? "접기" : "누락 의심 구간 보기")
+                        .help(expanded ? uiLang("접기", "Collapse") : uiLang("누락 의심 구간 보기", "Show suspected gaps"))
                     }
                 }
                 .frame(height: 21)
@@ -57,7 +58,7 @@ struct StatusArea: View {
     /// Outline box (Figma): the suspected-missing timestamps + a one-line why.
     private var coverageBox: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("소리는 있었지만 전사가 비어 재시도도 실패한 구간이에요")
+            Text(uiLang("소리는 있었지만 전사가 비어 재시도도 실패한 구간이에요", "There was sound but transcription came up empty, and a retry also failed"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Theme.Colors.textTertiary)
             ForEach(Array(gapTimes.enumerated()), id: \.offset) { _, t in
@@ -65,7 +66,7 @@ struct StatusArea: View {
                     Circle().fill(Self.warnOrange).frame(width: 5, height: 5)
                     Text(t).font(.system(size: 13, weight: .medium)).monospacedDigit()
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("근처").font(.system(size: 12))
+                    Text(uiLang("근처", "area")).font(.system(size: 12))
                         .foregroundStyle(Theme.Colors.textSecondary)
                     Spacer(minLength: 0)
                 }
