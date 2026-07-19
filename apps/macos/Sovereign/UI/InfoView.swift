@@ -8,6 +8,7 @@ import AppKit
 struct InfoView: View {
     @Bindable var betaGate: BetaGate
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     var body: some View {
         VStack(spacing: 18) {
@@ -24,7 +25,7 @@ struct InfoView: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
                     if AppVersion.isBeta { channelBadge }
                 }
-                Text("빌드 \(AppVersion.build) · \(AppVersion.bundleID)")
+                Text("\(uiLang("빌드", "Build")) \(AppVersion.build) · \(AppVersion.bundleID)")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Theme.Colors.textTertiary)
             }
@@ -36,15 +37,16 @@ struct InfoView: View {
             HStack(spacing: 14) {
                 Button {
                     NSWorkspace.shared.open(AppVersion.releasesURL)
-                } label: { Label("릴리스", systemImage: "shippingbox") }
+                } label: { Label(uiLang("릴리스", "Releases"), systemImage: "shippingbox") }
                 Button { openWindow(id: "madi-update") } label: {
-                    Label("업데이트 확인", systemImage: "arrow.triangle.2.circlepath")
+                    Label(uiLang("업데이트 확인", "Check for updates"), systemImage: "arrow.triangle.2.circlepath")
                 }
             }
             .font(.system(size: 12, weight: .medium, design: .rounded))
             .buttonStyle(.bordered)
 
-            Text("© companyjupiter · 온-디바이스 회의 기록. 오디오는 Mac을 떠나지 않습니다.")
+            Text(uiLang("© companyjupiter · 온-디바이스 회의 기록. 오디오는 Mac을 떠나지 않습니다.",
+                        "© companyjupiter · On-device meeting notes. Audio never leaves your Mac."))
                 .font(.system(size: 10))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.Colors.textTertiary)
@@ -69,16 +71,16 @@ struct InfoView: View {
             switch betaGate.status {
             case .active:
                 statusRow(icon: "checkmark.seal.fill", tint: Theme.Colors.meterFill,
-                          title: "베타 사용 가능",
-                          detail: "\(Self.expiryText)까지")
+                          title: uiLang("베타 사용 가능", "Beta active"),
+                          detail: uiLang("\(Self.expiryText(uiLang))까지", "Through \(Self.expiryText(uiLang))"))
             case .expiringSoon(let days):
                 statusRow(icon: "exclamationmark.triangle.fill", tint: Theme.Colors.overlapMarker,
-                          title: days <= 0 ? "오늘 베타가 종료됩니다" : "베타 종료 D-\(days)",
-                          detail: "\(Self.expiryText) 종료 · 정식판 준비를 권장합니다")
+                          title: days <= 0 ? uiLang("오늘 베타가 종료됩니다", "Beta ends today") : uiLang("베타 종료 D-\(days)", "Beta ends in \(days)d"),
+                          detail: uiLang("\(Self.expiryText(uiLang)) 종료 · 정식판 준비를 권장합니다", "Ends \(Self.expiryText(uiLang)) · we recommend preparing the full version"))
             case .expired:
                 statusRow(icon: "hourglass.bottomhalf.filled", tint: Theme.Colors.recording,
-                          title: "베타 기간 종료됨",
-                          detail: "\(Self.expiryText) 종료 · 정식판을 받아 주세요")
+                          title: uiLang("베타 기간 종료됨", "Beta period ended"),
+                          detail: uiLang("\(Self.expiryText(uiLang)) 종료 · 정식판을 받아 주세요", "Ended \(Self.expiryText(uiLang)) · please get the full version"))
             }
         }
     }
@@ -105,10 +107,15 @@ struct InfoView: View {
         .background(RoundedRectangle(cornerRadius: Theme.Radius.card).fill(tint.opacity(0.08)))
     }
 
-    static var expiryText: String {
+    static func expiryText(_ lang: UILanguage) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ko_KR")
-        f.dateFormat = "yyyy년 M월 d일"
+        if lang == .en {
+            f.locale = Locale(identifier: "en_US")
+            f.dateFormat = "MMM d, yyyy"
+        } else {
+            f.locale = Locale(identifier: "ko_KR")
+            f.dateFormat = "yyyy년 M월 d일"
+        }
         return f.string(from: AppVersion.betaExpiryDate)
     }
 }

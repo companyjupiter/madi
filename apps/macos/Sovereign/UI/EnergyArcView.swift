@@ -19,6 +19,7 @@ struct EnergyArcView: View {
     /// at-a-glance proof that audio is coming in. nil when not recording.
     var liveLevel: Float? = nil
     var onSeek: (UUID) -> Void
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     private let dotDiameter: CGFloat = 2.6
     private let rowPitch: CGFloat = 5.5
@@ -26,7 +27,7 @@ struct EnergyArcView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("에너지 흐름")
+            Text(uiLang("에너지 흐름", "Energy flow"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.Colors.textSecondary)
 
@@ -35,7 +36,7 @@ struct EnergyArcView: View {
             if values.count > 1 || liveLevel != nil {
                 chart
                     .frame(height: 64)
-                    .help("회의 에너지 흐름 — 발언 속도·겹침·침묵. 클릭하면 그 구간으로 이동합니다.")
+                    .help(uiLang("회의 에너지 흐름 — 발언 속도·겹침·침묵. 클릭하면 그 구간으로 이동합니다.", "Meeting energy — pace, overlap, silence. Click to jump to that moment."))
                 HStack {
                     Text("0:00")
                     Spacer()
@@ -44,7 +45,7 @@ struct EnergyArcView: View {
                 .font(.system(size: 11, weight: .medium)).monospacedDigit()
                 .foregroundStyle(Theme.Colors.textTertiary)
             } else {
-                Text("발언이 쌓이면 흐름이 표시됩니다")
+                Text(uiLang("발언이 쌓이면 흐름이 표시됩니다", "The flow appears once speech accumulates"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.Colors.textTertiary)
                     .frame(maxWidth: .infinity, minHeight: 64)

@@ -7,6 +7,7 @@ import SwiftUI
 
 struct WorkspaceStatsView: View {
     let stats: WorkspaceStats
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     private static let grouper: NumberFormatter = {
         let f = NumberFormatter(); f.numberStyle = .decimal; return f
@@ -15,10 +16,10 @@ struct WorkspaceStatsView: View {
     var body: some View {
         if stats.meetingCount == 0 {
             VStack(spacing: 6) {
-                Text("저장된 회의가 없습니다")
+                Text(uiLang("저장된 회의가 없습니다", "No saved meetings"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.Colors.textSecondary)
-                Text("회의를 저장하면 활동 통계가 쌓입니다")
+                Text(uiLang("회의를 저장하면 활동 통계가 쌓입니다", "Activity stats build up as you save meetings"))
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.Colors.textTertiary)
                     .multilineTextAlignment(.center)
@@ -30,15 +31,15 @@ struct WorkspaceStatsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
                                         GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                        tile("\(stats.meetingCount)", "회의")
-                        tile(hoursMinutes(stats.totalSeconds), "총 시간")
-                        tile(hoursMinutes(stats.avgSeconds), "평균 길이")
-                        tile(Self.grouper.string(from: NSNumber(value: stats.totalWords)) ?? "\(stats.totalWords)", "총 단어")
+                        tile("\(stats.meetingCount)", uiLang("회의", "Meetings"))
+                        tile(hoursMinutes(stats.totalSeconds), uiLang("총 시간", "Total time"))
+                        tile(hoursMinutes(stats.avgSeconds), uiLang("평균 길이", "Avg length"))
+                        tile(Self.grouper.string(from: NSNumber(value: stats.totalWords)) ?? "\(stats.totalWords)", uiLang("총 단어", "Total words"))
                     }
                     HStack {
-                        Text("평균 화자").font(.system(size: 12)).foregroundStyle(Theme.Colors.textSecondary)
+                        Text(uiLang("평균 화자", "Avg speakers")).font(.system(size: 12)).foregroundStyle(Theme.Colors.textSecondary)
                         Spacer()
-                        Text(String(format: "%.1f명", stats.avgSpeakers))
+                        Text(uiLang(String(format: "%.1f명", stats.avgSpeakers), String(format: "%.1f", stats.avgSpeakers)))
                             .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                     }
                     trendBlock
@@ -64,9 +65,9 @@ struct WorkspaceStatsView: View {
         let maxV = max(1, stats.weeklyTrend.max() ?? 1)
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("최근 \(stats.weeklyTrend.count)주").font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
+                Text(uiLang("최근 \(stats.weeklyTrend.count)주", "Last \(stats.weeklyTrend.count) wks")).font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
                 Spacer()
-                Text("이번 주 \(stats.thisWeekCount)")
+                Text(uiLang("이번 주 \(stats.thisWeekCount)", "This week \(stats.thisWeekCount)"))
                     .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.Colors.textSecondary)
             }
             HStack(alignment: .bottom, spacing: 5) {
@@ -84,6 +85,6 @@ struct WorkspaceStatsView: View {
     /// Seconds → "Nh Mm" / "Nm" (compact for the narrow tile).
     private func hoursMinutes(_ s: Double) -> String {
         let m = Int((s / 60).rounded())
-        return m >= 60 ? "\(m / 60)시간 \(m % 60)분" : "\(m)분"
+        return m >= 60 ? uiLang("\(m / 60)시간 \(m % 60)분", "\(m / 60)h \(m % 60)m") : uiLang("\(m)분", "\(m)m")
     }
 }

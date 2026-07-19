@@ -43,6 +43,7 @@ struct SovereignApp: App {
     @State private var betaGate = BetaGate()
     @State private var updateChecker = UpdateChecker()
     @AppStorage("appearance") private var appearance = Appearance.system
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     var body: some Scene {
         WindowGroup("Madi") {
@@ -62,19 +63,19 @@ struct SovereignApp: App {
             // — the old zero-size, zero-opacity in-view Button never registered its
             // ⌘K. Bonus: it now appears in the View menu, so ⌘K is discoverable.
             CommandGroup(after: .toolbar) {
-                Button("명령 팔레트") { session.showCommandPalette = true }
+                Button(uiLang("명령 팔레트", "Command Palette")) { session.showCommandPalette = true }
                     .keyboardShortcut("k", modifiers: .command)
             }
             // ⌘F — find within the current transcript (Edit menu). Scene command for
             // the same reliability reason as ⌘K; ContentView owns the find bar.
             CommandGroup(after: .textEditing) {
-                Button("전사문에서 찾기") { session.showFindBar = true }
+                Button(uiLang("전사문에서 찾기", "Find in Transcript")) { session.showFindBar = true }
                     .keyboardShortcut("f", modifiers: .command)
             }
             // Replace the empty default Help menu: bundled user manual +
             // update / info (the latter two open dedicated windows).
             CommandGroup(replacing: .help) {
-                Button("Madi 사용자 매뉴얼") { Self.openManual() }
+                Button(uiLang("Madi 사용자 매뉴얼", "Madi User Manual")) { Self.openManual() }
                     .keyboardShortcut("?", modifiers: .command)
                 Divider()
                 HelpMenuExtras()
@@ -82,7 +83,7 @@ struct SovereignApp: App {
         }
 
         // Info window (Help → 정보) — version, channel, beta lifecycle.
-        Window("Madi 정보", id: Self.infoWindowID) {
+        Window(uiLang("Madi 정보", "About Madi"), id: Self.infoWindowID) {
             InfoView(betaGate: betaGate)
                 .preferredColorScheme(appearance.colorScheme)
         }
@@ -90,7 +91,7 @@ struct SovereignApp: App {
         .defaultPosition(.center)
 
         // Update window (Help → 업데이트 설치) — GitHub Releases check + install.
-        Window("Madi 업데이트", id: Self.updateWindowID) {
+        Window(uiLang("Madi 업데이트", "Madi Update"), id: Self.updateWindowID) {
             UpdateView(checker: updateChecker)
                 .preferredColorScheme(appearance.colorScheme)
         }
@@ -117,8 +118,9 @@ struct SovereignApp: App {
 /// no scene-opening environment).
 private struct HelpMenuExtras: View {
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
     var body: some View {
-        Button("업데이트 설치…") { openWindow(id: SovereignApp.updateWindowID) }
-        Button("정보") { openWindow(id: SovereignApp.infoWindowID) }
+        Button(uiLang("업데이트 설치…", "Install Update…")) { openWindow(id: SovereignApp.updateWindowID) }
+        Button(uiLang("정보", "About")) { openWindow(id: SovereignApp.infoWindowID) }
     }
 }

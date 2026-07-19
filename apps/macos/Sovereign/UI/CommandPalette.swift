@@ -59,6 +59,7 @@ struct CommandPalette: View {
     @State private var query = ""
     @State private var selection = 0
     @FocusState private var fieldFocused: Bool
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     /// Built once per open from the current session state.
     private var allCommands: [PaletteCommand] {
@@ -68,20 +69,20 @@ struct CommandPalette: View {
         // 요약 only when it can actually produce something: an empty/live session
         // would run the LLM into nothing, which is what made these look broken.
         if session.canSummarize {
-            out.append(PaletteCommand(title: "요약 생성", subtitle: "동작 · AI 요약",
+            out.append(PaletteCommand(title: uiLang("요약 생성", "Generate summary"), subtitle: uiLang("동작 · AI 요약", "Action · AI summary"),
                                       symbol: "sparkles", extraTerms: "summary 요약 action") {
                 onOpenSummary(false)
             })
-            out.append(PaletteCommand(title: "화자별 요약", subtitle: "동작 · 누가 무엇을",
+            out.append(PaletteCommand(title: uiLang("화자별 요약", "Summary by speaker"), subtitle: uiLang("동작 · 누가 무엇을", "Action · who said what"),
                                       symbol: "person.2", extraTerms: "speaker summary 화자 요약") {
                 onOpenSummary(true)
             })
         }
-        out.append(PaletteCommand(title: "새 세션", subtitle: "동작 · 현재 전사 비우기",
+        out.append(PaletteCommand(title: uiLang("새 세션", "New session"), subtitle: uiLang("동작 · 현재 전사 비우기", "Action · clear current transcript"),
                                   symbol: "plus.circle", extraTerms: "new reset 초기화 세션") {
             session.reset()
         })
-        out.append(PaletteCommand(title: "작업 폴더 변경", subtitle: "동작 · 저장 위치 선택",
+        out.append(PaletteCommand(title: uiLang("작업 폴더 변경", "Change working folder"), subtitle: uiLang("동작 · 저장 위치 선택", "Action · pick save location"),
                                   symbol: "folder", extraTerms: "folder workspace 폴더 저장") {
             chooseWorkspaceFolder()
         })
@@ -89,7 +90,7 @@ struct CommandPalette: View {
         // (b) named speakers — jump-to / context. (Naming lives elsewhere; here a
         //     speaker row is a lightweight "go" that just closes the palette.)
         for (id, name) in session.speakerNames.sorted(by: { $0.key < $1.key }) where !name.isEmpty {
-            out.append(PaletteCommand(title: name, subtitle: "화자 \(id)",
+            out.append(PaletteCommand(title: name, subtitle: uiLang("화자 \(id)", "Speaker \(id)"),
                                       symbol: "person.crop.circle", extraTerms: "speaker 화자") {
                 // no destructive side effect — selecting just dismisses to the
                 // transcript where the speaker's lines already live.
@@ -99,7 +100,7 @@ struct CommandPalette: View {
         // (a) archived meetings — every .md in the workspace tree.
         for url in transcriptURLs(session.workspace.nodes) {
             let base = url.deletingPathExtension().lastPathComponent
-            out.append(PaletteCommand(title: base, subtitle: "회의 · \(url.lastPathComponent)",
+            out.append(PaletteCommand(title: base, subtitle: uiLang("회의 · \(url.lastPathComponent)", "Meeting · \(url.lastPathComponent)"),
                                       symbol: "doc.text", extraTerms: "meeting transcript 회의 전사") {
                 session.openArchived(url)
             })
@@ -151,6 +152,7 @@ struct CommandPalette: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(Theme.Colors.textTertiary)
                 CommandPaletteField(text: $query,
+                                    placeholder: uiLang("회의·화자·동작 검색…", "Search meetings · speakers · actions…"),
                                     onUp: { move(-1) },
                                     onDown: { move(1) },
                                     onSubmit: { runSelected() },
@@ -164,7 +166,7 @@ struct CommandPalette: View {
             // results
             let rows = results
             if rows.isEmpty {
-                Text("일치하는 항목이 없습니다")
+                Text(uiLang("일치하는 항목이 없습니다", "No matching items"))
                     .font(Theme.Fonts.body)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -257,8 +259,8 @@ struct CommandPalette: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "선택"
-        panel.message = "전사·요약을 저장할 작업 폴더를 선택하세요."
+        panel.prompt = uiLang("선택", "Choose")
+        panel.message = uiLang("전사·요약을 저장할 작업 폴더를 선택하세요.", "Choose a working folder for transcripts and summaries.")
         if panel.runModal() == .OK, let url = panel.url {
             session.autoSaveFolder = url
         }
@@ -272,6 +274,7 @@ struct CommandPalette: View {
 /// while staying first responder for typing. Autofocuses on appearance.
 private struct CommandPaletteField: NSViewRepresentable {
     @Binding var text: String
+    var placeholder: String
     var onUp: () -> Void
     var onDown: () -> Void
     var onSubmit: () -> Void
@@ -286,7 +289,7 @@ private struct CommandPaletteField: NSViewRepresentable {
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = NSFont.systemFont(ofSize: 16, weight: .regular)
-        field.placeholderString = "회의·화자·동작 검색…"
+        field.placeholderString = placeholder
         field.onUp = onUp
         field.onDown = onDown
         field.onSubmit = onSubmit
@@ -297,6 +300,7 @@ private struct CommandPaletteField: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSTextField, context: Context) {
         if nsView.stringValue != text { nsView.stringValue = text }
+        if nsView.placeholderString != placeholder { nsView.placeholderString = placeholder }
         if let f = nsView as? KeyCapturingTextField {
             f.onUp = onUp; f.onDown = onDown; f.onSubmit = onSubmit; f.onCancel = onCancel
         }

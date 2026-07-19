@@ -80,6 +80,7 @@ struct CaptionView: View {
     @Bindable var session: SessionController
     var audience: CaptionAudience = .staff
     var onClose: (() -> Void)? = nil
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     private var settings: CaptionSettings { session.captionSettings }
     private var lang: String? {
@@ -155,7 +156,7 @@ struct CaptionView: View {
     private var header: some View {
         HStack(spacing: 6) {
             Image(systemName: "captions.bubble.fill").font(.system(size: 12))
-            Text("실시간 자막" + (lang.map { " · \($0)" } ?? ""))
+            Text(uiLang("실시간 자막", "Live captions") + (lang.map { " · \($0)" } ?? ""))
                 .font(.system(size: 12, weight: .medium))
             // A5: localized in-progress / translating status, in the caption lang
             if statusKind != .waiting {
@@ -175,7 +176,7 @@ struct CaptionView: View {
     private func speakerTag(_ id: Int) -> some View {
         HStack(spacing: 5) {
             Circle().fill(Theme.Colors.speaker(id)).frame(width: 8, height: 8)
-            Text(SpeakerID.display(id, names: session.speakerNames, fallback: "화자 \(id)"))
+            Text(SpeakerID.display(id, names: session.speakerNames, fallback: uiLang("화자 \(id)", "Speaker \(id)")))
                 .font(.system(size: transFont * 0.42, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
         }

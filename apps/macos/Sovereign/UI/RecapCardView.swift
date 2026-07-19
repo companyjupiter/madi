@@ -116,10 +116,11 @@ struct RecapCardView: View {
     var onClose: () -> Void
 
     @State private var copied = false
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     private var data: RecapData {
         let title = session.fileName.isEmpty
-            ? "회의 요약"
+            ? uiLang("회의 요약", "Meeting summary")
             : (session.fileName as NSString).deletingPathExtension
         return RecapData.make(lines: session.transcript.lines,
                               names: session.speakerNames,
@@ -137,7 +138,7 @@ struct RecapCardView: View {
                 VStack(alignment: .leading, spacing: Theme.Space.panelGap) {
                     titleBlock(d)
                     if !d.tldr.isEmpty { section("TL;DR", d.tldr) }
-                    if !d.decisions.isEmpty { section("결정", d.decisions, accent: true) }
+                    if !d.decisions.isEmpty { section(uiLang("결정", "Decisions"), d.decisions, accent: true) }
                     if !d.actions.isEmpty { actionBlock(d.actions) }
                     if !d.talk.isEmpty { talkBlock(d) }
                     if let q = d.quote, !q.isEmpty { quoteBlock(q) }
@@ -159,11 +160,11 @@ struct RecapCardView: View {
         HStack(spacing: Theme.Space.chipGap) {
             Image(systemName: "rectangle.portrait.on.rectangle.portrait")
                 .foregroundStyle(Theme.Colors.accent)
-            Text("리캡 카드").font(Theme.Fonts.appTitle)
-            Text("온디바이스").font(Theme.Fonts.status)
+            Text(uiLang("리캡 카드", "Recap card")).font(Theme.Fonts.appTitle)
+            Text(uiLang("온디바이스", "On-device")).font(Theme.Fonts.status)
                 .foregroundStyle(Theme.Colors.textTertiary)
             Spacer()
-            Button("닫기") { onClose() }
+            Button(uiLang("닫기", "Close")) { onClose() }
         }
         .padding(Theme.Space.window)
     }
@@ -171,15 +172,15 @@ struct RecapCardView: View {
     private func footer(_ d: RecapData) -> some View {
         HStack(spacing: Theme.Space.chipGap) {
             Button { copy(d.markdown) } label: {
-                Label(copied ? "복사됨" : "복사", systemImage: copied ? "checkmark" : "doc.on.doc")
+                Label(copied ? uiLang("복사됨", "Copied") : uiLang("복사", "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
             }
             Button {
-                export(d.markdown, suggested: "\(d.title) 리캡")
+                export(d.markdown, suggested: uiLang("\(d.title) 리캡", "\(d.title) recap"))
             } label: {
-                Label("내보내기…", systemImage: "square.and.arrow.up")
+                Label(uiLang("내보내기…", "Export…"), systemImage: "square.and.arrow.up")
             }
             Spacer()
-            Text("이 카드는 이 Mac을 떠나지 않습니다.")
+            Text(uiLang("이 카드는 이 Mac을 떠나지 않습니다.", "This card never leaves this Mac."))
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
         }
         .font(Theme.Fonts.status)
@@ -223,7 +224,7 @@ struct RecapCardView: View {
 
     private func actionBlock(_ items: [String]) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.chipGap) {
-            Text("액션").font(Theme.Fonts.section)
+            Text(uiLang("액션", "Actions")).font(Theme.Fonts.section)
                 .foregroundStyle(Theme.Colors.textSecondary)
             VStack(alignment: .leading, spacing: Theme.Space.lineInner) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
@@ -245,7 +246,7 @@ struct RecapCardView: View {
 
     private func talkBlock(_ d: RecapData) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.chipGap) {
-            Text("발화 시간").font(Theme.Fonts.section)
+            Text(uiLang("발화 시간", "Talk time")).font(Theme.Fonts.section)
                 .foregroundStyle(Theme.Colors.textSecondary)
             VStack(alignment: .leading, spacing: Theme.Space.chipGap) {
                 ForEach(d.talk) { t in
@@ -296,9 +297,10 @@ struct RecapCardView: View {
 
     private var emptyHint: some View {
         VStack(alignment: .leading, spacing: Theme.Space.chipGap) {
-            Text("요약이 아직 없습니다.")
+            Text(uiLang("요약이 아직 없습니다.", "No summary yet."))
                 .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
-            Text("회의 요약을 먼저 생성하면 TL;DR·결정·액션이 채워집니다. 발화 시간과 인용은 전사만으로도 표시됩니다.")
+            Text(uiLang("회의 요약을 먼저 생성하면 TL;DR·결정·액션이 채워집니다. 발화 시간과 인용은 전사만으로도 표시됩니다.",
+                        "Generate a meeting summary first and TL;DR, decisions, and actions fill in. Talk time and the quote show from the transcript alone."))
                 .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

@@ -20,6 +20,7 @@ struct ReviewControlView: View {
     @Binding var scrollTick: Int
     /// transcript 순서의 저신뢰 단어 라인 목록(reviewBar 가 이미 계산해 전달).
     let flaggedCount: Int
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     /// 파일 전사 세션에서만 귀로 검토 가능(원본 미디어 URL 필요).
     private var canPlay: Bool { session.sourceMediaURL != nil }
@@ -32,10 +33,10 @@ struct ReviewControlView: View {
                         .foregroundStyle(controller.isListening ? Theme.Colors.lowConf : Theme.Colors.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .help(controller.isListening ? "귀로 검토 멈춤" : "저신뢰 단어 귀로 검토")
+                .help(controller.isListening ? uiLang("귀로 검토 멈춤", "Stop listen-review") : uiLang("저신뢰 단어 귀로 검토", "Listen-review low-confidence words"))
 
                 if controller.isListening, !controller.queue.isEmpty {
-                    Text("재생 \(controller.index + 1)/\(controller.queue.count)")
+                    Text(uiLang("재생 \(controller.index + 1)/\(controller.queue.count)", "Playing \(controller.index + 1)/\(controller.queue.count)"))
                         .font(Theme.Fonts.status)
                         .foregroundStyle(Theme.Colors.lowConf)
                         .monospacedDigit()

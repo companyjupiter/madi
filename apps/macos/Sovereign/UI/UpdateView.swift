@@ -8,6 +8,7 @@ import AppKit
 
 struct UpdateView: View {
     @Bindable var checker: UpdateChecker
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     var body: some View {
         VStack(spacing: 16) {
@@ -15,10 +16,10 @@ struct UpdateView: View {
                 Image(systemName: "arrow.down.app.fill")
                     .font(.system(size: 34, weight: .light))
                     .foregroundStyle(Theme.Colors.accent)
-                Text("업데이트")
+                Text(uiLang("업데이트", "Update"))
                     .font(Theme.Fonts.appTitle)
                     .foregroundStyle(Theme.Colors.brandMark)
-                Text("현재 버전 \(AppVersion.full)")
+                Text(uiLang("현재 버전 \(AppVersion.full)", "Current version \(AppVersion.full)"))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -26,7 +27,7 @@ struct UpdateView: View {
             content
 
             if !isBusy {
-                Button("다시 확인") { checker.check() }
+                Button(uiLang("다시 확인", "Check again")) { checker.check() }
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .buttonStyle(.bordered)
             }
@@ -49,14 +50,14 @@ struct UpdateView: View {
     @ViewBuilder private var content: some View {
         switch checker.state {
         case .idle, .checking:
-            ProgressView("업데이트 확인 중…")
+            ProgressView(uiLang("업데이트 확인 중…", "Checking for updates…"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
 
         case .upToDate:
             infoBlock(icon: "checkmark.seal.fill", tint: Theme.Colors.meterFill,
-                      title: "최신 버전입니다",
-                      body: "설치된 \(AppVersion.full)보다 새로운 릴리스가 없습니다.")
+                      title: uiLang("최신 버전입니다", "You’re up to date"),
+                      body: uiLang("설치된 \(AppVersion.full)보다 새로운 릴리스가 없습니다.", "There’s no release newer than the installed \(AppVersion.full)."))
 
         case .available(let rel):
             availableBlock(rel)
@@ -64,7 +65,7 @@ struct UpdateView: View {
         case .downloading(let p):
             VStack(spacing: 10) {
                 ProgressView(value: p) {
-                    Text("다운로드 중 (\(Int(p * 100))%)")
+                    Text(uiLang("다운로드 중 (\(Int(p * 100))%)", "Downloading (\(Int(p * 100))%)"))
                         .font(Theme.Fonts.status)
                 }
                 .tint(Theme.Colors.accent)
@@ -74,16 +75,16 @@ struct UpdateView: View {
 
         case .downloaded(let url):
             infoBlock(icon: "checkmark.circle.fill", tint: Theme.Colors.meterFill,
-                      title: "다운로드 완료",
-                      body: "Finder에서 열린 디스크 이미지의 Madi를 응용 프로그램 폴더로 끌어다 놓아 설치를 마치세요.")
-            Button("Finder에서 보기") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                      title: uiLang("다운로드 완료", "Download complete"),
+                      body: uiLang("Finder에서 열린 디스크 이미지의 Madi를 응용 프로그램 폴더로 끌어다 놓아 설치를 마치세요.", "In the disk image Finder opened, drag Madi into your Applications folder to finish installing."))
+            Button(uiLang("Finder에서 보기", "Show in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .buttonStyle(.bordered)
 
         case .failed(let msg):
             infoBlock(icon: "exclamationmark.triangle.fill", tint: Theme.Colors.recording,
-                      title: "업데이트 확인 실패", body: msg)
-            Button("릴리스 페이지 열기") { checker.openReleasesPage() }
+                      title: uiLang("업데이트 확인 실패", "Update check failed"), body: msg)
+            Button(uiLang("릴리스 페이지 열기", "Open releases page")) { checker.openReleasesPage() }
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .buttonStyle(.bordered)
         }
@@ -92,10 +93,10 @@ struct UpdateView: View {
     private func availableBlock(_ rel: ReleaseInfo) -> some View {
         VStack(spacing: 12) {
             infoBlock(icon: "sparkles", tint: Theme.Colors.accent,
-                      title: "새 버전 \(rel.version)",
+                      title: uiLang("새 버전 \(rel.version)", "New version \(rel.version)"),
                       body: rel.dmgURL != nil
-                            ? "설치를 누르면 DMG를 내려받아 Finder에서 엽니다."
-                            : "이 릴리스에는 DMG가 없어 릴리스 페이지를 엽니다.")
+                            ? uiLang("설치를 누르면 DMG를 내려받아 Finder에서 엽니다.", "Tap Install to download the DMG and open it in Finder.")
+                            : uiLang("이 릴리스에는 DMG가 없어 릴리스 페이지를 엽니다.", "This release has no DMG, so the releases page opens instead."))
             if !rel.notes.isEmpty {
                 ScrollView {
                     Text(rel.notes)
@@ -109,9 +110,9 @@ struct UpdateView: View {
                 .background(RoundedRectangle(cornerRadius: Theme.Radius.card).fill(Theme.Colors.surfaceSunken))
             }
             HStack(spacing: 10) {
-                Button("릴리스 페이지") { NSWorkspace.shared.open(rel.pageURL) }
+                Button(uiLang("릴리스 페이지", "Releases page")) { NSWorkspace.shared.open(rel.pageURL) }
                     .buttonStyle(.bordered)
-                Button(rel.dmgURL != nil ? "설치" : "열기") { checker.installPending() }
+                Button(rel.dmgURL != nil ? uiLang("설치", "Install") : uiLang("열기", "Open")) { checker.installPending() }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.Colors.accent)
             }
