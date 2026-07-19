@@ -22,7 +22,9 @@ final class BetaGate {
     @ObservationIgnored private nonisolated(unsafe) var ticker: Task<Void, Never>?
 
     init() {
-        status = AppVersion.evaluateExpiry()
+        // Only the beta channel expires. A stable release stays .active forever —
+        // no expiry block, no warning banner — regardless of any date key.
+        status = AppVersion.isBeta ? AppVersion.evaluateExpiry() : .active
         // Re-evaluate hourly. Cheap; catches the midnight rollover of a
         // long-running clinic display and the day the warning window opens.
         ticker = Task { [weak self] in
@@ -36,6 +38,6 @@ final class BetaGate {
     deinit { ticker?.cancel() }
 
     func refresh() {
-        status = AppVersion.evaluateExpiry()
+        status = AppVersion.isBeta ? AppVersion.evaluateExpiry() : .active
     }
 }

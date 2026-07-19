@@ -32,7 +32,8 @@ struct InfoView: View {
 
             Divider().frame(maxWidth: 300)
 
-            expirySection
+            // Beta lifecycle (expiry status) only applies to the beta channel.
+            if AppVersion.isBeta { expirySection }
 
             HStack(spacing: 14) {
                 Button {
