@@ -6,15 +6,14 @@
   <key>CFBundleDisplayName</key>     <string>Madi</string>
   <key>CFBundleIdentifier</key>      <string>com.companyjupiter.madi</string>
   <key>CFBundleVersion</key>         <string>1</string>
-  <key>CFBundleShortVersionString</key> <string>0.9.0</string>
+  <key>CFBundleShortVersionString</key> <string>0.1.0</string>
   <!-- Full semantic version incl. prerelease (source of truth mirrored by
        AppInfo/AppVersion.swift). CFBundleShortVersionString stays numeric-only
-       as macOS requires; the -beta.N prerelease lives here. -->
-  <key>MADIFullVersion</key>         <string>0.9.0-beta.1</string>
-  <key>MADIChannel</key>             <string>beta</string>
-  <!-- Hard beta-expiry day (local midnight). On/after this the app blocks and
-       directs users to the Official build. Enforced by AppVersion.expiryStatus. -->
-  <key>MADIBetaExpiry</key>          <string>2026-12-01</string>
+       as macOS requires; a -beta.N prerelease (beta channel only) would live here. -->
+  <key>MADIFullVersion</key>         <string>0.1.0</string>
+  <key>MADIChannel</key>             <string>stable</string>
+  <!-- Stable channel: no MADIBetaExpiry → BetaGate stays .active (no expiry
+       block / warning banner). A beta build re-adds MADIChannel=beta + MADIBetaExpiry. -->
   <key>CFBundlePackageType</key>     <string>APPL</string>
   <key>CFBundleExecutable</key>      <string>Madi</string>
   <key>CFBundleIconFile</key>        <string>AppIcon</string>

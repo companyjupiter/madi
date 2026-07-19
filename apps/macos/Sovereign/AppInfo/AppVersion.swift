@@ -117,9 +117,9 @@ enum ExpiryStatus: Equatable {
 enum AppVersion {
     /// Fallbacks used when the Info.plist keys are absent (e.g. the headless
     /// test bundle). Keep in lockstep with Info.plist.
-    static let fallbackFull = "0.9.0-beta.1"
-    static let fallbackMarketing = "0.9.0"
-    static let fallbackChannel = "beta"
+    static let fallbackFull = "0.1.0"
+    static let fallbackMarketing = "0.1.0"
+    static let fallbackChannel = "stable"
 
     /// GitHub repo the updater queries. owner/name.
     static let repoOwner = "companyjupiter"

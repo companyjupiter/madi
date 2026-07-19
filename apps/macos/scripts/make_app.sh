@@ -147,7 +147,10 @@ if [ -n "${MADI_VERSION:-}" ]; then
   /usr/libexec/PlistBuddy -c "Set :MADIChannel $CHANNEL" "$BUNDLE/Contents/Info.plist"
 fi
 if [ -n "${MADI_BETA_EXPIRY:-}" ]; then
-  /usr/libexec/PlistBuddy -c "Set :MADIBetaExpiry $MADI_BETA_EXPIRY" "$BUNDLE/Contents/Info.plist"
+  # Add-or-set: the stable source plist omits MADIBetaExpiry, so a beta release
+  # build (which passes this env) must be able to inject the key when absent.
+  /usr/libexec/PlistBuddy -c "Set :MADIBetaExpiry $MADI_BETA_EXPIRY" "$BUNDLE/Contents/Info.plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :MADIBetaExpiry string $MADI_BETA_EXPIRY" "$BUNDLE/Contents/Info.plist"
 fi
 cp "$APP_DIR/Sovereign/Resources/logo_madi.png" "$BUNDLE/Contents/Resources/logo_madi.png"
 cp "$APP_DIR/Sovereign/Resources/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns"
