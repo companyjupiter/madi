@@ -27,14 +27,15 @@ enum MeetingMode: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
-    /// Korean label for the picker.
-    var label: String {
+    /// Korean label for the picker (kept for not-yet-localized call sites).
+    var label: String { label(.ko) }
+    func label(_ lang: UILanguage) -> String {
         switch self {
-        case .general:   return "일반"
+        case .general:   return lang("일반", "General")
         case .oneOnOne:  return "1:1"
-        case .standup:   return "스탠드업"
-        case .interview: return "인터뷰"
-        case .lecture:   return "강의"
+        case .standup:   return lang("스탠드업", "Standup")
+        case .interview: return lang("인터뷰", "Interview")
+        case .lecture:   return lang("강의", "Lecture")
         }
     }
 

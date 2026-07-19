@@ -19,37 +19,41 @@ import SwiftUI
 
 struct GlossarySettingsView: View {
     @Bindable var session: SessionController
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     var body: some View {
         Form {
-            Section("개인 단어장") {
-                Toggle("학습한 교정 자동 적용", isOn: Binding(
+            Section(uiLang("개인 단어장", "Personal glossary")) {
+                Toggle(uiLang("학습한 교정 자동 적용", "Auto-apply learned corrections"), isOn: Binding(
                     get: { session.glossary.enabled },
                     set: { session.glossary.enabled = $0; session.glossary.save() }
                 ))
-                Text("전사 중 자주 틀리는 도메인 용어·이름을 직접 고친 내용을 기억해, 이후 회의의 비슷한 오인식을 자동으로 바로잡습니다. 학습은 항상 동작하고, 이 스위치는 ‘적용’만 켭니다.")
+                Text(uiLang("전사 중 자주 틀리는 도메인 용어·이름을 직접 고친 내용을 기억해, 이후 회의의 비슷한 오인식을 자동으로 바로잡습니다. 학습은 항상 동작하고, 이 스위치는 ‘적용’만 켭니다.",
+                            "Remembers the fixes you make to frequently-misheard domain terms and names, and auto-corrects similar errors in later meetings. Learning always happens; this switch only controls applying."))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("적용 기준") {
+            Section(uiLang("적용 기준", "When to apply")) {
                 HStack {
-                    Text("최소 확인 횟수")
+                    Text(uiLang("최소 확인 횟수", "Minimum hits"))
                     Slider(value: Binding(
                         get: { Double(session.glossary.minHits) },
                         set: { session.glossary.minHits = Int($0.rounded()); session.glossary.save() }
                     ), in: 1...5, step: 1)
-                    Text("\(session.glossary.minHits)회")
+                    Text("\(session.glossary.minHits)×")
                         .monospacedDigit().foregroundStyle(.secondary)
                         .frame(width: 44, alignment: .trailing)
                 }
                 .disabled(!session.glossary.enabled)
-                Text("같은 교정을 이 횟수 이상 확인해야 자동 적용합니다. 값이 클수록 보수적입니다(우발적 편집이 이후 전사를 덮어쓰지 않도록).")
+                Text(uiLang("같은 교정을 이 횟수 이상 확인해야 자동 적용합니다. 값이 클수록 보수적입니다(우발적 편집이 이후 전사를 덮어쓰지 않도록).",
+                            "The same correction must be seen at least this many times before it auto-applies. Higher is more conservative (so one accidental edit won’t overwrite later transcripts)."))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("학습한 교정 (\(activeCount)/\(totalCount))") {
+            Section("\(uiLang("학습한 교정", "Learned corrections")) (\(activeCount)/\(totalCount))") {
                 if entries.isEmpty {
-                    Text("아직 학습한 교정이 없습니다. 전사문에서 잘못 인식된 단어를 직접 고치면 여기에 쌓입니다.")
+                    Text(uiLang("아직 학습한 교정이 없습니다. 전사문에서 잘못 인식된 단어를 직접 고치면 여기에 쌓입니다.",
+                                "No learned corrections yet. Fix a misrecognized word in a transcript and it accumulates here."))
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     ForEach(entries, id: \.wrong) { e in
@@ -64,7 +68,7 @@ struct GlossarySettingsView: View {
                                 .foregroundStyle(active(e) ? Theme.Colors.textPrimary
                                                             : Theme.Colors.textTertiary)
                             Spacer()
-                            Text("\(e.hits)회")
+                            Text("\(e.hits)×")
                                 .font(.caption).monospacedDigit()
                                 .foregroundStyle(active(e) ? Theme.Colors.accent
                                                             : Theme.Colors.textTertiary)
@@ -75,11 +79,11 @@ struct GlossarySettingsView: View {
                                 Image(systemName: "trash")
                             }
                             .buttonStyle(.borderless)
-                            .help("이 교정을 잊기")
+                            .help(uiLang("이 교정을 잊기", "Forget this correction"))
                         }
-                        .help(active(e) ? "적용 중" : "확인 횟수 부족 — 아직 적용 안 됨")
+                        .help(active(e) ? uiLang("적용 중", "Active") : uiLang("확인 횟수 부족 — 아직 적용 안 됨", "Below the hit threshold — not applied yet"))
                     }
-                    Button("전체 지우기", role: .destructive) {
+                    Button(uiLang("전체 지우기", "Clear all"), role: .destructive) {
                         session.glossary.clear()
                         session.glossary.save()
                     }

@@ -42,6 +42,9 @@ struct ContentView: View {
     @State private var findMatches: [UUID] = []
     @State private var findIndex = 0
     @FocusState private var findFocused: Bool
+    // UI language (한국어/English) — start screen localized in this phase; other
+    // screens follow. Reading it here re-renders the start screen on toggle.
+    @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
     @State private var transcriptScrolled = false   // top fade shows only when scrolled
     // Set to start language dropdowns: which panel is open ("input"/"output"),
     // and each trigger pill's frame in the card space for panel anchoring.
@@ -784,11 +787,11 @@ struct ContentView: View {
             if case .countingDown(let n) = session.phase {
                 // Same warn-gradient as the status rows, NO exclamation icon —
                 // reads as an eager "about to start", not a warning.
-                GradientText("곧 녹음이 시작됩니다 \(n)")
+                GradientText(uiLang("곧 녹음이 시작됩니다 \(n)", "Recording starts in \(n)"))
                 LoadingDots(color: Color(red: 136/255, green: 145/255, blue: 234/255))
                     .padding(.top, 4)
             } else {
-                Text("전사 결과가 곧 여기에 표시됩니다")
+                Text(uiLang("전사 결과가 곧 여기에 표시됩니다", "Your transcript will appear here shortly."))
                     .font(StatusArea.warnFont).tracking(-0.28)
                     .foregroundStyle(Theme.Colors.textTertiary)
                 LoadingDots(color: Theme.Colors.textTertiary)
@@ -802,7 +805,7 @@ struct ContentView: View {
         VStack(spacing: 16) {
             OrbView()
             VStack(spacing: 6) {
-                Text("기록할 준비가 되었어요")
+                Text(uiLang("기록할 준비가 되었어요", "Ready to record"))
                     .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Text("‘녹음 시작’을 누르거나, 오디오·영상 파일을 끌어다 놓으세요.")
@@ -876,7 +879,7 @@ struct ContentView: View {
                     // Header (Figma 246:801/800) — leading-aligned with the
                     // 회의 정보 column below.
                     BrandLogo(width: 126)
-                    Text("녹음하면 회의가 글이 되고, 실시간으로 번역돼요. 모두 이 Mac 안에서")
+                    Text(uiLang("녹음하면 회의가 글이 되고, 실시간으로 번역돼요. 모두 이 Mac 안에서", "Record and your meeting becomes text, translated live — all on this Mac."))
                         .font(Theme.Fonts.startTagline)
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .lineSpacing(4)
@@ -950,16 +953,16 @@ struct ContentView: View {
     private var meetingInfoColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("회의 정보")
+                Text(uiLang("회의 정보", "Meeting info"))
                     .font(Theme.Fonts.startHeader).foregroundStyle(Theme.Colors.textPrimary)
-                Text("회의 정보를 설정하면 더 정확한 결과를 얻을 수 있어요")
+                Text(uiLang("회의 정보를 설정하면 더 정확한 결과를 얻을 수 있어요", "Setting up the meeting gives more accurate results."))
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
             VStack(alignment: .leading, spacing: 18) {
                 languageRow
-                setupBlock("회의 모드") { meetingChips }
-                setupBlock("화자") { speakerChips }
+                setupBlock(uiLang("회의 모드", "Meeting mode")) { meetingChips }
+                setupBlock(uiLang("화자", "Speakers")) { speakerChips }
             }
             .padding(.top, 22)
         }
@@ -972,23 +975,23 @@ struct ContentView: View {
     private var startColumn: some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("시작하기")
+                Text(uiLang("시작하기", "Get started"))
                     .font(Theme.Fonts.startHeader).foregroundStyle(Theme.Colors.textPrimary)
-                Text("오디오, 비디오 파일을 선택하거나 지금 바로 녹음을 시작해 보세요")
+                Text(uiLang("오디오, 비디오 파일을 선택하거나 지금 바로 녹음을 시작해 보세요", "Pick an audio or video file, or start recording now."))
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: 8) {
                 setupDropZone
-                setupCTA("파일로 시작하기", enabled: stagedFile != nil) {
+                setupCTA(uiLang("파일로 시작하기", "Start from file"), enabled: stagedFile != nil) {
                     if let u = stagedFile { stagedFile = nil; session.transcribeFile(u) }
                 }
                 orDivider
                     .padding(.vertical, 2)
                 HStack(spacing: 4) {
                     micPicker
-                    setupCTA("지금 녹음 시작", enabled: stagedFile == nil) {
+                    setupCTA(uiLang("지금 녹음 시작", "Start recording now"), enabled: stagedFile == nil) {
                         session.startCountdown()
                     }
                 }
@@ -1017,7 +1020,7 @@ struct ContentView: View {
     @ViewBuilder private var micPanelRows: some View {
         // 1) Mic devices. Picking one leaves system-audio-only mode so the mic is
         //    actually captured; in 마이크+시스템 it just swaps which mic is used.
-        langCheckRow("시스템 기본", checked: session.audioSource != .system && session.inputDeviceID == nil, dimmed: false) {
+        langCheckRow(uiLang("시스템 기본", "System default"), checked: session.audioSource != .system && session.inputDeviceID == nil, dimmed: false) {
             if session.audioSource == .system { session.audioSource = .mic }
             session.setInputDevice(nil); openLangDropdown = nil
         }
@@ -1032,10 +1035,10 @@ struct ContentView: View {
         //    reachable only from Settings, so the start screen looked like it
         //    couldn't capture it at all.
         Divider().padding(.vertical, 4).padding(.horizontal, 12)
-        langCheckRow(AudioSource.system.label, checked: session.audioSource == .system, dimmed: false) {
+        langCheckRow(AudioSource.system.label(uiLang), checked: session.audioSource == .system, dimmed: false) {
             session.audioSource = .system; openLangDropdown = nil
         }
-        langCheckRow(AudioSource.both.label, checked: session.audioSource == .both, dimmed: false) {
+        langCheckRow(AudioSource.both.label(uiLang), checked: session.audioSource == .both, dimmed: false) {
             session.audioSource = .both; openLangDropdown = nil
         }
     }
@@ -1076,8 +1079,8 @@ struct ContentView: View {
     /// chosen mic (falling back to the system default's name).
     private var micLabel: String {
         switch session.audioSource {
-        case .system: return AudioSource.system.label            // 시스템 오디오
-        case .both:   return "\(micDeviceLabel) + 시스템"
+        case .system: return AudioSource.system.label(uiLang)
+        case .both:   return uiLang("\(micDeviceLabel) + 시스템", "\(micDeviceLabel) + system")
         case .mic:    return micDeviceLabel
         }
     }
@@ -1089,7 +1092,7 @@ struct ContentView: View {
            let d = inputs.first(where: { $0.id == id }) { return d.name }
         if let def = AudioDevices.defaultInputID,
            let d = inputs.first(where: { $0.id == def }) { return d.name }
-        return "시스템 기본"
+        return uiLang("시스템 기본", "System default")
     }
 
     // 인풋(단일)·아웃풋(멀티 체크박스) 언어 드롭다운 한 줄 (Figma 246:756 +
@@ -1097,11 +1100,11 @@ struct ContentView: View {
     private var languageRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
-                Text("입력 언어")
+                Text(uiLang("입력 언어", "Input language"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text("출력 언어")
+                Text(uiLang("출력 언어", "Output language"))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1112,7 +1115,7 @@ struct ContentView: View {
                 langTrigger(id: "output", label: outputLangLabel)
                     .opacity(AssetManifest.translateAvailable ? 1 : 0.4)
                     .allowsHitTesting(AssetManifest.translateAvailable)
-                    .help(AssetManifest.translateAvailable ? "" : "번역 모델이 필요해요 — 설정 › 번역")
+                    .help(AssetManifest.translateAvailable ? "" : uiLang("번역 모델이 필요해요 — 설정 › 번역", "Needs the translation model — Settings › Translation"))
             }
         }
     }
@@ -1120,18 +1123,18 @@ struct ContentView: View {
     // MARK: language dropdowns (Figma 247:555)
 
     /// Input options: whisper token id (nil = auto-detect) + display label.
-    private static let inputLangOptions: [(id: Int?, label: String)] = [
-        (nil, "자동"), (WhisperLang.ko, "한국어"), (WhisperLang.en, "영어"),
-        (WhisperLang.zh, "중국어"), (WhisperLang.ja, "일본어"),
+    private static let inputLangOptions: [(id: Int?, ko: String, en: String)] = [
+        (nil, "자동", "Auto"), (WhisperLang.ko, "한국어", "Korean"), (WhisperLang.en, "영어", "English"),
+        (WhisperLang.zh, "중국어", "Chinese"), (WhisperLang.ja, "일본어", "Japanese"),
     ]
-    /// Output options: translateTargets code + Korean display label.
-    private static let outputLangOptions: [(code: String, label: String)] = [
-        ("Korean", "한국어"), ("English", "영어"), ("Chinese", "중국어"), ("Japanese", "일본어"),
+    /// Output options: translateTargets code + ko/en display labels.
+    private static let outputLangOptions: [(code: String, ko: String, en: String)] = [
+        ("Korean", "한국어", "Korean"), ("English", "영어", "English"), ("Chinese", "중국어", "Chinese"), ("Japanese", "일본어", "Japanese"),
     ]
     private let maxTranslateTargets = 3
 
     private var inputLangLabel: String {
-        Self.inputLangOptions.first { $0.id == session.languageTokenID }?.label ?? "자동"
+        Self.inputLangOptions.first { $0.id == session.languageTokenID }.map { uiLang($0.ko, $0.en) } ?? uiLang("자동", "Auto")
     }
 
     /// translateTargets code of the chosen input language (nil for 자동) — used
@@ -1149,14 +1152,14 @@ struct ContentView: View {
     /// Collapsed pill label: 번역 안 함 / 영어 / 영어 · 일본어 / 영어 외 2.
     private var outputLangLabel: String {
         let labelFor: (String) -> String = { code in
-            Self.outputLangOptions.first { $0.code == code }?.label ?? code
+            Self.outputLangOptions.first { $0.code == code }.map { uiLang($0.ko, $0.en) } ?? code
         }
         let picked = session.translateTargets.sorted().map(labelFor)
         switch picked.count {
-        case 0: return "번역 안 함"
+        case 0: return uiLang("번역 안 함", "No translation")
         case 1: return picked[0]
         case 2: return picked.joined(separator: " · ")
-        default: return "\(picked[0]) 외 \(picked.count - 1)"
+        default: return uiLang("\(picked[0]) 외 \(picked.count - 1)", "\(picked[0]) +\(picked.count - 1)")
         }
     }
 
@@ -1227,10 +1230,10 @@ struct ContentView: View {
                 ScrollView(.vertical) { VStack(spacing: 0) { micPanelRows } }
                     .frame(height: min(micPanelNaturalHeight, maxHeight))
             } else if which == "input" {
-                ForEach(Self.inputLangOptions, id: \.label) { opt in
+                ForEach(Self.inputLangOptions, id: \.ko) { opt in
                     Button { setLanguage(opt.id) } label: {
                         HStack {
-                            Text(opt.label)
+                            Text(uiLang(opt.ko, opt.en))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(Theme.Colors.textPrimary)
                             Spacer(minLength: 0)
@@ -1241,13 +1244,13 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                 }
             } else {
-                langCheckRow("번역 안 함", checked: session.translateTargets.isEmpty, dimmed: false) {
+                langCheckRow(uiLang("번역 안 함", "No translation"), checked: session.translateTargets.isEmpty, dimmed: false) {
                     session.translateTargets = []
                 }
                 ForEach(Self.outputLangOptions.filter { $0.code != inputLangCode }, id: \.code) { opt in
                     let on = session.translateTargets.contains(opt.code)
                     let capped = !on && session.translateTargets.count >= maxTranslateTargets
-                    langCheckRow(opt.label, checked: on, dimmed: capped) {
+                    langCheckRow(uiLang(opt.ko, opt.en), checked: on, dimmed: capped) {
                         toggleTranslateTarget(opt.code)
                     }
                 }
@@ -1297,7 +1300,7 @@ struct ContentView: View {
                 Text(title).font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
                 if optional {
-                    Text("*Optional").font(.system(size: 10, weight: .semibold))
+                    Text(uiLang("*선택", "*Optional")).font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Self.optionalOrange)
                 }
             }
@@ -1310,7 +1313,7 @@ struct ContentView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 ForEach(MeetingMode.allCases) { m in
-                    setupChip(m.label, selected: session.meetingMode == m) { session.meetingMode = m }
+                    setupChip(m.label(uiLang), selected: session.meetingMode == m) { session.meetingMode = m }
                 }
             }
         }
@@ -1320,7 +1323,7 @@ struct ContentView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 ForEach(SpeakerCount.allCases) { s in
-                    setupChip(s.label, selected: session.speakerCount == s) { session.speakerCount = s }
+                    setupChip(s.label(uiLang), selected: session.speakerCount == s) { session.speakerCount = s }
                 }
             }
         }
@@ -1385,7 +1388,7 @@ struct ContentView: View {
                 VStack(spacing: 4) {
                     SVGIcon(name: "folder-plus", size: 24)
                         .opacity(0.6)
-                    Text("파일 선택 or 드래그 앤 드롭")
+                    Text(uiLang("파일 선택 or 드래그 앤 드롭", "Choose file or drag & drop"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.Colors.textPrimary)
                 }

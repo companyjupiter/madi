@@ -50,6 +50,7 @@ let package = Package(
                 "Transcript/ReviewController.swift",
                 "Engine/EngineProtocol.swift",
                 "Engine/EngineEvents.swift",
+                "UI/L10n.swift",
                 "UI/ClinicDisplaySupport.swift",
                 "Audio/WavWriter.swift",
                 "Audio/Segmenter.swift",

@@ -19,7 +19,14 @@ import AVFoundation
 enum AudioSource: String, CaseIterable, Identifiable {
     case mic, system, both
     var id: String { rawValue }
-    var label: String { self == .mic ? "마이크" : self == .system ? "시스템 오디오" : "마이크+시스템" }
+    var label: String { label(.ko) }
+    func label(_ lang: UILanguage) -> String {
+        switch self {
+        case .mic:    return lang("마이크", "Microphone")
+        case .system: return lang("시스템 오디오", "System audio")
+        case .both:   return lang("마이크+시스템", "Mic + system")
+        }
+    }
 }
 
 @MainActor
