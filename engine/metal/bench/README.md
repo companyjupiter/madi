@@ -39,6 +39,14 @@ python3 bench/diar_panel_eval.py --audio panel.wav --ref panel.rttm --id panel -
 python3 bench/diar_panel_eval.py --youtube-url 'https://youtu.be/...' --ref panel.rttm --id panel --speakers 4 --live
 ```
 
+The live silence-birth regression gate replays both digital silence and a
+speech-to-silence sequence through the resident STREAM engine. It requires a
+built `out/transcribe` and the local model/VAD assets:
+
+```bash
+python3 -m unittest bench/test_live_silence_gate.py
+```
+
 Outputs are written under `bench/runs/diar_panel_<timestamp>/`:
 `results.jsonl`, `summary.md`, and the generated system RTTMs.
 
