@@ -27,54 +27,66 @@ struct WorkspaceStatsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 24)
         } else {
+            // rev.2 (Figma 318:1579): flat value-over-label grid (no sunken tiles),
+            // hairline-divided key/value rows, and the trend chart in the same
+            // amber→orange gradient as the speaker share bar.
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 14) {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
-                                        GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                        tile("\(stats.meetingCount)", uiLang("회의", "Meetings"))
-                        tile(hoursMinutes(stats.totalSeconds), uiLang("총 시간", "Total time"))
-                        tile(hoursMinutes(stats.avgSeconds), uiLang("평균 길이", "Avg length"))
-                        tile(Self.grouper.string(from: NSNumber(value: stats.totalWords)) ?? "\(stats.totalWords)", uiLang("총 단어", "Total words"))
+                VStack(alignment: .leading, spacing: 20) {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 7),
+                                        GridItem(.flexible(), spacing: 7)], spacing: 22) {
+                        statItem("\(stats.meetingCount)", uiLang("회의", "Meetings"))
+                        statItem(hoursMinutes(stats.totalSeconds), uiLang("총 시간", "Total time"))
+                        statItem(hoursMinutes(stats.avgSeconds), uiLang("평균 길이", "Avg length"))
+                        statItem(Self.grouper.string(from: NSNumber(value: stats.totalWords)) ?? "\(stats.totalWords)", uiLang("총 단어", "Total words"))
                     }
+                    divider
                     HStack {
-                        Text(uiLang("평균 화자", "Avg speakers")).font(.system(size: 12)).foregroundStyle(Theme.Colors.textSecondary)
+                        Text(uiLang("평균 화자", "Avg speakers"))
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textSecondary)
                         Spacer()
                         Text(uiLang(String(format: "%.1f명", stats.avgSpeakers), String(format: "%.1f", stats.avgSpeakers)))
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
+                            .font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.Colors.textPrimary)
                     }
+                    divider
                     trendBlock
                 }
-                .padding(.horizontal, 20).padding(.top, 16)
+                .padding(.horizontal, 19).padding(.top, 20)
             }
         }
     }
 
-    private func tile(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    private var divider: some View {
+        Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
+    }
+
+    private func statItem(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
             Text(value)
-                .font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
+                .font(.system(size: 18)).foregroundStyle(Theme.Colors.textPrimary)
                 .lineLimit(1).minimumScaleFactor(0.55)
-            Text(label).font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
+            Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.Colors.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12).padding(.vertical, 11)
-        .background(RoundedRectangle(cornerRadius: 11).fill(Theme.Colors.surfaceSunken))
     }
 
     private var trendBlock: some View {
         let maxV = max(1, stats.weeklyTrend.max() ?? 1)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(uiLang("최근 \(stats.weeklyTrend.count)주", "Last \(stats.weeklyTrend.count) wks", "直近 \(stats.weeklyTrend.count)週")).font(.system(size: 11)).foregroundStyle(Theme.Colors.textTertiary)
+                Text(uiLang("최근 \(stats.weeklyTrend.count)주", "Last \(stats.weeklyTrend.count) wks", "直近 \(stats.weeklyTrend.count)週"))
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textSecondary)
                 Spacer()
-                Text(uiLang("이번 주 \(stats.thisWeekCount)", "This week \(stats.thisWeekCount)", "今週 \(stats.thisWeekCount)"))
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.Colors.textSecondary)
+                Text(uiLang("이번주 \(stats.thisWeekCount)", "This week \(stats.thisWeekCount)", "今週 \(stats.thisWeekCount)"))
+                    .font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.Colors.textPrimary)
             }
-            HStack(alignment: .bottom, spacing: 5) {
+            HStack(alignment: .bottom, spacing: 3) {
                 ForEach(Array(stats.weeklyTrend.enumerated()), id: \.offset) { i, v in
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(i == stats.weeklyTrend.count - 1 ? Theme.Colors.accent : Theme.Colors.surfaceSunken)
-                        .frame(height: max(4, CGFloat(v) / CGFloat(maxV) * 42))
+                    // 15pt floor keeps quiet weeks as visible pills (Figma), not slivers.
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(i == stats.weeklyTrend.count - 1
+                              ? AnyShapeStyle(Theme.Colors.speakerGradient(0))
+                              : AnyShapeStyle(Theme.Colors.surfaceSunken))
+                        .frame(height: max(15, CGFloat(v) / CGFloat(maxV) * 42))
                         .frame(maxWidth: .infinity)
                 }
             }
