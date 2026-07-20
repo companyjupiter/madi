@@ -147,9 +147,12 @@ final class SessionController: EngineProcessDelegate {
     private(set) var streamingTranslation: TranslationRef?
     /// Pending translation turns (queued + in-flight) — the "N줄 대기" status (D20).
     private(set) var translateQueueDepth = 0
-    /// Max live translation queue depth (turns). Past this, fast speech sheds its
-    /// OLDEST turns to `translateBacklog` and they're re-translated at stop.
-    private static let liveTranslateCap = 30
+    /// Max live translation queue depth (turns). The 8 GB realtime profile keeps
+    /// only a four-turn horizon; larger systems retain the legacy 30-turn buffer.
+    /// Superseded revisions are coalesced before this cap and never backfilled.
+    private static func liveTranslateCap(for variant: TranslateModelVariant) -> Int {
+        variant == .realtime2B ? 4 : 30
+    }
     /// Upper bound on a live PREVIEW (interim) string. A real ~10s recognition
     /// window holds well under this in any language; a value beyond it is a
     /// run-on-hallucination balloon, dropped so it never flashes on the caption
@@ -408,7 +411,7 @@ final class SessionController: EngineProcessDelegate {
     private var interimCache = InterimTranslationCache()
 
     // ── on-device meeting intelligence (post-session summary + action items) ──
-    // Uses the SAME bundled DNA3.0-4B; the transcript never leaves the device.
+    // Uses the SAME selected DNA3 process; the transcript never leaves the device.
     private var summaryEngine: SummaryEngine?
     private(set) var meetingSummary: String? = nil
     /// Smart auto-title — sanitized one-line meeting name (nil until generated).
@@ -732,7 +735,11 @@ final class SessionController: EngineProcessDelegate {
             t.priorityLang = translateTargets.sorted().first
             // Live cap: keep the queue tracking the newest speech. Turns the engine
             // can't keep up with are shed and remembered for the stop-time backfill.
-            t.maxPending = Self.liveTranslateCap
+            t.maxPending = Self.liveTranslateCap(for: AssetManifest.translateModelVariant)
+            t.onDiscard = { [weak self] id, lang, source in
+                guard let self else { return }
+                _ = self.finishInterimTurn(id: id, lang: lang, source: source, text: nil)
+            }
             t.onDrop = { [weak self] id, lang, source in
                 guard let self else { return }
                 if self.finishInterimTurn(id: id, lang: lang, source: source, text: nil) { return }
@@ -835,10 +842,10 @@ final class SessionController: EngineProcessDelegate {
             let targets = self.routedTargets(for: source)
             guard !targets.isEmpty else { return }
             let id = UUID()
+            guard t.translate(source, into: targets, id: id, kind: .interim) else { return }
             self.activeInterimID = id
             self.interimRequests[id] = InterimRequest(
                 source: source, pending: Set(targets), translations: [:])
-            t.translate(source, into: targets, id: id)
         }
     }
 

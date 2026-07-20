@@ -28,7 +28,8 @@ Canonical bundle layout it produces:
 Madi.app/Contents/
   MacOS/Madi                     # the app
   MacOS/transcribe               # Zig/Metal speech engine
-  MacOS/translate-engine         # optional local LLM runner (~1.4 MB; model is downloaded)
+  MacOS/translate-engine-4b      # optional quality-profile LLM runner
+  MacOS/translate-engine-2b      # optional 8 GB realtime-profile LLM runner
   Resources/whisper.metallib     # sealed by the bundle signature
   Resources/assets-small/*.bin   # the 7 files the engine opens at runtime
   Resources/manual/index.html    # offline user manual (Help menu)
@@ -44,7 +45,8 @@ bundled — they download on first run / on demand into Application Support.
 |---|---|---|
 | engine + metallib + 7 `.bin` assets | small | **bundled** (`assemble_bundle.sh` / `make_app.sh`, same 7-file list) |
 | `model.q8.safetensors` (speech) | ~830 MB | **downloaded** first run, SHA-256 verified (`ModelDownloader`) |
-| `DNA3.0-4B…gguf` (optional LLM) | ~2.6 GB | **downloaded** on demand, SHA-256 verified (`TranslateModelDownloader`) |
+| `DNA3.0-2B…gguf` (8 GB LLM) | ~1.3 GB | **downloaded** on demand, SHA-256 verified (`TranslateModelDownloader`) |
+| `DNA3.0-4B…gguf` (16 GB+ LLM) | ~2.8 GB | **downloaded** on demand, SHA-256 verified (`TranslateModelDownloader`) |
 
 Bundled `.bin` list is kept in sync between `make_app.sh` (`ASSETS[]`) and
 `assemble_bundle.sh` (`SMALL[]`) — both are the files `transcribe.zig` opens via
@@ -169,7 +171,7 @@ Build a fresh bundle, then verify each item on a clean machine / clean App Suppo
 **Pre-flight (automated)**
 - [ ] `cd apps/macos && swift test` — core suite green (this is the CI release gate).
 - [ ] `bash -n apps/macos/scripts/*.sh` — all packaging scripts parse.
-- [ ] `make_app.sh` completes and prints `✅`; bundle has `MacOS/{Madi,transcribe,translate-engine}` and `Resources/assets-small/` with 7 `.bin` files.
+- [ ] `make_app.sh` completes and prints `✅`; translation-enabled bundles have `MacOS/{Madi,transcribe,translate-engine-2b,translate-engine-4b}` and `Resources/assets-small/` with 7 `.bin` files.
 
 **First launch (clean App Support: no `~/Library/Application Support/Madi/`)**
 - [ ] App launches; **model setup gate** appears before any recording control is usable.
@@ -250,8 +252,10 @@ the release branch or tags, and add all Developer ID/notarization secrets:
 | `APPLE_NOTARY_ISSUER_ID` | App Store Connect API issuer ID |
 | `APPLE_NOTARY_KEY_P8_BASE64` | base64-encoded `AuthKey_….p8` |
 
-Translation is bundled when both optional secrets are present:
-`MADI_TRANSLATE_ENGINE_URL` and `MADI_TRANSLATE_ENGINE_SHA256`.
+Translation is bundled only as a complete engine pair. Configure
+`MADI_TRANSLATE_ENGINE_{2B,4B}_{URL,SHA256}`. The legacy unsuffixed URL/SHA pair
+remains a 4B fallback, but the 2B pair is still required before translation can be
+included in a release.
 
 Create the small-assets archive once from a validated engine workspace, upload it
 to versioned immutable storage, and record its digest in the environment secret:

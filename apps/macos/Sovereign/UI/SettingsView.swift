@@ -17,11 +17,10 @@ struct SettingsView: View {
     // UI language (한국어/English) — read by localized views via the same key.
     @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
-    /// Translation needs the DNA3 engine binary in the bundle (make_app.sh only
-    /// copies it when TRANSLATE_ENGINE is set). Without it the tab would invite a
-    /// 2.6 GB model download that can never run — hide the whole tab instead.
+    /// Translation needs the hardware-selected DNA3 engine in the bundle. Without
+    /// it the tab would invite a model download that can never run.
     private var translateEngineBundled: Bool {
-        Bundle.main.url(forAuxiliaryExecutable: "translate-engine") != nil
+        AssetManifest.translateEngineURL != nil
     }
 
     var body: some View {
@@ -41,10 +40,14 @@ struct SettingsView: View {
         .padding()
     }
 
-    // MARK: 번역 — on-device translation model (DNA3.0-4B, downloaded on demand)
+    // MARK: 번역 — hardware-selected on-device DNA3 model
     private var translate: some View {
-        Form {
-            Section("\(uiLang("번역 모델", "Translation model")) (DNA3.0-4B · ~2.6 GB)") {
+        let variant = AssetManifest.translateModelVariant
+        let asset = AssetManifest.translateModel
+        let diskGB = String(format: "%.1f", Double(asset.sizeBytes) / 1_000_000_000)
+        let ramGB = String(format: "%.1f", asset.approxRuntimeMemoryGB ?? 0)
+        return Form {
+            Section("\(uiLang("번역 모델", "Translation model")) (\(variant.displayName) · ~\(diskGB) GB)") {
                 LabeledContent(uiLang("상태", "Status")) {
                     switch translateDownloader.state {
                     case .ready: Label(uiLang("설치됨", "Installed"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
@@ -65,9 +68,11 @@ struct SettingsView: View {
                     Button(uiLang("번역 모델 다운로드", "Download translation model")) { translateDownloader.startDownload() }
                         .buttonStyle(.borderedProminent)
                 }
-                let gb = Int(AssetManifest.translateModel.approxRuntimeMemoryGB ?? 3)
-                Text(uiLang("로컬 온디바이스 번역(KO·ZH·JA·EN)용. 앱에 동봉되지 않고 켤 때 받습니다 — 메모리 약 \(gb) GB 추가.",
-                            "For on-device translation (KO·ZH·JA·EN). Not bundled; downloaded on demand — about \(gb) GB more memory in use."))
+                let profile = variant == .realtime2B
+                    ? uiLang("8GB Mac용 실시간 최적화 프로필", "Realtime profile for 8 GB Macs")
+                    : uiLang("품질 우선 기본 프로필", "Quality-default profile")
+                Text(uiLang("\(profile). 로컬 번역(KO·ZH·JA·EN)용으로 필요할 때 받습니다 — 실측 메모리 약 \(ramGB) GB.",
+                            "\(profile). Downloaded on demand for local translation (KO·ZH·JA·EN) — measured memory about \(ramGB) GB."))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section(uiLang("실시간 번역 (다중 대상)", "Live translation (multi-target)")) {
@@ -98,8 +103,8 @@ struct SettingsView: View {
                 Text(AssetManifest.translateAvailable
                      ? uiLang("녹음이 끝나면 온디바이스 LLM이 대화를 읽고 명백한 화자 오분리·잘못된 언어 줄을 보수적으로 바로잡습니다. 화자 교정은 한 번에 되돌릴 수 있습니다.",
                               "When recording ends, the on-device LLM reads the conversation and conservatively fixes obvious speaker mis-splits and wrong-language lines. Speaker corrections can be undone in one click.")
-                     : uiLang("번역·요약 모델(DNA3.0-4B)이 있어야 사용할 수 있습니다.",
-                              "Requires the translation/summary model (DNA3.0-4B)."))
+                     : uiLang("번역·요약 모델(\(variant.displayName))이 있어야 사용할 수 있습니다.",
+                              "Requires the translation/summary model (\(variant.displayName))."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

@@ -22,6 +22,25 @@ struct RemoteAsset {
     var approxRuntimeMemoryGB: Double? = nil
 }
 
+enum TranslateModelVariant: String, CaseIterable {
+    case quality4B
+    case realtime2B
+
+    var displayName: String {
+        switch self {
+        case .quality4B: return "DNA3.0-4B"
+        case .realtime2B: return "DNA3.0-2B"
+        }
+    }
+
+    var engineExecutableName: String {
+        switch self {
+        case .quality4B: return "translate-engine-4b"
+        case .realtime2B: return "translate-engine-2b"
+        }
+    }
+}
+
 enum AssetManifest {
     /// The large model fetched on first run — the pre-quantized Q8 build
     /// (bench/quantize_q8.py output), 1.86x smaller than F16 with proven zero
@@ -45,29 +64,66 @@ enum AssetManifest {
     /// Hosted on Hugging Face (mradermacher's i1/imatrix GGUF quant of dnotitia/DNA3.0-4B).
     /// `resolve/main` is the stable direct-download endpoint (302 → HF xet CDN). Verified
     /// against this exact file: x-linked-size 2,783,447,424 + sha256 a00a837a… == local.
-    static let translateModel = RemoteAsset(
+    static let translateModel4B = RemoteAsset(
         name: "DNA3.0-4B.i1-Q4_K_M.gguf",
         url: URL(string: "https://huggingface.co/mradermacher/DNA3.0-4B-i1-GGUF/resolve/main/DNA3.0-4B.i1-Q4_K_M.gguf")!,
         sha256: "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8",
         sizeBytes: 2_783_447_424,
-        approxRuntimeMemoryGB: 3.0
+        approxRuntimeMemoryGB: 5.1
     )
-    /// Always App Support (never bundled). The 1.1 MB engine binary IS bundled.
-    static var translateModelURL: URL { supportDir.appendingPathComponent(translateModel.name) }
-    /// Fast presence gate (size-only, symlinks resolved for the dev-seed path —
-    /// like the main model launch gate).
-    static func translateModelIsValid() -> Bool {
-        let resolved = translateModelURL.resolvingSymlinksInPath()
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path),
-              let size = attrs[.size] as? Int64 else { return false }
-        return size == translateModel.sizeBytes
+
+    /// Low-memory live-translation model for 8 GB Macs. Same qwen35 hybrid
+    /// architecture/tokenizer as 4B, model-specific Metal binary, Q4_K_M.
+    /// Measured on this Mac: 2,405 MB phys_footprint vs 5,119 MB for 4B (-53%).
+    static let translateModel2B = RemoteAsset(
+        name: "DNA3.0-2B.i1-Q4_K_M.gguf",
+        url: URL(string: "https://huggingface.co/mradermacher/DNA3.0-2B-i1-GGUF/resolve/main/DNA3.0-2B.i1-Q4_K_M.gguf")!,
+        sha256: "9270db053b27f1ec127e37ad7aaec0efa05dc89fbd158f3c4724e33e478da7a3",
+        sizeBytes: 1_312_165_344,
+        approxRuntimeMemoryGB: 2.4
+    )
+
+    /// 8 GB is the only current Mac capacity below 12 GiB, so the midpoint
+    /// threshold is robust to future reporting/rounding while leaving 16 GB+
+    /// on the quality-default 4B profile.
+    static func recommendedTranslateModelVariant(physicalMemory: UInt64) -> TranslateModelVariant {
+        physicalMemory < 12 * (1 << 30) ? .realtime2B : .quality4B
     }
 
-    /// The bundled translate engine binary (DNA3.0-4B Metal, ~1.1 MB, self-contained
-    /// — embedded metallib). Copied into Contents/MacOS/translate-engine at build
-    /// time (make_app.sh 2c). nil if this build didn't bundle it.
+    static var translateModelVariant: TranslateModelVariant {
+        if let forced = ProcessInfo.processInfo.environment["MADI_TRANSLATE_MODEL"]?.lowercased() {
+            if forced == "2b" { return .realtime2B }
+            if forced == "4b" { return .quality4B }
+        }
+        return recommendedTranslateModelVariant(physicalMemory: ProcessInfo.processInfo.physicalMemory)
+    }
+
+    static func translateModel(for variant: TranslateModelVariant) -> RemoteAsset {
+        variant == .realtime2B ? translateModel2B : translateModel4B
+    }
+
+    static var translateModel: RemoteAsset { translateModel(for: translateModelVariant) }
+
+    /// Always App Support (never bundled). The small engine binaries ARE bundled.
+    static func translateModelURL(for variant: TranslateModelVariant) -> URL {
+        supportDir.appendingPathComponent(translateModel(for: variant).name)
+    }
+    static var translateModelURL: URL { translateModelURL(for: translateModelVariant) }
+    /// Fast presence gate (size-only, symlinks resolved for the dev-seed path —
+    /// like the main model launch gate).
+    static func translateModelIsValid(_ variant: TranslateModelVariant = translateModelVariant) -> Bool {
+        let asset = translateModel(for: variant)
+        let resolved = translateModelURL(for: variant).resolvingSymlinksInPath()
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: resolved.path),
+              let size = attrs[.size] as? Int64 else { return false }
+        return size == asset.sizeBytes
+    }
+
+    /// Selected bundled Metal binary (one binary per model+quant, embedded
+    /// metallib). Both are copied into Contents/MacOS by make_app.sh.
     static var translateEngineURL: URL? {
-        let u = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/translate-engine")
+        let name = translateModelVariant.engineExecutableName
+        let u = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/\(name)")
         return FileManager.default.fileExists(atPath: u.path) ? u : nil
     }
     /// Translation is available only when BOTH the engine (bundled) and the model

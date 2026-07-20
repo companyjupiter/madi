@@ -34,8 +34,14 @@ executables=(
   "$APP/Contents/MacOS/Madi"
   "$APP/Contents/MacOS/transcribe"
 )
-[ ! -e "$APP/Contents/MacOS/translate-engine" ] \
-  || executables+=("$APP/Contents/MacOS/translate-engine")
+translate_4b="$APP/Contents/MacOS/translate-engine-4b"
+translate_2b="$APP/Contents/MacOS/translate-engine-2b"
+if [ -e "$translate_4b" ] || [ -e "$translate_2b" ]; then
+  [ -s "$translate_4b" ] && [ -s "$translate_2b" ] || {
+    echo "❌ translation engines must be bundled as a 4B+2B pair" >&2; exit 1;
+  }
+  executables+=("$translate_4b" "$translate_2b")
+fi
 
 for executable in "${executables[@]}"; do
   file "$executable" | grep -q 'arm64' || {

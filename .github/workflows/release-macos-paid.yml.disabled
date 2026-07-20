@@ -47,8 +47,10 @@ jobs:
     env:
       ASSETS_URL: ${{ vars.MADI_RELEASE_ASSETS_URL }}
       ASSETS_SHA256: ${{ vars.MADI_RELEASE_ASSETS_SHA256 }}
-      TRANSLATE_ENGINE_URL: ${{ secrets.MADI_TRANSLATE_ENGINE_URL }}
-      TRANSLATE_ENGINE_SHA256: ${{ secrets.MADI_TRANSLATE_ENGINE_SHA256 }}
+      TRANSLATE_ENGINE_4B_URL: ${{ secrets.MADI_TRANSLATE_ENGINE_4B_URL || secrets.MADI_TRANSLATE_ENGINE_URL }}
+      TRANSLATE_ENGINE_4B_SHA256: ${{ secrets.MADI_TRANSLATE_ENGINE_4B_SHA256 || secrets.MADI_TRANSLATE_ENGINE_SHA256 }}
+      TRANSLATE_ENGINE_2B_URL: ${{ secrets.MADI_TRANSLATE_ENGINE_2B_URL }}
+      TRANSLATE_ENGINE_2B_SHA256: ${{ secrets.MADI_TRANSLATE_ENGINE_2B_SHA256 }}
       SIGN_ID: ${{ secrets.MACOS_SIGN_ID }}
       CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
       CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -136,19 +138,24 @@ jobs:
           curl --fail --location --retry 3 "$ASSETS_URL" --output "$RUNNER_TEMP/madi-assets.tar.gz"
           apps/macos/scripts/prepare_release_assets.sh "$RUNNER_TEMP/madi-assets.tar.gz" "$ASSETS_SHA256"
 
-      - name: Install optional translation engine
+      - name: Install optional translation engines
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$TRANSLATE_ENGINE_URL" ]; then
-            echo "No translation engine secret configured; building transcription-only app"
+          if [ -z "$TRANSLATE_ENGINE_4B_URL" ] && [ -z "$TRANSLATE_ENGINE_2B_URL" ]; then
+            echo "No translation engines configured; building transcription-only app"
             exit 0
           fi
-          [ -n "$TRANSLATE_ENGINE_SHA256" ] || { echo "MADI_TRANSLATE_ENGINE_SHA256 is required" >&2; exit 1; }
-          curl --fail --location --retry 3 "$TRANSLATE_ENGINE_URL" --output "$RUNNER_TEMP/translate-engine"
-          echo "$TRANSLATE_ENGINE_SHA256  $RUNNER_TEMP/translate-engine" | shasum -a 256 -c -
-          chmod +x "$RUNNER_TEMP/translate-engine"
-          echo "TRANSLATE_ENGINE=$RUNNER_TEMP/translate-engine" >> "$GITHUB_ENV"
+          for name in TRANSLATE_ENGINE_4B_URL TRANSLATE_ENGINE_4B_SHA256 TRANSLATE_ENGINE_2B_URL TRANSLATE_ENGINE_2B_SHA256; do
+            [ -n "${!name:-}" ] || { echo "$name is required when translation is bundled" >&2; exit 1; }
+          done
+          curl --fail --location --retry 3 "$TRANSLATE_ENGINE_4B_URL" --output "$RUNNER_TEMP/translate-engine-4b"
+          echo "$TRANSLATE_ENGINE_4B_SHA256  $RUNNER_TEMP/translate-engine-4b" | shasum -a 256 -c -
+          curl --fail --location --retry 3 "$TRANSLATE_ENGINE_2B_URL" --output "$RUNNER_TEMP/translate-engine-2b"
+          echo "$TRANSLATE_ENGINE_2B_SHA256  $RUNNER_TEMP/translate-engine-2b" | shasum -a 256 -c -
+          chmod +x "$RUNNER_TEMP/translate-engine-4b" "$RUNNER_TEMP/translate-engine-2b"
+          echo "TRANSLATE_ENGINE_4B=$RUNNER_TEMP/translate-engine-4b" >> "$GITHUB_ENV"
+          echo "TRANSLATE_ENGINE_2B=$RUNNER_TEMP/translate-engine-2b" >> "$GITHUB_ENV"
 
       - name: Run release gates
         shell: bash

@@ -1,5 +1,5 @@
 // SummaryEngine.swift — on-device meeting intelligence. Drives the SAME bundled
-// DNA3.0-4B Metal engine as translation, but for POST-session summarization:
+// the hardware-selected DNA3 Metal engine as translation, but for POST-session summarization:
 // feeds the speaker-attributed transcript as one chat turn and returns a
 // structured [요약]/[액션]/[결정] block. 100% local — the transcript never leaves
 // the device (the product moat vs cloud meeting tools; whisper.cpp has no LLM).
@@ -20,7 +20,7 @@ import Foundation
 final class SummaryEngine {
     /// (tag, reply). tag routes the caller (e.g. "summary" / "qa"); reply is the
     /// finished multi-line text, or nil on empty/failure. The engine stays resident
-    /// so follow-up questions don't reload the 2.6 GB model.
+    /// so follow-up questions don't reload the selected model.
     var onResult: ((String, String?) -> Void)?
 
     private let broker = DNAEngineBroker.shared

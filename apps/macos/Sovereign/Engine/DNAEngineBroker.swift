@@ -1,6 +1,6 @@
 // DNAEngineBroker.swift — one resident DNA3 process shared by live translation,
 // action rail, summary, reconcile, and Q&A. Requests are priority-serialized so
-// Metal never runs two 2.6 GB DNA models concurrently.
+// Metal never runs two model-sized DNA processes concurrently.
 
 import Foundation
 
@@ -12,8 +12,8 @@ final class DNAEngineBroker {
     enum Priority: Int {
         case postSession = 10
         case liveRail = 30
-        case committedCaption = 80
-        case interimCaption = 100
+        case interimCaption = 80
+        case committedCaption = 100
     }
 
     typealias ClientID = UUID
