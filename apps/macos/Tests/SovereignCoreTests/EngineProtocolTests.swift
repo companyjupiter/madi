@@ -58,4 +58,30 @@ final class EngineProtocolTests: XCTestCase {
             XCTFail("malformed partial should decode to .other")
         }
     }
+
+    func testPreviewLaneIsolatesTextAndRestoresCommittedParsing() {
+        let d = EngineProtocol.Decoder()
+        XCTAssertEqual(d.decode(line: "<<PREVIEW_BEGIN>>"), .previewBegin)
+        XCTAssertEqual(d.decode(line: "«partial 0.00» 미리 보기"), .previewPartial("미리 보기"))
+        if case .other = d.decode(line: "=== WORD TIMESTAMPS ===") { } else {
+            XCTFail("preview word section must not look committed")
+        }
+        XCTAssertEqual(d.decode(line: "[0.10s-0.50s] 안녕하세요  «conf 0.91»"),
+                       .previewWord("안녕하세요"))
+        // Even if a future engine accidentally emits session state inside the
+        // markers, the decoder must quarantine it from SessionController.
+        if case .other = d.decode(line: "SPK 0.00 7 1.50") { } else {
+            XCTFail("preview speaker state escaped its lane")
+        }
+        if case .other = d.decode(line: "[lang] detected token 50264 (en=50259 ko=50264)") { } else {
+            XCTFail("preview language state escaped its lane")
+        }
+        if case .other = d.decode(line: "<<SEG_END>>") { } else {
+            XCTFail("preview job spoofed a committed segment barrier")
+        }
+        XCTAssertEqual(d.decode(line: "<<PREVIEW_END>>"), .previewEnd)
+        XCTAssertEqual(d.decode(line: "=== WORD TIMESTAMPS ==="), .wordSectionBegin)
+        XCTAssertEqual(d.decode(line: "[1.00s-1.40s] committed"),
+                       .word(t0: 1.0, t1: 1.4, text: "committed", conf: 1.0))
+    }
 }

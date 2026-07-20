@@ -20,6 +20,9 @@ void mtl_cleanup(void);
 // 반환값: CPU/GPU 공유 포인터 (직접 memcpy 가능)
 void* mtl_alloc(size_t size);
 void  mtl_free(void* ptr);
+// Deterministic registry invariant test: deleting one colliding key must not
+// hide later keys in the same open-addressing probe chain. Returns 0 on pass.
+int mtl_test_buffer_hash_delete_chain(void);
 
 // 통합 메모리이므로 직접 포인터 접근 가능하지만,
 // GPU 캐시 플러시가 필요한 경우 사용

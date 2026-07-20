@@ -1,5 +1,5 @@
-// TranslateModelDownloader.swift — on-demand download of the DNA3.0-4B translate
-// model (~2.6 GB) into App Support, with progress + SHA-256 verification. The
+// TranslateModelDownloader.swift — on-demand download of the hardware-selected
+// DNA3 translate model into App Support, with progress + SHA-256 verification. The
 // model is NOT bundled (keeps the base DMG light); the user fetches it with a
 // button when enabling live translation.
 //

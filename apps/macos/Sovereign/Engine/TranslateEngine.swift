@@ -1,5 +1,5 @@
-// TranslateEngine.swift — drives the bundled sovereign DNA3.0-4B Metal engine for
-// on-device translation. Spawns the engine once, feeds each committed segment as a
+// TranslateEngine.swift — drives the selected sovereign DNA3 Metal engine for
+// on-device translation. Spawns the engine once, feeds interim/committed captions as a
 // single-turn chat (the engine is STATELESS per line → independent translations,
 // no reset), and returns the translated text.
 //
@@ -23,7 +23,7 @@ final class TranslateEngine {
     var onResult: ((UUID, String, String, String) -> Void)?
     /// Streaming in-progress translation (same keys; text = accumulated so far).
     /// Echo-gated: not fired while the reply is still a prefix of the source, so a
-    /// verbatim echo (the 4B failure mode) never streams to the UI.
+    /// verbatim echo never streams to the UI.
     var onPartial: ((UUID, String, String, String) -> Void)?
     /// Language written FIRST when several targets queue for one line — the
     /// caption's display language. Without it, sorted-append + LIFO pop meant
@@ -36,19 +36,11 @@ final class TranslateEngine {
     private let clientID = UUID()
     private var lastPartialEmit = ContinuousClock.now
 
-    private struct Turn {
-        let id: UUID; let lang: String; let source: String
-        let prompt: String; let prefix: String?; let body: String?
-        var retries: Int
-    }
     private var ready = false
-    // Live-priority scheduling: hold turns in a stack and write them NEWEST-FIRST,
-    // one at a time. During a meeting the line you're looking at (the most recent)
-    // gets translated before an older backlog; starved old turns drain at the next
-    // pause / at stop (finalize re-runs the full pass), so nothing is permanently
-    // skipped — it's reordered, not dropped.
-    private var pending: [Turn] = []   // not-yet-sent; popLast() = newest
-    private var inflightTurn: Turn?    // the single turn currently generating
+    // Semantic-priority scheduling: committed captions always beat disposable
+    // interim previews; newest-first within each lane keeps live captions current.
+    private var pending = TranslationTurnQueue()
+    private var inflightTurn: TranslationTurn? // the single turn currently generating
     private var registeredPrefixes: Set<String> = []
     private var registeringPrefixes: Set<String> = []
     private var disabledPrefixes: Set<String> = []
@@ -61,6 +53,9 @@ final class TranslateEngine {
     /// these and re-translates them (uncapped) at stop, so the saved record stays
     /// complete — the drop only defers them out of the live path.
     var onDrop: ((UUID, String, String) -> Void)?
+    /// A pending turn was superseded or preempted, so it must drain any interim
+    /// barrier but MUST NOT enter stop-time backfill.
+    var onDiscard: ((UUID, String, String) -> Void)?
 
     func start(engine: URL, model: URL) -> Bool {
         broker.attach(client: clientID, engine: engine, model: model) { [weak self] in
@@ -87,50 +82,59 @@ final class TranslateEngine {
     // this = the 9B model — deferred A/B.)
     private static let anchor: [String: String] =
         ["Korean": "안녕하세요", "English": "Hello", "Japanese": "こんにちは", "Chinese": "你好"]
-    // Retry variant: the engine decodes GREEDILY with a per-turn state reset, so
-    // re-sending the IDENTICAL prompt after an echo re-produces the identical
-    // echo — the old retry only "worked" by cross-turn state accident. A retry
-    // must CHANGE the tokens: swap the one-shot example (different trajectory).
-    private static let anchor2: [String: String] =
-        ["Korean": "감사합니다", "English": "Thank you", "Japanese": "ありがとうございます", "Chinese": "谢谢"]
-
-    private static func prompt(for target: String, text: String, variant: Bool) -> String {
-        prefix(for: target, variant: variant) + text + " =>"
+    private static func prompt(for target: String, text: String) -> String {
+        prefix(for: target) + text + " =>"
     }
 
-    private static func prefix(for target: String, variant: Bool) -> String {
-        let a = (variant ? anchor2[target] : anchor[target]) ?? "Hello"
-        let ex = variant ? "Thank you" : "Hello"
-        return "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — \(ex) => \(a) . Now: "
+    private static func prefix(for target: String) -> String {
+        let a = anchor[target] ?? "Hello"
+        return "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — Hello => \(a) . Now: "
+    }
+
+    /// Retry prompt deliberately changes both the instruction and token layout.
+    /// The 2B model responds more reliably when the source language is explicit;
+    /// this path is only paid after an objective echo/wrong-script failure.
+    private static func repairPrompt(for target: String, text: String) -> String {
+        let source = TranslationOutputPolicy.sourceLanguageName(for: text)
+        return "You are a \(source)-to-\(target) translator. Return \(target) text only. Source \(source): \(text) Target \(target):"
     }
 
     private static let prefixSlot = ["Korean": 0, "English": 1, "Japanese": 2, "Chinese": 3]
 
-    func translate(_ text: String, into targets: [String], id: UUID) {
+    @discardableResult
+    func translate(_ text: String, into targets: [String], id: UUID,
+                   kind: TranslationTurnKind = .committed) -> Bool {
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !oneLine.isEmpty else { return }
+        guard !oneLine.isEmpty else { return false }
         // priority language is appended LAST → popLast() serves it FIRST
         var ordered = targets
         if let p = priorityLang, let i = ordered.firstIndex(of: p) {
             ordered.remove(at: i); ordered.append(p)
         }
+        var accepted = false
         for target in ordered {
-            pending.append(Turn(id: id, lang: target, source: oneLine,
-                                prompt: Self.prompt(for: target, text: oneLine, variant: false),
-                                prefix: Self.prefix(for: target, variant: false), body: oneLine + " =>", retries: 1))
+            let turn = TranslationTurn(
+                id: id, lang: target, source: oneLine,
+                prompt: Self.prompt(for: target, text: oneLine),
+                prefix: Self.prefix(for: target), body: oneLine + " =>",
+                retries: 1, kind: kind)
+            let result = pending.enqueue(
+                turn, blockInterim: inflightTurn?.kind == .committed)
+            accepted = accepted || result.accepted
+            for old in result.displaced { onDiscard?(old.id, old.lang, old.source) }
         }
         // Live cap: shed the OLDEST turns (front of the stack) past maxPending.
         // popLast() serves newest-first, so the front holds the stalest backlog —
         // exactly what a live caption no longer needs. Dropped lines → onDrop.
         if maxPending > 0 {
-            while pending.count > maxPending {
-                let shed = pending.removeFirst()
+            for shed in pending.shedOldest(to: maxPending) {
                 onDrop?(shed.id, shed.lang, shed.source)
             }
         }
         pump()
         reportQueue()
+        return accepted
     }
 
     private func reportQueue() { onQueueChange?(pending.count + (inflightTurn != nil ? 1 : 0)) }
@@ -138,7 +142,7 @@ final class TranslateEngine {
     /// Write the NEXT turn (newest pending) iff the engine is free. One turn in
     /// flight at a time — the DNA3 REPL generates one reply per prompt.
     private func pump() {
-        guard ready, inflightTurn == nil, let turn = pending.last else { return }
+        guard ready, inflightTurn == nil, let turn = pending.next else { return }
         if let prefix = turn.prefix, let slot = Self.prefixSlot[turn.lang],
            !registeredPrefixes.contains(turn.lang), !disabledPrefixes.contains(turn.lang) {
             guard registeringPrefixes.insert(turn.lang).inserted else { return }
@@ -151,15 +155,17 @@ final class TranslateEngine {
             }
             return
         }
-        _ = pending.popLast()
-        inflightTurn = turn
+        guard let next = pending.popNext() else { return }
+        inflightTurn = next
         let wirePrompt: String
-        if let body = turn.body, let slot = Self.prefixSlot[turn.lang], registeredPrefixes.contains(turn.lang) {
+        if let body = next.body, let slot = Self.prefixSlot[next.lang], registeredPrefixes.contains(next.lang) {
             wirePrompt = "%%TRN \(slot) \(body)"
         } else {
-            wirePrompt = turn.prompt
+            wirePrompt = next.prompt
         }
-        broker.submit(client: clientID, prompt: wirePrompt, priority: .committedCaption,
+        let priority: DNAEngineBroker.Priority = next.kind == .committed
+            ? .committedCaption : .interimCaption
+        broker.submit(client: clientID, prompt: wirePrompt, priority: priority,
             onPartial: { [weak self] text in
                 guard let self else { return }
                 let now = ContinuousClock.now
@@ -172,36 +178,43 @@ final class TranslateEngine {
 
     private func emitPartial(_ text: String) {
         guard let turn = inflightTurn, !text.isEmpty else { return }
+        let cleaned = TranslationOutputPolicy.clean(text)
+        guard !cleaned.isEmpty else { return }
         // echo gate: while the reply is still a (normalized) prefix of the source
         // it may be a verbatim echo — hold streaming until it diverges. A real
         // cross-script translation diverges at the first token.
-        if Self.norm(turn.source).hasPrefix(Self.norm(text)) { return }
-        onPartial?(turn.id, turn.lang, text, turn.source)
+        if Self.norm(turn.source).hasPrefix(Self.norm(cleaned)) { return }
+        if TranslationOutputPolicy.shouldRetry(cleaned, source: turn.source, target: turn.lang) { return }
+        onPartial?(turn.id, turn.lang, cleaned, turn.source)
     }
 
     private func completeTurn(_ text: String) {
         guard let turn = inflightTurn else { return }
         inflightTurn = nil
         defer { pump(); reportQueue() }              // start the next turn
-        // Failure mode: the 4B sometimes echoes the source verbatim instead of
-        // translating (a cross-turn sampling-state effect — see LIVE_TRANSLATE
-        // P4). Normalize-compare; retry, then SUPPRESS (don't show the source
-        // masquerading as a translation) rather than emit an echo.
-        if !text.isEmpty, Self.norm(text) == Self.norm(turn.source) {
+        let cleaned = TranslationOutputPolicy.clean(text)
+        // Both models can rarely echo; 2B can additionally stay in the source
+        // script. Retry only on an objective failure, then suppress rather than
+        // present invalid output as a translation.
+        if TranslationOutputPolicy.shouldRetry(text, source: turn.source, target: turn.lang) {
             if turn.retries > 0 {
-                // retry with the VARIANT prompt (different example tokens →
-                // different greedy trajectory); same-prompt retries are no-ops.
-                pending.append(Turn(id: turn.id, lang: turn.lang, source: turn.source,
-                                    prompt: Self.prompt(for: turn.lang, text: turn.source, variant: true),
-                                    prefix: nil, body: nil,
-                                    retries: turn.retries - 1))
+                let retry = TranslationTurn(
+                    id: turn.id, lang: turn.lang, source: turn.source,
+                    prompt: Self.repairPrompt(for: turn.lang, text: turn.source),
+                    prefix: nil, body: nil, retries: turn.retries - 1, kind: turn.kind)
+                // An old in-flight revision may echo after a newer revision for
+                // the same line+language is already pending. Its retry must never
+                // replace that newer work.
+                let result = pending.enqueue(retry, replaceExisting: false)
+                for old in result.displaced { onDiscard?(old.id, old.lang, old.source) }
+                if !result.accepted { onDiscard?(retry.id, retry.lang, retry.source) }
             }
             if turn.retries == 0 { onResult?(turn.id, turn.lang, "", turn.source) }
             return   // retry pending, or report a completed suppressed echo
         }
         // Empty is a terminal result too: request-generation and backfill
         // barriers must drain even when the model returns no usable text.
-        onResult?(turn.id, turn.lang, text, turn.source)
+        onResult?(turn.id, turn.lang, cleaned, turn.source)
     }
 
     private static func norm(_ x: String) -> String {

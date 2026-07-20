@@ -58,17 +58,17 @@ pub const Kernels = struct {
 pub const Layer = struct {
     aln_w: [*]f32,
     aln_b: [*]f32,
-    qkv_w: Q8, // stacked [3D][D] out-major (q|k|v)
+    qkv_w: ?Q8 = null, // stacked [3D][D] out-major (q|k|v); released after F16 cache
     q_b: [*]f32,
     k_b: [*]f32,
     v_b: [*]f32,
-    o_w: Q8, // [D][D]
+    o_w: ?Q8 = null, // [D][D]
     o_b: [*]f32,
     mln_w: [*]f32,
     mln_b: [*]f32,
-    m0_w: Q8, // [MLP][D]
+    m0_w: ?Q8 = null, // [MLP][D]
     m0_b: [*]f32,
-    m2_w: Q8, // [D][MLP]
+    m2_w: ?Q8 = null, // [D][MLP]
     m2_b: [*]f32,
     // Optional high-memory performance cache in Metal GEMM [K][N] layout.
     q_f16: ?[*]f16 = null,
@@ -169,6 +169,10 @@ pub fn cacheWeights(K: Kernels, layers: []Layer) !void {
     const d2 = @as(usize, D) * D;
     const dnb = @as(usize, D) / 32;
     for (layers) |*L| {
+        const qkv_w = L.qkv_w orelse return error.MissingQuantizedWeight;
+        const o_w = L.o_w orelse return error.MissingQuantizedWeight;
+        const m0_w = L.m0_w orelse return error.MissingQuantizedWeight;
+        const m2_w = L.m2_w orelse return error.MissingQuantizedWeight;
         L.q_f16 = (try mtl.allocSlice(f16, d2)).ptr;
         L.k_f16 = (try mtl.allocSlice(f16, d2)).ptr;
         L.v_f16 = (try mtl.allocSlice(f16, d2)).ptr;
@@ -176,15 +180,47 @@ pub fn cacheWeights(K: Kernels, layers: []Layer) !void {
         L.m0_f16 = (try mtl.allocSlice(f16, @as(usize, MLP) * D)).ptr;
         L.m2_f16 = (try mtl.allocSlice(f16, @as(usize, MLP) * D)).ptr;
         try mtl.beginCommandBuffer();
-        try kDeq(K, L.q_f16.?, L.qkv_w, D, D);
-        try kDeq(K, L.k_f16.?, .{ .qs = L.qkv_w.qs + d2, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
-        try kDeq(K, L.v_f16.?, .{ .qs = L.qkv_w.qs + 2 * d2, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
-        try kDeq(K, L.o_f16.?, L.o_w, D, D);
-        try kDeq(K, L.m0_f16.?, L.m0_w, MLP, D);
-        try kDeq(K, L.m2_f16.?, L.m2_w, D, MLP);
+        try kDeq(K, L.q_f16.?, qkv_w, D, D);
+        try kDeq(K, L.k_f16.?, .{ .qs = qkv_w.qs + d2, .scales = qkv_w.scales + @as(usize, D) * dnb }, D, D);
+        try kDeq(K, L.v_f16.?, .{ .qs = qkv_w.qs + 2 * d2, .scales = qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+        try kDeq(K, L.o_f16.?, o_w, D, D);
+        try kDeq(K, L.m0_f16.?, m0_w, MLP, D);
+        try kDeq(K, L.m2_f16.?, m2_w, D, MLP);
         try mtl.commitCommandBuffer();
         try mtl.sync();
     }
+}
+
+/// Drop the encoder Q8 sources once every projection has a complete F16 cache.
+/// This is representation replacement, not a quality trade: `forward` reads only
+/// the bit-identical dequantized F16 buffers after this transition.
+pub fn releaseQuantizedWeights(layers: []Layer) !usize {
+    for (layers) |L| {
+        if (L.qkv_w == null or L.o_w == null or L.m0_w == null or L.m2_w == null or
+            L.q_f16 == null or L.k_f16 == null or L.v_f16 == null or
+            L.o_f16 == null or L.m0_f16 == null or L.m2_f16 == null)
+            return error.IncompleteEncoderWeightCache;
+    }
+    const q8Bytes = struct {
+        fn f(rows: usize, dim: usize) usize {
+            return rows * dim + rows * (dim / 32) * @sizeOf(f16);
+        }
+    }.f;
+    var released: usize = 0;
+    for (layers) |*L| {
+        const qkv_w = L.qkv_w.?;
+        const o_w = L.o_w.?;
+        const m0_w = L.m0_w.?;
+        const m2_w = L.m2_w.?;
+        mtl.free(qkv_w.qs); mtl.free(qkv_w.scales);
+        mtl.free(o_w.qs); mtl.free(o_w.scales);
+        mtl.free(m0_w.qs); mtl.free(m0_w.scales);
+        mtl.free(m2_w.qs); mtl.free(m2_w.scales);
+        L.qkv_w = null; L.o_w = null; L.m0_w = null; L.m2_w = null;
+        released += q8Bytes(3 * D, D) + q8Bytes(D, D) +
+            q8Bytes(MLP, D) + q8Bytes(D, MLP);
+    }
+    return released;
 }
 
 /// Run the encoder. `x` (F32 residual, pos-emb already added) in/out; final
@@ -224,18 +260,18 @@ pub fn forward(
         // while it is cache-hot (MPS + separate bias_add_f16 = an extra full
         // M×D memory pass each); ENC_M4=0 reverts to MPS.
         if (K.m4_bias) |m4b| {
-            if (L.q_f16 == null) try kDeq(K, s.wdq, L.qkv_w, D, D);
+            if (L.q_f16 == null) try kDeq(K, s.wdq, L.qkv_w orelse return error.MissingQuantizedWeight, D, D);
             try kM4Bias(m4b, s.x_ln, L.q_f16 orelse s.wdq, q, L.q_b, M, D, D);
-            if (L.k_f16 == null) try kDeq(K, s.wdq2, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
+            if (L.k_f16 == null) { const w = L.qkv_w orelse return error.MissingQuantizedWeight; try kDeq(K, s.wdq2, .{ .qs = w.qs + @as(usize, D) * D, .scales = w.scales + @as(usize, D) * dnb }, D, D); }
             try kM4Bias(m4b, s.x_ln, L.k_f16 orelse s.wdq2, k, L.k_b, M, D, D);
-            if (L.v_f16 == null) try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+            if (L.v_f16 == null) { const w = L.qkv_w orelse return error.MissingQuantizedWeight; try kDeq(K, s.wdq, .{ .qs = w.qs + 2 * @as(usize, D) * D, .scales = w.scales + 2 * @as(usize, D) * dnb }, D, D); }
             try kM4Bias(m4b, s.x_ln, L.v_f16 orelse s.wdq, v, L.v_b, M, D, D);
         } else {
-            if (L.q_f16 == null) try kDeq(K, s.wdq, L.qkv_w, D, D);
+            if (L.q_f16 == null) try kDeq(K, s.wdq, L.qkv_w orelse return error.MissingQuantizedWeight, D, D);
             try mtl.matmulF16Batched(s.x_ln, L.q_f16 orelse s.wdq, q, M, D, D);
-            if (L.k_f16 == null) try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + @as(usize, D) * D, .scales = L.qkv_w.scales + @as(usize, D) * dnb }, D, D);
+            if (L.k_f16 == null) { const w = L.qkv_w orelse return error.MissingQuantizedWeight; try kDeq(K, s.wdq, .{ .qs = w.qs + @as(usize, D) * D, .scales = w.scales + @as(usize, D) * dnb }, D, D); }
             try mtl.matmulF16Batched(s.x_ln, L.k_f16 orelse s.wdq, k, M, D, D);
-            if (L.v_f16 == null) try kDeq(K, s.wdq, .{ .qs = L.qkv_w.qs + 2 * @as(usize, D) * D, .scales = L.qkv_w.scales + 2 * @as(usize, D) * dnb }, D, D);
+            if (L.v_f16 == null) { const w = L.qkv_w orelse return error.MissingQuantizedWeight; try kDeq(K, s.wdq, .{ .qs = w.qs + 2 * @as(usize, D) * D, .scales = w.scales + 2 * @as(usize, D) * dnb }, D, D); }
             try mtl.matmulF16Batched(s.x_ln, L.v_f16 orelse s.wdq, v, M, D, D);
             try kBias(K, q, L.q_b, M * D, D);
             try kBias(K, k, L.k_b, M * D, D);
@@ -245,14 +281,14 @@ pub fn forward(
             const off = bi * seq * D;
             try kFlash(K, s.ao + off, q + off, k + off, v + off, seq);
         }
-        if (L.o_f16 == null) try kDeq(K, s.wdq, L.o_w, D, D);
+        if (L.o_f16 == null) try kDeq(K, s.wdq, L.o_w orelse return error.MissingQuantizedWeight, D, D);
         if (K.m4_nn) |m4| {
             try kM4(m4, s.ao, L.o_f16 orelse s.wdq, s.mo, M, D, D);
         } else {
             try mtl.matmulF16Batched(s.ao, L.o_f16 orelse s.wdq, s.mo, M, D, D);
         }
         try kBRLN(K, x, s.mo, L.o_b, s.x_ln, L.mln_w, L.mln_b, D, M);
-        if (L.m0_f16 == null) try kDeq(K, s.wdq, L.m0_w, MLP, D);
+        if (L.m0_f16 == null) try kDeq(K, s.wdq, L.m0_w orelse return error.MissingQuantizedWeight, MLP, D);
         if (K.m4_bias_gelu) |m4bg| {
             try kM4Bias(m4bg, s.x_ln, L.m0_f16 orelse s.wdq, s.mh, L.m0_b, M, MLP, D);
         } else {
@@ -260,7 +296,7 @@ pub fn forward(
             try kBias(K, s.mh, L.m0_b, M * MLP, MLP);
             try kGelu(K, s.mh, M * MLP);
         }
-        if (L.m2_f16 == null) try kDeq(K, s.wdq2, L.m2_w, D, MLP);
+        if (L.m2_f16 == null) try kDeq(K, s.wdq2, L.m2_w orelse return error.MissingQuantizedWeight, D, MLP);
         if (K.m4_nn) |m4| {
             try kM4(m4, s.mh, L.m2_f16 orelse s.wdq2, s.mo, M, D, MLP);
         } else {

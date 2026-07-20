@@ -147,9 +147,12 @@ final class SessionController: EngineProcessDelegate {
     private(set) var streamingTranslation: TranslationRef?
     /// Pending translation turns (queued + in-flight) — the "N줄 대기" status (D20).
     private(set) var translateQueueDepth = 0
-    /// Max live translation queue depth (turns). Past this, fast speech sheds its
-    /// OLDEST turns to `translateBacklog` and they're re-translated at stop.
-    private static let liveTranslateCap = 30
+    /// Max live translation queue depth (turns). The 8 GB realtime profile keeps
+    /// only a four-turn horizon; larger systems retain the legacy 30-turn buffer.
+    /// Superseded revisions are coalesced before this cap and never backfilled.
+    private static func liveTranslateCap(for variant: TranslateModelVariant) -> Int {
+        variant == .realtime2B ? 4 : 30
+    }
     /// Upper bound on a live PREVIEW (interim) string. A real ~10s recognition
     /// window holds well under this in any language; a value beyond it is a
     /// run-on-hallucination balloon, dropped so it never flashes on the caption
@@ -329,9 +332,9 @@ final class SessionController: EngineProcessDelegate {
         multiTranslateForcesAccurate ? max(7, liveWindowSeconds) : liveWindowSeconds
     }
 
-    /// Streaming preview: a 2nd engine decodes the in-progress window every ~1.5s
-    /// for instant interim text — NO accuracy cost (committed text is unchanged).
-    /// Costs a 2nd resident model (~830 MB) only while recording. Persisted.
+    /// Streaming preview: the resident engine's throwaway lane decodes the open
+    /// window every ~1s for instant interim text. Committed text stays unchanged,
+    /// and no second model/process is loaded. Persisted.
     var livePreviewEnabled: Bool = (UserDefaults.standard.object(forKey: "livePreviewEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(livePreviewEnabled, forKey: "livePreviewEnabled") }
     }
@@ -340,7 +343,7 @@ final class SessionController: EngineProcessDelegate {
     /// freshest audio; life of a «partial» is ~0.5 s with AUDIO_CTX decode):
     ///   «partial» lines — the closed segment's in-decode hypothesis (main
     ///                     engine, PARTIALS=1) — converges to the committed text
-    ///   PreviewEngine   — the still-open window's text (~1 s cadence)
+    ///   PREVIEW lane    — the still-open window's text (~1 s cadence)
     private(set) var livePartial: String = "" {
         didSet {
             // NOTE: translations are NOT auto-cleared here — on window commit the
@@ -366,8 +369,8 @@ final class SessionController: EngineProcessDelegate {
     private var dnaBusy = false
 
     /// GPU admission order: committed Whisper > DNA caption > throwaway preview.
-    /// PreviewEngine itself is latest-only, so closing this gate never grows a
-    /// stale queue; the newest open-window snapshot runs when both priorities drain.
+    /// PreviewEngine is a latest-only scheduler over the SAME resident process,
+    /// so closing this gate never grows a stale queue or duplicates model memory.
     private func updatePreviewAdmission() {
         preview.setAdmitted(segmentsInFlight == 0 && !dnaBusy)
     }
@@ -408,7 +411,7 @@ final class SessionController: EngineProcessDelegate {
     private var interimCache = InterimTranslationCache()
 
     // ── on-device meeting intelligence (post-session summary + action items) ──
-    // Uses the SAME bundled DNA3.0-4B; the transcript never leaves the device.
+    // Uses the SAME selected DNA3 process; the transcript never leaves the device.
     private var summaryEngine: SummaryEngine?
     private(set) var meetingSummary: String? = nil
     /// Smart auto-title — sanitized one-line meeting name (nil until generated).
@@ -732,7 +735,11 @@ final class SessionController: EngineProcessDelegate {
             t.priorityLang = translateTargets.sorted().first
             // Live cap: keep the queue tracking the newest speech. Turns the engine
             // can't keep up with are shed and remembered for the stop-time backfill.
-            t.maxPending = Self.liveTranslateCap
+            t.maxPending = Self.liveTranslateCap(for: AssetManifest.translateModelVariant)
+            t.onDiscard = { [weak self] id, lang, source in
+                guard let self else { return }
+                _ = self.finishInterimTurn(id: id, lang: lang, source: source, text: nil)
+            }
             t.onDrop = { [weak self] id, lang, source in
                 guard let self else { return }
                 if self.finishInterimTurn(id: id, lang: lang, source: source, text: nil) { return }
@@ -835,10 +842,10 @@ final class SessionController: EngineProcessDelegate {
             let targets = self.routedTargets(for: source)
             guard !targets.isEmpty else { return }
             let id = UUID()
+            guard t.translate(source, into: targets, id: id, kind: .interim) else { return }
             self.activeInterimID = id
             self.interimRequests[id] = InterimRequest(
                 source: source, pending: Set(targets), translations: [:])
-            t.translate(source, into: targets, id: id)
         }
     }
 
@@ -1281,9 +1288,9 @@ final class SessionController: EngineProcessDelegate {
     /// stop→start dance. Only when not actively capturing.
     func reset() {
         guard phase == .done || phase == .idle || isError else { return }
+        terminateTranscriptionEngines()
         countdownTask?.cancel(); countdownTask = nil
         periodicSaveTask?.cancel(); periodicSaveTask = nil
-        engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
         silenceWatchTask?.cancel(); silenceWatchTask = nil; micSilent = false
         meterLevel = 0; level = 0
         recordStartedAt = nil; recordEndedAt = nil; pausedAt = nil; pausedAccum = 0
@@ -1384,9 +1391,15 @@ final class SessionController: EngineProcessDelegate {
     }
 
     func start() {
+        guard phase == .idle || phase == .done || isError else { return }
         guard AssetManifest.modelIsValid() else {
             phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."); return
         }
+        // A failed capture can leave a fully resident engine behind while phase
+        // moves to .error. Retrying used to overwrite `engine` and orphan that
+        // process (including its Metal allocations). Always retire any previous
+        // main/preview pair before installing the next session's processes.
+        terminateTranscriptionEngines()
         transcript.reset()
         speakerNames = [:]
         autoRecognizedSpeakers.removeAll()
@@ -1427,7 +1440,10 @@ final class SessionController: EngineProcessDelegate {
         capture.onError = { [weak self] msg in
             guard let self else { return }
             // surface a system-audio failure without killing a running mic+system mix
-            if self.audioSource == .system { self.phase = .error(msg) }
+            if self.audioSource == .system {
+                self.terminateTranscriptionEngines()
+                self.phase = .error(msg)
+            }
         }
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
         let win = effectiveWindowSeconds   // 2개+ 번역 시 정확(10초) 강제
@@ -1457,11 +1473,9 @@ final class SessionController: EngineProcessDelegate {
         coverageGaps.removeAll(); hangRecoveries = 0
         startWatchdog()
 
-        // streaming preview (interim text before a window closes). The preview
-        // engine MUST run with a forced language — it decodes tiny ~1.5s clips
-        // where auto-detect misfires (→ English). If the user picked a language,
-        // start now; if auto, wait for the main engine's [lang] detection (see
-        // .languageDetected below) so previews match the committed transcript.
+        // Streaming preview reuses the main resident process. Tiny clips must
+        // never auto-detect independently: with a selected language arm now; in
+        // auto mode wait for the committed lane's [lang] lock below.
         livePartial = ""; livePartialTranslations = [:]
         if livePreviewEnabled {
             preview.onText = { [weak self] t in
@@ -1469,13 +1483,16 @@ final class SessionController: EngineProcessDelegate {
                 self.livePartial = t
             }
             capture.onPreview = { [weak self] url in self?.preview.feed(wav: url) }
-            if let lang = languageTokenID { preview.start(config: makeConfig(), lang: lang) }
+            if languageTokenID != nil { startPreviewLane() }
         } else {
             capture.onPreview = nil
         }
 
         do { try e.start() }
-        catch { phase = .error("전사 엔진을 시작하지 못했어요: \(error.localizedDescription)") }
+        catch {
+            terminateTranscriptionEngines()
+            phase = .error("전사 엔진을 시작하지 못했어요: \(error.localizedDescription)")
+        }
 
         engineStartTimeoutTask?.cancel()
         engineStartTimeoutTask = Task { @MainActor in
@@ -1498,6 +1515,7 @@ final class SessionController: EngineProcessDelegate {
         guard AssetManifest.modelIsValid() else {
             phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."); return
         }
+        terminateTranscriptionEngines()
         transcript.reset()
         speakerNames = [:]
         autoRecognizedSpeakers.removeAll()
@@ -1582,7 +1600,10 @@ final class SessionController: EngineProcessDelegate {
             startPeriodicAutosave()
             startSilenceWatch()
         }
-        catch { phase = .error("마이크를 시작하지 못했어요: \(error.localizedDescription)") }
+        catch {
+            terminateTranscriptionEngines()
+            phase = .error("마이크를 시작하지 못했어요: \(error.localizedDescription)")
+        }
     }
 
     /// Poll every 3s while recording: 15s+ without audible input flips micSilent
@@ -1612,6 +1633,7 @@ final class SessionController: EngineProcessDelegate {
 
     func engine(didEmit event: EngineEvent) {
         lastEngineActivityAt = Date()   // W2 하트비트 (모든 엔진 이벤트 = 진행 증거)
+        if preview.consume(event) { return }
         switch event {
         case .progressTotal(let n): chunksTotal = n
         case .progressChunk(let k): chunksDone = max(chunksDone, k)
@@ -1620,9 +1642,10 @@ final class SessionController: EngineProcessDelegate {
             lastCommitAt = Date()                        // D19 commit-cadence ring
             translateStableLines()                       // translate now-stable prior lines
         case .languageDetected(let tok):
-            // auto-detect locked → start the preview engine in THAT language
-            // (no-op if already started / preview off)
-            if livePreviewEnabled { preview.start(config: makeConfig(), lang: tok) }
+            // Auto-detection belongs to the committed lane. PREVIEW now reuses
+            // that same in-process language state (no tiny-clip re-probe).
+            _ = tok
+            if livePreviewEnabled { startPreviewLane() }
         case .speakerName(let id, let name):
             // a live speaker matched an enrolled voiceprint → auto-label (the user
             // can still override). Cross-session speaker re-identification.
@@ -1663,7 +1686,7 @@ final class SessionController: EngineProcessDelegate {
             updatePreviewAdmission()
         case .partial(_, let text):
             // in-decode hypothesis of the closed segment — better context than
-            // the preview engine's text and converges to the committed line, so
+            // the open-window PREVIEW text and converges to the committed line, so
             // it may overwrite; the next preview/commit supersedes it.
             // Defense-in-depth for the "폭파" (run-on hallucination): the engine now
             // freezes a runaway «partial», but drop any preview far longer than a
@@ -1693,8 +1716,24 @@ final class SessionController: EngineProcessDelegate {
         if code == 0 { finalizeOnce(); return }
         if phase != .done, phase != .flushing {
             preview.stop(); livePartial = ""; livePartialTranslations = [:]
+            engine = nil
             phase = .error("전사 엔진이 예기치 않게 종료되었어요 (코드 \(code)). 다시 시도해주세요.")
         }
+    }
+
+    /// Hard teardown for retry/reset/error paths. `EngineProcess.stop()` only
+    /// requests FLUSH; these paths must release the process immediately because
+    /// there may be no live session left to deliver <<FLUSH_END>>.
+    private func terminateTranscriptionEngines() {
+        engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
+        engine?.delegate = nil
+        engine?.terminate()
+        engine = nil
+        preview.stop()
+    }
+
+    private func startPreviewLane() {
+        preview.start { [weak self] wav in self?.engine?.feedPreview(wav: wav) }
     }
 
     private func finalizeOnce() {
@@ -1721,7 +1760,7 @@ final class SessionController: EngineProcessDelegate {
         for p in pendingEnrollment.pending() { enrollVoiceprint(speaker: p.id, name: p.name) }
         pendingEnrollment.clear()
         engine = nil
-        preview.stop(); livePartial = ""; livePartialTranslations = [:]   // tear down the 2nd engine + interim text
+        preview.stop(); livePartial = ""; livePartialTranslations = [:]   // disarm PREVIEW lane + interim text
         phase = .done
         // Backfill: lines the live queue shed under load get re-translated now,
         // uncapped, so the on-screen transcript/scrollback is complete after stop

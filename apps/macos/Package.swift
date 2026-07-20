@@ -57,6 +57,7 @@ let package = Package(
                 "Audio/WavWriter.swift",
                 "Audio/Segmenter.swift",
                 "Engine/TranslateStreamParser.swift",
+                "Engine/TranslationTurnQueue.swift",
                 "Dictation/DictationFormatting.swift",
             ]
         ),

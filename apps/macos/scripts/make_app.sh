@@ -32,6 +32,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Engine/PreviewEngine.swift
   "$APP_DIR"/Sovereign/Engine/DNAEngineBroker.swift
   "$APP_DIR"/Sovereign/Engine/TranslateStreamParser.swift
+  "$APP_DIR"/Sovereign/Engine/TranslationTurnQueue.swift
   "$APP_DIR"/Sovereign/Engine/TranslateEngine.swift
   "$APP_DIR"/Sovereign/Engine/SummaryEngine.swift
   "$APP_DIR"/Sovereign/Audio/WavWriter.swift
@@ -202,28 +203,36 @@ if [ "${BUNDLE_MODEL:-0}" = "1" ]; then
   fi
 fi
 
-# ── 2c. translate engine binary (DNA3.0-4B Metal) — ~1.1 MB, self-contained
-# (embedded metallib, system frameworks only). ALWAYS bundled when present (tiny);
-# the 2.6 GB translate MODEL is downloaded on demand, NOT bundled. Override path
-# with TRANSLATE_ENGINE; skipped (translation unavailable) if absent so the base
-# build never breaks.
-TRANSLATE_ENGINE="${TRANSLATE_ENGINE:-$ROOT/../sovereignLLM/out/metal-dna3-4b-q4km/sovereign-metal-dna3-4b-q4km}"
-BUNDLED_TRANSLATE=0
-if [ -x "$TRANSLATE_ENGINE" ]; then
-  echo "[2c] bundling translate engine ($(du -h "$TRANSLATE_ENGINE" | cut -f1))"
-  cp "$TRANSLATE_ENGINE" "$BUNDLE/Contents/MacOS/translate-engine"
-  BUNDLED_TRANSLATE=1
+# ── 2c. model-specific translate engines (embedded metallib, ~1.1 MB each)
+# Both binaries are tiny; the selected 1.3/2.8 GB GGUF remains on-demand. The
+# legacy TRANSLATE_ENGINE override maps to 4B for release-pipeline compatibility.
+TRANSLATE_ENGINE_4B="${TRANSLATE_ENGINE_4B:-${TRANSLATE_ENGINE:-$ROOT/../sovereignLLM/out/metal-dna3-4b-q4km/sovereign-metal-dna3-4b-q4km}}"
+TRANSLATE_ENGINE_2B="${TRANSLATE_ENGINE_2B:-$ROOT/../sovereignLLM/out/metal-dna3-2b-q4km/sovereign-metal-dna3-2b-q4km}"
+BUNDLED_TRANSLATE_4B=0
+BUNDLED_TRANSLATE_2B=0
+if [ -x "$TRANSLATE_ENGINE_4B" ]; then
+  echo "[2c] bundling DNA3.0-4B engine ($(du -h "$TRANSLATE_ENGINE_4B" | cut -f1))"
+  cp "$TRANSLATE_ENGINE_4B" "$BUNDLE/Contents/MacOS/translate-engine-4b"
+  BUNDLED_TRANSLATE_4B=1
 else
-  echo "[2c] (translate engine not found at $TRANSLATE_ENGINE — translation off; set TRANSLATE_ENGINE)"
-  if [ "${REQUIRE_TRANSLATE_ENGINE:-0}" = "1" ]; then
-    echo "❌ translate engine is required for this build"; exit 1
-  fi
+  echo "[2c] (4B translate engine not found at $TRANSLATE_ENGINE_4B)"
+fi
+if [ -x "$TRANSLATE_ENGINE_2B" ]; then
+  echo "[2c] bundling DNA3.0-2B engine ($(du -h "$TRANSLATE_ENGINE_2B" | cut -f1))"
+  cp "$TRANSLATE_ENGINE_2B" "$BUNDLE/Contents/MacOS/translate-engine-2b"
+  BUNDLED_TRANSLATE_2B=1
+else
+  echo "[2c] (2B translate engine not found at $TRANSLATE_ENGINE_2B)"
+fi
+if [ "${REQUIRE_TRANSLATE_ENGINE:-0}" = "1" ] && { [ "$BUNDLED_TRANSLATE_4B" != "1" ] || [ "$BUNDLED_TRANSLATE_2B" != "1" ]; }; then
+  echo "❌ both 4B and 2B translate engines are required for this build"; exit 1
 fi
 
 # ── 3. ad-hoc sign for local development ────────────────────────────────────
 echo "[3/4] ad-hoc codesign (local dev; Developer ID via sign_notarize.sh)"
 codesign --force --sign - "$BUNDLE/Contents/MacOS/transcribe"
-[ "$BUNDLED_TRANSLATE" = "1" ] && codesign --force --sign - "$BUNDLE/Contents/MacOS/translate-engine"
+[ "$BUNDLED_TRANSLATE_4B" = "1" ] && codesign --force --sign - "$BUNDLE/Contents/MacOS/translate-engine-4b"
+[ "$BUNDLED_TRANSLATE_2B" = "1" ] && codesign --force --sign - "$BUNDLE/Contents/MacOS/translate-engine-2b"
 codesign --force --sign - --entitlements "$APP_DIR/Sovereign/Sovereign.entitlements" "$BUNDLE"
 
 # ── 4. optional: seed the model so first run skips the (placeholder) download ─

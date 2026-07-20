@@ -119,9 +119,10 @@ static int profile_enabled(void) {
 #define HASH_BITS 13
 #define HASH_SIZE (1 << HASH_BITS)  // 8192 slots
 #define HASH_MASK (HASH_SIZE - 1)
+#define PTR_TOMBSTONE ((void*)(uintptr_t)1)
 
 typedef struct {
-    void*             ptr;     // NULL = empty
+    void*             ptr;     // NULL = empty, PTR_TOMBSTONE = deleted probe slot
     id<MTLBuffer>     buffer;
     size_t            size;
     id<MTLBuffer>     child_resources[8];
@@ -158,19 +159,37 @@ static id<MTLBuffer> find_buffer(const void* ptr) {
 // Defined later; forward-declared so the dispatch path can bind offset pointers.
 static id<MTLBuffer> resolve_buffer(const void* p, size_t* out_off);
 
-static void insert_buffer(void* ptr, id<MTLBuffer> buf, size_t size) {
+static BufferEntry* insert_buffer(void* ptr, id<MTLBuffer> buf, size_t size) {
     uint32_t idx = ptr_hash(ptr);
+    BufferEntry* tombstone = NULL;
     for (uint32_t probe = 0; probe < 64; probe++) {
         uint32_t i = (idx + probe) & HASH_MASK;
+        if (g_buf_hash[i].ptr == PTR_TOMBSTONE) {
+            if (tombstone == NULL) tombstone = &g_buf_hash[i];
+            continue;
+        }
         if (g_buf_hash[i].ptr == NULL) {
-            g_buf_hash[i].ptr = ptr;
-            g_buf_hash[i].buffer = buf;
-            g_buf_hash[i].size = size;
+            BufferEntry* entry = tombstone ? tombstone : &g_buf_hash[i];
+            entry->ptr = ptr;
+            entry->buffer = buf;
+            entry->size = size;
+            entry->n_child_resources = 0;
+            for (int c = 0; c < 8; c++) entry->child_resources[c] = nil;
             g_n_buffers++;
-            return;
+            return entry;
         }
     }
+    if (tombstone != NULL) {
+        tombstone->ptr = ptr;
+        tombstone->buffer = buf;
+        tombstone->size = size;
+        tombstone->n_child_resources = 0;
+        for (int c = 0; c < 8; c++) tombstone->child_resources[c] = nil;
+        g_n_buffers++;
+        return tombstone;
+    }
     fprintf(stderr, "[metal] ERROR: Hash table full (%d buffers)\n", g_n_buffers);
+    return NULL;
 }
 
 static void remove_buffer(void* ptr) {
@@ -179,7 +198,13 @@ static void remove_buffer(void* ptr) {
         uint32_t i = (idx + probe) & HASH_MASK;
         if (g_buf_hash[i].ptr == ptr) {
             g_buf_hash[i].buffer = nil;
-            g_buf_hash[i].ptr = NULL;
+            for (int c = 0; c < g_buf_hash[i].n_child_resources; c++)
+                g_buf_hash[i].child_resources[c] = nil;
+            g_buf_hash[i].n_child_resources = 0;
+            g_buf_hash[i].size = 0;
+            // Open-addressing deletion must preserve the probe chain. NULL here
+            // made every colliding allocation after this slot unreachable.
+            g_buf_hash[i].ptr = PTR_TOMBSTONE;
             g_n_buffers--;
             return;
         }
@@ -304,7 +329,10 @@ void* mtl_alloc(size_t size) {
             return NULL;
         }
         void* ptr = [buf contents];
-        insert_buffer(ptr, buf, size);
+        if (insert_buffer(ptr, buf, size) == NULL) {
+            pthread_mutex_unlock(&g_alloc_mutex);
+            return NULL;
+        }
         g_mtl4_res_dirty = 1;   // MTL4 residency 재빌드 필요 (신규 버퍼)
         pthread_mutex_unlock(&g_alloc_mutex);
         return ptr;
@@ -314,7 +342,45 @@ void* mtl_alloc(size_t size) {
 void mtl_free(void* ptr) {
     pthread_mutex_lock(&g_alloc_mutex);
     remove_buffer(ptr);
+    g_mtl4_res_dirty = 1;   // next MTL4 cycle drops freed allocations from residency
     pthread_mutex_unlock(&g_alloc_mutex);
+}
+
+int mtl_test_buffer_hash_delete_chain(void) {
+    pthread_mutex_lock(&g_alloc_mutex);
+    if (g_n_buffers != 0) {
+        pthread_mutex_unlock(&g_alloc_mutex);
+        return -1;
+    }
+    uintptr_t seen[HASH_SIZE] = {0};
+    void* colliders[3] = {NULL, NULL, NULL};
+    uint32_t target = 0;
+    for (uintptr_t p = 0x1000; p < 0x2000000 && colliders[2] == NULL; p += 0x10) {
+        uint32_t h = ptr_hash((void*)p);
+        if (seen[h] == 0) {
+            seen[h] = p;
+        } else if (colliders[0] == NULL) {
+            colliders[0] = (void*)seen[h];
+            colliders[1] = (void*)p;
+            target = h;
+        } else if (h == target && p != (uintptr_t)colliders[1]) {
+            colliders[2] = (void*)p;
+        }
+    }
+    int rc = -2;
+    if (colliders[2] != NULL &&
+        insert_buffer(colliders[0], nil, 1) != NULL &&
+        insert_buffer(colliders[1], nil, 1) != NULL) {
+        remove_buffer(colliders[0]);
+        if (find_entry(colliders[1]) != NULL &&
+            insert_buffer(colliders[2], nil, 1) != NULL &&
+            find_entry(colliders[1]) != NULL &&
+            find_entry(colliders[2]) != NULL) rc = 0;
+    }
+    memset(g_buf_hash, 0, sizeof(g_buf_hash));
+    g_n_buffers = 0;
+    pthread_mutex_unlock(&g_alloc_mutex);
+    return rc;
 }
 
 void mtl_upload(void* gpu_buf, const void* src, size_t size) {
@@ -383,21 +449,14 @@ void* mtl_create_argument_buffer(const void** ptrs, int n_buffers, int pipeline_
             return NULL;
         }
         
-        // 해시 테이블에 수동으로 자식 리소스 정보를 포함해서 입력
-        uint32_t idx = ptr_hash(arg_ptr);
-        for (uint32_t probe = 0; probe < 64; probe++) {
-            uint32_t i = (idx + probe) & HASH_MASK;
-            if (g_buf_hash[i].ptr == NULL) {
-                g_buf_hash[i].ptr = arg_ptr;
-                g_buf_hash[i].buffer = argBuffer;
-                g_buf_hash[i].size = [argBuffer length];
-                g_buf_hash[i].n_child_resources = n_children;
-                for (int c = 0; c < n_children; c++) {
-                    g_buf_hash[i].child_resources[c] = children[c];
-                }
-                g_n_buffers++;
-                break;
-            }
+        BufferEntry* entry = insert_buffer(arg_ptr, argBuffer, [argBuffer length]);
+        if (entry == NULL) {
+            pthread_mutex_unlock(&g_alloc_mutex);
+            return NULL;
+        }
+        entry->n_child_resources = n_children;
+        for (int c = 0; c < n_children; c++) {
+            entry->child_resources[c] = children[c];
         }
         g_mtl4_res_dirty = 1;   // arg buffer 도 MTL4 residency 대상
         pthread_mutex_unlock(&g_alloc_mutex);
@@ -452,6 +511,7 @@ static void mtl4_rebuild_residency(void) {
     if (!g_mtl4_init_ok || !g_mtl4_res_dirty) return;
     @autoreleasepool {
         pthread_mutex_lock(&g_alloc_mutex);
+        [g_mtl4_residency removeAllAllocations];
         for (int i = 0; i < HASH_SIZE; i++) {
             if (g_buf_hash[i].ptr != NULL && g_buf_hash[i].buffer != nil) {
                 [g_mtl4_residency addAllocation:g_buf_hash[i].buffer];

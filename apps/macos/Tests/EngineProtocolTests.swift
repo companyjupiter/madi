@@ -57,6 +57,12 @@ struct EngineProtocolTests {
         check(d.decode(line: "[perf] chunk 1: ...") == .progressChunk(1),
               "perf chunk line is progress")
 
+        check(d.decode(line: "<<PREVIEW_BEGIN>>") == .previewBegin, "preview begin")
+        _ = d.decode(line: "=== WORD TIMESTAMPS ===")
+        check(d.decode(line: "[0.1s-0.5s] preview") == .previewWord("preview"),
+              "preview word isolated")
+        check(d.decode(line: "<<PREVIEW_END>>") == .previewEnd, "preview end")
+
         if failures == 0 { print("✅ EngineProtocol: all checks passed") }
         else { print("❌ \(failures) failure(s)"); exit(1) }
     }

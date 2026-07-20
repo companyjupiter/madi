@@ -63,8 +63,8 @@ final class EngineProcess {
         /// voiceprints, so a known voice (clinic staff) is VERIFIED against a
         /// fixed reference instead of re-discovered by clustering.
         var anchorVoiceprints = false
-        /// 24GB+ main-engine mode: expand encoder Q8 weights once (~1.25GB) and
-        /// remove per-segment dequant dispatches. Preview always forces this off.
+        /// 24GB+ mode: expand encoder Q8 weights once (~1.25GB) and remove
+        /// per-segment dequant dispatches. The preview lane reuses this process.
         var encoderF16Cache = false
     }
 
@@ -150,6 +150,17 @@ final class EngineProcess {
             return
         }
         write(String(format: "%.3f %@\n", offset, wav.path))
+    }
+
+    /// Decode the newest still-open capture window in the same resident process.
+    /// The engine serializes PREVIEW behind committed SEG jobs and emits dedicated
+    /// markers, so its text is throwaway and cannot enter transcript/diar state.
+    func feedPreview(wav: URL) {
+        guard EnginePathPolicy.streamWavIsAllowed(wav, roots: config.streamWavRoots) else {
+            NSLog("blocked preview wav outside allowed stream roots: \(wav.path)")
+            return
+        }
+        write("PREVIEW \(wav.path)\n")
     }
 
     /// Finalize: triggers SPKFIX/SPKOV relabel then <<FLUSH_END>>.
