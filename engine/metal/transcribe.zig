@@ -472,6 +472,10 @@ var g_t_diar: u64 = 0;
 var g_words = std.ArrayList(Word).init(alloc);
 var g_segs = std.ArrayList(SpkSeg).init(alloc);
 var g_vad_iv = std.ArrayList([2]f32).init(alloc); // silero speech intervals (global s) — clips diar segments to speech
+// `g_vad_iv.len == 0` is ambiguous by itself: either the optional Silero asset
+// is unavailable, or Silero ran successfully and found zero speech. Only the
+// first case may fall back to whole-window speaker rows.
+var g_vad_available = false;
 var g_osd_iv = std.ArrayList([2]f32).init(alloc); // pyannote OSD overlap intervals (global s) — 2nd-speaker emission
 const OsdWin = struct { t: f32, nf: u32, cls: [600]u8, pov: [600]f32 }; // one 10s model window: argmax class + P(overlap) per frame
 var g_osd_win = std.ArrayList(OsdWin).init(alloc);
@@ -1035,6 +1039,7 @@ pub fn main() !void {
     var kb_d3: [256]u8 = undefined;
     const vad_path = std.fmt.bufPrint(&kb_d3, "{s}/silero_vad.bin", .{bpe_dir(bpe_path)}) catch unreachable;
     var vad_model: ?vad.Model = vad.Model.load(alloc, vad_path) catch null;
+    g_vad_available = vad_model != null;
     if (vad_model == null) try out.print("[vad] silero_vad.bin not found — energy-only VAD\n", .{});
     // pyannote segmentation-3.0 (overlap detection) — opt-in OSD=1 while the
     // 2nd-speaker emission is validated; single-label diar's overlap miss
@@ -1791,14 +1796,21 @@ pub fn main() !void {
                     const coherent_segment_emit = recluster_every > 0 and
                         !std.mem.eql(u8, std.posix.getenv("DIAR_SEGMENT_COHERENT") orelse "1", "0");
                     const chunk_live_begin = live_t0.items.len;
-                    // per-segment relative-energy VAD: keep windows RMS > 0.3×median
+                    // Per-segment window selection. When Silero ran, crms is a
+                    // binary speech verdict and is authoritative: zero must not
+                    // fall through when a silence-majority segment has median 0.
+                    // Without the optional model, preserve the relative-RMS
+                    // fallback and use the same strict `rms > threshold` rule as
+                    // file mode.
                     var rtmp: [64]f32 = undefined;
                     const m = @min(nwin, rtmp.len);
                     for (0..m) |w| rtmp[w] = crms[w];
                     std.mem.sort(f32, rtmp[0..m], {}, std.sort.asc(f32));
                     const thr = rtmp[m / 2] * 0.3;
                     for (0..nwin) |wsg| {
-                        if (crms[wsg] < thr) continue;
+                        if (vad_np > 0) {
+                            if (crms[wsg] == 0) continue;
+                        } else if (crms[wsg] <= thr) continue;
                         const gt = t_off + @as(f32, @floatFromInt(wsg)) * SEG_SEC;
                         // once re-clustering owns K, suppress online births
                         // (new speakers enter via the next k-means auto-K bump)
@@ -2975,7 +2987,10 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         // precision — a 1.5 s diar window containing 0.3 s of speech must
         // not claim 1.5 s of speaker time; tucrg measured 919% DER that way)
         fn f(o: anytype, r: *std.ArrayList(u8), fid: []const u8, a: f32, b: f32, sp: i32) !void {
-            if (g_vad_iv.items.len == 0) return emit(o, r, fid, a, b, sp);
+            if (g_vad_iv.items.len == 0) {
+                if (!g_vad_available) return emit(o, r, fid, a, b, sp);
+                return;
+            }
             for (g_vad_iv.items) |iv| {
                 const lo = @max(a, iv[0]);
                 const hi = @min(b, iv[1]);
@@ -3183,6 +3198,7 @@ fn osdWorker(om: *const osd.Model, samples_: []const f32, logp: []f32, nf: *usiz
 fn emitOverlapRow(rttm: *std.ArrayList(u8), file_id: []const u8, a: f32, b: f32, sp: i32) !usize {
     var n: usize = 0;
     if (g_vad_iv.items.len == 0) {
+        if (g_vad_available) return 0;
         try rttm.writer().print("SPEAKER {s} 1 {d:.3} {d:.3} <NA> <NA> spk{d} <NA> <NA>\n", .{ file_id, a, b - a, sp });
         return 1;
     }
@@ -3198,12 +3214,14 @@ fn emitOverlapRow(rttm: *std.ArrayList(u8), file_id: []const u8, a: f32, b: f32,
 }
 
 // Emit "<tag> <t> <id> <dur>" for each silero speech piece of the 1.5 s diar
-// window at gt; falls back to the whole window when no VAD intervals exist.
+// window at gt. Whole-window fallback is valid only when the optional VAD model
+// is unavailable; an available VAD with zero intervals means confirmed silence.
 fn emitClippedSpk(out: anytype, tag: []const u8, gt: f32, id: u32, margin: f32) !void {
     // 5th field = acoustic margin (best−second centroid cosine) — the app's
     // fusion gate (S3): only low-margin lines may be relabeled by the LLM.
     // Extra fields are ignored by the runner's awk (backward compatible).
     if (g_vad_iv.items.len == 0) {
+        if (g_vad_available) return;
         try out.print("{s} {d:.2} {d} 1.50 {d:.2}\n", .{ tag, gt, id, margin });
         return;
     }
@@ -3307,6 +3325,7 @@ fn emitOsdOverlapFrom(out: anytype, t0s: []const f32, ids: anytype, first_win: u
 fn emitOvPieces(out: anytype, a: f32, b: f32, sp: i32) !usize {
     var n: usize = 0;
     if (g_vad_iv.items.len == 0) {
+        if (g_vad_available) return 0;
         try out.print("SPKOV {d:.2} {d} {d:.2}\n", .{ a, sp, b - a });
         return 1;
     }
