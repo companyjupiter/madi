@@ -1281,9 +1281,9 @@ final class SessionController: EngineProcessDelegate {
     /// stop→start dance. Only when not actively capturing.
     func reset() {
         guard phase == .done || phase == .idle || isError else { return }
+        terminateTranscriptionEngines()
         countdownTask?.cancel(); countdownTask = nil
         periodicSaveTask?.cancel(); periodicSaveTask = nil
-        engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
         silenceWatchTask?.cancel(); silenceWatchTask = nil; micSilent = false
         meterLevel = 0; level = 0
         recordStartedAt = nil; recordEndedAt = nil; pausedAt = nil; pausedAccum = 0
@@ -1384,9 +1384,15 @@ final class SessionController: EngineProcessDelegate {
     }
 
     func start() {
+        guard phase == .idle || phase == .done || isError else { return }
         guard AssetManifest.modelIsValid() else {
             phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."); return
         }
+        // A failed capture can leave a fully resident engine behind while phase
+        // moves to .error. Retrying used to overwrite `engine` and orphan that
+        // process (including its Metal allocations). Always retire any previous
+        // main/preview pair before installing the next session's processes.
+        terminateTranscriptionEngines()
         transcript.reset()
         speakerNames = [:]
         autoRecognizedSpeakers.removeAll()
@@ -1427,7 +1433,10 @@ final class SessionController: EngineProcessDelegate {
         capture.onError = { [weak self] msg in
             guard let self else { return }
             // surface a system-audio failure without killing a running mic+system mix
-            if self.audioSource == .system { self.phase = .error(msg) }
+            if self.audioSource == .system {
+                self.terminateTranscriptionEngines()
+                self.phase = .error(msg)
+            }
         }
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
         let win = effectiveWindowSeconds   // 2개+ 번역 시 정확(10초) 강제
@@ -1475,7 +1484,10 @@ final class SessionController: EngineProcessDelegate {
         }
 
         do { try e.start() }
-        catch { phase = .error("전사 엔진을 시작하지 못했어요: \(error.localizedDescription)") }
+        catch {
+            terminateTranscriptionEngines()
+            phase = .error("전사 엔진을 시작하지 못했어요: \(error.localizedDescription)")
+        }
 
         engineStartTimeoutTask?.cancel()
         engineStartTimeoutTask = Task { @MainActor in
@@ -1498,6 +1510,7 @@ final class SessionController: EngineProcessDelegate {
         guard AssetManifest.modelIsValid() else {
             phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."); return
         }
+        terminateTranscriptionEngines()
         transcript.reset()
         speakerNames = [:]
         autoRecognizedSpeakers.removeAll()
@@ -1582,7 +1595,10 @@ final class SessionController: EngineProcessDelegate {
             startPeriodicAutosave()
             startSilenceWatch()
         }
-        catch { phase = .error("마이크를 시작하지 못했어요: \(error.localizedDescription)") }
+        catch {
+            terminateTranscriptionEngines()
+            phase = .error("마이크를 시작하지 못했어요: \(error.localizedDescription)")
+        }
     }
 
     /// Poll every 3s while recording: 15s+ without audible input flips micSilent
@@ -1693,8 +1709,20 @@ final class SessionController: EngineProcessDelegate {
         if code == 0 { finalizeOnce(); return }
         if phase != .done, phase != .flushing {
             preview.stop(); livePartial = ""; livePartialTranslations = [:]
+            engine = nil
             phase = .error("전사 엔진이 예기치 않게 종료되었어요 (코드 \(code)). 다시 시도해주세요.")
         }
+    }
+
+    /// Hard teardown for retry/reset/error paths. `EngineProcess.stop()` only
+    /// requests FLUSH; these paths must release the process immediately because
+    /// there may be no live session left to deliver <<FLUSH_END>>.
+    private func terminateTranscriptionEngines() {
+        engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
+        engine?.delegate = nil
+        engine?.terminate()
+        engine = nil
+        preview.stop()
     }
 
     private func finalizeOnce() {
