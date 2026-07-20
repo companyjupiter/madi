@@ -8,6 +8,8 @@
 //   SPKFIX <gt> <id> [dur]      → FLUSH: recluster-corrected label
 //   SPKOV <gt> <id> [dur]       → causal/final overlap 2nd speaker
 //   SPKOVRESET                   → replace causal overlap with final rows
+//   <<PREVIEW_BEGIN>>            → throwaway open-window decode begins
+//   <<PREVIEW_END>>              → throwaway open-window decode ends
 //   <<FLUSH_END>>               → finalization done → export
 //
 // This file is pure parsing (no I/O), so it is unit-testable in isolation.
@@ -30,6 +32,10 @@ enum EngineEvent: Equatable {
     case languageDetected(Int)        // auto-detect locked a language token id
     case partial(t0: Double, text: String) // «partial <t0>» — in-decode hypothesis (PARTIALS=1)
     case segmentEnd                   // <<SEG_END>> — one stream job finished (watchdog heartbeat)
+    case previewBegin                 // <<PREVIEW_BEGIN>> — isolate following output from committed state
+    case previewWord(String)          // final word emitted by the throwaway preview lane
+    case previewPartial(String)       // in-decode hypothesis from the throwaway preview lane
+    case previewEnd                   // <<PREVIEW_END>> — preview lane is available again
     case other(String)                // unrecognized line (perf/log) — kept for diagnostics
 }
 
@@ -47,9 +53,50 @@ enum EngineProtocol {
     /// markers, so the parser tracks whether it is "inside words".
     final class Decoder {
         private var inWords = false
+        private var inPreview = false
 
         func decode(line raw: String) -> EngineEvent {
             let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if line == "<<PREVIEW_BEGIN>>" {
+                inPreview = true
+                inWords = false
+                return .previewBegin
+            }
+            if line == "<<PREVIEW_END>>" {
+                inPreview = false
+                inWords = false
+                return .previewEnd
+            }
+
+            let partial: EngineEvent? = {
+                guard line.hasPrefix("\u{00AB}partial ") else { return nil }
+                let rest = line.dropFirst("\u{00AB}partial ".count)
+                guard let close = rest.range(of: "\u{00BB} "),
+                      let t0 = Double(rest[..<close.lowerBound]) else { return nil }
+                return .partial(t0: t0, text: String(rest[close.upperBound...]))
+            }()
+
+            // Markers quarantine every control/event family, including any a
+            // future engine accidentally prints. Only preview text can escape.
+            if inPreview {
+                if line.hasPrefix("=== WORD TIMESTAMPS") {
+                    inWords = true
+                    return .other(line)
+                }
+                if line.hasPrefix("=== ") {
+                    inWords = false
+                    return .other(line)
+                }
+                if let partial, case .partial(_, let text) = partial {
+                    return .previewPartial(text)
+                }
+                if inWords, line.hasPrefix("["), let word = EngineProtocol.parseWord(line),
+                   case .word(_, _, let text, _) = word {
+                    return .previewWord(text)
+                }
+                return .other(line)
+            }
 
             if line.hasPrefix("[stream] ready") { return .ready }
             if line == "<<FLUSH_END>>" { return .flushEnd }
@@ -90,12 +137,7 @@ enum EngineProtocol {
             // «partial <t0>» <text> — streaming in-decode hypothesis (engine env
             // PARTIALS=1; live STREAM mode sets it). The text grows batch-by-
             // batch and is superseded by the committed word section.
-            if line.hasPrefix("\u{00AB}partial ") {
-                let rest = line.dropFirst("\u{00AB}partial ".count)
-                if let close = rest.range(of: "\u{00BB} "), let t0 = Double(rest[..<close.lowerBound]) {
-                    return .partial(t0: t0, text: String(rest[close.upperBound...]))
-                }
-            }
+            if let partial { return partial }
 
             if let lbl = EngineProtocol.parseSpeaker(line, tag: "SPKFIX") { return .speakerFix(lbl) }
             if let lbl = EngineProtocol.parseSpeaker(line, tag: "SPKOV")  { return .speakerOverlap(lbl) }

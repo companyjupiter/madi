@@ -489,10 +489,15 @@ var g_osd_win = std.ArrayList(OsdWin).init(alloc);
 // emitted as defaults now so downstream UI can bind to them before P1/P3 land —
 // the data model is stable from day one (see ui-ux-scaffold-contract).
 var g_ev: ?std.fs.File = null;
+// PREVIEW jobs share every resident weight/scratch buffer with committed STREAM
+// jobs, but are observational only: no structured events, transcript words,
+// language lock, diar centroids, or session profiling may be mutated.
+var g_preview_job = false;
 fn evOpen() void {
     if (std.posix.getenv("EVENTS_FILE")) |p| g_ev = std.fs.cwd().createFile(p, .{}) catch null;
 }
 fn evLine(s: []const u8) void {
+    if (g_preview_job) return;
     const f = g_ev orelse return;
     f.writeAll(s) catch {};
     f.writeAll("\n") catch {};
@@ -1471,6 +1476,8 @@ pub fn main() !void {
         // ── obtain the next job (wav path + global time offset) ──────────────
         var cur_path: []const u8 = wav_path;
         var g_off: f32 = 0;
+        var preview_job = false;
+        defer g_preview_job = false;
         if (stream) {
             const line = (stdin_r.readUntilDelimiterOrEof(&stdin_buf, '\n') catch null) orelse break :job;
             const trimmed = std.mem.trim(u8, line, " \t\r");
@@ -1582,9 +1589,16 @@ pub fn main() !void {
                 try out.print("<<FLUSH_END>>\n", .{});
                 continue :job;
             }
-            const sp = std.mem.indexOfScalar(u8, trimmed, ' ') orelse continue :job;
-            g_off = std.fmt.parseFloat(f32, trimmed[0..sp]) catch 0;
-            cur_path = std.mem.trim(u8, trimmed[sp + 1 ..], " \t\r");
+            if (std.mem.startsWith(u8, trimmed, "PREVIEW ")) {
+                preview_job = true;
+                cur_path = std.mem.trim(u8, trimmed["PREVIEW ".len..], " \t\r");
+            } else {
+                const sp = std.mem.indexOfScalar(u8, trimmed, ' ') orelse continue :job;
+                g_off = std.fmt.parseFloat(f32, trimmed[0..sp]) catch 0;
+                cur_path = std.mem.trim(u8, trimmed[sp + 1 ..], " \t\r");
+            }
+            g_preview_job = preview_job;
+            if (preview_job) try out.print("<<PREVIEW_BEGIN>>\n", .{});
         }
 
         var checked_stream_path: ?[]u8 = null;
@@ -1592,8 +1606,12 @@ pub fn main() !void {
             checked_stream_path = validateStreamWavPath(alloc, cur_path) catch |e| {
                 std.debug.print("[skip] rejected stream path '{s}': {s}\n", .{ cur_path, @errorName(e) });
                 try out.print("=== TRANSCRIPTION (0.00s, 0 chunk(s)) ===\n", .{});
-                evEnd("seg_end");
-                try out.print("<<SEG_END>>\n", .{});
+                if (preview_job) {
+                    try out.print("<<PREVIEW_END>>\n", .{});
+                } else {
+                    evEnd("seg_end");
+                    try out.print("<<SEG_END>>\n", .{});
+                }
                 continue :job;
             };
             cur_path = checked_stream_path.?;
@@ -1616,8 +1634,12 @@ pub fn main() !void {
             std.debug.print("[skip] {s}: {s}\n", .{ cur_path, why });
             if (stream) {
                 try out.print("=== TRANSCRIPTION (0.00s, 0 chunk(s)) ===\n", .{});
-                evEnd("seg_end");
-                try out.print("<<SEG_END>>\n", .{});
+                if (preview_job) {
+                    try out.print("<<PREVIEW_END>>\n", .{});
+                } else {
+                    evEnd("seg_end");
+                    try out.print("<<SEG_END>>\n", .{});
+                }
                 continue :job;
             }
             return;
@@ -1676,6 +1698,7 @@ pub fn main() !void {
                 }
             }
             const gate_samples: []f32 = samples[0..got];
+            if (!preview_job) {
             if (osd_model) |*om| {
                 // pyannote OSD on 10 s windows, threaded (≈410 ms each naive;
                 // overlaps the diar embed pool + silero below)
@@ -1697,6 +1720,7 @@ pub fn main() !void {
                 }
                 osd_nw_used = wi;
             }
+            }
             if (vad_model) |*vm| {
                 // run Silero on its own thread — it overlaps the ResNet diar
                 // embedding pool below (~150 ms each on a 30 s chunk), so the
@@ -1707,7 +1731,7 @@ pub fn main() !void {
             // diarization: 256-d ResNet34 embedding per 1.5 s window. Non-stream
             // accumulates for end-of-file k-means; stream mode clusters online
             // (resident centroids) and emits "SPK <gtime> <id>" right away.
-            if (!stream or stream_diar) {
+            if (!preview_job and (!stream or stream_diar)) {
             const nwin = got / SEG_SAMP;
             if (nwin > 0) {
                 // Diar embeddings (ResNet34) — skipped entirely when 화자 분리 is off.
@@ -2069,7 +2093,7 @@ pub fn main() !void {
         // front-end: mel → Conv1D×2 → enc_input (into this chunk's batch slot)
         var mt = try std.time.Timer.start();
         mel.melSpectrogram(samples, mel_filters, mel_buf);
-        g_t_mel += mt.read();
+        if (!preview_job) g_t_mel += mt.read();
         var ct = try std.time.Timer.start();
         try mtl.beginCommandBuffer();
         try imIm2col(f_im2col, col1, mel_buf.ptr, mel.N_MELS, mel.N_FRAMES, 1, 1, mel.N_FRAMES);
@@ -2081,7 +2105,7 @@ pub fn main() !void {
         try mtl.commitCommandBuffer();
         try mtl.sync();
         const conv_ns_t = ct.read();
-        g_t_conv += conv_ns_t;
+        if (!preview_job) g_t_conv += conv_ns_t;
         slot_conv[nb] = @as(f64, @floatFromInt(conv_ns_t)) / 1e6;
         slot_nenv[nb] = energyEnvelope(samples[0..got], slot_env[@as(usize, nb) * ENV_LEN ..][0..ENV_LEN]);
         @memcpy(slot_samp[@as(usize, nb) * mel.CHUNK_SAMPLES ..][0..got], samples[0..got]);
@@ -2102,7 +2126,7 @@ pub fn main() !void {
         var et = try std.time.Timer.start();
         try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, nb, actx);
         const enc_ns_t = et.read();
-        g_t_enc += enc_ns_t;
+        if (!preview_job) g_t_enc += enc_ns_t;
         const enc_ms = @as(f64, @floatFromInt(enc_ns_t)) / 1e6 / @as(f64, @floatFromInt(nb));
 
         // ── BATCHDEC M1 shadow: decode all nb chunks BATCHED (verify text + speed)
@@ -2228,7 +2252,7 @@ pub fn main() !void {
             try mtl.commitCommandBuffer();
             try mtl.sync();
         }
-        g_t_ckv += ckvt.read();
+        if (!preview_job) g_t_ckv += ckvt.read();
 
         // reset decode state for this chunk
         for (SEED, 0..) |s, i| { d_tokens[i] = s; out_tokens[i] = s; }
@@ -2248,7 +2272,7 @@ pub fn main() !void {
         // this segment's seed language may differ from the session lock — a KO
         // staff line and the JA patient's reply each decode with their own token.
         var seg_lang: u32 = lang_tok;
-        if (lang_tok == 0 or g_lang_ncands > 0) {
+        if (!preview_job and (lang_tok == 0 or g_lang_ncands > 0)) {
             d_pos[0] = 0;
             try mtl.beginCommandBuffer();
             try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[0]);
@@ -2547,8 +2571,10 @@ pub fn main() !void {
         }
 
         const dec_gpu_ns = dt2.read() -| host_ns;
-        g_t_dec += dec_gpu_ns;
-        g_t_dtw += host_ns;
+        if (!preview_job) {
+            g_t_dec += dec_gpu_ns;
+            g_t_dtw += host_ns;
+        }
         const dec_ms = @as(f64, @floatFromInt(dec_gpu_ns)) / 1e6; // word-DTW/BPE moved inside the loop; keep tok/s comparable
         try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms | passes {d}]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_tok_total, dec_ms, @as(f64, @floatFromInt(n_tok_total)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6, total_passes });
         const avg_lp: f32 = if (n_lp > 0) @floatCast(sum_lp / @as(f64, @floatFromInt(n_lp))) else 0;
@@ -2566,8 +2592,12 @@ pub fn main() !void {
 
         // stream mode: one segment done → emit sentinel and await the next job.
         if (stream) {
-            evEnd("seg_end");
-            try out.print("<<SEG_END>>\n", .{});
+            if (preview_job) {
+                try out.print("<<PREVIEW_END>>\n", .{});
+            } else {
+                evEnd("seg_end");
+                try out.print("<<SEG_END>>\n", .{});
+            }
             continue :job;
         }
 
@@ -3691,7 +3721,7 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
             try out.print("  [{d:.2}s-{d:.2}s] {s}\n", .{ ts, te, w.txt });
         }
         evWord(ts, te, w.txt, w.conf, -1); // spk resolved later via spk_seg (diar runs after decode)
-        try g_words.append(.{ .t = ts, .txt = w.txt });
+        if (!g_preview_job) try g_words.append(.{ .t = ts, .txt = w.txt });
     }
 }
 

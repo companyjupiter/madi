@@ -227,7 +227,7 @@ final class AudioCapture {
         onLevel?(level)
         for seg in segmenter.push(samples) { write(seg); samplesSincePreview = 0 }
         // streaming preview: every previewSeconds of new audio, hand the in-progress
-        // window to the preview engine (only if there's enough pending to be useful).
+        // window to the resident engine's PREVIEW lane (only when useful).
         if onPreview != nil {
             samplesSincePreview += samples.count
             let interval = Int(previewSeconds * Double(WavWriter.sampleRate))
