@@ -8,10 +8,10 @@ import SwiftUI
 struct BlackToggle: View {
     @Binding var isOn: Bool
 
-    // ON = near-black #141616 (de-accent pass — was accent indigo). The white
-    // knob always reads against it; on a dark window the track blends into the
-    // background but the knob still marks the ON state. OFF = adaptive mid-gray.
-    private static let onFill = Color(red: 20/255, green: 22/255, blue: 22/255)
+    // ON = inkStrong (near-black on light, INVERTS to near-white on dark — the
+    // old fixed #141616 track vanished into a dark window, leaving a floating
+    // knob). Knob pairs with inkStrongOn when ON. OFF = adaptive mid-gray.
+    private static let onFill = Theme.Colors.inkStrong
     private static let offFill = Theme.Colors.switchOffTrack
 
     var body: some View {
@@ -20,7 +20,8 @@ struct BlackToggle: View {
                 .fill(isOn ? Self.onFill : Self.offFill)
                 .frame(width: 28, height: 16)
                 .overlay(alignment: isOn ? .trailing : .leading) {
-                    Circle().fill(.white).frame(width: 12, height: 12).padding(2)
+                    Circle().fill(isOn ? Theme.Colors.inkStrongOn : .white)
+                        .frame(width: 12, height: 12).padding(2)
                 }
         }
         .buttonStyle(.plain)
