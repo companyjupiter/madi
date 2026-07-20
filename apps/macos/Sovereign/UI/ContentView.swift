@@ -56,6 +56,17 @@ struct ContentView: View {
             value.merge(nextValue()) { $1 }
         }
     }
+
+    /// Measured natural height of the input-picker rows — replaces the hand-math
+    /// estimate once known, so the fixed scroll frame hugs the content exactly
+    /// (a too-tall frame read as extra bottom padding inside the panel).
+    private struct MicPanelHeightKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
+        }
+    }
+    @State private var micPanelMeasuredHeight: CGFloat = 0
     // Guard rails for destructive exits (X on the file card / back chevron):
     // confirm before wiping unsaved content, and stop-confirm mid-recording.
     @State private var showDiscardConfirm = false
@@ -922,12 +933,17 @@ struct ContentView: View {
                     // ABOVE the pill when it doesn't fit below and there IS room
                     // above; otherwise cap it to the room below and let it scroll.
                     let isMic = (which == "mic" || which == "side-mic")
-                    let natural = isMic ? micPanelNaturalHeight : 0
+                    let natural = isMic ? micPanelRowsHeight + 12 : 0   // +12 = panel v-padding
                     let below = geo.size.height - f.maxY - 16
                     let flipUp = isMic && natural > below && f.minY - 8 > natural
-                    langDropdownPanel(which, maxHeight: flipUp ? .infinity : max(120, below))
+                    // Flip-up positioning is BOTTOM-anchored (a spacer frame ending
+                    // 4 px above the pill) so the panel hugs the pill regardless of
+                    // how accurate the height estimate is — the old top offset
+                    // (f.minY - natural) drifted whenever the estimate was off.
+                    langDropdownPanel(which, maxHeight: flipUp ? (f.minY - 16) : max(120, below))
                         .frame(width: f.width)
-                        .offset(x: f.minX, y: flipUp ? (f.minY - natural - 4) : (f.maxY + 4))
+                        .frame(height: flipUp ? f.minY - 4 : nil, alignment: .bottom)
+                        .offset(x: f.minX, y: flipUp ? 0 : (f.maxY + 4))
                 }
             }
             .coordinateSpace(name: "startCard")
@@ -1021,12 +1037,12 @@ struct ContentView: View {
     @ViewBuilder private var micPanelRows: some View {
         // 1) Mic devices. Picking one leaves system-audio-only mode so the mic is
         //    actually captured; in 마이크+시스템 it just swaps which mic is used.
-        langCheckRow(uiLang("시스템 기본", "System default"), checked: session.audioSource != .system && session.inputDeviceID == nil, dimmed: false) {
+        micPanelRow(uiLang("시스템 기본", "System default"), selected: session.audioSource != .system && session.inputDeviceID == nil) {
             if session.audioSource == .system { session.audioSource = .mic }
             session.setInputDevice(nil); openLangDropdown = nil
         }
         ForEach(session.availableInputs) { dev in
-            langCheckRow(dev.name, checked: session.audioSource != .system && session.inputDeviceID == dev.id, dimmed: false) {
+            micPanelRow(dev.name, selected: session.audioSource != .system && session.inputDeviceID == dev.id) {
                 if session.audioSource == .system { session.audioSource = .mic }
                 session.setInputDevice(dev.id); openLangDropdown = nil
             }
@@ -1036,12 +1052,36 @@ struct ContentView: View {
         //    reachable only from Settings, so the start screen looked like it
         //    couldn't capture it at all.
         Divider().padding(.vertical, 4).padding(.horizontal, 12)
-        langCheckRow(AudioSource.system.label(uiLang), checked: session.audioSource == .system, dimmed: false) {
+        micPanelRow(AudioSource.system.label(uiLang), selected: session.audioSource == .system) {
             session.audioSource = .system; openLangDropdown = nil
         }
-        langCheckRow(AudioSource.both.label(uiLang), checked: session.audioSource == .both, dimmed: false) {
+        micPanelRow(AudioSource.both.label(uiLang), selected: session.audioSource == .both) {
             session.audioSource = .both; openLangDropdown = nil
         }
+    }
+
+    /// Single-select row for the input picker: plain label + trailing ✓ on the
+    /// current choice (menu-style) — NOT the checkbox rows the multi-select
+    /// output-language panel uses.
+    private func micPanelRow(_ label: String, selected: Bool,
+                             _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // Mic input picker (Figma 463:2851): which device 지금 녹음 시작 captures.
@@ -1218,9 +1258,19 @@ struct ContentView: View {
     /// multi-select topped by an exclusive "번역 안 함" row (stays open).
     /// Estimated natural height of the mic/input panel: one row per mic + the
     /// 시스템 기본 row, the 음원 divider, and the two 음원 rows.
+    /// Rows height for the scroll frame: the live measurement once available,
+    /// else the estimate (first frame only).
+    private var micPanelRowsHeight: CGFloat {
+        micPanelMeasuredHeight > 0 ? micPanelMeasuredHeight : micPanelNaturalHeight
+    }
+
     private var micPanelNaturalHeight: CGFloat {
+        // Measured: a langCheckRow is ~33 pt (8+8 v-padding + ~16 pt line) at the
+        // default type size. 29 underestimated → the panel "fit" below on paper,
+        // skipped the flip, and clipped off the window edge in practice. Slight
+        // OVERestimate is safe: it just biases toward flipping up.
         let rows = CGFloat(1 + session.availableInputs.count + 2)
-        return rows * 29 + 9 + 12          // rows + divider + panel v-padding
+        return rows * 33 + 9 + 12          // rows + divider + panel v-padding
     }
 
     @ViewBuilder
@@ -1228,8 +1278,14 @@ struct ContentView: View {
         VStack(spacing: 0) {
             if which == "mic" || which == "side-mic" {
                 // Scrolls only when the rows can't fit the room under the pill.
-                ScrollView(.vertical) { VStack(spacing: 0) { micPanelRows } }
-                    .frame(height: min(micPanelNaturalHeight, maxHeight))
+                ScrollView(.vertical) {
+                    VStack(spacing: 0) { micPanelRows }
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: MicPanelHeightKey.self, value: g.size.height)
+                        })
+                }
+                .frame(height: min(micPanelRowsHeight, maxHeight))
+                .onPreferenceChange(MicPanelHeightKey.self) { micPanelMeasuredHeight = $0 }
             } else if which == "input" {
                 ForEach(Self.inputLangOptions, id: \.ko) { opt in
                     Button { setLanguage(opt.id) } label: {
