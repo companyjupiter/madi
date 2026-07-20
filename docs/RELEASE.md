@@ -77,37 +77,46 @@ Uses `create-dmg` if installed, else `hdiutil`. Staples the DMG too.
 
 ---
 
-## Local S3 release (current operational path)
+## Local S3 release (canonical path)
 
-GitHub Actions automatic runs are paused while the account is over its included
-plan. Build and publish the free-account, ad-hoc-signed and unnotarized release
-from an Apple-silicon Mac with one local command instead:
+Use `apps/macos/scripts/madi_release.sh` as the release entrypoint. It accepts
+the exact subcommands below:
 
 ```sh
-# Build and verify only. Nothing is uploaded.
-apps/macos/scripts/release_local_free.sh 0.1.0
-
-# Upload immutable version files, but do not change the public channel/index.
-apps/macos/scripts/release_local_free.sh 0.1.0 --upload
-
-# Publish the byte-identical DMG from an existing GitHub Release.
-apps/macos/scripts/release_local_free.sh 0.1.0 --publish
-
-# Build and upload an unpublished offline variant without advancing a channel.
-apps/macos/scripts/release_local_free.sh 0.1.0 --offline --upload
+apps/macos/scripts/madi_release.sh plan 0.1.0 --json
+apps/macos/scripts/madi_release.sh build 0.1.0 --json
+apps/macos/scripts/madi_release.sh upload 0.1.0 --json
+apps/macos/scripts/madi_release.sh publish 0.1.0 --json
+apps/macos/scripts/madi_release.sh promote-github 0.1.0 --json
 ```
 
-The script validates shell files, runs the S3 publisher tests and Swift tests,
-builds and checks the app bundle, creates lowercase
-`madi-<version>-arm64.dmg` artifacts, and writes `SHA256SUMS.txt`. Output is kept
-under `build/local-release/<version>/`. `--publish` is intentionally explicit:
-it advances `channels/<channel>/latest.json` and `releases/index.json`, while
-`--upload` leaves both mutable documents unchanged.
+`plan` is read-only. `build` creates or reuses local artifacts. `upload`
+publishes only the immutable versioned objects. `publish` is the one-command
+local release path: it builds or reuses the local DMG, uploads the immutable S3
+artifacts, and then advances `releases/index.json` and
+`channels/<channel>/latest.json`. `promote-github` is the legacy path that
+reuses an existing GitHub Release DMG asset before publishing to S3.
+
+`apps/macos/scripts/release_local_free.sh` now acts as a compatibility wrapper:
+default = `build`, `--upload` = `upload`, `--publish-local` = `publish`, and
+`--publish` = `promote-github`.
+
+The CLI accepts `--offline`, `--skip-tests`, `--beta-expiry YYYY-MM-DD`, and
+`--json`. `--json` makes the command emit a single JSON object; all other logs
+go to stderr. Build output lives under `build/local-release/<version>/`, and
+the manifest is written to `build/local-release/<version>/manifest.json`.
+
+The build flow validates shell files, runs the S3 publisher tests and Swift
+tests, builds and checks the app bundle, creates lowercase
+`madi-<version>-arm64.dmg` artifacts, and writes `SHA256SUMS.txt`. The script
+records the current git SHA and dirty state in the manifest and reuses existing
+artifacts only when the version, git SHA, offline flag, and checksums still
+match. A dirty working tree forces a rebuild.
 
 Local uploads use the credentials already available to the AWS CLI
-(`aws configure`, AWS SSO, or environment credentials); GitHub's OIDC
-`AWS_ROLE_ARN` is not used. Production defaults are built in and can be
-overridden through environment variables:
+(`aws configure`, AWS SSO, or environment credentials). The GitHub OIDC
+`AWS_ROLE_ARN` path is used only by CI, not by local releases. Production
+defaults are built in and can be overridden through environment variables:
 
 ```sh
 MADI_RELEASE_BUCKET=devart-teamjupiter-downloads-artdapne2
@@ -117,9 +126,9 @@ MADI_DOWNLOAD_BASE_URL=https://madi.devart.tv
 
 The script always refreshes and verifies the seven runtime assets from the
 pinned `runtime-assets/v1` archive before a new build. Set both
-`MADI_RELEASE_ASSETS_URL` and `MADI_RELEASE_ASSETS_SHA256` only when intentionally
-moving to a different immutable archive. An offline build downloads and verifies
-the Q8 speech model only when it is not already present.
+`MADI_RELEASE_ASSETS_URL` and `MADI_RELEASE_ASSETS_SHA256` only when
+intentionally moving to a different immutable archive. An offline build
+downloads and verifies the Q8 speech model only when it is not already present.
 
 The engine build pins the app and transcription engine to the declared macOS
 14.0 minimum, independent of the macOS/Xcode version on the build machine.
@@ -128,20 +137,28 @@ engine, rejecting a release if any of them targets a newer OS. This prevents
 host-runner defaults from leaking into customer binaries.
 
 Completed artifacts are retained. If an S3 or metadata update fails, rerun the
-same `--upload` or `--publish` command. `--upload` reuses a locally verified DMG;
-`--publish` downloads the standard DMG from the existing `v<version>` GitHub
-Release, verifies GitHub's SHA-256 digest, and publishes those exact bytes under
-the lowercase S3 name. This prevents one version from pointing at two different
-binaries. The download uses the authenticated GitHub CLI, so private release
-assets work as well. It also appends the S3 links to the existing release notes.
+same command. `build` and `upload` reuse matching artifacts when the manifest is
+still valid. `publish` keeps the lower-case S3 naming convention and refuses to
+overwrite an existing version with different bytes. When reusing a standard-only
+release root, the CLI prunes any stale offline DMG before upload so a previous
+offline build cannot leak into a later standard release. GitHub promotion
+remains available only as the legacy `promote-github` path.
+
 The in-app updater reads `channels/<MADIChannel>/latest.json` through CloudFront,
 requires the schema-1 channel/version contract, pins DMG URLs to
 `https://madi.devart.tv/releases/<version>/`, and verifies both byte size and
 SHA-256 before opening a downloaded image. GitHub remains the human-facing
-release/support page, not the binary update feed. Run `--publish` from one
-operator at a time because the channel and release index are mutable
-read-modify-write documents; immutable version objects remain overwrite-protected
-by their SHA-256 metadata.
+release/support page, not the binary update feed.
+
+Normal versioned releases do not need CloudFront invalidation because the
+versioned object paths are immutable and the metadata documents are served with
+no-cache headers. This CLI refuses same-version replacement with different
+bytes; any exceptional manual replacement would also require explicit cache
+invalidation.
+
+Treat `releases/index.json` and `channels/<channel>/latest.json` as single-writer
+mutable metadata. The publisher uses read-modify-write semantics without a
+lock, so run one publisher at a time.
 
 ---
 
@@ -253,8 +270,8 @@ metadata is injected into the built bundle, so CI never edits the tracked
 
 ### S3 binary storage
 
-DMGs are stored only in S3. GitHub Releases contain version metadata and S3
-download links, not duplicate binary attachments. Configure these repository
+DMGs are stored only in S3. GitHub Releases are optional legacy metadata and
+S3 download links, not duplicate binary attachments. Configure these repository
 variables for both workflows:
 
 | repository variable | example |

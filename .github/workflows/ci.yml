@@ -1,7 +1,7 @@
 name: CI
 
 # Automatic checks are paused while the GitHub Actions account is over its
-# included plan. Run the macOS release gates through release_local_free.sh.
+# included plan. Run the macOS release gates through madi_release.sh.
 on:
   workflow_dispatch:
 
@@ -27,6 +27,10 @@ jobs:
       - name: Test S3 release publication
         shell: bash
         run: apps/macos/scripts/tests/publish_s3_release_test.sh
+
+      - name: Test local release CLI
+        shell: bash
+        run: apps/macos/scripts/tests/madi_release_test.sh
 
       - name: Validate Python syntax
         shell: bash

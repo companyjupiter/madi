@@ -1,0 +1,4 @@
+interface:
+  display_name: "Madi Release"
+  short_description: "Build and publish Madi DMG releases"
+  default_prompt: "Use $madi-release to plan, build, or publish a Madi macOS release."
