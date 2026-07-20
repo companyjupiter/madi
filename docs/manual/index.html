@@ -90,7 +90,8 @@
 <a class="nav-link" data-target="ko-07-workspace"><span class="nav-num">07</span>작업 폴더와 내보내기</a>
 <a class="nav-link" data-target="ko-08-dictation"><span class="nav-num">08</span>시스템 받아쓰기 (추후 제공)</a>
 <a class="nav-link" data-target="ko-09-settings"><span class="nav-num">09</span>설정</a>
-<a class="nav-link" data-target="ko-10-open-source"><span class="nav-num">10</span>오픈소스 라이선스</a></nav><main class="content"><section id="ko-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">시작하기</h1><p>Madi(마디)에 오신 것을 환영합니다. Madi는 회의를 <strong>전부 이 Mac 안에서</strong> 받아쓰고 옮기는 앱입니다. 실시간 받아쓰기, 오디오·영상 파일 전사, 화자 분리, 온디바이스 번역까지 — 모든 처리가 여러분의 Mac 안에서 일어납니다.</p>
+<a class="nav-link" data-target="ko-10-open-source"><span class="nav-num">10</span>오픈소스 라이선스</a>
+<a class="nav-link" data-target="ko-11-eight-gb-guide"><span class="nav-num">11</span>8GB Mac 사용 가이드</a></nav><main class="content"><section id="ko-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">시작하기</h1><p>Madi(마디)에 오신 것을 환영합니다. Madi는 회의를 <strong>전부 이 Mac 안에서</strong> 받아쓰고 옮기는 앱입니다. 실시간 받아쓰기, 오디오·영상 파일 전사, 화자 분리, 온디바이스 번역까지 — 모든 처리가 여러분의 Mac 안에서 일어납니다.</p>
 <h2 id="madi가-하는-일">Madi가 하는 일</h2>
 <ul>
 <li><strong>실시간 전사</strong> — 마이크나 회의 음성을 들으며 말이 끝나기 무섭게 텍스트가 나타납니다.</li>
@@ -106,19 +107,19 @@
 <h2 id="모델-안내">모델 안내</h2>
 <p>Madi는 두 종류의 AI 모델을 씁니다.</p>
 <ul>
-<li><strong>Whisper 음성 모델</strong> — 받아쓰기를 담당합니다. <strong>앱에 기본 동봉</strong>되어 있어 따로 받을 필요가 없습니다.</li>
-<li><strong>DNA3.0-4B 언어 모델 (약 2.6 GB)</strong> — <strong>번역</strong>, <strong>AI 교정</strong>, <strong>요약·질의응답</strong>에 쓰입니다. 앱 용량을 줄이기 위해 <strong>처음 쓸 때 다운로드</strong>합니다.</li>
+<li><strong>Whisper 음성 모델 (약 867 MB)</strong> — 받아쓰기를 담당합니다. 표준 DMG에서는 첫 실행에 한 번 받습니다.</li>
+<li><strong>DNA3.0 언어 모델</strong> — <strong>번역</strong>, <strong>AI 교정</strong>, <strong>요약·질의응답</strong>에 쓰입니다. 8GB Mac은 2B(약 1.31 GB), 16GB 이상은 품질 우선 4B(약 2.78 GB)를 자동 선택하며 <strong>처음 쓸 때 다운로드</strong>합니다.</li>
 <ul>
 <li>받는 곳: <strong>설정(⌘,) → 번역</strong>의 “번역 모델 다운로드” 버튼.</li>
-<li>다운로드 약 <strong>2.6 GB</strong>, 디스크 공간도 그만큼 필요합니다.</li>
+<li>선택된 모델만 받으며 디스크 공간도 그만큼 필요합니다.</li>
 </ul>
 </ul>
 <p>번역·요약·질의응답을 쓰지 않는다면 이 모델은 받지 않아도 됩니다. 전사와 화자 분리는 동봉된 Whisper만으로 완전히 동작합니다.</p>
 <h2 id="메모리-안내-솔직하게">메모리 안내 (솔직하게)</h2>
 <ul>
-<li><strong>8 GB Mac (예: M1 MacBook Air)</strong> — 받아쓰기와 화자 분리는 원활히 돌아갑니다.</li>
-<li><strong>번역을 켜면 약 3 GB가 추가로 필요합니다.</strong> 8 GB Mac에서도 쓸 수 있지만 여유가 빠듯해집니다.</li>
-<li><strong>실시간 프리뷰</strong>를 켜면 약 830 MB가 더 듭니다.</li>
+<li><strong>8 GB Mac (예: M1 MacBook Air)</strong> — DNA3.0-2B와 4턴 번역 대기열을 자동 적용합니다. 번역 엔진의 실측 물리 메모리는 약 2.4 GB입니다.</li>
+<li><strong>16 GB 이상</strong> — 번역 품질을 우선해 DNA3.0-4B를 사용합니다(실측 약 5.1 GB).</li>
+<li><strong>실시간 프리뷰</strong>는 확정 전사와 같은 Whisper 프로세스를 공유하므로 두 번째 830 MB 모델을 띄우지 않습니다.</li>
 </ul>
 <h2 id="madi가-요청할-수-있는-권한">Madi가 요청할 수 있는 권한</h2>
 <p>권한은 미리 한꺼번에 묻지 않고, <strong>그 기능을 처음 쓸 때</strong> 필요한 것만 요청합니다.</p>
@@ -136,7 +137,7 @@
 <li>화면 가운데에 실시간 전사문이 나타나는 것을 지켜봅니다.</li>
 <li><strong>정지</strong>를 누르면 거기까지의 기록이 정리됩니다. 자동저장이 켜져 있으면 파일로 저장됩니다.</li>
 </ol>
-<blockquote>번역을 쓰려면 먼저 <strong>설정(⌘,) → 번역</strong>에서 번역 모델(약 2.6 GB)을 받아야 합니다.</blockquote>
+<blockquote>번역을 쓰려면 먼저 <strong>설정(⌘,) → 번역</strong>에서 Mac 메모리에 맞게 선택된 번역 모델을 받아야 합니다. 8GB Mac에서는 전용 가이드가 최초 한 번 자동으로 열립니다.</blockquote>
 <h2 id="창-구조">창 구조</h2>
 <p>녹음이 시작되면 창은 세 칸으로 나뉩니다.</p>
 <ul>
@@ -293,7 +294,7 @@
 <ul>
 <li><strong>설정(⌘,) → 번역 → AI 교정 (세션 종료 후)</strong> 의 <strong>화자·언어 자동 교정</strong>으로 켜고 끕니다.</li>
 <li>교정이 적용되면 전사문 위에 안내가 뜨고, <strong>화자 교정 되돌리기</strong> 버튼으로 <strong>한 번에 되돌릴 수 있습니다.</strong></li>
-<li>번역 모델(DNA3.0-4B)이 있어야 씁니다.</li>
+<li>하드웨어에 맞게 선택된 DNA3.0 번역 모델이 있어야 씁니다.</li>
 </ul>
 <h2 id="발언-겹침-표시">발언 겹침 표시</h2>
 <p>두 사람이 동시에 말하면 <strong>상세</strong> 보기에 <strong>⟨+이름 겹침⟩</strong> 표시가 나타나, 그 구간에 끼어든 두 번째 화자를 알려 줍니다.</p>
@@ -302,15 +303,15 @@
 <li>겹침 표시는 <strong>상세</strong> 보기에서만 나타납니다. 화면 상단에서 <strong>내용 → 상세</strong>로 전환하세요.</li>
 <li><strong>설정(⌘,) → 녹음 → 화자</strong>의 <strong>중첩 발화 감지</strong>가 켜져 있어야 합니다.</li>
 </ul></section>
-<section id="ko-04-translation" class="doc"><div class="doc-num">04</div><h1 class="doc-title">실시간 번역·통역</h1><p>Madi의 번역은 100% 기기 안에서 동작합니다. 클라우드도, 계정도 필요 없습니다. 회의가 진행되는 동안 각 발화를 한국어·영어·일본어·중국어로 즉시 옮겨 원문 아래에 함께 보여 줍니다. 모든 번역은 온디바이스 LLM(DNA3.0-4B)이 처리합니다.</p>
+<section id="ko-04-translation" class="doc"><div class="doc-num">04</div><h1 class="doc-title">실시간 번역·통역</h1><p>Madi의 번역은 100% 기기 안에서 동작합니다. 클라우드도, 계정도 필요 없습니다. 회의가 진행되는 동안 각 발화를 한국어·영어·일본어·중국어로 즉시 옮겨 원문 아래에 함께 보여 줍니다. 8GB Mac은 DNA3.0-2B, 16GB 이상은 DNA3.0-4B를 자동으로 사용합니다.</p>
 <h2 id="먼저-번역-모델-받기">먼저: 번역 모델 받기</h2>
-<p>번역은 별도의 모델(DNA3.0-4B, 약 2.6 GB)이 필요하며 앱에 동봉되어 있지 않습니다. 켤 때 한 번 내려받습니다.</p>
+<p>번역은 별도 모델이 필요하며 앱에 동봉되어 있지 않습니다. 8GB Mac은 DNA3.0-2B(약 1.31 GB), 16GB 이상은 DNA3.0-4B(약 2.78 GB)를 켤 때 한 번 내려받습니다.</p>
 <ol>
 <li><strong>설정(⌘,) → 번역</strong> 탭을 엽니다.</li>
 <li><strong>번역 모델 다운로드</strong> 버튼을 누릅니다.</li>
 <li>다운로드가 끝나면 번역 항목이 활성화됩니다.</li>
 </ol>
-<p>메모리는 사용 중에 약 3 GB가 추가로 필요합니다. 모델을 받기 전에는 번역 토글이 비활성 상태이고 “번역 모델을 먼저 다운로드하세요.”라는 안내가 표시됩니다.</p>
+<p>엔진 프로세스의 실측 물리 메모리는 2B 약 2.4 GB, 4B 약 5.1 GB입니다. 모델을 받기 전에는 번역 토글이 비활성 상태이고 “번역 모델을 먼저 다운로드하세요.”라는 안내가 표시됩니다.</p>
 <blockquote><strong>번역 탭이 안 보인다면</strong> — 번역 엔진이 포함되지 않은 빌드입니다. 이 경우 번역 기능 자체를 쓸 수 없습니다.</blockquote>
 <h2 id="번역할-언어-고르기-출력-언어">번역할 언어 고르기 (출력 언어)</h2>
 <p>두 곳 중 편한 곳에서 고릅니다. 같은 설정입니다.</p>
@@ -345,7 +346,7 @@
 <h2 id="반응-속도와-번역-품질">반응 속도와 번역 품질</h2>
 <p>출력 언어를 <strong>2개 이상</strong> 고르면 원문 줄 경계 오류가 여러 언어로 번지므로, 반응 속도가 최소 <strong>보통(7초)</strong> 으로 내려앉습니다. <strong>빠름(5초)</strong> 을 골라 두었더라도 자동으로 7초가 됩니다. <strong>정확(10초)</strong> 은 그대로 쓸 수 있습니다.</p>
 <blockquote><strong>예외:</strong> <code>한국어</code> + 다른 언어 하나만 켠 <strong>양방향 통역</strong> 모드에서는 줄마다 실제 번역 대상이 한 개로 줄어들기 때문에 강제하지 않습니다. 대면 통역에서 자막이 더 빨리 뜹니다.</blockquote>
-<p>번역이 밀릴 때는 <strong>“번역 중 · N줄 대기”</strong> 가 표시됩니다. 멈춘 것이 아니라 순서대로 처리 중이라는 뜻입니다(모델은 한 번에 한 줄씩 번역합니다).</p>
+<p>번역이 밀릴 때는 <strong>“번역 중 · N줄 대기”</strong> 가 표시됩니다. 멈춘 것이 아닙니다. 확정된 전사 줄을 임시 프리뷰보다 먼저 처리하고, 같은 줄의 오래된 요청은 최신 문장으로 합칩니다. 8GB 프로필은 실시간 대기를 4턴으로 제한하며 밀린 확정 줄은 녹음 종료 후 채웁니다.</p>
 <h2 id="ai-언어-교정-녹음이-끝난-뒤">AI 언어 교정 (녹음이 끝난 뒤)</h2>
 <p>녹음이 끝나면 온디바이스 LLM이 대화를 읽고 <strong>잘못된 언어로 받아쓴 줄</strong>을 보수적으로 바로잡습니다. <strong>설정(⌘,) → 번역 → AI 교정 (세션 종료 후)</strong> 의 <strong>화자·언어 자동 교정</strong>으로 켜고 끕니다. (<strong>화자</strong> 참고.)</p>
 <h2 id="자막-오버레이">자막 오버레이</h2>
@@ -366,9 +367,9 @@
 <li><strong>환자 자막</strong> — 외장 모니터에 크게(원거리 판독용). 환자 언어로 표시.</li>
 </ul>
 <p><strong>설정(⌘,) → 녹음 → 자막 오버레이 (진료실)</strong> 에서 켭니다. 직원 글씨(14–48pt)·환자 글씨(24–96pt)·환자 화면·환자 언어를 각각 지정할 수 있습니다. 진료 의자와 디스플레이 사이 1.5–2.5 m 거리에서 읽기 좋게 큰 글씨를 씁니다.</p></section>
-<section id="ko-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 요약과 질의응답</h1><p>전사가 끝나면 온디바이스 LLM이 회의록을 구조화된 요약으로 정리하고, 회의 내용에 대해 자연어로 질문할 수 있습니다. 요약과 질의응답은 번역과 같은 모델(DNA3.0-4B)을 쓰며, <strong>전사 내용도 요약도 이 Mac을 떠나지 않습니다.</strong></p>
+<section id="ko-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 요약과 질의응답</h1><p>전사가 끝나면 온디바이스 LLM이 회의록을 구조화된 요약으로 정리하고, 회의 내용에 대해 자연어로 질문할 수 있습니다. 요약과 질의응답은 번역과 같은 하드웨어 맞춤 모델(8GB는 DNA3.0-2B, 16GB 이상은 4B)을 쓰며, <strong>전사 내용도 요약도 이 Mac을 떠나지 않습니다.</strong></p>
 <h2 id="먼저-번역-요약-모델">먼저: 번역·요약 모델</h2>
-<p>요약과 질의응답은 번역과 같은 온디바이스 모델(DNA3.0-4B, 약 2.6 GB)을 씁니다. 모델이 없으면 <strong>요약 버튼이 나타나지 않습니다.</strong> 받는 법은 <strong>실시간 번역·통역</strong> 또는 <strong>설정</strong> 페이지를 참고하세요.</p>
+<p>요약과 질의응답은 번역과 같은 온디바이스 모델을 씁니다. 모델이 없으면 <strong>요약 버튼이 나타나지 않습니다.</strong> 받는 법은 <strong>실시간 번역·통역</strong> 또는 <strong>설정</strong> 페이지를 참고하세요.</p>
 <h2 id="회의-요약-만들기">회의 요약 만들기</h2>
 <ol>
 <li>전사가 끝난 뒤(녹음 중에는 안 됩니다), 상단 도구 막대의 <strong>✦(반짝이) 버튼</strong>을 누릅니다. 또는 <strong>⌘K</strong> 명령 팔레트에서 <strong>요약 생성</strong>을 고릅니다.</li>
@@ -463,7 +464,7 @@
 <ul>
 <li><strong>켜는 법:</strong> <strong>설정(⌘,) → 번역 → AI 교정 (세션 종료 후)</strong> 의 <strong>화자·언어 자동 교정</strong>.</li>
 <li>교정이 적용되면 전사문 위에 안내가 뜨고, <strong>화자 교정 되돌리기</strong> 버튼으로 <strong>한 번에 되돌릴 수 있습니다.</strong></li>
-<li>번역 모델(DNA3.0-4B)이 있어야 씁니다.</li>
+<li>하드웨어에 맞게 선택된 DNA3.0 번역 모델이 있어야 씁니다.</li>
 </ul>
 <h2 id="개인-단어장-교정을-기억하는-학습">개인 단어장 — 교정을 기억하는 학습</h2>
 <p>전사문의 한 줄을 고치면 Madi가 그 교정을 학습합니다. <strong>단어장</strong> 을 켜 두면, 다음 회의에서 같은 도메인 용어·이름의 오인식을 자동으로 바로잡습니다.</p>
@@ -555,7 +556,7 @@
 <ul>
 <li><em>출력 언어가 2개 이상이면 최소 <strong>보통(7초)</strong> 으로 내려앉습니다 — 빠름을 골라 두었어도 자동으로 7초가 됩니다. 단, <code>한국어</code>+다른 언어 하나만 켠 양방향 통역은 예외입니다.</em></li>
 </ul>
-<li><strong>실시간 프리뷰</strong> — 한 구간이 확정되기 전, 중간 텍스트를 회색으로 미리 보여 줍니다(정확도 손해 없음, 메모리 약 830 MB 추가).</li>
+<li><strong>실시간 프리뷰</strong> — 한 구간이 확정되기 전, 중간 텍스트를 회색으로 미리 보여 줍니다. 확정 전사와 같은 Whisper 프로세스를 공유해 두 번째 모델을 띄우지 않습니다.</li>
 </ul>
 <h3 id="표시">표시</h3>
 <ul>
@@ -589,10 +590,10 @@
 <h2 id="번역">번역</h2>
 <p>온디바이스 번역(한국어·영어·일본어·중국어)을 켜고 끄는 곳입니다.</p>
 <blockquote>번역 엔진이 포함되지 않은 빌드에서는 이 탭이 아예 보이지 않습니다.</blockquote>
-<h3 id="번역-모델-dna3-0-4b-약-2-6-gb">번역 모델 (DNA3.0-4B · 약 2.6 GB)</h3>
+<h3 id="번역-모델-8gb-dna3-0-2b-약-1-31-gb-16gb-dna3-0-4b-약-2-78-gb">번역 모델 (8GB: DNA3.0-2B · 약 1.31 GB / 16GB+: DNA3.0-4B · 약 2.78 GB)</h3>
 <ul>
 <li><strong>상태</strong> — 설치됨 / 검증 중 / 다운로드 진행률 / 미설치를 보여 줍니다.</li>
-<li><strong>번역 모델 다운로드</strong> — 모델을 받습니다. 앱에 동봉되어 있지 않고, 켤 때 받습니다(메모리 약 3 GB 추가). 받는 중에는 <strong>취소</strong>, 설치 후에는 <strong>Finder에서 보기</strong> 로 파일 위치를 열 수 있습니다.</li>
+<li><strong>번역 모델 다운로드</strong> — Mac 메모리에 맞게 자동 선택된 모델을 받습니다. 앱에 동봉되어 있지 않습니다. 엔진 실측 물리 메모리는 2B 약 2.4 GB, 4B 약 5.1 GB이며, 받는 중에는 <strong>취소</strong>, 설치 후에는 <strong>Finder에서 보기</strong> 로 파일 위치를 열 수 있습니다.</li>
 </ul>
 <h3 id="실시간-번역-다중-대상">실시간 번역 (다중 대상)</h3>
 <ul>
@@ -606,7 +607,7 @@
 <h3 id="ai-교정-세션-종료-후">AI 교정 (세션 종료 후)</h3>
 <ul>
 <li><strong>화자·언어 자동 교정</strong> — 녹음이 끝나면 온디바이스 LLM이 대화를 읽고 명백한 화자 오분리·잘못된 언어 줄을 보수적으로 바로잡습니다. 화자 교정은 <strong>한 번에 되돌릴 수 있습니다.</strong></li>
-<li>번역·요약 모델(DNA3.0-4B)이 있어야 씁니다.</li>
+<li>하드웨어에 맞게 선택된 DNA3.0 번역·요약 모델이 있어야 씁니다.</li>
 </ul>
 <hr>
 <h2 id="단어장-개인-단어장">단어장 (개인 단어장)</h2>
@@ -624,17 +625,50 @@
 <li><strong>모델 재다운로드</strong> — 모델을 다시 받습니다.</li>
 <li><strong>Finder에서 보기</strong> — 모델 파일 위치를 엽니다.</li>
 </ul>
-<blockquote>번역 모델(DNA3.0-4B)은 <strong>번역</strong> 탭에서 관리합니다.</blockquote>
+<blockquote>선택된 DNA3.0 번역 모델은 <strong>번역</strong> 탭에서 관리합니다.</blockquote>
 <blockquote><strong>시스템 받아쓰기</strong>는 추후 제공 예정이라, 현재 베타에는 <strong>받아쓰기 탭이 없습니다.</strong> (<strong>시스템 받아쓰기 (추후 제공)</strong> 참고.)</blockquote></section>
 <section id="ko-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">오픈소스 라이선스</h1><p>Madi는 대부분 자체 개발한 코드로 이루어져 있지만, 일부 서드파티 구성요소를 <strong>Apache License 2.0</strong> 하에 사용합니다. 라이선스가 요구하는 저작권·귀속(attribution) 고지는 그대로 유지합니다.</p>
 <h2 id="apache-license-2-0-구성요소">Apache License 2.0 구성요소</h2>
-<table><thead><tr><th>구성요소</th><th>Madi에서의 용도</th><th>출처</th><th>라이선스</th></tr></thead><tbody><tr><td><strong>DNA3.0-4B</strong> (dnotitia · Qwen3.5-4B 기반)</td><td>온디바이스 번역 및 회의 요약·질의응답</td><td><code>dnotitia/DNA3.0-4B</code> (베이스 <code>Qwen/Qwen3.5-4B</code>)</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>화자 분리(음성 임베딩)</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
+<table><thead><tr><th>구성요소</th><th>Madi에서의 용도</th><th>출처</th><th>라이선스</th></tr></thead><tbody><tr><td><strong>DNA3.0-2B</strong> (dnotitia · Qwen3.5-2B 기반)</td><td>8GB Mac 온디바이스 번역 및 회의 요약·질의응답</td><td><code>dnotitia/DNA3.0-2B</code> (베이스 <code>Qwen/Qwen3.5-2B</code>)</td><td>Apache-2.0</td></tr><tr><td><strong>DNA3.0-4B</strong> (dnotitia · Qwen3.5-4B 기반)</td><td>온디바이스 번역 및 회의 요약·질의응답</td><td><code>dnotitia/DNA3.0-4B</code> (베이스 <code>Qwen/Qwen3.5-4B</code>)</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>화자 분리(음성 임베딩)</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
 <ul>
-<li><strong>DNA3.0-4B</strong> — 디노티시아(dnotitia)가 Qwen3.5-4B를 한국어 중심으로 후처리 학습한 온디바이스 LLM입니다. 실시간 번역과 회의 요약·질의응답에 사용됩니다. 베이스 모델인 Qwen3.5-4B(Alibaba) 역시 Apache-2.0입니다.</li>
+<li><strong>DNA3.0-2B / 4B</strong> — 디노티시아(dnotitia)가 Qwen3.5를 한국어 중심으로 후처리 학습한 온디바이스 LLM입니다. 실시간 번역과 회의 요약·질의응답에 사용되며, 각 베이스 모델(Alibaba)도 Apache-2.0입니다.</li>
 <li><strong>WeSpeaker</strong> — ResNet34 화자 임베딩 모델로, 누가 언제 말했는지 구분하는 화자 분리에 사용됩니다.</li>
 </ul>
 <p>Apache License 2.0 전문: <a href="https://www.apache.org/licenses/LICENSE-2.0">apache.org/licenses/LICENSE-2.0</a></p>
-<blockquote>그 밖에 번들되는 구성요소를 포함한 전체 서드파티 고지는 저장소의 <code>NOTICE</code> 및 <code>THIRD_PARTY_LICENSES.md</code>에서 확인할 수 있습니다.</blockquote></section><footer class="foot">모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.</footer></main></div>
+<blockquote>그 밖에 번들되는 구성요소를 포함한 전체 서드파티 고지는 저장소의 <code>NOTICE</code> 및 <code>THIRD_PARTY_LICENSES.md</code>에서 확인할 수 있습니다.</blockquote></section>
+<section id="ko-11-eight-gb-guide" class="doc"><div class="doc-num">11</div><h1 class="doc-title">8GB Mac 사용 가이드</h1><blockquote>Madi가 8GB급 Mac을 감지하면 이 문서를 최초 한 번 자동으로 엽니다. 이후에는 <strong>도움말 → 8GB Mac 사용 가이드</strong>에서 언제든 다시 볼 수 있습니다.</blockquote>
+<h2 id="자동으로-적용되는-저메모리-프로필">자동으로 적용되는 저메모리 프로필</h2>
+<p>별도 설정 없이 다음 정책이 적용됩니다.</p>
+<ul>
+<li><strong>DNA3.0-2B 번역 모델</strong> — 4B 대신 2B를 선택합니다. 다운로드는 약 <strong>1.31 GB</strong>, 엔진 프로세스의 실측 물리 메모리는 약 <strong>2.4 GB</strong>입니다(4B 실측 약 5.1 GB 대비 53% 감소).</li>
+<li><strong>확정 자막 우선</strong> — 말하는 중의 임시 번역보다 확정된 전사 줄을 먼저 번역합니다.</li>
+<li><strong>대기열 합치기</strong> — 같은 줄이 다시 인식되면 오래된 번역 요청을 버리고 최신 문장 하나만 남깁니다.</li>
+<li><strong>4턴 대기 상한</strong> — 실시간 화면은 최신 번역을 따라가며, 밀린 확정 줄은 녹음 종료 후 다시 채웁니다.</li>
+<li><strong>저메모리 Whisper 경로</strong> — 큰 encoder 캐시를 보존하지 않아 메모리 압박과 swap을 줄입니다.</li>
+</ul>
+<p>이 정책은 품질을 숨기지 않습니다. 2B는 4B보다 작아 어려운 문장에서는 번역 표현이 덜 정확할 수 있습니다. Madi는 원문 반복, 잘못된 문자 체계, <code>&lt;think&gt;</code> 누출과 반복 폭주를 감지해 한 번 다시 생성하고, 그래도 잘못되면 틀린 번역을 표시하지 않습니다.</p>
+<h2 id="실시간-통역-권장-설정">실시간 통역 권장 설정</h2>
+<ol>
+<li>출력 언어는 가능하면 <strong>하나만</strong> 고릅니다.</li>
+<li>대면 통역이라면 <strong>한국어 + 상대 언어 하나</strong>만 켭니다. 줄마다 실제 번역 대상은 하나가 되어 가장 효율적입니다.</li>
+<li>처음에는 <strong>보통(7초)</strong> 으로 시작합니다. 원문 경계가 더 중요하면 <strong>정확(10초)</strong> 을 씁니다.</li>
+<li>장시간 통역 중에는 브라우저의 많은 탭, 대형 IDE, 다른 로컬 LLM처럼 메모리를 많이 쓰는 앱을 닫습니다.</li>
+<li>“번역 중 · N줄 대기”가 보이면 멈춘 것이 아닙니다. 확정 자막이 우선 처리되고 있으며 오래된 임시 요청은 자동으로 정리됩니다.</li>
+</ol>
+<h2 id="무엇을-기대하면-되나요">무엇을 기대하면 되나요?</h2>
+<ul>
+<li><strong>전사와 화자 분리만 사용</strong>하면 번역 모델을 내려받거나 실행하지 않습니다.</li>
+<li><strong>번역·요약·AI 교정</strong>을 처음 켤 때 8GB용 2B 모델을 한 번 내려받습니다.</li>
+<li>실시간 번역 중 오래된 확정 줄이 화면에서 늦어질 수 있지만, 녹음을 끝내면 저장할 기록을 위해 다시 번역합니다.</li>
+<li>메모리 압박이 심하면 macOS의 swap 때문에 전사와 번역이 함께 느려질 수 있습니다. 이때는 출력 언어 수와 다른 앱의 메모리 사용량부터 줄이세요.</li>
+</ul>
+<h2 id="문제를-확인할-때">문제를 확인할 때</h2>
+<ul>
+<li><strong>설정(⌘,) → 번역</strong>에서 <code>DNA3.0-2B · ~1.3 GB</code>가 표시되는지 확인합니다.</li>
+<li>모델을 아직 받지 않았다면 같은 화면의 <strong>번역 모델 다운로드</strong>를 누릅니다.</li>
+<li>번역 없이도 전사·화자 분리는 정상 동작해야 합니다.</li>
+<li>문제가 계속되면 도움말의 사용자 매뉴얼과 업데이트 화면에서 현재 버전을 확인하세요.</li>
+</ul></section><footer class="foot">모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.</footer></main></div>
 <div class="lang-pane" data-lang="en" hidden><nav class="toc"><div class="toc-h">Contents</div><a class="nav-link" data-target="en-01-getting-started"><span class="nav-num">01</span>Getting started</a>
 <a class="nav-link" data-target="en-02-recording"><span class="nav-num">02</span>Recording and transcription</a>
 <a class="nav-link" data-target="en-03-speakers"><span class="nav-num">03</span>Speakers</a>
@@ -644,7 +678,8 @@
 <a class="nav-link" data-target="en-07-workspace"><span class="nav-num">07</span>Workspace and export</a>
 <a class="nav-link" data-target="en-08-dictation"><span class="nav-num">08</span>System dictation (coming later)</a>
 <a class="nav-link" data-target="en-09-settings"><span class="nav-num">09</span>Settings</a>
-<a class="nav-link" data-target="en-10-open-source"><span class="nav-num">10</span>Open-Source Licenses</a></nav><main class="content"><section id="en-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">Getting started</h1><p>Welcome to Madi. Madi transcribes and translates your meetings <strong>entirely on this Mac</strong>. Live transcription, audio and video file transcription, speaker separation, on-device translation — every step happens inside your own machine.</p>
+<a class="nav-link" data-target="en-10-open-source"><span class="nav-num">10</span>Open-Source Licenses</a>
+<a class="nav-link" data-target="en-11-eight-gb-guide"><span class="nav-num">11</span>8 GB Mac guide</a></nav><main class="content"><section id="en-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">Getting started</h1><p>Welcome to Madi. Madi transcribes and translates your meetings <strong>entirely on this Mac</strong>. Live transcription, audio and video file transcription, speaker separation, on-device translation — every step happens inside your own machine.</p>
 <h2 id="what-madi-does">What Madi does</h2>
 <ul>
 <li><strong>Live transcription</strong> — listens to your mic or meeting audio and puts text on screen almost as fast as you speak.</li>
@@ -660,19 +695,19 @@
 <h2 id="about-the-models">About the models</h2>
 <p>Madi uses two kinds of AI model.</p>
 <ul>
-<li><strong>Whisper speech model</strong> — handles transcription. <strong>Bundled with the app</strong>, nothing to download.</li>
-<li><strong>DNA3.0-4B language model (~2.6 GB)</strong> — powers <strong>translation</strong>, <strong>AI correction</strong>, and <strong>summary / Q&amp;A</strong>. To keep the app small, it is <strong>downloaded the first time you use it</strong>.</li>
+<li><strong>Whisper speech model (~867 MB)</strong> — handles transcription. The standard DMG downloads it once on first launch.</li>
+<li><strong>DNA3.0 language model</strong> — powers <strong>translation</strong>, <strong>AI correction</strong>, and <strong>summary / Q&amp;A</strong>. Madi automatically selects 2B (~1.31 GB) on an 8 GB Mac and quality-first 4B (~2.78 GB) on 16 GB or more; it is <strong>downloaded the first time you use it</strong>.</li>
 <ul>
 <li>Where: <strong>Settings (⌘,) → Translation</strong>, the "Download translation model" button.</li>
-<li>About <strong>2.6 GB</strong> to download, and the same in disk space.</li>
+<li>Only the selected model is downloaded, using the same amount of disk space.</li>
 </ul>
 </ul>
 <p>If you don't use translation, summary or Q&amp;A you never need this model. Transcription and speaker separation run entirely on the bundled Whisper model.</p>
 <h2 id="about-memory-honestly">About memory (honestly)</h2>
 <ul>
-<li><strong>8 GB Mac (e.g. M1 MacBook Air)</strong> — transcription and speaker separation run comfortably.</li>
-<li><strong>Translation adds about 3 GB.</strong> It works on an 8 GB Mac, but memory gets tight.</li>
-<li><strong>Live preview</strong> adds roughly another 830 MB.</li>
+<li><strong>8 GB Mac (e.g. M1 MacBook Air)</strong> — Madi automatically uses DNA3.0-2B and a four-turn translation horizon. The measured translation-engine footprint is about 2.4 GB.</li>
+<li><strong>16 GB and above</strong> — Madi uses quality-first DNA3.0-4B (measured at about 5.1 GB).</li>
+<li><strong>Live preview</strong> shares the committed Whisper process; it no longer launches a second 830 MB model.</li>
 </ul>
 <h2 id="permissions-madi-may-ask-for">Permissions Madi may ask for</h2>
 <p>Madi doesn't ask for everything up front — it requests each permission <strong>the first time you use that feature</strong>.</p>
@@ -690,7 +725,7 @@
 <li>Watch the live transcript appear in the middle of the window.</li>
 <li>Press <strong>Stop</strong> to wrap up. If auto-save is on, the transcript is written to a file.</li>
 </ol>
-<blockquote>To translate, first download the translation model (~2.6 GB) in <strong>Settings (⌘,) → Translation</strong>.</blockquote>
+<blockquote>To translate, download the hardware-selected model in <strong>Settings (⌘,) → Translation</strong>. On an 8 GB Mac, Madi opens the dedicated guide once.</blockquote>
 <h2 id="the-window">The window</h2>
 <p>Once recording starts, the window splits into three columns.</p>
 <ul>
@@ -848,7 +883,7 @@
 <ul>
 <li>Toggle it under <strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong> (Settings → Translation → AI correction (after session)), switch <strong>화자·언어 자동 교정</strong> (Auto-correct speakers and language).</li>
 <li>When a correction is applied, a note appears above the transcript with a <strong>화자 교정 되돌리기</strong> (Undo speaker correction) button — <strong>one click reverts all of it.</strong></li>
-<li>Requires the translation model (DNA3.0-4B).</li>
+<li>Requires the hardware-selected DNA3.0 translation model.</li>
 </ul>
 <h2 id="overlap-markers">Overlap markers</h2>
 <p>When two people talk at once, the <strong>상세</strong> (Detail) view shows a <strong>⟨+name 겹침⟩</strong> (overlap) marker naming the second speaker who cut in.</p>
@@ -857,16 +892,16 @@
 <li>Overlap markers appear <strong>only</strong> in the <strong>상세</strong> (Detail) view. Switch from <strong>내용 → 상세</strong> at the top of the window.</li>
 <li>Requires <strong>중첩 발화 감지</strong> (Overlapping speech detection) in <strong>설정 (⌘,) → 녹음 → 화자</strong>.</li>
 </ul></section>
-<section id="en-04-translation" class="doc"><div class="doc-num">04</div><h1 class="doc-title">Live translation and interpreting</h1><p>Madi's translation runs 100% on your device — no cloud, no account. While a meeting is in progress, each spoken line is translated into Korean, English, Japanese and/or Chinese and shown right beneath the original. Everything is handled by the on-device LLM (DNA3.0-4B).</p>
+<section id="en-04-translation" class="doc"><div class="doc-num">04</div><h1 class="doc-title">Live translation and interpreting</h1><p>Madi's translation runs 100% on your device — no cloud, no account. While a meeting is in progress, each spoken line is translated into Korean, English, Japanese and/or Chinese and shown right beneath the original. Madi automatically uses DNA3.0-2B on an 8 GB Mac and DNA3.0-4B on 16 GB or more.</p>
 <blockquote>The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.</blockquote>
 <h2 id="first-download-the-translation-model">First: download the translation model</h2>
-<p>Translation needs a separate model (DNA3.0-4B, ~2.6 GB) that isn't bundled with the app. You download it once.</p>
+<p>Translation needs a separate model that isn't bundled with the app. You download DNA3.0-2B (~1.31 GB) once on an 8 GB Mac, or DNA3.0-4B (~2.78 GB) on 16 GB or more.</p>
 <ol>
 <li>Open <strong>설정 (⌘,) → 번역</strong> (Settings → Translation).</li>
 <li>Press <strong>번역 모델 다운로드</strong> (Download translation model).</li>
 <li>When it finishes, the translation options become available.</li>
 </ol>
-<p>It needs about 3 GB of additional memory while in use. Before the model is installed the toggles are disabled and you'll see "번역 모델을 먼저 다운로드하세요." (Download the translation model first.)</p>
+<p>The measured engine-process footprint is about 2.4 GB for 2B and 5.1 GB for 4B. Before the model is installed the toggles are disabled and you'll see "번역 모델을 먼저 다운로드하세요." (Download the translation model first.)</p>
 <blockquote><strong>If you don't see the 번역 tab</strong> — your build doesn't include the translation engine, and translation isn't available at all.</blockquote>
 <h2 id="choosing-output-languages">Choosing output languages</h2>
 <p>Two places, same setting — use whichever is handy.</p>
@@ -901,7 +936,7 @@
 <h2 id="latency-and-translation-quality">Latency and translation quality</h2>
 <p>With <strong>2 or more</strong> output languages, boundary errors in the source line would propagate into every language — so the response speed drops to a floor of <strong>보통 (7초)</strong> (Normal, 7 s). If you had picked <strong>빠름 (5초)</strong> (Fast, 5 s), it automatically becomes 7 s. <strong>정확 (10초)</strong> (Accurate, 10 s) still works.</p>
 <blockquote><strong>Exception:</strong> the <strong>bidirectional</strong> mode (<code>한국어</code> + exactly one other language) is not forced, because each line's effective target count drops to one. Captions appear faster in face-to-face interpreting.</blockquote>
-<p>When translation falls behind you'll see <strong>"번역 중 · N줄 대기"</strong> (Translating · N lines queued). It isn't stuck — it's working through them in order (the model translates one line at a time).</p>
+<p>When translation falls behind you'll see <strong>"번역 중 · N줄 대기"</strong> (Translating · N lines queued). It is not stuck: committed transcript lines run before disposable previews, and stale revisions of the same line are coalesced. The 8 GB profile keeps a four-turn live horizon and fills deferred durable lines after recording stops.</p>
 <h2 id="ai-language-correction-after-recording">AI language correction (after recording)</h2>
 <p>When recording ends, the on-device LLM reads the conversation and conservatively fixes <strong>lines transcribed in the wrong language</strong>. Toggle it under <strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong> → <strong>화자·언어 자동 교정</strong>. See <strong>Speakers</strong>.</p>
 <h2 id="caption-overlay">Caption overlay</h2>
@@ -922,10 +957,10 @@
 <li><strong>Patient captions</strong> — large, on an external monitor, for reading at a distance, in the patient's language.</li>
 </ul>
 <p>Turn it on in <strong>설정 (⌘,) → 녹음 → 자막 오버레이 (진료실)</strong> (Settings → Recording → Caption overlay (clinic)). You can set staff text size (14–48 pt), patient text size (24–96 pt), which display to use, and the patient's language. The large sizes are meant to read well across the 1.5–2.5 m between a treatment chair and the display.</p></section>
-<section id="en-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI summary and Q&amp;A</h1><p>When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. Summary and Q&amp;A use the same model as translation (DNA3.0-4B), and <strong>neither the transcript nor the summary ever leaves this Mac.</strong></p>
+<section id="en-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI summary and Q&amp;A</h1><p>When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. Summary and Q&amp;A use the same hardware-selected model as translation (DNA3.0-2B on 8 GB, 4B on 16 GB or more), and <strong>neither the transcript nor the summary ever leaves this Mac.</strong></p>
 <blockquote>The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.</blockquote>
 <h2 id="first-the-translation-summary-model">First: the translation/summary model</h2>
-<p>Summary and Q&amp;A use the same on-device model as translation (DNA3.0-4B, ~2.6 GB). Without it, the <strong>summary button doesn't appear</strong>. See <strong>Live translation</strong> or <strong>Settings</strong> for how to download it.</p>
+<p>Summary and Q&amp;A use the same on-device model as translation. Without it, the <strong>summary button doesn't appear</strong>. See <strong>Live translation</strong> or <strong>Settings</strong> for how to download it.</p>
 <h2 id="generating-a-meeting-summary">Generating a meeting summary</h2>
 <ol>
 <li>After transcription finishes (not while recording), press the <strong>✦ (sparkles) button</strong> in the top toolbar. Or pick <strong>요약 생성</strong> (Generate summary) from the <strong>⌘K</strong> command palette.</li>
@@ -1021,7 +1056,7 @@
 <ul>
 <li><strong>Turn it on:</strong> <strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong> → <strong>화자·언어 자동 교정</strong>.</li>
 <li>When applied, a note appears above the transcript with a <strong>화자 교정 되돌리기</strong> (Undo speaker correction) button — <strong>one click reverts all of it.</strong></li>
-<li>Requires the translation model (DNA3.0-4B).</li>
+<li>Requires the hardware-selected DNA3.0 translation model.</li>
 </ul>
 <h2 id="personal-glossary-learning-from-your-corrections">Personal glossary — learning from your corrections</h2>
 <p>When you fix a line, Madi learns that correction. With the <strong>단어장</strong> (Glossary) switch on, it automatically fixes the same domain term or name in later meetings.</p>
@@ -1115,7 +1150,7 @@
 <ul>
 <li><em>With 2 or more output languages this drops to a floor of <strong>보통 (7초)</strong> — even if you picked Fast, it becomes 7 s. The bidirectional case (<code>한국어</code> plus exactly one other language) is exempt.</em></li>
 </ul>
-<li><strong>실시간 프리뷰</strong> (Live preview) — show interim text in gray before a window is finalized (no accuracy cost, ~830 MB more memory).</li>
+<li><strong>실시간 프리뷰</strong> (Live preview) — show interim text in gray before a window is finalized. It shares the committed Whisper process and does not launch a second model.</li>
 </ul>
 <h3 id="표시-appearance">표시 (Appearance)</h3>
 <ul>
@@ -1149,10 +1184,10 @@
 <h2 id="번역-translation">번역 (Translation)</h2>
 <p>Where on-device translation (Korean, English, Japanese, Chinese) is turned on and off.</p>
 <blockquote>On builds without the translation engine this tab is hidden entirely.</blockquote>
-<h3 id="번역-모델-dna3-0-4b-2-6-gb-translation-model">번역 모델 (DNA3.0-4B · ~2.6 GB) — translation model</h3>
+<h3 id="번역-모델-translation-model-8-gb-dna3-0-2b-1-31-gb-16-gb-dna3-0-4b-2-78-gb">번역 모델 — translation model (8 GB: DNA3.0-2B · ~1.31 GB / 16 GB+: DNA3.0-4B · ~2.78 GB)</h3>
 <ul>
 <li><strong>상태</strong> (Status) — 설치됨 (Installed) / 검증 중 (Verifying) / download progress / 미설치 (Not installed).</li>
-<li><strong>번역 모델 다운로드</strong> (Download translation model) — fetches the model. It isn't bundled; you download it when you want it (~3 GB more memory in use). While downloading you can <strong>취소</strong> (Cancel); once installed, <strong>Finder에서 보기</strong> (Show in Finder) opens its location.</li>
+<li><strong>번역 모델 다운로드</strong> (Download translation model) — fetches the model selected for this Mac. It is not bundled. The measured engine-process footprint is about 2.4 GB for 2B and 5.1 GB for 4B. While downloading you can <strong>취소</strong> (Cancel); once installed, <strong>Finder에서 보기</strong> (Show in Finder) opens its location.</li>
 </ul>
 <h3 id="실시간-번역-다중-대상-live-translation-multi-target">실시간 번역 (다중 대상) — live translation, multi-target</h3>
 <ul>
@@ -1166,7 +1201,7 @@
 <h3 id="ai-교정-세션-종료-후-ai-correction-after-session">AI 교정 (세션 종료 후) — AI correction (after session)</h3>
 <ul>
 <li><strong>화자·언어 자동 교정</strong> (Auto-correct speakers and language) — when recording ends, the on-device LLM reads the conversation and conservatively fixes obvious speaker mis-splits and wrong-language lines. Speaker corrections can be <strong>undone in one click</strong>.</li>
-<li>Requires the translation/summary model (DNA3.0-4B).</li>
+<li>Requires the hardware-selected DNA3.0 translation/summary model.</li>
 </ul>
 <hr>
 <h2 id="단어장-glossary">단어장 (Glossary)</h2>
@@ -1184,17 +1219,50 @@
 <li><strong>모델 재다운로드</strong> (Re-download model) — fetch it again.</li>
 <li><strong>Finder에서 보기</strong> (Show in Finder) — open the model's location.</li>
 </ul>
-<blockquote>The translation model (DNA3.0-4B) is managed on the <strong>번역</strong> (Translation) tab.</blockquote>
+<blockquote>The selected DNA3.0 translation model is managed on the <strong>번역</strong> (Translation) tab.</blockquote>
 <blockquote><strong>System dictation</strong> is coming later, so the current beta has <strong>no 받아쓰기 (Dictation) tab.</strong> (See <strong>System dictation (coming later)</strong>.)</blockquote></section>
 <section id="en-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">Open-Source Licenses</h1><p>Madi is almost entirely original code, but it uses a few third-party components under the <strong>Apache License 2.0</strong>. Their copyright and attribution notices are retained as the license requires.</p>
 <h2 id="apache-license-2-0-components">Apache License 2.0 components</h2>
-<table><thead><tr><th>Component</th><th>Use in Madi</th><th>Source</th><th>License</th></tr></thead><tbody><tr><td><strong>DNA3.0-4B</strong> (dnotitia · Qwen3.5-4B base)</td><td>On-device translation and meeting summary / Q&amp;A</td><td><code>dnotitia/DNA3.0-4B</code> (base <code>Qwen/Qwen3.5-4B</code>)</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>Speaker diarization (voice embedding)</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
+<table><thead><tr><th>Component</th><th>Use in Madi</th><th>Source</th><th>License</th></tr></thead><tbody><tr><td><strong>DNA3.0-2B</strong> (dnotitia · Qwen3.5-2B base)</td><td>8 GB Mac on-device translation and meeting summary / Q&amp;A</td><td><code>dnotitia/DNA3.0-2B</code> (base <code>Qwen/Qwen3.5-2B</code>)</td><td>Apache-2.0</td></tr><tr><td><strong>DNA3.0-4B</strong> (dnotitia · Qwen3.5-4B base)</td><td>On-device translation and meeting summary / Q&amp;A</td><td><code>dnotitia/DNA3.0-4B</code> (base <code>Qwen/Qwen3.5-4B</code>)</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>Speaker diarization (voice embedding)</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
 <ul>
-<li><strong>DNA3.0-4B</strong> — an on-device LLM from dnotitia, post-trained on Qwen3.5-4B with a focus on Korean. It powers live translation and meeting summary / Q&amp;A. Its base model, Qwen3.5-4B (Alibaba), is also Apache-2.0.</li>
+<li><strong>DNA3.0-2B / 4B</strong> — on-device LLMs from dnotitia, post-trained from Qwen3.5 with a focus on Korean. They power live translation and meeting summary / Q&amp;A; both Alibaba base models are also Apache-2.0.</li>
 <li><strong>WeSpeaker</strong> — a ResNet34 speaker-embedding model, used for diarization (telling who spoke when).</li>
 </ul>
 <p>Full Apache License 2.0 text: <a href="https://www.apache.org/licenses/LICENSE-2.0">apache.org/licenses/LICENSE-2.0</a></p>
-<blockquote>Complete third-party notices, including all other bundled components, are in the repository's <code>NOTICE</code> and <code>THIRD_PARTY_LICENSES.md</code>.</blockquote></section><footer class="foot">Everything runs on this Mac — transcripts, translation and summaries never leave the device.</footer></main></div>
+<blockquote>Complete third-party notices, including all other bundled components, are in the repository's <code>NOTICE</code> and <code>THIRD_PARTY_LICENSES.md</code>.</blockquote></section>
+<section id="en-11-eight-gb-guide" class="doc"><div class="doc-num">11</div><h1 class="doc-title">8 GB Mac guide</h1><blockquote>Madi opens this document once when it detects an 8 GB-class Mac. Reopen it any time from <strong>Help → 8 GB Mac Guide</strong>.</blockquote>
+<h2 id="the-low-memory-profile-madi-applies-automatically">The low-memory profile Madi applies automatically</h2>
+<p>No manual tuning is required.</p>
+<ul>
+<li><strong>DNA3.0-2B translation model</strong> — Madi selects 2B instead of 4B. The download is about <strong>1.31 GB</strong> and the measured engine process footprint is about <strong>2.4 GB</strong> (53% below the measured 5.1 GB 4B process).</li>
+<li><strong>Committed captions first</strong> — finalized transcript lines translate before disposable in-progress previews.</li>
+<li><strong>Queue coalescing</strong> — when recognition revises a line, the stale translation request is replaced by the newest text.</li>
+<li><strong>Four-turn live horizon</strong> — the screen follows current speech; shed committed lines are translated again after recording stops.</li>
+<li><strong>Low-memory Whisper path</strong> — Madi does not retain the large encoder cache, reducing memory pressure and swap.</li>
+</ul>
+<p>This profile does not hide the model tradeoff. The smaller 2B model can choose less accurate wording on difficult sentences. Madi detects source echoes, visibly wrong scripts, leaked <code>&lt;think&gt;</code> framing, and runaway repetition, retries once, and suppresses a still-invalid translation rather than displaying it as correct.</p>
+<h2 id="recommended-live-interpreting-setup">Recommended live-interpreting setup</h2>
+<ol>
+<li>Select <strong>one output language</strong> whenever possible.</li>
+<li>For face-to-face interpreting, enable <strong>Korean plus one counterpart language</strong>. Each line then has only one effective target.</li>
+<li>Start with <strong>Normal (7 s)</strong>. Use <strong>Accurate (10 s)</strong> when clean source boundaries matter more than immediacy.</li>
+<li>During long sessions, close memory-heavy browser tabs, large IDEs, and other local LLMs.</li>
+<li>“Translating · N lines queued” does not mean the engine is stuck. Final captions are running first and stale preview work is being discarded.</li>
+</ol>
+<h2 id="what-to-expect">What to expect</h2>
+<ul>
+<li><strong>Transcription and speaker separation alone</strong> never download or launch the translation model.</li>
+<li>The first use of <strong>translation, summary, or AI correction</strong> downloads the 8 GB 2B model once.</li>
+<li>An older finalized line can appear late during live translation, but Madi retries deferred durable lines after recording stops.</li>
+<li>Under severe memory pressure, macOS swap can slow transcription and translation together. Reduce output languages and other apps' memory use first.</li>
+</ul>
+<h2 id="if-something-looks-wrong">If something looks wrong</h2>
+<ul>
+<li>In <strong>Settings (⌘,) → Translation</strong>, confirm that <code>DNA3.0-2B · ~1.3 GB</code> is shown.</li>
+<li>If it is not installed, use <strong>Download translation model</strong> on that screen.</li>
+<li>Transcription and speaker separation should continue to work without translation.</li>
+<li>Use the Help manual and update screen to confirm the installed Madi version.</li>
+</ul></section><footer class="foot">Everything runs on this Mac — transcripts, translation and summaries never leave the device.</footer></main></div>
 <div class="lang-pane" data-lang="ja" hidden><nav class="toc"><div class="toc-h">目次</div><a class="nav-link" data-target="ja-01-getting-started"><span class="nav-num">01</span>はじめに</a>
 <a class="nav-link" data-target="ja-02-recording"><span class="nav-num">02</span>録音と文字起こし</a>
 <a class="nav-link" data-target="ja-03-speakers"><span class="nav-num">03</span>話者</a>
@@ -1204,7 +1272,8 @@
 <a class="nav-link" data-target="ja-07-workspace"><span class="nav-num">07</span>ワークスペースとエクスポート</a>
 <a class="nav-link" data-target="ja-08-dictation"><span class="nav-num">08</span>システムディクテーション（音声入力・今後提供予定）</a>
 <a class="nav-link" data-target="ja-09-settings"><span class="nav-num">09</span>設定</a>
-<a class="nav-link" data-target="ja-10-open-source"><span class="nav-num">10</span>オープンソースライセンス</a></nav><main class="content"><section id="ja-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">はじめに</h1><p>Madi へようこそ。Madi は会議を<strong>すべてこの Mac の中で</strong>文字起こしし、翻訳するアプリです。リアルタイムの文字起こし、音声・動画ファイルの文字起こし、話者分離、オンデバイス翻訳まで — すべての処理があなた自身の Mac の中で行われます。</p>
+<a class="nav-link" data-target="ja-10-open-source"><span class="nav-num">10</span>オープンソースライセンス</a>
+<a class="nav-link" data-target="ja-11-eight-gb-guide"><span class="nav-num">11</span>8 GB Mac 利用ガイド</a></nav><main class="content"><section id="ja-01-getting-started" class="doc"><div class="doc-num">01</div><h1 class="doc-title">はじめに</h1><p>Madi へようこそ。Madi は会議を<strong>すべてこの Mac の中で</strong>文字起こしし、翻訳するアプリです。リアルタイムの文字起こし、音声・動画ファイルの文字起こし、話者分離、オンデバイス翻訳まで — すべての処理があなた自身の Mac の中で行われます。</p>
 <h2 id="madi">Madi でできること</h2>
 <ul>
 <li><strong>リアルタイム文字起こし</strong> — マイクや会議の音声を聞き取り、話し終わるとほぼ同時に画面へ文字が表示されます。</li>
@@ -1220,19 +1289,19 @@
 <h2 id="">モデルについて</h2>
 <p>Madi は 2 種類の AI モデルを使用します。</p>
 <ul>
-<li><strong>Whisper 音声モデル</strong> — 文字起こしを担当します。<strong>アプリに標準で同梱</strong>されており、別途ダウンロードする必要はありません。</li>
-<li><strong>DNA3.0-4B 言語モデル（約 2.6 GB）</strong> — <strong>翻訳</strong>、<strong>AI 修正</strong>、<strong>要約・質疑応答</strong>に使われます。アプリを軽く保つため、<strong>初めて使うときにダウンロード</strong>します。</li>
+<li><strong>Whisper 音声モデル（約 867 MB）</strong> — 文字起こしを担当します。標準 DMG では初回起動時に一度ダウンロードします。</li>
+<li><strong>DNA3.0 言語モデル</strong> — <strong>翻訳</strong>、<strong>AI 修正</strong>、<strong>要約・質疑応答</strong>に使われます。8 GB Mac では 2B（約 1.31 GB）、16 GB 以上では品質優先の 4B（約 2.78 GB）を自動選択し、<strong>初めて使うときにダウンロード</strong>します。</li>
 <ul>
 <li>入手先: <strong>設定（⌘,）→ 翻訳</strong>の「翻訳モデルをダウンロード」ボタン。</li>
-<li>ダウンロードは約 <strong>2.6 GB</strong>、ディスク容量も同じだけ必要です。</li>
+<li>選択されたモデルだけをダウンロードし、同じだけのディスク容量が必要です。</li>
 </ul>
 </ul>
 <p>翻訳・要約・質疑応答を使わないのであれば、このモデルは不要です。文字起こしと話者分離は、同梱の Whisper モデルだけで完全に動作します。</p>
 <h2 id="">メモリについて（正直なところ）</h2>
 <ul>
-<li><strong>8 GB の Mac（例: M1 MacBook Air）</strong> — 文字起こしと話者分離は快適に動作します。</li>
-<li><strong>翻訳を使うと約 3 GB が追加で必要になります。</strong> 8 GB の Mac でも使えますが、メモリの余裕は少なくなります。</li>
-<li><strong>リアルタイムプレビュー</strong>を使うと、さらに約 830 MB 必要になります。</li>
+<li><strong>8 GB の Mac（例: M1 MacBook Air）</strong> — DNA3.0-2B と最大 4 ターンの翻訳待機を自動適用します。翻訳エンジンの実測物理メモリは約 2.4 GB です。</li>
+<li><strong>16 GB 以上</strong> — 翻訳品質を優先して DNA3.0-4B を使います（実測約 5.1 GB）。</li>
+<li><strong>リアルタイムプレビュー</strong>は確定文字起こしと同じ Whisper プロセスを共有し、2 個目の 830 MB モデルを起動しません。</li>
 </ul>
 <h2 id="madi">Madi が求めることのある権限</h2>
 <p>Madi は必要な権限を最初にまとめて求めることはせず、<strong>その機能を初めて使うとき</strong>に必要なものだけを要求します。</p>
@@ -1250,7 +1319,7 @@
 <li>ウィンドウ中央にリアルタイムの文字起こしが表示されるのを確認します。</li>
 <li><strong>停止</strong>を押して終了します。自動保存がオンの場合、文字起こしはファイルに保存されます。</li>
 </ol>
-<blockquote>翻訳するには、まず<strong>設定（⌘,）→ 翻訳</strong>で翻訳モデル（約 2.6 GB）をダウンロードしてください。</blockquote>
+<blockquote>翻訳するには、まず<strong>設定（⌘,）→ 翻訳</strong>で Mac のメモリに合わせて選択されたモデルをダウンロードしてください。8 GB Mac では専用ガイドが最初の一度だけ自動的に開きます。</blockquote>
 <h2 id="">ウィンドウの構成</h2>
 <p>録音を開始すると、ウィンドウは 3 つの列に分かれます。</p>
 <ul>
@@ -1408,7 +1477,7 @@
 <ul>
 <li><strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong>（設定 → 翻訳 → AI 修正（セッション終了後））の <strong>화자·언어 자동 교정</strong>（話者・言語の自動修正）でオン・オフを切り替えます。</li>
 <li>修正が適用されると、文字起こしの上に案内が表示され、<strong>화자 교정 되돌리기</strong>（話者修正を元に戻す）ボタンが付きます — <strong>1 回のクリックですべて元に戻せます。</strong></li>
-<li>翻訳モデル（DNA3.0-4B）が必要です。</li>
+<li>ハードウェアに合わせて選択された DNA3.0 翻訳モデルが必要です。</li>
 </ul>
 <h2 id="">発言の重なりマーカー</h2>
 <p>2 人が同時に話すと、<strong>상세</strong>（詳細）表示に <strong>⟨+name 겹침⟩</strong>（重なり）マーカーが現れ、割り込んだ 2 人目の話者を示します。</p>
@@ -1417,16 +1486,16 @@
 <li>重なりマーカーは <strong>상세</strong>（詳細）表示で<strong>のみ</strong>表示されます。ウィンドウ上部で <strong>내용 → 상세</strong>（内容 → 詳細）に切り替えてください。</li>
 <li><strong>설정 (⌘,) → 녹음 → 화자</strong>（設定 → 録音 → 話者）の <strong>중첩 발화 감지</strong>（重なり発話の検出）が有効になっている必要があります。</li>
 </ul></section>
-<section id="ja-04-translation" class="doc"><div class="doc-num">04</div><h1 class="doc-title">リアルタイム翻訳・通訳</h1><p>Madi の翻訳は 100% お使いのデバイス上で動作します — クラウドもアカウントも不要です。会議の進行中、話された各行を韓国語・英語・日本語・中国語に翻訳し、原文のすぐ下に表示します。すべての処理はオンデバイスの LLM（DNA3.0-4B）が行います。</p>
+<section id="ja-04-translation" class="doc"><div class="doc-num">04</div><h1 class="doc-title">リアルタイム翻訳・通訳</h1><p>Madi の翻訳は 100% お使いのデバイス上で動作します — クラウドもアカウントも不要です。会議の進行中、話された各行を韓国語・英語・日本語・中国語に翻訳し、原文のすぐ下に表示します。8 GB Mac では DNA3.0-2B、16 GB 以上では DNA3.0-4B を自動的に使用します。</p>
 <blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
 <h2 id="">まず：翻訳モデルをダウンロード</h2>
-<p>翻訳には別途モデル（DNA3.0-4B、約 2.6 GB）が必要で、アプリには同梱されていません。最初に一度だけダウンロードします。</p>
+<p>翻訳には別途モデルが必要で、アプリには同梱されていません。8 GB Mac では DNA3.0-2B（約 1.31 GB）、16 GB 以上では DNA3.0-4B（約 2.78 GB）を最初に一度だけダウンロードします。</p>
 <ol>
 <li><strong>설정 (⌘,) → 번역</strong>（設定 → 翻訳）を開きます。</li>
 <li><strong>번역 모델 다운로드</strong>（翻訳モデルをダウンロード）を押します。</li>
 <li>完了すると、翻訳のオプションが使えるようになります。</li>
 </ol>
-<p>使用中は約 3 GB のメモリが追加で必要になります。モデルをインストールする前はトグルが無効で、「번역 모델을 먼저 다운로드하세요.」（先に翻訳モデルをダウンロードしてください。）と表示されます。</p>
+<p>エンジンプロセスの実測物理メモリは、2B が約 2.4 GB、4B が約 5.1 GB です。モデルをインストールする前はトグルが無効で、「번역 모델을 먼저 다운로드하세요.」（先に翻訳モデルをダウンロードしてください。）と表示されます。</p>
 <blockquote><strong>번역 タブが表示されない場合</strong> — お使いのビルドには翻訳エンジンが含まれておらず、翻訳機能自体を利用できません。</blockquote>
 <h2 id="">出力言語を選ぶ</h2>
 <p>設定は 2 か所にありますが、内容は同じです。使いやすいほうをどうぞ。</p>
@@ -1461,7 +1530,7 @@
 <h2 id="">応答速度と翻訳品質</h2>
 <p>出力言語を <strong>2 つ以上</strong> にすると、原文の行の区切りの誤りがすべての言語に波及してしまうため、応答速度は下限の <strong>보통 (7초)</strong>（標準 7 秒）まで下がります。<strong>빠름 (5초)</strong>（高速 5 秒）を選んでいた場合は、自動的に 7 秒になります。<strong>정확 (10초)</strong>（正確 10 秒）はそのまま使えます。</p>
 <blockquote><strong>例外：</strong> <strong>双方向</strong> モード（<code>한국어</code> + 他の言語ちょうど 1 つだけ）は強制されません。各行の実質的な翻訳対象が 1 つに減るためです。対面通訳では字幕がより速く表示されます。</blockquote>
-<p>翻訳が遅れると、<strong>「번역 중 · N줄 대기」</strong>（翻訳中・N 行待機）と表示されます。止まっているのではなく、順番に処理しているということです（モデルは一度に 1 行ずつ翻訳します）。</p>
+<p>翻訳が遅れると、<strong>「번역 중 · N줄 대기」</strong>（翻訳中・N 行待機）と表示されます。停止しているわけではありません。確定行を暫定プレビューより先に処理し、同じ行の古い要求は最新の文章に統合します。8 GB プロファイルはライブ待機を最大 4 ターンに制限し、後回しになった確定行は録音終了後に補完します。</p>
 <h2 id="ai">AI 言語修正（録音終了後）</h2>
 <p>録音が終わると、オンデバイスの LLM が会話を読み取り、<strong>誤った言語で文字起こしされた行</strong> を控えめに修正します。<strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong>（設定 → 翻訳 → AI 修正（セッション終了後））の <strong>화자·언어 자동 교정</strong>（話者・言語の自動修正）で切り替えます。<strong>話者</strong> を参照してください。</p>
 <h2 id="">字幕オーバーレイ</h2>
@@ -1482,10 +1551,10 @@
 <li><strong>患者字幕</strong> — 外部モニターに大きく、離れた位置から読めるように、患者の言語で。</li>
 </ul>
 <p><strong>설정 (⌘,) → 녹음 → 자막 오버레이 (진료실)</strong>（設定 → 録音 → 字幕オーバーレイ（診察室））でオンにします。スタッフの文字サイズ（14–48 pt）、患者の文字サイズ（24–96 pt）、使用するディスプレイ、患者の言語を設定できます。大きなサイズは、診察チェアとディスプレイの間の 1.5–2.5 m の距離でも読みやすいように設計されています。</p></section>
-<section id="ja-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 要約・質疑応答</h1><p>文字起こしが終わると、オンデバイスの LLM が会議を構造化された要約にまとめ、その内容について自然言語で質問できます。要約と質疑応答は翻訳と同じモデル（DNA3.0-4B）を使い、<strong>文字起こしの内容も要約も、この Mac から外に出ることはありません。</strong></p>
+<section id="ja-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 要約・質疑応答</h1><p>文字起こしが終わると、オンデバイスの LLM が会議を構造化された要約にまとめ、その内容について自然言語で質問できます。要約と質疑応答は翻訳と同じハードウェア向けモデル（8 GB は DNA3.0-2B、16 GB 以上は 4B）を使い、<strong>文字起こしの内容も要約も、この Mac から外に出ることはありません。</strong></p>
 <blockquote>アプリのインターフェースは韓国語です。韓国語の UI ラベルには、以下では日本語の訳を括弧で添えています。</blockquote>
 <h2 id="">まず：翻訳・要約モデル</h2>
-<p>要約と質疑応答は、翻訳と同じオンデバイスモデル（DNA3.0-4B、約 2.6 GB）を使います。これがないと、<strong>要約ボタンが表示されません。</strong> ダウンロード方法は <strong>リアルタイム翻訳・通訳</strong> または <strong>設定</strong> のページを参照してください。</p>
+<p>要約と質疑応答は、翻訳と同じオンデバイスモデルを使います。これがないと、<strong>要約ボタンが表示されません。</strong> ダウンロード方法は <strong>リアルタイム翻訳・通訳</strong> または <strong>設定</strong> のページを参照してください。</p>
 <h2 id="">会議の要約を作成する</h2>
 <ol>
 <li>文字起こしが終わったあと（録音中はできません）、上部ツールバーの <strong>✦（キラキラ）ボタン</strong> を押します。または <strong>⌘K</strong> のコマンドパレットから <strong>요약 생성</strong>（要約を生成）を選びます。</li>
@@ -1581,7 +1650,7 @@
 <ul>
 <li><strong>オンにする：</strong> <strong>설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)</strong>（設定 → 翻訳 → AI 修正（セッション終了後））の <strong>화자·언어 자동 교정</strong>（話者・言語の自動修正）。</li>
 <li>修正が適用されると、文字起こしの上に案内が表示され、<strong>화자 교정 되돌리기</strong>（話者修正を元に戻す）ボタンが付きます — <strong>1 回のクリックですべて元に戻せます。</strong></li>
-<li>翻訳モデル（DNA3.0-4B）が必要です。</li>
+<li>ハードウェアに合わせて選択された DNA3.0 翻訳モデルが必要です。</li>
 </ul>
 <h2 id="">個人用語集 — あなたの修正から学習する</h2>
 <p>文字起こしの 1 行を修正すると、Madi はその修正を学習します。<strong>단어장</strong>（用語集）スイッチをオンにしておくと、次の会議で同じ専門用語や名前の誤認識を自動的に修正します。</p>
@@ -1675,7 +1744,7 @@
 <ul>
 <li><em>出力言語が 2 つ以上の場合は、最低でも <strong>보통 (7초)</strong>（標準 7 秒）まで下がります — 高速を選んでいても自動的に 7 秒になります。ただし、<code>한국어</code> と他の言語 1 つだけを有効にした双方向通訳は例外です。</em></li>
 </ul>
-<li><strong>실시간 프리뷰</strong>（リアルタイムプレビュー）— 区間が確定する前に、途中のテキストをグレーで先に表示します（精度の低下なし、メモリ約 830 MB 追加）。</li>
+<li><strong>실시간 프리뷰</strong>（リアルタイムプレビュー）— 区間が確定する前に、途中のテキストをグレーで先に表示します。確定文字起こしと同じ Whisper プロセスを共有し、2 個目のモデルは起動しません。</li>
 </ul>
 <h3 id="표시">표시（表示）</h3>
 <ul>
@@ -1709,10 +1778,10 @@
 <h2 id="번역">번역（翻訳）</h2>
 <p>オンデバイス翻訳（韓国語・英語・日本語・中国語）のオン・オフを切り替える場所です。</p>
 <blockquote>翻訳エンジンを含まないビルドでは、このタブはまったく表示されません。</blockquote>
-<h3 id="번역-모델-dna3-0-4b-2-6-gb">번역 모델 (DNA3.0-4B · 約 2.6 GB)（翻訳モデル）</h3>
+<h3 id="번역-모델-8-gb-dna3-0-2b-1-31-gb-16-gb-dna3-0-4b-2-78-gb">번역 모델（翻訳モデル：8 GB は DNA3.0-2B · 約 1.31 GB / 16 GB 以上は DNA3.0-4B · 約 2.78 GB）</h3>
 <ul>
 <li><strong>상태</strong>（状態）— 설치됨（インストール済み）/ 검증 중（検証中）/ ダウンロードの進捗率 / 미설치（未インストール）を表示します。</li>
-<li><strong>번역 모델 다운로드</strong>（翻訳モデルをダウンロード）— モデルを取得します。アプリには同梱されておらず、使いたいときにダウンロードします（メモリ約 3 GB 追加）。ダウンロード中は <strong>취소</strong>（キャンセル）、インストール後は <strong>Finder에서 보기</strong>（Finder で表示）でファイルの場所を開けます。</li>
+<li><strong>번역 모델 다운로드</strong>（翻訳モデルをダウンロード）— この Mac に合わせて選択されたモデルを取得します。アプリには同梱されていません。エンジンプロセスの実測物理メモリは 2B が約 2.4 GB、4B が約 5.1 GB です。ダウンロード中は <strong>취소</strong>（キャンセル）、インストール後は <strong>Finder에서 보기</strong>（Finder で表示）でファイルの場所を開けます。</li>
 </ul>
 <h3 id="실시간-번역-다중-대상">실시간 번역 (다중 대상)（リアルタイム翻訳・複数ターゲット）</h3>
 <ul>
@@ -1726,7 +1795,7 @@
 <h3 id="ai-교정-세션-종료-후-ai">AI 교정 (세션 종료 후)（AI 修正・セッション終了後）</h3>
 <ul>
 <li><strong>화자·언어 자동 교정</strong>（話者・言語の自動修正）— 録音が終わると、オンデバイスの LLM が会話を読み取り、明らかな話者の誤分割や言語の誤った行を控えめに修正します。話者の修正は <strong>1 回のクリックで元に戻せます</strong>。</li>
-<li>翻訳・要約モデル（DNA3.0-4B）が必要です。</li>
+<li>ハードウェアに合わせて選択された DNA3.0 翻訳・要約モデルが必要です。</li>
 </ul>
 <hr>
 <h2 id="단어장">단어장（用語集・個人用語集）</h2>
@@ -1744,24 +1813,57 @@
 <li><strong>모델 재다운로드</strong>（モデルを再ダウンロード）— モデルをもう一度取得します。</li>
 <li><strong>Finder에서 보기</strong>（Finder で表示）— モデルファイルの場所を開きます。</li>
 </ul>
-<blockquote>翻訳モデル（DNA3.0-4B）は <strong>번역</strong>（翻訳）タブで管理します。</blockquote>
+<blockquote>選択された DNA3.0 翻訳モデルは <strong>번역</strong>（翻訳）タブで管理します。</blockquote>
 <blockquote><strong>システムディクテーション</strong>は今後提供予定のため、現在のベータには <strong>받아쓰기（ディクテーション）タブがありません。</strong>（<strong>システムディクテーション（音声入力・今後提供予定）</strong> を参照。）</blockquote></section>
 <section id="ja-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">オープンソースライセンス</h1><p>Madi のコードはほぼすべて自社開発ですが、一部のサードパーティコンポーネントを <strong>Apache License 2.0</strong> の下で利用しています。ライセンスが求める著作権表示・帰属（attribution）表示はそのまま保持しています。</p>
 <h2 id="apache-license-2-0">Apache License 2.0 のコンポーネント</h2>
-<table><thead><tr><th>コンポーネント</th><th>Madi での用途</th><th>出典</th><th>ライセンス</th></tr></thead><tbody><tr><td><strong>DNA3.0-4B</strong>（dnotitia・Qwen3.5-4B ベース）</td><td>オンデバイス翻訳および会議の要約・質疑応答</td><td><code>dnotitia/DNA3.0-4B</code>（ベース <code>Qwen/Qwen3.5-4B</code>）</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>話者分離（音声エンベディング）</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
+<table><thead><tr><th>コンポーネント</th><th>Madi での用途</th><th>出典</th><th>ライセンス</th></tr></thead><tbody><tr><td><strong>DNA3.0-2B</strong>（dnotitia・Qwen3.5-2B ベース）</td><td>8 GB Mac のオンデバイス翻訳および会議の要約・質疑応答</td><td><code>dnotitia/DNA3.0-2B</code>（ベース <code>Qwen/Qwen3.5-2B</code>）</td><td>Apache-2.0</td></tr><tr><td><strong>DNA3.0-4B</strong>（dnotitia・Qwen3.5-4B ベース）</td><td>オンデバイス翻訳および会議の要約・質疑応答</td><td><code>dnotitia/DNA3.0-4B</code>（ベース <code>Qwen/Qwen3.5-4B</code>）</td><td>Apache-2.0</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>話者分離（音声エンベディング）</td><td><code>wenet-e2e/wespeaker</code></td><td>Apache-2.0</td></tr></tbody></table>
 <ul>
-<li><strong>DNA3.0-4B</strong> — dnotitia が Qwen3.5-4B を韓国語中心にポストトレーニングしたオンデバイス LLM です。リアルタイム翻訳と会議の要約・質疑応答に使用します。ベースモデルの Qwen3.5-4B（Alibaba）も Apache-2.0 です。</li>
+<li><strong>DNA3.0-2B / 4B</strong> — dnotitia が Qwen3.5 を韓国語中心にポストトレーニングしたオンデバイス LLM です。リアルタイム翻訳と会議の要約・質疑応答に使用し、各ベースモデル（Alibaba）も Apache-2.0 です。</li>
 <li><strong>WeSpeaker</strong> — ResNet34 の話者エンベディングモデルで、誰がいつ話したかを区別する話者分離に使用します。</li>
 </ul>
 <p>Apache License 2.0 の全文: <a href="https://www.apache.org/licenses/LICENSE-2.0">apache.org/licenses/LICENSE-2.0</a></p>
-<blockquote>バンドルされる他のコンポーネントを含む、すべてのサードパーティ表示は、リポジトリの <code>NOTICE</code> および <code>THIRD_PARTY_LICENSES.md</code> に記載されています。</blockquote></section><footer class="foot">すべての処理はこの Mac 内で — 文字起こし・翻訳・要約はデバイスから外に出ません。</footer></main></div></div>
+<blockquote>バンドルされる他のコンポーネントを含む、すべてのサードパーティ表示は、リポジトリの <code>NOTICE</code> および <code>THIRD_PARTY_LICENSES.md</code> に記載されています。</blockquote></section>
+<section id="ja-11-eight-gb-guide" class="doc"><div class="doc-num">11</div><h1 class="doc-title">8 GB Mac 利用ガイド</h1><blockquote>Madi は 8 GB クラスの Mac を検出すると、この文書を最初の一度だけ自動的に開きます。その後は <strong>ヘルプ → 8 GB Mac 利用ガイド</strong> からいつでも開き直せます。</blockquote>
+<h2 id="">自動的に適用される省メモリプロファイル</h2>
+<p>手動で調整する必要はありません。</p>
+<ul>
+<li><strong>DNA3.0-2B 翻訳モデル</strong> — 4B の代わりに 2B を選択します。ダウンロードは約 <strong>1.31 GB</strong>、エンジンプロセスの実測物理メモリは約 <strong>2.4 GB</strong> です（4B の実測約 5.1 GB より 53% 削減）。</li>
+<li><strong>確定字幕を優先</strong> — 発話途中の暫定翻訳より、確定した文字起こし行を先に翻訳します。</li>
+<li><strong>キューの統合</strong> — 同じ行が再認識されると、古い翻訳要求を最新の文章に置き換えます。</li>
+<li><strong>待機は最大 4 ターン</strong> — ライブ画面は最新の発話を追い、後回しになった確定行は録音終了後に再翻訳します。</li>
+<li><strong>省メモリ Whisper 経路</strong> — 大きな encoder キャッシュを保持せず、メモリ圧迫と swap を抑えます。</li>
+</ul>
+<p>小さい 2B モデルは、難しい文で 4B より表現精度が下がる場合があります。Madi は原文の繰り返し、明らかに誤った文字体系、<code>&lt;think&gt;</code> の漏出、同一文の暴走反復を検出して一度だけ再生成し、それでも無効なら誤った翻訳を表示しません。</p>
+<h2 id="">リアルタイム通訳の推奨設定</h2>
+<ol>
+<li>可能であれば出力言語は <strong>1 つ</strong> にします。</li>
+<li>対面通訳では <strong>韓国語 + 相手の言語 1 つ</strong> のみを有効にします。各行の実際の翻訳先が 1 つになり、最も効率的です。</li>
+<li>まず <strong>標準（7 秒）</strong> で始めます。原文の区切りを優先する場合は <strong>正確（10 秒）</strong> を使います。</li>
+<li>長時間の通訳では、多数のブラウザタブ、大規模 IDE、他のローカル LLM などメモリを多く使うアプリを閉じます。</li>
+<li>「翻訳中・N 行待機」と表示されても停止しているわけではありません。確定字幕が先に処理され、古い暫定要求は自動的に整理されます。</li>
+</ol>
+<h2 id="">期待される動作</h2>
+<ul>
+<li><strong>文字起こしと話者分離だけ</strong>なら、翻訳モデルのダウンロードも起動も行いません。</li>
+<li><strong>翻訳・要約・AI 修正</strong>を初めて使うとき、8 GB 用の 2B モデルを一度ダウンロードします。</li>
+<li>ライブ中に古い確定行の翻訳が遅れる場合がありますが、録音終了後に保存用の行を再翻訳します。</li>
+<li>メモリ圧迫が強いと macOS の swap により文字起こしと翻訳が同時に遅くなります。まず出力言語数と他アプリのメモリ使用量を減らしてください。</li>
+</ul>
+<h2 id="">問題を確認するとき</h2>
+<ul>
+<li><strong>設定（⌘,）→ 翻訳</strong>で <code>DNA3.0-2B · ~1.3 GB</code> と表示されることを確認します。</li>
+<li>未インストールなら、同じ画面の <strong>翻訳モデルをダウンロード</strong>を押します。</li>
+<li>翻訳を使わなくても、文字起こしと話者分離は正常に動作するはずです。</li>
+<li>ヘルプのユーザーマニュアルとアップデート画面で、現在の Madi バージョンを確認できます。</li>
+</ul></section><footer class="foot">すべての処理はこの Mac 内で — 文字起こし・翻訳・要約はデバイスから外に出ません。</footer></main></div></div>
 </div>
 <script>
   var TAG={ko:'온디바이스 회의 인텔리전스',en:'On-device meeting intelligence',ja:'オンデバイス会議インテリジェンス'};
   var panes=[].slice.call(document.querySelectorAll('.lang-pane'));
   var host=document.querySelector('.toc-host');
   var tagEl=document.querySelector('[data-tag]');
-  function activate(lang){
+  function activate(lang,resetScroll){
     document.documentElement.lang=lang;
     tagEl.textContent=TAG[lang]||'';
     panes.forEach(function(p){ p.hidden = p.getAttribute('data-lang')!==lang; });
@@ -1769,18 +1871,23 @@
     var pane=panes.filter(function(p){return p.getAttribute('data-lang')===lang;})[0];
     host.innerHTML=''; if(pane){ host.appendChild(pane.querySelector('.toc').cloneNode(true)); }
     wireNav();
-    window.scrollTo(0,0);
+    startSpy();
+    if(resetScroll!==false) window.scrollTo(0,0);
   }
   function wireNav(){
     document.querySelectorAll('.toc-host .nav-link').forEach(function(a){
       a.addEventListener('click',function(){
-        var el=document.getElementById(a.getAttribute('data-target'));
-        if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+        var target=a.getAttribute('data-target');
+        var el=document.getElementById(target);
+        if(el){ history.replaceState(null,'','#'+target); el.scrollIntoView({behavior:'smooth',block:'start'}); }
       });
     });
   }
   document.querySelectorAll('.lang-btn').forEach(function(b){
-    b.addEventListener('click',function(){ activate(b.getAttribute('data-lang')); });
+    b.addEventListener('click',function(){
+      history.replaceState(null,'',location.pathname+location.search);
+      activate(b.getAttribute('data-lang'),true);
+    });
   });
   // scroll-spy: highlight the section in view
   var spy;
@@ -1798,8 +1905,16 @@
     },{rootMargin:'-10% 0px -80% 0px'});
     document.querySelectorAll('.lang-pane:not([hidden]) .doc').forEach(function(s){ spy.observe(s); });
   }
-  var _act=activate; activate=function(l){_act(l);startSpy();};
-  activate('ko');
+  function openHash(){
+    var target=decodeURIComponent(location.hash.replace(/^#/,''));
+    var match=/^(ko|en|ja)-/.exec(target);
+    activate(match ? match[1] : 'ko',!match);
+    if(match){ requestAnimationFrame(function(){
+      var el=document.getElementById(target); if(el) el.scrollIntoView({block:'start'});
+    }); }
+  }
+  window.addEventListener('hashchange',openHash);
+  openHash();
 </script>
 </body>
 </html>

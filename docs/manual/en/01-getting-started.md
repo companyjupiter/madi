@@ -20,18 +20,18 @@ Madi's core promise is **sovereignty**. No audio, no transcript, no translation 
 
 Madi uses two kinds of AI model.
 
-- **Whisper speech model** — handles transcription. **Bundled with the app**, nothing to download.
-- **DNA3.0-4B language model (~2.6 GB)** — powers **translation**, **AI correction**, and **summary / Q&A**. To keep the app small, it is **downloaded the first time you use it**.
+- **Whisper speech model (~867 MB)** — handles transcription. The standard DMG downloads it once on first launch.
+- **DNA3.0 language model** — powers **translation**, **AI correction**, and **summary / Q&A**. Madi automatically selects 2B (~1.31 GB) on an 8 GB Mac and quality-first 4B (~2.78 GB) on 16 GB or more; it is **downloaded the first time you use it**.
   - Where: **Settings (⌘,) → Translation**, the "Download translation model" button.
-  - About **2.6 GB** to download, and the same in disk space.
+  - Only the selected model is downloaded, using the same amount of disk space.
 
 If you don't use translation, summary or Q&A you never need this model. Transcription and speaker separation run entirely on the bundled Whisper model.
 
 ## About memory (honestly)
 
-- **8 GB Mac (e.g. M1 MacBook Air)** — transcription and speaker separation run comfortably.
-- **Translation adds about 3 GB.** It works on an 8 GB Mac, but memory gets tight.
-- **Live preview** adds roughly another 830 MB.
+- **8 GB Mac (e.g. M1 MacBook Air)** — Madi automatically uses DNA3.0-2B and a four-turn translation horizon. The measured translation-engine footprint is about 2.4 GB.
+- **16 GB and above** — Madi uses quality-first DNA3.0-4B (measured at about 5.1 GB).
+- **Live preview** shares the committed Whisper process; it no longer launches a second 830 MB model.
 
 ## Permissions Madi may ask for
 
@@ -51,7 +51,7 @@ If you deny a permission and want it later, open **System Settings → Privacy &
 4. Watch the live transcript appear in the middle of the window.
 5. Press **Stop** to wrap up. If auto-save is on, the transcript is written to a file.
 
-> To translate, first download the translation model (~2.6 GB) in **Settings (⌘,) → Translation**.
+> To translate, download the hardware-selected model in **Settings (⌘,) → Translation**. On an 8 GB Mac, Madi opens the dedicated guide once.
 
 ## The window
 

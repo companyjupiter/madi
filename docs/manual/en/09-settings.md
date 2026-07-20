@@ -32,7 +32,7 @@ How audio is captured, how live transcription behaves, and how things look.
 
 - **반응 속도** (Response speed) — **빠름 (5초)** / **보통 (7초)** / **정확 (10초)** (Fast 5 s / Normal 7 s / Accurate 10 s). Fast puts text on screen more often and feels quicker; Accurate sees more context and reads better.
   - *With 2 or more output languages this drops to a floor of **보통 (7초)** — even if you picked Fast, it becomes 7 s. The bidirectional case (`한국어` plus exactly one other language) is exempt.*
-- **실시간 프리뷰** (Live preview) — show interim text in gray before a window is finalized (no accuracy cost, ~830 MB more memory).
+- **실시간 프리뷰** (Live preview) — show interim text in gray before a window is finalized. It shares the committed Whisper process and does not launch a second model.
 
 ### 표시 (Appearance)
 
@@ -73,10 +73,10 @@ Where on-device translation (Korean, English, Japanese, Chinese) is turned on an
 
 > On builds without the translation engine this tab is hidden entirely.
 
-### 번역 모델 (DNA3.0-4B · ~2.6 GB) — translation model
+### 번역 모델 — translation model (8 GB: DNA3.0-2B · ~1.31 GB / 16 GB+: DNA3.0-4B · ~2.78 GB)
 
 - **상태** (Status) — 설치됨 (Installed) / 검증 중 (Verifying) / download progress / 미설치 (Not installed).
-- **번역 모델 다운로드** (Download translation model) — fetches the model. It isn't bundled; you download it when you want it (~3 GB more memory in use). While downloading you can **취소** (Cancel); once installed, **Finder에서 보기** (Show in Finder) opens its location.
+- **번역 모델 다운로드** (Download translation model) — fetches the model selected for this Mac. It is not bundled. The measured engine-process footprint is about 2.4 GB for 2B and 5.1 GB for 4B. While downloading you can **취소** (Cancel); once installed, **Finder에서 보기** (Show in Finder) opens its location.
 
 ### 실시간 번역 (다중 대상) — live translation, multi-target
 
@@ -90,7 +90,7 @@ Where on-device translation (Korean, English, Japanese, Chinese) is turned on an
 ### AI 교정 (세션 종료 후) — AI correction (after session)
 
 - **화자·언어 자동 교정** (Auto-correct speakers and language) — when recording ends, the on-device LLM reads the conversation and conservatively fixes obvious speaker mis-splits and wrong-language lines. Speaker corrections can be **undone in one click**.
-- Requires the translation/summary model (DNA3.0-4B).
+- Requires the hardware-selected DNA3.0 translation/summary model.
 
 ---
 
@@ -112,6 +112,6 @@ Status and management for the transcription (Whisper) model.
 - **모델 재다운로드** (Re-download model) — fetch it again.
 - **Finder에서 보기** (Show in Finder) — open the model's location.
 
-> The translation model (DNA3.0-4B) is managed on the **번역** (Translation) tab.
+> The selected DNA3.0 translation model is managed on the **번역** (Translation) tab.
 
 > **System dictation** is coming later, so the current beta has **no 받아쓰기 (Dictation) tab.** (See **System dictation (coming later)**.)

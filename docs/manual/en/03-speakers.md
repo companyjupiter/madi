@@ -48,7 +48,7 @@ When recording ends, the on-device LLM reads the conversation and conservatively
 
 - Toggle it under **설정 (⌘,) → 번역 → AI 교정 (세션 종료 후)** (Settings → Translation → AI correction (after session)), switch **화자·언어 자동 교정** (Auto-correct speakers and language).
 - When a correction is applied, a note appears above the transcript with a **화자 교정 되돌리기** (Undo speaker correction) button — **one click reverts all of it.**
-- Requires the translation model (DNA3.0-4B).
+- Requires the hardware-selected DNA3.0 translation model.
 
 ## Overlap markers
 
