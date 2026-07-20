@@ -12,9 +12,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        presentEightGBGuideIfNeeded()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    private func presentEightGBGuideIfNeeded() {
+        let defaults = UserDefaults.standard
+        let revision = defaults.integer(forKey: LowMemoryGuidePolicy.presentedRevisionKey)
+        guard LowMemoryGuidePolicy.shouldPresent(
+            physicalMemory: ProcessInfo.processInfo.physicalMemory,
+            presentedRevision: revision) else { return }
+        let lang = UILanguage(rawValue: defaults.string(forKey: "uiLanguage") ?? "") ?? .ko
+
+        // Let the main window activate first, then surface the bundled offline
+        // document. Mark it seen only when Launch Services accepted the URL.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            if SovereignApp.openManual(
+                sectionID: LowMemoryGuidePolicy.manualSectionID,
+                language: lang) {
+                UserDefaults.standard.set(
+                    LowMemoryGuidePolicy.currentRevision,
+                    forKey: LowMemoryGuidePolicy.presentedRevisionKey)
+            }
+        }
     }
 }
 
@@ -75,7 +97,9 @@ struct SovereignApp: App {
             // Replace the empty default Help menu: bundled user manual +
             // update / info (the latter two open dedicated windows).
             CommandGroup(replacing: .help) {
-                Button(uiLang("Madi 사용자 매뉴얼", "Madi User Manual")) { Self.openManual() }
+                Button(uiLang("Madi 사용자 매뉴얼", "Madi User Manual")) {
+                    Self.openManual(sectionID: "01-getting-started", language: uiLang)
+                }
                     .keyboardShortcut("?", modifiers: .command)
                 Divider()
                 HelpMenuExtras()
@@ -106,10 +130,16 @@ struct SovereignApp: App {
 
     /// Open the bundled, self-contained user manual (Resources/manual/index.html)
     /// in the default browser. Works fully offline.
-    private static func openManual() {
-        if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "manual") {
-            NSWorkspace.shared.open(url)
+    @discardableResult
+    static func openManual(sectionID: String, language: UILanguage) -> Bool {
+        guard let base = Bundle.main.url(
+            forResource: "index", withExtension: "html", subdirectory: "manual"),
+              var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            return false
         }
+        components.fragment = "\(language.rawValue)-\(sectionID)"
+        guard let url = components.url else { return false }
+        return NSWorkspace.shared.open(url)
     }
 }
 
@@ -120,6 +150,15 @@ private struct HelpMenuExtras: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
     var body: some View {
+        if LowMemoryGuidePolicy.isEightGBClass(
+            physicalMemory: ProcessInfo.processInfo.physicalMemory) {
+            Button(uiLang("8GB Mac 사용 가이드", "8 GB Mac Guide", "8 GB Mac 利用ガイド")) {
+                SovereignApp.openManual(
+                    sectionID: LowMemoryGuidePolicy.manualSectionID,
+                    language: uiLang)
+            }
+            Divider()
+        }
         Button(uiLang("업데이트 설치…", "Install Update…")) { openWindow(id: SovereignApp.updateWindowID) }
         Button(uiLang("정보", "About")) { openWindow(id: SovereignApp.infoWindowID) }
     }

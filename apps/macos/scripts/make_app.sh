@@ -81,6 +81,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/CalendarBridge.swift
   "$APP_DIR"/Sovereign/AppInfo/AppVersion.swift
+  "$APP_DIR"/Sovereign/AppInfo/LowMemoryGuidePolicy.swift
   "$APP_DIR"/Sovereign/AppInfo/BetaGate.swift
   "$APP_DIR"/Sovereign/AppInfo/UpdateChecker.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift

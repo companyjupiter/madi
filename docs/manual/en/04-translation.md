@@ -1,18 +1,18 @@
 # Live translation and interpreting
 
-Madi's translation runs 100% on your device — no cloud, no account. While a meeting is in progress, each spoken line is translated into Korean, English, Japanese and/or Chinese and shown right beneath the original. Everything is handled by the on-device LLM (DNA3.0-4B).
+Madi's translation runs 100% on your device — no cloud, no account. While a meeting is in progress, each spoken line is translated into Korean, English, Japanese and/or Chinese and shown right beneath the original. Madi automatically uses DNA3.0-2B on an 8 GB Mac and DNA3.0-4B on 16 GB or more.
 
 > The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
 
 ## First: download the translation model
 
-Translation needs a separate model (DNA3.0-4B, ~2.6 GB) that isn't bundled with the app. You download it once.
+Translation needs a separate model that isn't bundled with the app. You download DNA3.0-2B (~1.31 GB) once on an 8 GB Mac, or DNA3.0-4B (~2.78 GB) on 16 GB or more.
 
 1. Open **설정 (⌘,) → 번역** (Settings → Translation).
 2. Press **번역 모델 다운로드** (Download translation model).
 3. When it finishes, the translation options become available.
 
-It needs about 3 GB of additional memory while in use. Before the model is installed the toggles are disabled and you'll see "번역 모델을 먼저 다운로드하세요." (Download the translation model first.)
+The measured engine-process footprint is about 2.4 GB for 2B and 5.1 GB for 4B. Before the model is installed the toggles are disabled and you'll see "번역 모델을 먼저 다운로드하세요." (Download the translation model first.)
 
 > **If you don't see the 번역 tab** — your build doesn't include the translation engine, and translation isn't available at all.
 
@@ -60,7 +60,7 @@ With **2 or more** output languages, boundary errors in the source line would pr
 
 > **Exception:** the **bidirectional** mode (`한국어` + exactly one other language) is not forced, because each line's effective target count drops to one. Captions appear faster in face-to-face interpreting.
 
-When translation falls behind you'll see **"번역 중 · N줄 대기"** (Translating · N lines queued). It isn't stuck — it's working through them in order (the model translates one line at a time).
+When translation falls behind you'll see **"번역 중 · N줄 대기"** (Translating · N lines queued). It is not stuck: committed transcript lines run before disposable previews, and stale revisions of the same line are coalesced. The 8 GB profile keeps a four-turn live horizon and fills deferred durable lines after recording stops.
 
 ## AI language correction (after recording)
 

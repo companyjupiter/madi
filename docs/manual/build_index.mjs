@@ -221,7 +221,7 @@ const HTML = `<!DOCTYPE html>
   var panes=[].slice.call(document.querySelectorAll('.lang-pane'));
   var host=document.querySelector('.toc-host');
   var tagEl=document.querySelector('[data-tag]');
-  function activate(lang){
+  function activate(lang,resetScroll){
     document.documentElement.lang=lang;
     tagEl.textContent=TAG[lang]||'';
     panes.forEach(function(p){ p.hidden = p.getAttribute('data-lang')!==lang; });
@@ -229,18 +229,23 @@ const HTML = `<!DOCTYPE html>
     var pane=panes.filter(function(p){return p.getAttribute('data-lang')===lang;})[0];
     host.innerHTML=''; if(pane){ host.appendChild(pane.querySelector('.toc').cloneNode(true)); }
     wireNav();
-    window.scrollTo(0,0);
+    startSpy();
+    if(resetScroll!==false) window.scrollTo(0,0);
   }
   function wireNav(){
     document.querySelectorAll('.toc-host .nav-link').forEach(function(a){
       a.addEventListener('click',function(){
-        var el=document.getElementById(a.getAttribute('data-target'));
-        if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+        var target=a.getAttribute('data-target');
+        var el=document.getElementById(target);
+        if(el){ history.replaceState(null,'','#'+target); el.scrollIntoView({behavior:'smooth',block:'start'}); }
       });
     });
   }
   document.querySelectorAll('.lang-btn').forEach(function(b){
-    b.addEventListener('click',function(){ activate(b.getAttribute('data-lang')); });
+    b.addEventListener('click',function(){
+      history.replaceState(null,'',location.pathname+location.search);
+      activate(b.getAttribute('data-lang'),true);
+    });
   });
   // scroll-spy: highlight the section in view
   var spy;
@@ -258,8 +263,16 @@ const HTML = `<!DOCTYPE html>
     },{rootMargin:'-10% 0px -80% 0px'});
     document.querySelectorAll('.lang-pane:not([hidden]) .doc').forEach(function(s){ spy.observe(s); });
   }
-  var _act=activate; activate=function(l){_act(l);startSpy();};
-  activate('ko');
+  function openHash(){
+    var target=decodeURIComponent(location.hash.replace(/^#/,''));
+    var match=/^(ko|en|ja)-/.exec(target);
+    activate(match ? match[1] : 'ko',!match);
+    if(match){ requestAnimationFrame(function(){
+      var el=document.getElementById(target); if(el) el.scrollIntoView({block:'start'});
+    }); }
+  }
+  window.addEventListener('hashchange',openHash);
+  openHash();
 </script>
 </body>
 </html>`;

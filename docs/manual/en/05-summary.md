@@ -1,12 +1,12 @@
 # AI summary and Q&A
 
-When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. Summary and Q&A use the same model as translation (DNA3.0-4B), and **neither the transcript nor the summary ever leaves this Mac.**
+When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. Summary and Q&A use the same hardware-selected model as translation (DNA3.0-2B on 8 GB, 4B on 16 GB or more), and **neither the transcript nor the summary ever leaves this Mac.**
 
 > The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
 
 ## First: the translation/summary model
 
-Summary and Q&A use the same on-device model as translation (DNA3.0-4B, ~2.6 GB). Without it, the **summary button doesn't appear**. See **Live translation** or **Settings** for how to download it.
+Summary and Q&A use the same on-device model as translation. Without it, the **summary button doesn't appear**. See **Live translation** or **Settings** for how to download it.
 
 ## Generating a meeting summary
 

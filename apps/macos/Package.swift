@@ -19,6 +19,7 @@ let package = Package(
             path: "Sovereign",
             sources: [
                 "AppInfo/AppVersion.swift",
+                "AppInfo/LowMemoryGuidePolicy.swift",
                 "Model/AssetManifest.swift",
                 "Transcript/SpeakerID.swift",
                 "Transcript/TranscriptStore.swift",
