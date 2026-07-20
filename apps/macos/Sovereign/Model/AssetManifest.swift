@@ -122,8 +122,9 @@ enum AssetManifest {
         return digest == model.sha256
     }
 
-    static func modelFileIsValid(at url: URL, expectedSize: Int64, expectedSHA256: String) -> Bool {
-        // Release builds should not trust symlinked model paths: the target can
+    /// Full byte-integrity check shared by model and release downloads.
+    static func fileIsValid(at url: URL, expectedSize: Int64, expectedSHA256: String) -> Bool {
+        // Release builds should not trust symlinked download paths: the target can
         // be swapped without changing the link entry the app originally checked.
         guard (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) == nil else {
             return false
@@ -135,6 +136,11 @@ enum AssetManifest {
             return false
         }
         return digest == expectedSHA256
+    }
+
+    /// Compatibility name retained for the existing model downloaders.
+    static func modelFileIsValid(at url: URL, expectedSize: Int64, expectedSHA256: String) -> Bool {
+        fileIsValid(at: url, expectedSize: expectedSize, expectedSHA256: expectedSHA256)
     }
 
     static func sha256(of url: URL) throws -> String {

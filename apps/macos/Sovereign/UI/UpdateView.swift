@@ -1,7 +1,5 @@
-// UpdateView.swift — Help → 업데이트 설치 window. Drives UpdateChecker: checks
-// GitHub Releases on open, then shows one of {up-to-date, newer available with
-// notes + install, downloading, downloaded, failed}. "설치" downloads the DMG and
-// opens it so Finder mounts the drag-to-Applications volume.
+// UpdateView.swift — Help → 업데이트 설치 window. Drives UpdateChecker through
+// CloudFront feed check, download, integrity verification, and Finder handoff.
 
 import SwiftUI
 import AppKit
@@ -42,7 +40,7 @@ struct UpdateView: View {
 
     private var isBusy: Bool {
         switch checker.state {
-        case .checking, .downloading: return true
+        case .checking, .downloading, .verifying: return true
         default: return false
         }
     }
@@ -73,6 +71,11 @@ struct UpdateView: View {
             }
             .padding(.vertical, 4)
 
+        case .verifying:
+            ProgressView(uiLang("다운로드 무결성 확인 중…", "Verifying downloaded update…"))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+
         case .downloaded(let url):
             infoBlock(icon: "checkmark.circle.fill", tint: Theme.Colors.meterFill,
                       title: uiLang("다운로드 완료", "Download complete"),
@@ -94,9 +97,7 @@ struct UpdateView: View {
         VStack(spacing: 12) {
             infoBlock(icon: "sparkles", tint: Theme.Colors.accent,
                       title: uiLang("새 버전 \(rel.version)", "New version \(rel.version)"),
-                      body: rel.dmgURL != nil
-                            ? uiLang("설치를 누르면 DMG를 내려받아 Finder에서 엽니다.", "Tap Install to download the DMG and open it in Finder.")
-                            : uiLang("이 릴리스에는 DMG가 없어 릴리스 페이지를 엽니다.", "This release has no DMG, so the releases page opens instead."))
+                      body: uiLang("설치를 누르면 DMG를 내려받아 Finder에서 엽니다.", "Tap Install to download the DMG and open it in Finder."))
             if !rel.notes.isEmpty {
                 ScrollView {
                     Text(rel.notes)
@@ -112,7 +113,7 @@ struct UpdateView: View {
             HStack(spacing: 10) {
                 Button(uiLang("릴리스 페이지", "Releases page")) { NSWorkspace.shared.open(rel.pageURL) }
                     .buttonStyle(.bordered)
-                Button(rel.dmgURL != nil ? uiLang("설치", "Install") : uiLang("열기", "Open")) { checker.installPending() }
+                Button(uiLang("설치", "Install")) { checker.installPending() }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.Colors.accent)
             }

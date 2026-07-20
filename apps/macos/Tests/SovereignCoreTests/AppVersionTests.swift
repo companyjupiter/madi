@@ -3,8 +3,9 @@
 //     ordering the updater depends on (0.9.0-beta.1 < 0.9.0-beta.2 < 0.9.0 < 1.0.0).
 //   • Beta-expiry status: active / expiringSoon(D-n) / expired, and the
 //     clock-rollback latch via the high-water mark.
-//   • ReleaseFeed.newest: prerelease inclusion, "strictly newer", DMG asset pick,
-//     draft skip, highest-of-many.
+//   • ReleaseFeed.newest: schema-1 CloudFront feed validation, strict channel /
+//     URL / digest checks, and the split between invalid-feed throws vs valid
+//     non-newer nil.
 import XCTest
 @testable import SovereignCore
 
@@ -138,80 +139,201 @@ final class AppVersionTests: XCTestCase {
 
     private func feed(_ json: String) -> Data { json.data(using: .utf8)! }
 
-    func testNewestPicksHighestNewerIncludingPrerelease() {
+    func testNewestReturnsReleaseWhenValidAndStrictlyNewer() throws {
         let data = feed("""
-        [
-          {"tag_name":"v0.9.0-beta.2","body":"n2","html_url":"https://x/2",
-           "assets":[{"name":"Madi-0.9.0-beta.2.dmg","browser_download_url":"https://x/2.dmg","size":123}]},
-          {"tag_name":"v0.9.0-beta.1","body":"n1","html_url":"https://x/1","assets":[]}
-        ]
+        {
+          "schema": 1,
+          "version": "0.9.0-beta.2",
+          "tag": "v0.9.0-beta.2",
+          "channel": "beta",
+          "dmg_url": "https://madi.devart.tv/releases/0.9.0-beta.2/madi-0.9.0-beta.2-arm64.dmg",
+          "dmg_size": 123,
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
         """)
-        let r = ReleaseFeed.newest(from: data, current: SemVer("0.9.0-beta.1")!)
+        let r = try ReleaseFeed.newest(from: data, current: SemVer("0.9.0-beta.1")!, channel: "beta")
+        XCTAssertEqual(r?.version, SemVer("0.9.0-beta.2"))
         XCTAssertEqual(r?.tag, "v0.9.0-beta.2")
-        XCTAssertEqual(r?.dmgURL?.absoluteString, "https://x/2.dmg")
+        XCTAssertEqual(r?.dmgURL.absoluteString, "https://madi.devart.tv/releases/0.9.0-beta.2/madi-0.9.0-beta.2-arm64.dmg")
         XCTAssertEqual(r?.dmgSize, 123)
+        XCTAssertEqual(r?.sha256, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+        XCTAssertEqual(r?.pageURL, AppVersion.releasesURL, "CloudFront feed keeps GitHub releases page as the human fallback")
     }
 
-    func testNewestReturnsNilWhenNothingNewer() {
+    func testNewestReturnsNilWhenFeedIsValidButNotNewer() throws {
         let data = feed("""
-        [{"tag_name":"v0.9.0-beta.1","assets":[]}]
+        {
+          "schema": 1,
+          "version": "0.9.0-beta.1",
+          "tag": "v0.9.0-beta.1",
+          "channel": "beta",
+          "dmg_url": "https://madi.devart.tv/releases/0.9.0-beta.1/madi-0.9.0-beta.1-arm64.dmg",
+          "dmg_size": 321,
+          "sha256": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+        }
         """)
-        XCTAssertNil(ReleaseFeed.newest(from: data, current: SemVer("0.9.0-beta.1")!),
+        XCTAssertNil(try ReleaseFeed.newest(from: data, current: SemVer("0.9.0-beta.1")!, channel: "beta"),
                      "same version is not strictly newer")
     }
 
-    func testNewestPrefersStableOverBeta() {
+    func testNewestAcceptsSemVerEquivalentVersionAndTagForms() throws {
         let data = feed("""
-        [
-          {"tag_name":"v1.0.0","assets":[{"name":"Madi.dmg","browser_download_url":"https://x/s.dmg","size":9}]},
-          {"tag_name":"v1.0.0-beta.5","assets":[]}
+        {
+          "schema": 1,
+          "version": "1.0.0",
+          "tag": "v1.0.0",
+          "channel": "stable",
+          "dmg_url": "https://madi.devart.tv/releases/1.0.0/madi-1.0.0-arm64.dmg",
+          "dmg_size": 999,
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+        }
+        """)
+        let r = try ReleaseFeed.newest(from: data, current: SemVer("0.9.0-beta.1")!, channel: "stable")
+        XCTAssertEqual(r?.tag, "v1.0.0")
+    }
+
+    func testNewestThrowsForInvalidJSON() {
+        XCTAssertThrowsError(try ReleaseFeed.newest(from: feed("not json"), current: SemVer("1.0.0")!, channel: "stable")) {
+            XCTAssertEqual($0 as? ReleaseFeedError, .invalidJSON)
+        }
+    }
+
+    func testNewestThrowsForJSONObjectShapeMismatch() {
+        let data = feed("""
+        [{"schema":1}]
+        """)
+        XCTAssertThrowsError(try ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!, channel: "stable")) {
+            XCTAssertEqual($0 as? ReleaseFeedError, .invalidJSON)
+        }
+    }
+
+    func testNewestThrowsForUnsupportedSchema() {
+        let data = feed("""
+        {
+          "schema": 2,
+          "version": "1.2.0",
+          "tag": "v1.2.0",
+          "channel": "stable",
+          "dmg_url": "https://madi.devart.tv/releases/1.2.0/madi-1.2.0-arm64.dmg",
+          "dmg_size": 7,
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+        }
+        """)
+        XCTAssertThrowsError(try ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!, channel: "stable")) {
+            XCTAssertEqual($0 as? ReleaseFeedError, .unsupportedSchema(2))
+        }
+    }
+
+    func testNewestThrowsWhenVersionAndTagDoNotMatch() {
+        let data = feed("""
+        {
+          "schema": 1,
+          "version": "1.2.0",
+          "tag": "v1.2.1",
+          "channel": "stable",
+          "dmg_url": "https://madi.devart.tv/releases/1.2.0/madi-1.2.0-arm64.dmg",
+          "dmg_size": 7,
+          "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+        }
+        """)
+        XCTAssertThrowsError(try ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!, channel: "stable")) {
+            XCTAssertEqual(
+                $0 as? ReleaseFeedError,
+                .versionTagMismatch(version: "1.2.0", tag: "v1.2.1")
+            )
+        }
+    }
+
+    func testNewestThrowsWhenChannelDoesNotMatchRequestedChannel() {
+        let data = feed("""
+        {
+          "schema": 1,
+          "version": "1.2.0",
+          "tag": "v1.2.0",
+          "channel": "beta",
+          "dmg_url": "https://madi.devart.tv/releases/1.2.0/madi-1.2.0-arm64.dmg",
+          "dmg_size": 7,
+          "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+        }
+        """)
+        XCTAssertThrowsError(try ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!, channel: "stable")) {
+            XCTAssertEqual(
+                $0 as? ReleaseFeedError,
+                .wrongChannel(expected: "stable", actual: "beta")
+            )
+        }
+    }
+
+    func testNewestThrowsWhenDMGURLViolatesCloudFrontPolicy() {
+        let badURLs = [
+            "http://madi.devart.tv/releases/1.2.0/madi-1.2.0-arm64.dmg",
+            "https://example.com/releases/1.2.0/madi-1.2.0-arm64.dmg",
+            "https://madi.devart.tv/downloads/1.2.0/madi-1.2.0-arm64.dmg",
+            "https://madi.devart.tv/releases/9.9.9/madi-1.2.0-arm64.dmg",
+            "https://madi.devart.tv/releases/1.2.0/madi-1.2.0-arm64.zip",
+            "https://madi.devart.tv/releases/1.2.0/Madi-1.2.0-arm64.dmg",
+            "https://madi.devart.tv/releases/1.2.0/madi-1.2.0-offline-arm64.dmg",
+            "https://madi.devart.tv/releases/1.2.0/nested/madi-1.2.0-arm64.dmg",
+            "https://madi.devart.tv/releases/1.2.0/madi-1.2.0-arm64.dmg?source=other"
         ]
-        """)
-        let r = ReleaseFeed.newest(from: data, current: SemVer("0.9.0-beta.1")!)
-        XCTAssertEqual(r?.tag, "v1.0.0", "stable 1.0.0 outranks 1.0.0-beta.5")
+
+        for badURL in badURLs {
+            let data = feed("""
+            {
+              "schema": 1,
+              "version": "1.2.0",
+              "tag": "v1.2.0",
+              "channel": "stable",
+              "dmg_url": "\(badURL)",
+              "dmg_size": 7,
+              "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+            }
+            """)
+            XCTAssertThrowsError(try ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!, channel: "stable")) {
+                XCTAssertEqual($0 as? ReleaseFeedError, .invalidDMGURL(badURL))
+            }
+        }
     }
 
-    func testNewestSkipsDraftsAndPicksDMGAsset() {
+    func testNewestThrowsWhenDMGSizeIsNotPositive() {
         let data = feed("""
-        [
-          {"tag_name":"v2.0.0","draft":true,"assets":[]},
-          {"tag_name":"v1.5.0","body":"real","html_url":"https://x/15",
-           "assets":[
-             {"name":"notes.txt","browser_download_url":"https://x/notes.txt","size":1},
-             {"name":"Madi-1.5.0.dmg","browser_download_url":"https://x/15.dmg","size":456}
-           ]}
+        {
+          "schema": 1,
+          "version": "1.2.0",
+          "tag": "v1.2.0",
+          "channel": "stable",
+          "dmg_url": "https://madi.devart.tv/releases/1.2.0/madi-1.2.0-arm64.dmg",
+          "dmg_size": 0,
+          "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+        }
+        """)
+        XCTAssertThrowsError(try ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!, channel: "stable")) {
+            XCTAssertEqual($0 as? ReleaseFeedError, .invalidDMGSize(0))
+        }
+    }
+
+    func testNewestThrowsWhenSHA256IsNotLowercase64Hex() {
+        let digests = [
+            "ABCDEFabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+            "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabc",
+            "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcg"
         ]
-        """)
-        let r = ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!)
-        XCTAssertEqual(r?.tag, "v1.5.0", "draft 2.0.0 is skipped")
-        XCTAssertEqual(r?.dmgURL?.absoluteString, "https://x/15.dmg", "picks the .dmg, not the .txt")
-        XCTAssertEqual(r?.dmgSize, 456)
-    }
 
-    func testNewestNoDMGLeavesNilURL() {
-        let data = feed("""
-        [{"tag_name":"v1.2.0","html_url":"https://x/12","assets":[]}]
-        """)
-        let r = ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!)
-        XCTAssertEqual(r?.tag, "v1.2.0")
-        XCTAssertNil(r?.dmgURL)
-        XCTAssertEqual(r?.pageURL.absoluteString, "https://x/12")
-    }
-
-    func testNewestPrefersStandardDMGOverOfflineDMG() {
-        let data = feed("""
-        [{"tag_name":"v1.2.0","assets":[
-          {"name":"Madi-1.2.0-offline-arm64.dmg","browser_download_url":"https://x/offline.dmg","size":900},
-          {"name":"Madi-1.2.0-arm64.dmg","browser_download_url":"https://x/standard.dmg","size":30}
-        ]}]
-        """)
-        let r = ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!)
-        XCTAssertEqual(r?.dmgURL?.absoluteString, "https://x/standard.dmg")
-        XCTAssertEqual(r?.dmgSize, 30)
-    }
-
-    func testNewestGarbageJSON() {
-        XCTAssertNil(ReleaseFeed.newest(from: feed("not json"), current: SemVer("1.0.0")!))
-        XCTAssertNil(ReleaseFeed.newest(from: feed("{}"), current: SemVer("1.0.0")!), "object, not array")
+        for digest in digests {
+            let data = feed("""
+            {
+              "schema": 1,
+              "version": "1.2.0",
+              "tag": "v1.2.0",
+              "channel": "stable",
+              "dmg_url": "https://madi.devart.tv/releases/1.2.0/madi-1.2.0-arm64.dmg",
+              "dmg_size": 7,
+              "sha256": "\(digest)"
+            }
+            """)
+            XCTAssertThrowsError(try ReleaseFeed.newest(from: data, current: SemVer("1.0.0")!, channel: "stable")) {
+                XCTAssertEqual($0 as? ReleaseFeedError, .invalidSHA256(digest))
+            }
+        }
     }
 }

@@ -134,11 +134,14 @@ Release, verifies GitHub's SHA-256 digest, and publishes those exact bytes under
 the lowercase S3 name. This prevents one version from pointing at two different
 binaries. The download uses the authenticated GitHub CLI, so private release
 assets work as well. It also appends the S3 links to the existing release notes.
-The current in-app updater still reads the GitHub asset; before retiring GitHub
-assets for a future version, switch the updater itself to the S3 channel feed.
-Run `--publish` from one operator at a time because the channel and release index
-are mutable read-modify-write documents; immutable version objects remain
-overwrite-protected by their SHA-256 metadata.
+The in-app updater reads `channels/<MADIChannel>/latest.json` through CloudFront,
+requires the schema-1 channel/version contract, pins DMG URLs to
+`https://madi.devart.tv/releases/<version>/`, and verifies both byte size and
+SHA-256 before opening a downloaded image. GitHub remains the human-facing
+release/support page, not the binary update feed. Run `--publish` from one
+operator at a time because the channel and release index are mutable
+read-modify-write documents; immutable version objects remain overwrite-protected
+by their SHA-256 metadata.
 
 ---
 
@@ -296,6 +299,8 @@ Access Control. Set the CloudFront origin path to `/<MADI_RELEASE_PREFIX>` (for
 this deployment, `/madi`). `MADI_DOWNLOAD_BASE_URL` is the custom domain without
 that storage prefix. This keeps S3 keys under `madi/` while customer-facing URLs
 start directly at `/releases/` or `/runtime-assets/`.
+The macOS updater checks `/channels/<channel>/latest.json`; the release index is
+for catalog/download-site consumers and is not the updater endpoint.
 The runtime asset variables can then point to, for example:
 
 ```text

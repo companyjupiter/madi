@@ -121,7 +121,7 @@ enum AppVersion {
     static let fallbackMarketing = "0.1.0"
     static let fallbackChannel = "stable"
 
-    /// GitHub repo the updater queries. owner/name.
+    /// GitHub repository retained as the human-facing release/support page.
     static let repoOwner = "companyjupiter"
     static let repoName = "madi"
 
@@ -216,67 +216,136 @@ enum AppVersion {
         return status
     }
 
-    /// The public download/support page users are sent to when the beta expires
-    /// or an update is offered but no DMG asset is attached.
+    /// Human-facing fallback page used by the beta gate and update error UI.
     static var releasesURL: URL {
         URL(string: "https://github.com/\(repoOwner)/\(repoName)/releases")!
     }
 }
 
-// MARK: - GitHub Releases feed (pure parsing — unit-tested)
+// MARK: - CloudFront release feed (pure parsing — unit-tested)
 
-/// A release candidate parsed from the GitHub Releases API.
+/// A release candidate parsed from the CloudFront channel feed.
 struct ReleaseInfo: Equatable {
     let version: SemVer
     let tag: String
-    let notes: String          // release body (markdown)
-    let pageURL: URL           // html_url — the release page
-    let dmgURL: URL?           // browser_download_url of the .dmg asset, if any
+    let notes: String          // reserved for future feed notes/body content
+    let pageURL: URL           // human fallback page
+    let dmgURL: URL            // trusted direct .dmg download URL
     let dmgSize: Int64
+    let sha256: String
+}
+
+enum ReleaseFeedError: Error, Equatable {
+    case invalidJSON
+    case unsupportedSchema(Int)
+    case invalidVersion(String)
+    case invalidTag(String)
+    case versionTagMismatch(version: String, tag: String)
+    case wrongChannel(expected: String, actual: String)
+    case invalidDMGURL(String)
+    case invalidDMGSize(Int64)
+    case invalidSHA256(String)
 }
 
 enum ReleaseFeed {
-    /// Decode the `/releases` JSON array and return the highest-SemVer release
-    /// strictly newer than `current`, or nil if none is. Drafts are skipped;
-    /// prereleases are KEPT (this is a beta channel — a newer beta or a stable
-    /// build both outrank the current build by the same comparator).
-    static func newest(from data: Data, current: SemVer) -> ReleaseInfo? {
-        guard let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
-            return nil
+    private static let expectedHost = "madi.devart.tv"
+
+    private struct CloudFrontPayload: Decodable {
+        let schema: Int
+        let version: String
+        let tag: String
+        let channel: String
+        let dmgURL: String
+        let dmgSize: Int64
+        let sha256: String
+        let notes: String?
+
+        enum CodingKeys: String, CodingKey {
+            case schema
+            case version
+            case tag
+            case channel
+            case dmgURL = "dmg_url"
+            case dmgSize = "dmg_size"
+            case sha256
+            case notes
         }
-        var best: ReleaseInfo?
-        for obj in arr {
-            if (obj["draft"] as? Bool) == true { continue }
-            guard let tag = obj["tag_name"] as? String, let ver = SemVer(tag) else { continue }
-            let notes = (obj["body"] as? String) ?? ""
-            let page = (obj["html_url"] as? String).flatMap(URL.init(string:))
-                ?? AppVersion.releasesURL
-            var dmgURL: URL?
-            var dmgSize: Int64 = 0
-            if let assets = obj["assets"] as? [[String: Any]] {
-                // A release may also contain the much larger offline DMG. The
-                // in-app updater must prefer the standard installer regardless
-                // of the order returned by GitHub.
-                let dmgAssets = assets.filter {
-                    (($0["name"] as? String)?.lowercased().hasSuffix(".dmg")) == true
-                }
-                let selected = dmgAssets.first {
-                    (($0["name"] as? String)?.lowercased().contains("offline")) == false
-                } ?? dmgAssets.first
-                if let a = selected,
-                   let urlStr = a["browser_download_url"] as? String,
-                   let url = URL(string: urlStr) {
-                    dmgURL = url
-                    if let n = a["size"] as? Int64 { dmgSize = n }
-                    else if let n = a["size"] as? Int { dmgSize = Int64(n) }
-                }
-            }
-            let info = ReleaseInfo(version: ver, tag: tag, notes: notes,
-                                   pageURL: page, dmgURL: dmgURL, dmgSize: dmgSize)
-            if info.version > current, best == nil || info.version > best!.version {
-                best = info
+    }
+
+    /// Decode the schema-1 CloudFront single-object feed and return the release
+    /// when it is strictly newer than `current`; return nil for a valid feed
+    /// that is not newer; throw when the feed is malformed or violates policy.
+    static func newest(from data: Data, current: SemVer, channel requestedChannel: String) throws -> ReleaseInfo? {
+        let payload: CloudFrontPayload
+        do {
+            payload = try JSONDecoder().decode(CloudFrontPayload.self, from: data)
+        } catch {
+            throw ReleaseFeedError.invalidJSON
+        }
+
+        guard payload.schema == 1 else {
+            throw ReleaseFeedError.unsupportedSchema(payload.schema)
+        }
+
+        guard let version = SemVer(payload.version) else {
+            throw ReleaseFeedError.invalidVersion(payload.version)
+        }
+        guard let tagVersion = SemVer(payload.tag) else {
+            throw ReleaseFeedError.invalidTag(payload.tag)
+        }
+        guard version == tagVersion else {
+            throw ReleaseFeedError.versionTagMismatch(version: payload.version, tag: payload.tag)
+        }
+
+        let expectedChannel = requestedChannel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let actualChannel = payload.channel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard actualChannel == expectedChannel else {
+            throw ReleaseFeedError.wrongChannel(expected: expectedChannel, actual: actualChannel)
+        }
+
+        guard let dmgURL = URL(string: payload.dmgURL),
+              isValidDMGURL(dmgURL, versionPathComponent: payload.version) else {
+            throw ReleaseFeedError.invalidDMGURL(payload.dmgURL)
+        }
+        guard payload.dmgSize > 0 else {
+            throw ReleaseFeedError.invalidDMGSize(payload.dmgSize)
+        }
+        guard isValidSHA256(payload.sha256) else {
+            throw ReleaseFeedError.invalidSHA256(payload.sha256)
+        }
+
+        let info = ReleaseInfo(
+            version: version,
+            tag: payload.tag,
+            notes: payload.notes ?? "",
+            pageURL: AppVersion.releasesURL,
+            dmgURL: dmgURL,
+            dmgSize: payload.dmgSize,
+            sha256: payload.sha256
+        )
+        return info.version > current ? info : nil
+    }
+
+    private static func isValidDMGURL(_ url: URL, versionPathComponent: String) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == expectedHost,
+              url.user == nil,
+              url.password == nil,
+              url.port == nil || url.port == 443,
+              url.query == nil,
+              url.fragment == nil else {
+            return false
+        }
+        return url.path == "/releases/\(versionPathComponent)/madi-\(versionPathComponent)-arm64.dmg"
+    }
+
+    private static func isValidSHA256(_ digest: String) -> Bool {
+        guard digest.count == 64 else { return false }
+        return digest.unicodeScalars.allSatisfy {
+            switch $0.value {
+            case 48...57, 97...102: return true
+            default: return false
             }
         }
-        return best
     }
 }
