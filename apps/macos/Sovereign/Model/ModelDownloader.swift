@@ -25,13 +25,17 @@ final class ModelDownloader: NSObject {
     override init() {
         super.init()
         session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+        // Avoid flashing the first-run guide for an existing installation before
+        // SovereignApp's .task gets its first turn on the main actor.
+        if AssetManifest.modelIsValid() { state = .ready }
     }
 
-    /// Ensure the model is present and valid; download if not.
+    /// Check the launch requirement. A missing model deliberately stays idle so
+    /// the first-run guide can explain the download choices before network I/O.
     func ensureModel() {
         state = .checking
         if AssetManifest.modelIsValid() { state = .ready; return }
-        startDownload()
+        state = .idle
     }
 
     func startDownload() {

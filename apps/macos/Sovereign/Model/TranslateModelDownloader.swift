@@ -99,6 +99,9 @@ extension TranslateModelDownloader: URLSessionDownloadDelegate {
 
     nonisolated func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error else { return }
+        // cancel() intentionally returns to .idle; URLSession reports that as an
+        // error asynchronously, which must not turn a user action into a failure.
+        if (error as NSError).code == NSURLErrorCancelled { return }
         Task { @MainActor in
             if case .ready = self.state { return }
             self.state = .failed(error.localizedDescription)
