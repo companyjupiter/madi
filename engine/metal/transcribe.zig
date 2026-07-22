@@ -639,6 +639,7 @@ const DiarConfirmState = struct {
     confirmed: bool = true,
     streak: u32 = 0,
     last_seen: f32 = 0,
+    fallback: usize = 0,
 };
 
 // Delay exposing a newly-born auto speaker until it has repeated acoustic
@@ -1874,7 +1875,10 @@ pub fn main() !void {
                         const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
                         const spk = ar.id;
                         while (live_confirm.items.len < cents.items.len) try live_confirm.append(.{});
-                        if (ar.born and spk > 0) live_confirm.items[spk] = .{ .confirmed = false };
+                        if (ar.born and spk > 0) live_confirm.items[spk] = .{
+                            .confirmed = false,
+                            .fallback = ar.fallback,
+                        };
                         if (diar_assign_trace) {
                             const action: []const u8 = if (ar.born) "birth" else "update";
                             try out.print("SPKTRACE {d:.2} {d} {d} {d:.4} {d:.4} {d:.4} {d} {d} {s}\n", .{
@@ -1882,10 +1886,17 @@ pub fn main() !void {
                                 ar.count_before, ar.count_after, action,
                             });
                         }
+                        const visible_fallback = if (spk < livefix_quarantined.len and
+                            livefix_quarantined[spk] and
+                            spk < live_confirm.items.len and
+                            !live_confirm.items[spk].confirmed)
+                            live_confirm.items[spk].fallback
+                        else
+                            ar.fallback;
                         const visible_spk = try liveVisibleSpeaker(
                             out,
                             spk,
-                            ar.fallback,
+                            visible_fallback,
                             cents.items[spk].count,
                             recluster_every > 0 and diar_k == 0 and n_anchor == 0,
                             envU("DIAR_CONFIRM_WIN", 2),
@@ -2003,7 +2014,10 @@ pub fn main() !void {
                                         {
                                             if (live_confirm.items[sidx].confirmed) {
                                                 livefix_quarantined[sidx] = false;
-                                            } else if (c.count <= livefix_quarantine_max_win) {
+                                            } else if (sidx < livefix_active.len and
+                                                livefix_active[sidx] and
+                                                c.count <= livefix_quarantine_max_win)
+                                            {
                                                 livefix_quarantined[sidx] = true;
                                             }
                                         }
