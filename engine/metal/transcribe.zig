@@ -855,7 +855,11 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         // absolute-separation gate (same as file mode): a presenter whose voice
         // varies splits with high silhouette but close centroids → one speaker
         if (K >= 2 and maxCentroidCosDist(X, m, segd, asg, K) < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); }
-        if (try maybePromoteSpherical4(X, m, segd, maxK, K, asg)) |promotion| {
+        if (try maybePromoteSpherical4(
+            X, m, segd, maxK, K, asg,
+            envU("DIAR_LIVE_PROMOTE4_LONG_WIN", 64),
+            envU("DIAR_LIVE_PROMOTE4_MIN_WIN", 5),
+        )) |promotion| {
             K = 4;
             bestSil = promotion.sil;
         }
@@ -2826,7 +2830,7 @@ const SphericalPromotion = struct { sil: f32, sep: f32 };
 // every legacy K=1 decision and every K>=4 result. Only promote a surviving
 // legacy K=2/3 when a full spherical sweep independently selects K=4 with a
 // strong silhouette and the existing absolute-separation safety gate passes.
-fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, legacy_k: usize, asg: []usize) !?SphericalPromotion {
+fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, legacy_k: usize, asg: []usize, support_long_win: usize, support_min_win: usize) !?SphericalPromotion {
     if (envU("DIAR_PROMOTE4", 1) == 0 or legacy_k < 2 or legacy_k >= 4 or maxK < 4) return null;
     const best_asg = try alloc.alloc(usize, m); defer alloc.free(best_asg);
     const tmp = try alloc.alloc(usize, m); defer alloc.free(tmp);
@@ -2853,10 +2857,9 @@ fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, le
     }
     // On a long session, a fourth cluster supported by only a few isolated
     // windows is more likely an outlier split than a participant. Keep short
-    // panels permissive (a brief speaker can still be real), but demand one
-    // extra independent 1.5 s observation once the ledger reaches 100 windows.
-    if (m >= envU("DIAR_PROMOTE4_LONG_WIN", 100) and
-        min_support < envU("DIAR_PROMOTE4_MIN_WIN", 4)) return null;
+    // panels permissive (a brief speaker can still be real). Callers set
+    // path-specific support because live overlap revisits boundary windows.
+    if (m >= support_long_win and min_support < support_min_win) return null;
     if (sep < envF("DIAR_MIN_SEP", 0.50)) return null;
     @memcpy(asg, best_asg);
     return .{ .sil = best_sil, .sep = sep };
@@ -3020,7 +3023,11 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
             ev_sep = sep;
             if (sep < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); bestSil = -2; }
         }
-        if (try maybePromoteSpherical4(X, m, segd, maxK, K, asg)) |promotion| {
+        if (try maybePromoteSpherical4(
+            X, m, segd, maxK, K, asg,
+            envU("DIAR_PROMOTE4_LONG_WIN", 100),
+            envU("DIAR_PROMOTE4_MIN_WIN", 4),
+        )) |promotion| {
             K = 4;
             bestSil = promotion.sil;
             ev_sep = promotion.sep;
