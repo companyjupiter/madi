@@ -1177,6 +1177,15 @@ final class SessionController: EngineProcessDelegate {
     private let capture = AudioCapture()
 
     private var isError: Bool { if case .error = phase { return true }; return false }
+    private var recordingStartAdmission: RecordingStartAdmission.State {
+        switch phase {
+        case .idle: return .idle
+        case .done: return .done
+        case .error: return .error
+        case .countingDown(let value): return .countdown(value)
+        default: return .busy
+        }
+    }
 
     /// T12: per-segment language re-probe whitelist = TRANSLATE TARGETS ∪ INPUT
     /// LANGUAGE. The old "exactly {Korean, X}" pair NEVER included the spoken
@@ -1347,6 +1356,7 @@ final class SessionController: EngineProcessDelegate {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)   // 1s/tick — clock cadence
                 if Task.isCancelled { return }
             }
+            countdownTask = nil
             start()
         }
     }
@@ -1465,7 +1475,10 @@ final class SessionController: EngineProcessDelegate {
     }
 
     func start() {
-        guard phase == .idle || phase == .done || isError else { return }
+        // The countdown intentionally calls start() while phase is still
+        // .countingDown(1). Reject every other busy phase, but admit that exact
+        // terminal tick; otherwise the UI remains frozen on “1” forever.
+        guard RecordingStartAdmission.allows(recordingStartAdmission) else { return }
         guard AssetManifest.modelIsValid() else {
             phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."); return
         }
