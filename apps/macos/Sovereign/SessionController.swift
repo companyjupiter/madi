@@ -6,7 +6,9 @@
 import Foundation
 import Observation
 import CoreAudio
+import CoreGraphics
 import AVFoundation
+import AppKit
 
 @Observable
 @MainActor
@@ -249,6 +251,7 @@ final class SessionController: EngineProcessDelegate {
     var audioSource: AudioSource = AudioSource(rawValue: UserDefaults.standard.string(forKey: "audioSource") ?? "mic") ?? .mic {
         didSet { UserDefaults.standard.set(audioSource.rawValue, forKey: "audioSource") }
     }
+    private(set) var audioPermissionIssue: AudioPermissionIssue?
     var osd = true
     // restored from the last launch (0 / unset = auto-detect)
     var languageTokenID: Int? = {
@@ -1225,6 +1228,7 @@ final class SessionController: EngineProcessDelegate {
     // MARK: session lifecycle
 
     private var countdownTask: Task<Void, Never>?
+    private var captureStartTask: Task<Void, Never>?
     // Safety net: if the engine never reports ready (rare crash/hang), surface a
     // Korean error instead of an infinite "모델 로딩…" spinner.
     private var engineStartTimeoutTask: Task<Void, Never>?
@@ -1241,31 +1245,98 @@ final class SessionController: EngineProcessDelegate {
     /// ready; recording starts the instant it hits 0. Cancellable mid-count.
     func startCountdown(from n: Int = 3) {
         guard phase == .idle || phase == .done || isError else { return }
+        audioPermissionIssue = nil
         guard AssetManifest.modelIsValid() else {
             phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요.")
             return
         }
-        // Mic permission preflight — without this the TCC dialog fires deep in
-        // capture.start() where a denial looks like an engine hang ("모델 로딩…").
+        preflightMicrophonePermission(from: n)
+    }
+
+    /// All permission UI happens before 3·2·1. A countdown is a promise that
+    /// capture is ready to start, never a prelude to a surprise TCC dialog.
+    private func preflightMicrophonePermission(from n: Int) {
+        guard AudioPermissionPolicy.requires(.microphone, for: audioSource) else {
+            preflightSystemAudioPermission(from: n)
+            return
+        }
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .denied, .restricted:
-            phase = .error("마이크 권한이 꺼져 있어요. 시스템 설정 → 개인정보 보호 및 보안 → 마이크에서 Madi를 허용해주세요.")
+            showMicrophonePermissionError()
             return
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
                 Task { @MainActor in
                     guard let self else { return }
-                    if granted { self.beginCountdown(from: n) }
-                    else {
-                        self.phase = .error("마이크 권한이 필요해요. 시스템 설정 → 개인정보 보호 및 보안 → 마이크에서 Madi를 허용해주세요.")
-                    }
+                    if granted { self.preflightSystemAudioPermission(from: n) }
+                    else { self.showMicrophonePermissionError() }
                 }
             }
             return
         default:
             break
         }
-        beginCountdown(from: n)
+        preflightSystemAudioPermission(from: n)
+    }
+
+    private func preflightSystemAudioPermission(from n: Int) {
+        guard AudioPermissionPolicy.requires(.systemAudio, for: audioSource) else {
+            beginCountdown(from: n)
+            return
+        }
+        if CGPreflightScreenCaptureAccess() {
+            beginCountdown(from: n)
+            return
+        }
+
+        // The system prompt now appears before the countdown. Apple requires a
+        // relaunch after first approval before ScreenCaptureKit can capture.
+        if CGRequestScreenCaptureAccess() {
+            audioPermissionIssue = .systemAudioRestartRequired
+            phase = .error(permissionText(
+                "시스템 오디오 권한을 허용했어요. 적용을 위해 Madi를 한 번 다시 시작해주세요.",
+                "System audio access is allowed. Restart Madi once to apply it.",
+                "システムオーディオのアクセスを許可しました。適用するため Madi を再起動してください。"))
+        } else {
+            showSystemAudioPermissionError()
+        }
+    }
+
+    private func showMicrophonePermissionError() {
+        audioPermissionIssue = .microphoneDenied
+        phase = .error(permissionText(
+            "녹음 전에 마이크 권한이 필요해요. 시스템 설정에서 Madi를 허용한 뒤 다시 시도해주세요.",
+            "Madi needs microphone access before recording. Allow it in System Settings, then try again.",
+            "録音前にマイクへのアクセスが必要です。システム設定で Madi を許可してから、もう一度お試しください。"))
+    }
+
+    private func showSystemAudioPermissionError() {
+        audioPermissionIssue = .systemAudioDenied
+        phase = .error(permissionText(
+            "녹음 전에 시스템 오디오 권한이 필요해요. 시스템 설정 → 개인정보 보호 및 보안 → 화면 및 시스템 오디오 기록에서 Madi를 허용한 뒤 다시 시작해주세요.",
+            "Madi needs system audio access before recording. Allow it in System Settings → Privacy & Security → Screen & System Audio Recording, then restart Madi.",
+            "録音前にシステムオーディオへのアクセスが必要です。システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオで Madi を許可してから再起動してください。"))
+    }
+
+    private func permissionText(_ ko: String, _ en: String, _ ja: String) -> String {
+        let raw = UserDefaults.standard.string(forKey: "uiLanguage") ?? UILanguage.ko.rawValue
+        return (UILanguage(rawValue: raw) ?? .ko)(ko, en, ja)
+    }
+
+    func openAudioPermissionSettings() {
+        let pane = audioPermissionIssue == .microphoneDenied
+            ? "Privacy_Microphone" : "Privacy_ScreenCapture"
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    func relaunchAfterPermissionGrant() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            guard error == nil else { return }
+            Task { @MainActor in NSApp.terminate(nil) }
+        }
     }
 
     private func beginCountdown(from n: Int) {
@@ -1290,6 +1361,9 @@ final class SessionController: EngineProcessDelegate {
         guard phase == .done || phase == .idle || isError else { return }
         terminateTranscriptionEngines()
         countdownTask?.cancel(); countdownTask = nil
+        captureStartTask?.cancel(); captureStartTask = nil
+        capture.abort()
+        audioPermissionIssue = nil
         periodicSaveTask?.cancel(); periodicSaveTask = nil
         silenceWatchTask?.cancel(); silenceWatchTask = nil; micSilent = false
         meterLevel = 0; level = 0
@@ -1400,6 +1474,9 @@ final class SessionController: EngineProcessDelegate {
         // process (including its Metal allocations). Always retire any previous
         // main/preview pair before installing the next session's processes.
         terminateTranscriptionEngines()
+        captureStartTask?.cancel(); captureStartTask = nil
+        capture.abort()
+        audioPermissionIssue = nil
         transcript.reset()
         speakerNames = [:]
         autoRecognizedSpeakers.removeAll()
@@ -1439,10 +1516,16 @@ final class SessionController: EngineProcessDelegate {
         capture.source = audioSource           // mic / system / both
         capture.onError = { [weak self] msg in
             guard let self else { return }
-            // surface a system-audio failure without killing a running mic+system mix
-            if self.audioSource == .system {
-                self.terminateTranscriptionEngines()
-                self.phase = .error(msg)
+            guard AudioPermissionPolicy.requires(.systemAudio, for: self.audioSource) else { return }
+            self.capture.abort()
+            self.terminateTranscriptionEngines()
+            if !CGPreflightScreenCaptureAccess() {
+                self.showSystemAudioPermissionError()
+            } else {
+                self.phase = .error(self.permissionText(
+                    "시스템 오디오 연결이 중단됐어요. (\(msg))",
+                    "The system audio connection stopped. (\(msg))",
+                    "システムオーディオの接続が停止しました。(\(msg))"))
             }
         }
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
@@ -1593,16 +1676,35 @@ final class SessionController: EngineProcessDelegate {
         // app-state-1/watchdog-conc-0). 캡처는 최초 기동에서만 시작.
         guard phase == .engineStarting || phase == .ready else { return }
         phase = .ready
-        do {
-            try capture.start()
-            recordStartedAt = Date(); recordEndedAt = nil; pausedAccum = 0; pausedAt = nil
-            phase = .recording
-            startPeriodicAutosave()
-            startSilenceWatch()
-        }
-        catch {
-            terminateTranscriptionEngines()
-            phase = .error("마이크를 시작하지 못했어요: \(error.localizedDescription)")
+        captureStartTask?.cancel()
+        captureStartTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.capture.start()
+                guard !Task.isCancelled, self.phase == .ready else {
+                    self.capture.abort()
+                    return
+                }
+                self.recordStartedAt = Date(); self.recordEndedAt = nil
+                self.pausedAccum = 0; self.pausedAt = nil
+                self.phase = .recording
+                self.startPeriodicAutosave()
+                self.startSilenceWatch()
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.capture.abort()
+                self.terminateTranscriptionEngines()
+                if AudioPermissionPolicy.requires(.systemAudio, for: self.audioSource),
+                   !CGPreflightScreenCaptureAccess() {
+                    self.showSystemAudioPermissionError()
+                } else {
+                    self.phase = .error(self.permissionText(
+                        "오디오 입력을 시작하지 못했어요: \(error.localizedDescription)",
+                        "Could not start audio input: \(error.localizedDescription)",
+                        "オーディオ入力を開始できませんでした: \(error.localizedDescription)"))
+                }
+            }
+            self.captureStartTask = nil
         }
     }
 
@@ -1726,6 +1828,7 @@ final class SessionController: EngineProcessDelegate {
     /// there may be no live session left to deliver <<FLUSH_END>>.
     private func terminateTranscriptionEngines() {
         engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
+        captureStartTask?.cancel(); captureStartTask = nil
         engine?.delegate = nil
         engine?.terminate()
         engine = nil

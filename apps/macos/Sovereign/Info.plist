@@ -26,6 +26,14 @@
   <key>NSMicrophoneUsageDescription</key>
   <string>Madi transcribes your meetings on-device. Audio never leaves your Mac.</string>
 
+  <!-- ScreenCaptureKit system-audio capture. The screen is requested only
+       because macOS gates system audio behind the same privacy service; Madi
+       discards video frames and never saves the screen. -->
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>Madi captures audio playing on your Mac for on-device transcription. Screen images are never saved.</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Madi transcribes system audio on-device. Audio never leaves your Mac.</string>
+
   <!-- Calendar: read the current event to prefill meeting title + attendees (local, read-only) -->
   <key>NSCalendarsFullAccessUsageDescription</key>
   <string>Madi reads the meeting happening now to prefill its title and attendees. Your calendar stays on your Mac.</string>
