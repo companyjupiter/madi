@@ -57,6 +57,7 @@ let package = Package(
                 "UI/L10nJa.swift",
                 "UI/ClinicDisplaySupport.swift",
                 "Audio/AudioSource.swift",
+                "Audio/RecordingStartAdmission.swift",
                 "Audio/WavWriter.swift",
                 "Audio/Segmenter.swift",
                 "Engine/TranslateStreamParser.swift",
