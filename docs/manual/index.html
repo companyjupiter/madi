@@ -107,14 +107,14 @@
 <h2 id="모델-안내">모델 안내</h2>
 <p>Madi는 두 종류의 AI 모델을 씁니다.</p>
 <ul>
-<li><strong>Whisper 음성 모델 (약 867 MB)</strong> — 받아쓰기를 담당합니다. 표준 DMG에서는 첫 실행에 한 번 받습니다.</li>
-<li><strong>DNA3.0 언어 모델</strong> — <strong>번역</strong>, <strong>AI 교정</strong>, <strong>요약·질의응답</strong>에 쓰입니다. 8GB Mac은 2B(약 1.31 GB), 16GB 이상은 품질 우선 4B(약 2.78 GB)를 자동 선택하며 <strong>처음 쓸 때 다운로드</strong>합니다.</li>
+<li><strong>Whisper large-v3 Turbo Q8 (약 867 MB, 필수)</strong> — Madi의 독자 Zig/Metal 엔진에서 전사·화자 분리·실시간 프리뷰를 담당합니다. 표준 DMG에서는 첫 실행에 한 번 받습니다.</li>
+<li><strong>DNA3.0 언어 모델 (선택)</strong> — <strong>번역</strong>, <strong>AI 교정</strong>, <strong>요약·질의응답</strong>에 쓰입니다. 8GB Mac은 2B(약 1.31 GB), 16GB 이상은 품질 우선 4B(약 2.78 GB)를 자동 추천합니다.</li>
 <ul>
 <li>받는 곳: <strong>설정(⌘,) → 번역</strong>의 “번역 모델 다운로드” 버튼.</li>
 <li>선택된 모델만 받으며 디스크 공간도 그만큼 필요합니다.</li>
 </ul>
 </ul>
-<p>번역·요약·질의응답을 쓰지 않는다면 이 모델은 받지 않아도 됩니다. 전사와 화자 분리는 동봉된 Whisper만으로 완전히 동작합니다.</p>
+<p>번역·요약·질의응답을 쓰지 않는다면 이 모델은 받지 않아도 됩니다. 전사와 화자 분리는 설치된 Whisper만으로 완전히 동작합니다.</p>
 <h2 id="메모리-안내-솔직하게">메모리 안내 (솔직하게)</h2>
 <ul>
 <li><strong>8 GB Mac (예: M1 MacBook Air)</strong> — DNA3.0-2B와 4턴 번역 대기열을 자동 적용합니다. 번역 엔진의 실측 물리 메모리는 약 2.4 GB입니다.</li>
@@ -131,13 +131,14 @@
 <p>권한을 거부했다가 나중에 켜고 싶으면 <strong>시스템 설정 → 개인정보 보호 및 보안</strong>에서 해당 항목(마이크 / 화면 기록)을 찾아 Madi를 켜면 됩니다.</p>
 <h2 id="처음-실행-빠른-시작">처음 실행 빠른 시작</h2>
 <ol>
-<li>Madi를 엽니다. 첫 화면에 <strong>회의 정보</strong>와 <strong>시작하기</strong> 두 칸이 보입니다.</li>
-<li><strong>회의 정보</strong>에서 이번 회의에 맞게 골라 둡니다 — 입력 언어, (번역을 쓴다면) 출력 언어, 회의 모드, 화자 수.</li>
-<li><strong>시작하기</strong>에서 마이크를 고르고 <strong>지금 녹음 시작</strong>을 누르거나, 오디오·영상 파일을 끌어다 놓습니다.</li>
-<li>화면 가운데에 실시간 전사문이 나타나는 것을 지켜봅니다.</li>
+<li>Madi를 열면 <strong>이 Mac에 맞게 Madi 준비하기</strong>가 나타납니다. 다운로드는 아직 시작되지 않습니다.</li>
+<li>번역·교정·요약까지 쓸 계획이면 <strong>추천 구성 다운로드</strong>를 고릅니다. Madi가 Mac 메모리를 감지해 8GB에는 DNA3.0-2B, 16GB 이상에는 DNA3.0-4B를 함께 받습니다.</li>
+<li>전사와 화자 분리만 먼저 쓸 계획이면 <strong>전사만 준비</strong>를 고릅니다. 필수 Whisper Q8만 받으며, DNA는 나중에 <strong>설정(⌘,) → 번역</strong>에서 받을 수 있습니다.</li>
+<li>추천 구성을 받는 중 Whisper가 먼저 준비되면 <strong>전사를 먼저 시작하고 DNA는 계속 받기</strong>를 눌러 바로 시작할 수도 있습니다.</li>
+<li>모델 준비가 끝나면 <strong>회의 정보</strong>에서 입력 언어·회의 모드·화자 수를 고르고, <strong>지금 녹음 시작</strong>을 누르거나 오디오·영상 파일을 끌어다 놓습니다.</li>
 <li><strong>정지</strong>를 누르면 거기까지의 기록이 정리됩니다. 자동저장이 켜져 있으면 파일로 저장됩니다.</li>
 </ol>
-<blockquote>번역을 쓰려면 먼저 <strong>설정(⌘,) → 번역</strong>에서 Mac 메모리에 맞게 선택된 번역 모델을 받아야 합니다. 8GB Mac에서는 전용 가이드가 최초 한 번 자동으로 열립니다.</blockquote>
+<blockquote>기존에 Whisper Q8이 설치된 사용자는 업데이트 후에도 온보딩을 다시 거치지 않습니다. 8GB 전용 상세 가이드는 모델 온보딩과 겹치지 않게 이후 실행에서 최초 한 번 열립니다.</blockquote>
 <h2 id="창-구조">창 구조</h2>
 <p>녹음이 시작되면 창은 세 칸으로 나뉩니다.</p>
 <ul>
@@ -695,14 +696,14 @@
 <h2 id="about-the-models">About the models</h2>
 <p>Madi uses two kinds of AI model.</p>
 <ul>
-<li><strong>Whisper speech model (~867 MB)</strong> — handles transcription. The standard DMG downloads it once on first launch.</li>
-<li><strong>DNA3.0 language model</strong> — powers <strong>translation</strong>, <strong>AI correction</strong>, and <strong>summary / Q&amp;A</strong>. Madi automatically selects 2B (~1.31 GB) on an 8 GB Mac and quality-first 4B (~2.78 GB) on 16 GB or more; it is <strong>downloaded the first time you use it</strong>.</li>
+<li><strong>Whisper large-v3 Turbo Q8 (~867 MB, required)</strong> — runs transcription, speaker separation, and live preview in Madi's native Zig/Metal engine. The standard DMG downloads it once on first launch.</li>
+<li><strong>DNA3.0 language model (optional)</strong> — powers <strong>translation</strong>, <strong>AI correction</strong>, and <strong>summary / Q&amp;A</strong>. Madi recommends 2B (~1.31 GB) on an 8 GB Mac and quality-first 4B (~2.78 GB) on 16 GB or more.</li>
 <ul>
 <li>Where: <strong>Settings (⌘,) → Translation</strong>, the "Download translation model" button.</li>
 <li>Only the selected model is downloaded, using the same amount of disk space.</li>
 </ul>
 </ul>
-<p>If you don't use translation, summary or Q&amp;A you never need this model. Transcription and speaker separation run entirely on the bundled Whisper model.</p>
+<p>If you don't use translation, summary or Q&amp;A you never need this model. Transcription and speaker separation run entirely on the installed Whisper model.</p>
 <h2 id="about-memory-honestly">About memory (honestly)</h2>
 <ul>
 <li><strong>8 GB Mac (e.g. M1 MacBook Air)</strong> — Madi automatically uses DNA3.0-2B and a four-turn translation horizon. The measured translation-engine footprint is about 2.4 GB.</li>
@@ -719,13 +720,14 @@
 <p>If you deny a permission and want it later, open <strong>System Settings → Privacy &amp; Security</strong>, find the item (Microphone / Screen Recording) and enable Madi.</p>
 <h2 id="first-run-quick-start">First-run quick start</h2>
 <ol>
-<li>Open Madi. The first screen has two columns: <strong>Meeting info</strong> and <strong>Get started</strong>.</li>
-<li>Under <strong>Meeting info</strong>, set up this meeting — input language, output language (if you translate), meeting mode, speaker count.</li>
-<li>Under <strong>Get started</strong>, pick a mic and press <strong>Start recording now</strong>, or drop in an audio/video file.</li>
-<li>Watch the live transcript appear in the middle of the window.</li>
+<li>Open Madi. <strong>Set up Madi for this Mac</strong> appears before any download begins.</li>
+<li>Choose <strong>Download recommended setup</strong> if you plan to use translation, correction, or summaries. Madi detects memory and downloads DNA3.0-2B on 8 GB or DNA3.0-4B on 16 GB and above alongside Whisper.</li>
+<li>Choose <strong>Set up transcription only</strong> if you want transcription and speaker separation first. It downloads only the required Whisper Q8; DNA remains available later under <strong>Settings (⌘,) → Translation</strong>.</li>
+<li>If Whisper finishes before DNA, you can choose <strong>Start transcribing while DNA continues</strong> and enter Madi immediately.</li>
+<li>Once ready, set the input language, meeting mode, and speaker count under <strong>Meeting info</strong>, then press <strong>Start recording now</strong> or drop in an audio/video file.</li>
 <li>Press <strong>Stop</strong> to wrap up. If auto-save is on, the transcript is written to a file.</li>
 </ol>
-<blockquote>To translate, download the hardware-selected model in <strong>Settings (⌘,) → Translation</strong>. On an 8 GB Mac, Madi opens the dedicated guide once.</blockquote>
+<blockquote>Existing users with Whisper Q8 installed bypass this onboarding after an update. On an 8 GB Mac, the detailed guide opens once on a later launch so it does not cover the model setup screen.</blockquote>
 <h2 id="the-window">The window</h2>
 <p>Once recording starts, the window splits into three columns.</p>
 <ul>
@@ -1289,14 +1291,14 @@
 <h2 id="">モデルについて</h2>
 <p>Madi は 2 種類の AI モデルを使用します。</p>
 <ul>
-<li><strong>Whisper 音声モデル（約 867 MB）</strong> — 文字起こしを担当します。標準 DMG では初回起動時に一度ダウンロードします。</li>
-<li><strong>DNA3.0 言語モデル</strong> — <strong>翻訳</strong>、<strong>AI 修正</strong>、<strong>要約・質疑応答</strong>に使われます。8 GB Mac では 2B（約 1.31 GB）、16 GB 以上では品質優先の 4B（約 2.78 GB）を自動選択し、<strong>初めて使うときにダウンロード</strong>します。</li>
+<li><strong>Whisper large-v3 Turbo Q8（約 867 MB、必須）</strong> — Madi 独自の Zig/Metal エンジンで文字起こし・話者分離・ライブプレビューを実行します。標準 DMG では初回起動時に一度ダウンロードします。</li>
+<li><strong>DNA3.0 言語モデル（任意）</strong> — <strong>翻訳</strong>、<strong>AI 修正</strong>、<strong>要約・質疑応答</strong>に使われます。8 GB Mac では 2B（約 1.31 GB）、16 GB 以上では品質優先の 4B（約 2.78 GB）を推奨します。</li>
 <ul>
 <li>入手先: <strong>設定（⌘,）→ 翻訳</strong>の「翻訳モデルをダウンロード」ボタン。</li>
 <li>選択されたモデルだけをダウンロードし、同じだけのディスク容量が必要です。</li>
 </ul>
 </ul>
-<p>翻訳・要約・質疑応答を使わないのであれば、このモデルは不要です。文字起こしと話者分離は、同梱の Whisper モデルだけで完全に動作します。</p>
+<p>翻訳・要約・質疑応答を使わないのであれば、このモデルは不要です。文字起こしと話者分離は、インストール済みの Whisper モデルだけで完全に動作します。</p>
 <h2 id="">メモリについて（正直なところ）</h2>
 <ul>
 <li><strong>8 GB の Mac（例: M1 MacBook Air）</strong> — DNA3.0-2B と最大 4 ターンの翻訳待機を自動適用します。翻訳エンジンの実測物理メモリは約 2.4 GB です。</li>
@@ -1313,13 +1315,14 @@
 <p>権限を拒否した後で有効にしたい場合は、<strong>システム設定 → プライバシーとセキュリティ</strong>を開き、該当項目（マイク / 画面収録）で Madi をオンにしてください。</p>
 <h2 id="">初回起動クイックスタート</h2>
 <ol>
-<li>Madi を開きます。最初の画面には<strong>会議情報</strong>と<strong>はじめる</strong>の 2 つの列があります。</li>
-<li><strong>会議情報</strong>で、この会議に合わせて設定しておきます — 入力言語、（翻訳する場合は）出力言語、会議モード、話者数。</li>
-<li><strong>はじめる</strong>でマイクを選び、<strong>今すぐ録音を開始</strong>を押すか、音声・動画ファイルをドロップします。</li>
-<li>ウィンドウ中央にリアルタイムの文字起こしが表示されるのを確認します。</li>
+<li>Madi を開くと、ダウンロード開始前に<strong>この Mac に合わせて Madi を準備</strong>が表示されます。</li>
+<li>翻訳・修正・要約も使う場合は<strong>推奨構成をダウンロード</strong>を選びます。メモリを検出し、Whisper と一緒に 8 GB では DNA3.0-2B、16 GB 以上では DNA3.0-4B をダウンロードします。</li>
+<li>文字起こしと話者分離を先に使う場合は<strong>文字起こしのみ準備</strong>を選びます。必須の Whisper Q8 だけをダウンロードし、DNA は後から<strong>設定（⌘,）→ 翻訳</strong>で追加できます。</li>
+<li>DNA より先に Whisper の準備が完了したら、<strong>文字起こしを先に始め、DNA は継続してダウンロード</strong>を選んですぐ開始できます。</li>
+<li>準備完了後、<strong>会議情報</strong>で入力言語・会議モード・話者数を設定し、<strong>今すぐ録音を開始</strong>を押すか音声・動画ファイルをドロップします。</li>
 <li><strong>停止</strong>を押して終了します。自動保存がオンの場合、文字起こしはファイルに保存されます。</li>
 </ol>
-<blockquote>翻訳するには、まず<strong>設定（⌘,）→ 翻訳</strong>で Mac のメモリに合わせて選択されたモデルをダウンロードしてください。8 GB Mac では専用ガイドが最初の一度だけ自動的に開きます。</blockquote>
+<blockquote>Whisper Q8 がすでにインストールされている場合、アップデート後にこのオンボーディングが再表示されることはありません。8 GB Mac の詳細ガイドはモデル設定画面と重ならないよう、後の起動時に一度だけ開きます。</blockquote>
 <h2 id="">ウィンドウの構成</h2>
 <p>録音を開始すると、ウィンドウは 3 つの列に分かれます。</p>
 <ul>

@@ -20,12 +20,12 @@ Madi's core promise is **sovereignty**. No audio, no transcript, no translation 
 
 Madi uses two kinds of AI model.
 
-- **Whisper speech model (~867 MB)** — handles transcription. The standard DMG downloads it once on first launch.
-- **DNA3.0 language model** — powers **translation**, **AI correction**, and **summary / Q&A**. Madi automatically selects 2B (~1.31 GB) on an 8 GB Mac and quality-first 4B (~2.78 GB) on 16 GB or more; it is **downloaded the first time you use it**.
+- **Whisper large-v3 Turbo Q8 (~867 MB, required)** — runs transcription, speaker separation, and live preview in Madi's native Zig/Metal engine. The standard DMG downloads it once on first launch.
+- **DNA3.0 language model (optional)** — powers **translation**, **AI correction**, and **summary / Q&A**. Madi recommends 2B (~1.31 GB) on an 8 GB Mac and quality-first 4B (~2.78 GB) on 16 GB or more.
   - Where: **Settings (⌘,) → Translation**, the "Download translation model" button.
   - Only the selected model is downloaded, using the same amount of disk space.
 
-If you don't use translation, summary or Q&A you never need this model. Transcription and speaker separation run entirely on the bundled Whisper model.
+If you don't use translation, summary or Q&A you never need this model. Transcription and speaker separation run entirely on the installed Whisper model.
 
 ## About memory (honestly)
 
@@ -45,13 +45,14 @@ If you deny a permission and want it later, open **System Settings → Privacy &
 
 ## First-run quick start
 
-1. Open Madi. The first screen has two columns: **Meeting info** and **Get started**.
-2. Under **Meeting info**, set up this meeting — input language, output language (if you translate), meeting mode, speaker count.
-3. Under **Get started**, pick a mic and press **Start recording now**, or drop in an audio/video file.
-4. Watch the live transcript appear in the middle of the window.
-5. Press **Stop** to wrap up. If auto-save is on, the transcript is written to a file.
+1. Open Madi. **Set up Madi for this Mac** appears before any download begins.
+2. Choose **Download recommended setup** if you plan to use translation, correction, or summaries. Madi detects memory and downloads DNA3.0-2B on 8 GB or DNA3.0-4B on 16 GB and above alongside Whisper.
+3. Choose **Set up transcription only** if you want transcription and speaker separation first. It downloads only the required Whisper Q8; DNA remains available later under **Settings (⌘,) → Translation**.
+4. If Whisper finishes before DNA, you can choose **Start transcribing while DNA continues** and enter Madi immediately.
+5. Once ready, set the input language, meeting mode, and speaker count under **Meeting info**, then press **Start recording now** or drop in an audio/video file.
+6. Press **Stop** to wrap up. If auto-save is on, the transcript is written to a file.
 
-> To translate, download the hardware-selected model in **Settings (⌘,) → Translation**. On an 8 GB Mac, Madi opens the dedicated guide once.
+> Existing users with Whisper Q8 installed bypass this onboarding after an update. On an 8 GB Mac, the detailed guide opens once on a later launch so it does not cover the model setup screen.
 
 ## The window
 

@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentEightGBGuideIfNeeded() {
+        // The model onboarding is the first-launch guide. Do not cover it with a
+        // browser window; the detailed 8 GB manual can surface on a later launch.
+        guard AssetManifest.modelIsValid() else { return }
         let defaults = UserDefaults.standard
         let revision = defaults.integer(forKey: LowMemoryGuidePolicy.presentedRevisionKey)
         guard LowMemoryGuidePolicy.shouldPresent(
@@ -69,7 +72,8 @@ struct SovereignApp: App {
 
     var body: some Scene {
         WindowGroup("Madi") {
-            ContentView(session: session, downloader: downloader, betaGate: betaGate)
+            ContentView(session: session, downloader: downloader,
+                        translateDownloader: translateDownloader, betaGate: betaGate)
                 .preferredColorScheme(appearance.colorScheme)
                 .task { downloader.ensureModel() }
                 .task { dictation.micBusy = { session.phase == .recording || session.phase == .paused } }

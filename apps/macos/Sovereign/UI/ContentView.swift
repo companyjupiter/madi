@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Bindable var session: SessionController
     @Bindable var downloader: ModelDownloader
+    @Bindable var translateDownloader: TranslateModelDownloader
     @Bindable var betaGate: BetaGate
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
@@ -95,6 +96,9 @@ struct ContentView: View {
     // the Set to start screen.
     @State private var showSaveToast = false
     @State private var saveToastTask: Task<Void, Never>? = nil
+    // nil is important: an existing installation with a valid Whisper model
+    // must enter directly and never be mistaken for an unfinished first run.
+    @State private var firstRunModelChoice: FirstRunModelSetupChoice? = nil
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
     private var flaggedWords: [(line: UUID, text: String)] {
@@ -115,8 +119,11 @@ struct ContentView: View {
                 // as the model gate). The app genuinely stops working here.
                 ExpiredGateView()
             } else {
-                switch downloader.state {
-                case .ready:
+                if FirstRunModelSetupPolicy.canEnterApp(
+                    requiredModelReady: downloader.state == .ready,
+                    translationModelReady: translateDownloader.state == .ready,
+                    translationEngineAvailable: AssetManifest.translateEngineURL != nil,
+                    choice: firstRunModelChoice) {
                     ZStack {
                         if showSetToStart {
                             setToStartCard
@@ -134,7 +141,11 @@ struct ContentView: View {
                         }
                     }
                     .animation(.snappy(duration: 0.32), value: showSetToStart)
-                default: ModelGateView(downloader: downloader)
+                } else {
+                    ModelGateView(
+                        downloader: downloader,
+                        translateDownloader: translateDownloader,
+                        setupChoice: $firstRunModelChoice)
                 }
             }
         }
