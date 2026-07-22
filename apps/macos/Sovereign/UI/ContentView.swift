@@ -825,11 +825,17 @@ struct ContentView: View {
             Text(msg).font(Theme.Fonts.body).foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center).padding(.horizontal, 32)
             HStack(spacing: 8) {
-                if msg.contains("마이크 권한") {
-                    Button(uiLang("시스템 설정 열기", "Open System Settings")) {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                            NSWorkspace.shared.open(url)
-                        }
+                if session.audioPermissionIssue == .microphoneDenied
+                    || session.audioPermissionIssue == .systemAudioDenied {
+                    Button(uiLang("시스템 설정 열기", "Open System Settings", "システム設定を開く")) {
+                        session.openAudioPermissionSettings()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                if session.audioPermissionIssue == .systemAudioDenied
+                    || session.audioPermissionIssue == .systemAudioRestartRequired {
+                    Button(uiLang("Madi 다시 시작", "Restart Madi", "Madi を再起動")) {
+                        session.relaunchAfterPermissionGrant()
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -2330,7 +2336,10 @@ struct ContentView: View {
         case .idle: uiLang("준비됨", "Ready")
         case .countingDown(let n): uiLang("\(n)초 후 시작…", "Starting in \(n)s…", "\(n)秒後に開始…")
         case .engineStarting: uiLang("모델 로딩…", "Loading model…")
-        case .ready: uiLang("마이크 시작…", "Starting mic…")
+        case .ready:
+            session.audioSource == .mic
+                ? uiLang("마이크 연결 중…", "Connecting microphone…", "マイクに接続中…")
+                : uiLang("시스템 오디오 연결 중…", "Connecting system audio…", "システムオーディオに接続中…")
         case .recording: uiLang("녹음 중", "Recording")
         case .paused: uiLang("일시정지", "Paused")
         case .processing: uiLang("파일 전사 중…", "Transcribing file…")

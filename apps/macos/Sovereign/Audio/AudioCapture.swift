@@ -14,21 +14,6 @@
 
 import AVFoundation
 
-/// Where the audio comes from. `system` = ScreenCaptureKit (Teams/Slack/YouTube);
-/// `both` = mic + system mixed (online meeting: you + remote participants).
-enum AudioSource: String, CaseIterable, Identifiable {
-    case mic, system, both
-    var id: String { rawValue }
-    var label: String { label(.ko) }
-    func label(_ lang: UILanguage) -> String {
-        switch self {
-        case .mic:    return lang("마이크", "Microphone")
-        case .system: return lang("시스템 오디오", "System audio")
-        case .both:   return lang("마이크+시스템", "Mic + system")
-        }
-    }
-}
-
 @MainActor
 final class AudioCapture {
     /// SEG/OVERLAP mirror the runner defaults; user-tunable in Settings.
@@ -62,6 +47,7 @@ final class AudioCapture {
     private var sysCapture: SystemAudioCapture?
     private let engine = AVAudioEngine()
     private var resampler: Resampler?
+    private var micTapInstalled = false
     private var segmenter = Segmenter()
     private var segIndex = 0
     private let tempDir: URL
@@ -75,38 +61,43 @@ final class AudioCapture {
 
     // MARK: live mic
 
-    func start() throws {
+    func start() async throws {
         resetSegmenter()
         micPending.removeAll(); sysPending.removeAll()
 
-        if source != .system {   // mic or both
-            if let dev = inputDeviceID { AudioDevices.setInput(dev, on: engine) }
-            let input = engine.inputNode
-            let hwFormat = input.outputFormat(forBus: 0)
-            guard let rs = Resampler(from: hwFormat) else {
-                throw NSError(domain: "AudioCapture", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "resampler init failed"])
+        do {
+            if source != .system {   // mic or both
+                if let dev = inputDeviceID { AudioDevices.setInput(dev, on: engine) }
+                let input = engine.inputNode
+                let hwFormat = input.outputFormat(forBus: 0)
+                guard let rs = Resampler(from: hwFormat) else {
+                    throw NSError(domain: "AudioCapture", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "resampler init failed"])
+                }
+                resampler = rs
+                input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self, rs] buf, _ in
+                    let samples = rs.convert(buf)
+                    guard !samples.isEmpty else { return }
+                    let level = AudioCapture.rmsLevel(samples)
+                    Task { @MainActor in self?.ingest(samples, level: level, mic: true) }
+                }
+                micTapInstalled = true
+                engine.prepare()
+                try engine.start()
             }
-            resampler = rs
-            input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self, rs] buf, _ in
-                let samples = rs.convert(buf)
-                guard !samples.isEmpty else { return }
-                let level = AudioCapture.rmsLevel(samples)
-                Task { @MainActor in self?.ingest(samples, level: level, mic: true) }
-            }
-            engine.prepare()
-            try engine.start()
-        }
 
-        if source != .mic {      // system or both
-            let sc = SystemAudioCapture()
-            sc.onSamples = { [weak self] s, lvl in self?.ingest(s, level: lvl, mic: false) }
-            sc.onError = { [weak self] msg in self?.onError?(msg) }
-            sysCapture = sc
-            Task { [weak self] in
-                do { try await sc.start() }
-                catch { self?.onError?("시스템 오디오를 시작할 수 없습니다 — 화면 기록 권한을 허용하세요. (\(error.localizedDescription))") }
+            if source != .mic {      // system or both
+                let sc = SystemAudioCapture()
+                sc.onSamples = { [weak self] s, lvl in self?.ingest(s, level: lvl, mic: false) }
+                sc.onError = { [weak self] msg in self?.onError?(msg) }
+                sysCapture = sc
+                // Do not report recording until ScreenCaptureKit has actually
+                // accepted the stream. Permission errors now reach the caller.
+                try await sc.start()
             }
+        } catch {
+            stopInputs()
+            throw error
         }
     }
 
@@ -145,7 +136,10 @@ final class AudioCapture {
     func switchInput(to id: AudioDeviceID?) {
         inputDeviceID = id
         guard source != .system, engine.isRunning else { return }
-        engine.inputNode.removeTap(onBus: 0)
+        if micTapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+            micTapInstalled = false
+        }
         engine.stop()
         // nil = follow the system default. The AUHAL keeps whatever device it
         // was bound to, so re-bind the CURRENT default explicitly.
@@ -165,6 +159,7 @@ final class AudioCapture {
             let level = AudioCapture.rmsLevel(samples)
             Task { @MainActor in self?.ingest(samples, level: level, mic: true) }
         }
+        micTapInstalled = true
         engine.prepare()
         do { try engine.start() }
         catch { onError?("마이크 전환 후 재시작 실패: \(error.localizedDescription)") }
@@ -173,8 +168,7 @@ final class AudioCapture {
     /// Finish the current partial window (final tail) and stop.
     func stop() {
         paused = false
-        if source != .system { engine.inputNode.removeTap(onBus: 0); engine.stop() }
-        sysCapture?.stop(); sysCapture = nil
+        stopInputs()
         // mix tail: flush whatever remains (the other side counts as silence)
         if source == .both {
             let tail = micPending.count >= sysPending.count ? micPending : sysPending
@@ -182,6 +176,28 @@ final class AudioCapture {
             micPending.removeAll(); sysPending.removeAll()
         }
         if let seg = segmenter.flush() { write(seg) }
+    }
+
+    /// Failure/cancellation teardown. Unlike stop(), this deliberately emits no
+    /// tail segment because no recording session was successfully admitted.
+    func abort() {
+        paused = false
+        stopInputs()
+        micPending.removeAll(); sysPending.removeAll()
+        resetSegmenter()
+        samplesSincePreview = 0
+        onLevel?(0)
+    }
+
+    /// Tear down partially-started inputs without flushing a phantom segment.
+    private func stopInputs() {
+        if micTapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+            micTapInstalled = false
+        }
+        engine.stop()
+        resampler = nil
+        sysCapture?.stop(); sysCapture = nil
     }
 
     // MARK: deterministic file injection (verification + --replay)

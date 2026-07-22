@@ -36,7 +36,7 @@ final class SystemAudioCapture: NSObject {
         cfg.channelCount = 2
         cfg.width = 2; cfg.height = 2                // minimal video (ignored)
         cfg.minimumFrameInterval = CMTime(value: 1, timescale: 1)
-        let s = SCStream(filter: filter, configuration: cfg, delegate: nil)
+        let s = SCStream(filter: filter, configuration: cfg, delegate: self)
         try s.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
         try await s.startCapture()
         stream = s
@@ -76,5 +76,15 @@ extension SystemAudioCapture: SCStreamOutput {
         var acc = 0.0
         for v in s { let f = Double(v) / 32768.0; acc += f * f }
         return Float(min(1, (acc / Double(s.count)).squareRoot() * 3))
+    }
+}
+
+extension SystemAudioCapture: SCStreamDelegate {
+    nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
+        Task { @MainActor [weak self] in
+            guard let self, self.stream === stream else { return }
+            self.stream = nil
+            self.onError?(error.localizedDescription)
+        }
     }
 }

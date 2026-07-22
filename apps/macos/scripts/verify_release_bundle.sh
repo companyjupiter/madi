@@ -30,6 +30,19 @@ ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :MADIFullVersion' "$PLIST")"
 }
 MINIMUM_OS="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$PLIST")"
 
+privacy_keys=(
+  NSMicrophoneUsageDescription
+  NSScreenCaptureUsageDescription
+  NSAudioCaptureUsageDescription
+)
+for key in "${privacy_keys[@]}"; do
+  value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$PLIST" 2>/dev/null || true)"
+  [ -n "$value" ] || {
+    echo "❌ bundle privacy description is missing: $key" >&2
+    exit 1
+  }
+done
+
 executables=(
   "$APP/Contents/MacOS/Madi"
   "$APP/Contents/MacOS/transcribe"
