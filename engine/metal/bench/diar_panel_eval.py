@@ -135,6 +135,16 @@ def parse_md_eval(stdout: str) -> dict:
         m = re.search(pat, stdout)
         if m:
             out[k] = float(m.group(1))
+    scored = out["scored"]
+    if isinstance(scored, float) and scored > 0:
+        # md-eval reports the three components in seconds, while DER is a
+        # percentage. Keep the historical fields for compatibility and add
+        # explicit percentage fields so reports cannot silently mix units.
+        for key in ("miss", "fa", "conf"):
+            value = out[key]
+            out[f"{key}_pct"] = (
+                100.0 * value / scored if isinstance(value, float) else None
+            )
     return out
 
 
@@ -479,17 +489,23 @@ def main() -> None:
     lines = [
         "# Diarization Panel Eval",
         "",
-        "| id | mode | ref spk | engine spk | auto-K | DER | miss | FA | conf | osd | mid fixes |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| id | mode | ref spk | engine spk | auto-K | DER % | scored s | miss s/% | FA s/% | conf s/% | osd | mid fixes |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     def fmt(record: dict, key: str) -> str:
         value = record.get(key)
         return "" if value is None else (f"{value:.2f}" if isinstance(value, float) else str(value))
 
     for r in records:
+        def component(key: str) -> str:
+            seconds = fmt(r, key)
+            percent = fmt(r, f"{key}_pct")
+            return seconds if not percent else f"{seconds}/{percent}"
+
         lines.append(
             f"| {r['id']} | {r['mode']} | {fmt(r, 'speakers_ref')} | {fmt(r, 'engine_speakers')} | "
-            f"{fmt(r, 'auto_k')} | {fmt(r, 'der')} | {fmt(r, 'miss')} | {fmt(r, 'fa')} | {fmt(r, 'conf')} | "
+            f"{fmt(r, 'auto_k')} | {fmt(r, 'der')} | {fmt(r, 'scored')} | {component('miss')} | "
+            f"{component('fa')} | {component('conf')} | "
             f"{fmt(r, 'osd_rows')} | {fmt(r, 'mid_fix_windows')} |"
         )
 
