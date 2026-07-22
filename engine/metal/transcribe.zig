@@ -845,6 +845,9 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         while (kk <= maxK) : (kk += 1) {
             try kmeansFit(X, m, segd, kk, tmp);
             const sil = try silhouetteSimplified(X, m, segd, tmp, kk);
+            if (std.posix.getenv("DIAR_K_TRACE") != null) {
+                std.debug.print("[auto-k-candidate] path=live m={d} K={d} sil={d:.6}\n", .{ m, kk, sil });
+            }
             if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
         }
         K = bestK;
@@ -2836,7 +2839,24 @@ fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, le
         if (sil > best_sil) { best_sil = sil; best_k = kk; @memcpy(best_asg, tmp); }
     }
     if (best_k != 4 or best_sil < envF("DIAR_PROMOTE4_SIL", 0.50)) return null;
+    var counts: [4]usize = .{0} ** 4;
+    for (best_asg) |cluster| counts[cluster] += 1;
+    var min_support = counts[0];
+    for (counts[1..]) |count| min_support = @min(min_support, count);
     const sep = maxCentroidCosDist(X, m, segd, best_asg, 4);
+    if (std.posix.getenv("DIAR_K_TRACE") != null) {
+        std.debug.print("[promote4-candidate] sil={d:.6} max_sep={d:.6} counts={any}\n", .{
+            best_sil,
+            sep,
+            counts,
+        });
+    }
+    // On a long session, a fourth cluster supported by only a few isolated
+    // windows is more likely an outlier split than a participant. Keep short
+    // panels permissive (a brief speaker can still be real), but demand one
+    // extra independent 1.5 s observation once the ledger reaches 100 windows.
+    if (m >= envU("DIAR_PROMOTE4_LONG_WIN", 100) and
+        min_support < envU("DIAR_PROMOTE4_MIN_WIN", 4)) return null;
     if (sep < envF("DIAR_MIN_SEP", 0.50)) return null;
     @memcpy(asg, best_asg);
     return .{ .sil = best_sil, .sep = sep };
@@ -2987,6 +3007,9 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         while (kk <= maxK) : (kk += 1) {
             try kmeansFit(X, m, segd, kk, tmp);
             const sil = try silhouetteSimplified(X, m, segd, tmp, kk);
+            if (std.posix.getenv("DIAR_K_TRACE") != null) {
+                std.debug.print("[auto-k-candidate] path=file m={d} K={d} sil={d:.6}\n", .{ m, kk, sil });
+            }
             if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
         }
         if (bestSil < tau) { K = 1; @memset(asg, 0); } else K = bestK;
