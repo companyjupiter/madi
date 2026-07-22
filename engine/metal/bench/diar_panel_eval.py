@@ -265,6 +265,7 @@ def eval_live_case(
         die(f"live engine failed for {case.case_id}:\n{p.stderr[-2000:]}")
 
     (live_dir / "engine.stdout.log").write_text(p.stdout)
+    (live_dir / "engine.stderr.log").write_text(p.stderr)
     live_ux = analyze_live_ux(p.stdout, frontiers, case.ref) if case.ref else {}
 
     output_lines = p.stdout.splitlines()

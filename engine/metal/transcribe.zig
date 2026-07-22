@@ -882,6 +882,9 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         for (0..segd) |d| sums[k * segd + d] += X[i * segd + d];
         cnts[k] += 1;
     }
+    if (std.posix.getenv("DIAR_K_TRACE") != null) {
+        std.debug.print("[recluster-final] m={d} K={d} counts={any}\n", .{ m, K, cnts });
+    }
     // Remap clusters → stable ids by MAJORITY VOTE of each cluster's windows'
     // already-emitted ids (continuity with what the user has seen, so
     // --speakers "0=name" and voiceprint claims stay on the right voice).
@@ -1399,11 +1402,14 @@ pub fn main() !void {
     // speaker panel audio into K=2. Keep births open until the session has enough
     // accepted windows to have likely seen every participant.
     const birth_lock_win: usize = envU("DIAR_BIRTH_LOCK_WIN", 64);
+    const livefix_tentative_quarantine = envU("DIAR_LIVEFIX_TENTATIVE_QUARANTINE", 1) != 0;
+    const livefix_quarantine_max_win: u32 = @intCast(envU("DIAR_LIVEFIX_QUARANTINE_MAX_WIN", 3));
     var live_emb = std.ArrayList(f32).init(alloc); // accepted windows, unit-normalized
     var live_ids = std.ArrayList(u8).init(alloc); // each window's visible stable/fallback id
     var live_raw_ids = std.ArrayList(u8).init(alloc); // internal pre-confirmation id
     var live_pending = std.ArrayList(bool).init(alloc); // visible id still folded into fallback
     var live_confirm = std.ArrayList(DiarConfirmState).init(alloc); // tentative-birth display lifecycle
+    var livefix_quarantined = [_]bool{false} ** 64;
     var live_margins = std.ArrayList(f32).init(alloc); // original acoustic margin
     var live_t0 = std.ArrayList(f32).init(alloc); // each window's global time (for SPKFIX)
     var live_osd_emitted: usize = 0; // OsdWin prefix already exposed before FLUSH
@@ -1989,6 +1995,27 @@ pub fn main() !void {
                                     var ncl: usize = 0;
                                     var nbroad_livefix: usize = 0;
                                     for (cents.items, 0..) |*c, sidx| {
+                                        if (livefix_tentative_quarantine and
+                                            acc_total >= birth_lock_win and
+                                            diar_k == 0 and n_anchor == 0 and
+                                            sidx < livefix_quarantined.len and
+                                            sidx < live_confirm.items.len)
+                                        {
+                                            if (live_confirm.items[sidx].confirmed) {
+                                                livefix_quarantined[sidx] = false;
+                                            } else if (c.count <= livefix_quarantine_max_win) {
+                                                livefix_quarantined[sidx] = true;
+                                            }
+                                        }
+                                        if (std.posix.getenv("DIAR_K_TRACE") != null) {
+                                            std.debug.print("[livefix-candidate] id={d} count={d} active={any} confirmed={any} quarantined={any}\n", .{
+                                                sidx,
+                                                c.count,
+                                                sidx < livefix_active.len and livefix_active[sidx],
+                                                if (sidx < live_confirm.items.len) live_confirm.items[sidx].confirmed else null,
+                                                sidx < livefix_quarantined.len and livefix_quarantined[sidx],
+                                            });
+                                        }
                                         if (sidx >= n_anchor and c.count < livefix_min_win) continue;
                                         livefix_broad_ids[nbroad_livefix] = sidx; nbroad_livefix += 1;
                                         if (sidx < livefix_active.len and livefix_active[sidx]) { livefix_ids[ncl] = sidx; ncl += 1; }
@@ -2019,6 +2046,17 @@ pub fn main() !void {
                                             }
                                             const stable_bs = livefix_ids[bs];
                                             live_raw_ids.items[wi] = @intCast(@min(stable_bs, 255));
+                                            // Recluster/writeback remains the internal acoustic
+                                            // continuity source.  A sparse post-lock cluster may
+                                            // learn and win that vote, but cannot bypass the direct
+                                            // independent-evidence lifecycle used by SPK emission.
+                                            // Confirmation releases the quarantine and a later pass
+                                            // repairs pending windows through the SPKFIX contract.
+                                            if (livefix_tentative_quarantine and
+                                                stable_bs < livefix_quarantined.len and
+                                                livefix_quarantined[stable_bs] and
+                                                stable_bs < live_confirm.items.len and
+                                                !live_confirm.items[stable_bs].confirmed) continue;
                                             live_pending.items[wi] = false;
                                             if (stable_bs != live_ids.items[wi]) {
                                                 live_ids.items[wi] = @intCast(@min(stable_bs, 255));
