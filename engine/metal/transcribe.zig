@@ -639,6 +639,7 @@ const DiarConfirmState = struct {
     confirmed: bool = true,
     streak: u32 = 0,
     last_seen: f32 = 0,
+    fallback: usize = 0,
 };
 
 // Delay exposing a newly-born auto speaker until it has repeated acoustic
@@ -845,6 +846,9 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         while (kk <= maxK) : (kk += 1) {
             try kmeansFit(X, m, segd, kk, tmp);
             const sil = try silhouetteSimplified(X, m, segd, tmp, kk);
+            if (std.posix.getenv("DIAR_K_TRACE") != null) {
+                std.debug.print("[auto-k-candidate] path=live m={d} K={d} sil={d:.6}\n", .{ m, kk, sil });
+            }
             if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
         }
         K = bestK;
@@ -852,7 +856,11 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         // absolute-separation gate (same as file mode): a presenter whose voice
         // varies splits with high silhouette but close centroids → one speaker
         if (K >= 2 and maxCentroidCosDist(X, m, segd, asg, K) < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); }
-        if (try maybePromoteSpherical4(X, m, segd, maxK, K, asg)) |promotion| {
+        if (try maybePromoteSpherical4(
+            X, m, segd, maxK, K, asg,
+            envU("DIAR_LIVE_PROMOTE4_LONG_WIN", 64),
+            envU("DIAR_LIVE_PROMOTE4_MIN_WIN", 5),
+        )) |promotion| {
             K = 4;
             bestSil = promotion.sil;
         }
@@ -874,6 +882,9 @@ fn liveRecluster(cents: *std.ArrayList(DiarCentroid), emb: []const f32, ids: []c
         const k = asg[i];
         for (0..segd) |d| sums[k * segd + d] += X[i * segd + d];
         cnts[k] += 1;
+    }
+    if (std.posix.getenv("DIAR_K_TRACE") != null) {
+        std.debug.print("[recluster-final] m={d} K={d} counts={any}\n", .{ m, K, cnts });
     }
     // Remap clusters → stable ids by MAJORITY VOTE of each cluster's windows'
     // already-emitted ids (continuity with what the user has seen, so
@@ -1392,11 +1403,14 @@ pub fn main() !void {
     // speaker panel audio into K=2. Keep births open until the session has enough
     // accepted windows to have likely seen every participant.
     const birth_lock_win: usize = envU("DIAR_BIRTH_LOCK_WIN", 64);
+    const livefix_tentative_quarantine = envU("DIAR_LIVEFIX_TENTATIVE_QUARANTINE", 1) != 0;
+    const livefix_quarantine_max_win: u32 = @intCast(envU("DIAR_LIVEFIX_QUARANTINE_MAX_WIN", 3));
     var live_emb = std.ArrayList(f32).init(alloc); // accepted windows, unit-normalized
     var live_ids = std.ArrayList(u8).init(alloc); // each window's visible stable/fallback id
     var live_raw_ids = std.ArrayList(u8).init(alloc); // internal pre-confirmation id
     var live_pending = std.ArrayList(bool).init(alloc); // visible id still folded into fallback
     var live_confirm = std.ArrayList(DiarConfirmState).init(alloc); // tentative-birth display lifecycle
+    var livefix_quarantined = [_]bool{false} ** 64;
     var live_margins = std.ArrayList(f32).init(alloc); // original acoustic margin
     var live_t0 = std.ArrayList(f32).init(alloc); // each window's global time (for SPKFIX)
     var live_osd_emitted: usize = 0; // OsdWin prefix already exposed before FLUSH
@@ -1861,7 +1875,10 @@ pub fn main() !void {
                         const ar = try diarAssign(&cents, cemb[wsg * diar.EMB ..][0 .. diar.EMB], diar_sim, eff_max, n_anchor, envF("DIAR_ANCHOR_SIM", 0.70));
                         const spk = ar.id;
                         while (live_confirm.items.len < cents.items.len) try live_confirm.append(.{});
-                        if (ar.born and spk > 0) live_confirm.items[spk] = .{ .confirmed = false };
+                        if (ar.born and spk > 0) live_confirm.items[spk] = .{
+                            .confirmed = false,
+                            .fallback = ar.fallback,
+                        };
                         if (diar_assign_trace) {
                             const action: []const u8 = if (ar.born) "birth" else "update";
                             try out.print("SPKTRACE {d:.2} {d} {d} {d:.4} {d:.4} {d:.4} {d} {d} {s}\n", .{
@@ -1869,10 +1886,17 @@ pub fn main() !void {
                                 ar.count_before, ar.count_after, action,
                             });
                         }
+                        const visible_fallback = if (spk < livefix_quarantined.len and
+                            livefix_quarantined[spk] and
+                            spk < live_confirm.items.len and
+                            !live_confirm.items[spk].confirmed)
+                            live_confirm.items[spk].fallback
+                        else
+                            ar.fallback;
                         const visible_spk = try liveVisibleSpeaker(
                             out,
                             spk,
-                            ar.fallback,
+                            visible_fallback,
                             cents.items[spk].count,
                             recluster_every > 0 and diar_k == 0 and n_anchor == 0,
                             envU("DIAR_CONFIRM_WIN", 2),
@@ -1982,6 +2006,30 @@ pub fn main() !void {
                                     var ncl: usize = 0;
                                     var nbroad_livefix: usize = 0;
                                     for (cents.items, 0..) |*c, sidx| {
+                                        if (livefix_tentative_quarantine and
+                                            acc_total >= birth_lock_win and
+                                            diar_k == 0 and n_anchor == 0 and
+                                            sidx < livefix_quarantined.len and
+                                            sidx < live_confirm.items.len)
+                                        {
+                                            if (live_confirm.items[sidx].confirmed) {
+                                                livefix_quarantined[sidx] = false;
+                                            } else if (sidx < livefix_active.len and
+                                                livefix_active[sidx] and
+                                                c.count <= livefix_quarantine_max_win)
+                                            {
+                                                livefix_quarantined[sidx] = true;
+                                            }
+                                        }
+                                        if (std.posix.getenv("DIAR_K_TRACE") != null) {
+                                            std.debug.print("[livefix-candidate] id={d} count={d} active={any} confirmed={any} quarantined={any}\n", .{
+                                                sidx,
+                                                c.count,
+                                                sidx < livefix_active.len and livefix_active[sidx],
+                                                if (sidx < live_confirm.items.len) live_confirm.items[sidx].confirmed else null,
+                                                sidx < livefix_quarantined.len and livefix_quarantined[sidx],
+                                            });
+                                        }
                                         if (sidx >= n_anchor and c.count < livefix_min_win) continue;
                                         livefix_broad_ids[nbroad_livefix] = sidx; nbroad_livefix += 1;
                                         if (sidx < livefix_active.len and livefix_active[sidx]) { livefix_ids[ncl] = sidx; ncl += 1; }
@@ -2012,6 +2060,17 @@ pub fn main() !void {
                                             }
                                             const stable_bs = livefix_ids[bs];
                                             live_raw_ids.items[wi] = @intCast(@min(stable_bs, 255));
+                                            // Recluster/writeback remains the internal acoustic
+                                            // continuity source.  A sparse post-lock cluster may
+                                            // learn and win that vote, but cannot bypass the direct
+                                            // independent-evidence lifecycle used by SPK emission.
+                                            // Confirmation releases the quarantine and a later pass
+                                            // repairs pending windows through the SPKFIX contract.
+                                            if (livefix_tentative_quarantine and
+                                                stable_bs < livefix_quarantined.len and
+                                                livefix_quarantined[stable_bs] and
+                                                stable_bs < live_confirm.items.len and
+                                                !live_confirm.items[stable_bs].confirmed) continue;
                                             live_pending.items[wi] = false;
                                             if (stable_bs != live_ids.items[wi]) {
                                                 live_ids.items[wi] = @intCast(@min(stable_bs, 255));
@@ -2823,7 +2882,7 @@ const SphericalPromotion = struct { sil: f32, sep: f32 };
 // every legacy K=1 decision and every K>=4 result. Only promote a surviving
 // legacy K=2/3 when a full spherical sweep independently selects K=4 with a
 // strong silhouette and the existing absolute-separation safety gate passes.
-fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, legacy_k: usize, asg: []usize) !?SphericalPromotion {
+fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, legacy_k: usize, asg: []usize, support_long_win: usize, support_min_win: usize) !?SphericalPromotion {
     if (envU("DIAR_PROMOTE4", 1) == 0 or legacy_k < 2 or legacy_k >= 4 or maxK < 4) return null;
     const best_asg = try alloc.alloc(usize, m); defer alloc.free(best_asg);
     const tmp = try alloc.alloc(usize, m); defer alloc.free(tmp);
@@ -2836,7 +2895,23 @@ fn maybePromoteSpherical4(X: []const f32, m: usize, segd: usize, maxK: usize, le
         if (sil > best_sil) { best_sil = sil; best_k = kk; @memcpy(best_asg, tmp); }
     }
     if (best_k != 4 or best_sil < envF("DIAR_PROMOTE4_SIL", 0.50)) return null;
+    var counts: [4]usize = .{0} ** 4;
+    for (best_asg) |cluster| counts[cluster] += 1;
+    var min_support = counts[0];
+    for (counts[1..]) |count| min_support = @min(min_support, count);
     const sep = maxCentroidCosDist(X, m, segd, best_asg, 4);
+    if (std.posix.getenv("DIAR_K_TRACE") != null) {
+        std.debug.print("[promote4-candidate] sil={d:.6} max_sep={d:.6} counts={any}\n", .{
+            best_sil,
+            sep,
+            counts,
+        });
+    }
+    // On a long session, a fourth cluster supported by only a few isolated
+    // windows is more likely an outlier split than a participant. Keep short
+    // panels permissive (a brief speaker can still be real). Callers set
+    // path-specific support because live overlap revisits boundary windows.
+    if (m >= support_long_win and min_support < support_min_win) return null;
     if (sep < envF("DIAR_MIN_SEP", 0.50)) return null;
     @memcpy(asg, best_asg);
     return .{ .sil = best_sil, .sep = sep };
@@ -2987,6 +3062,9 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
         while (kk <= maxK) : (kk += 1) {
             try kmeansFit(X, m, segd, kk, tmp);
             const sil = try silhouetteSimplified(X, m, segd, tmp, kk);
+            if (std.posix.getenv("DIAR_K_TRACE") != null) {
+                std.debug.print("[auto-k-candidate] path=file m={d} K={d} sil={d:.6}\n", .{ m, kk, sil });
+            }
             if (sil > bestSil) { bestSil = sil; bestK = kk; @memcpy(asg, tmp); }
         }
         if (bestSil < tau) { K = 1; @memset(asg, 0); } else K = bestK;
@@ -2997,7 +3075,11 @@ fn diarizeEmb(out: anytype, emb: []f32, bm: []const f32, t0: []const f32, n: usi
             ev_sep = sep;
             if (sep < envF("DIAR_MIN_SEP", 0.50)) { K = 1; @memset(asg, 0); bestSil = -2; }
         }
-        if (try maybePromoteSpherical4(X, m, segd, maxK, K, asg)) |promotion| {
+        if (try maybePromoteSpherical4(
+            X, m, segd, maxK, K, asg,
+            envU("DIAR_PROMOTE4_LONG_WIN", 100),
+            envU("DIAR_PROMOTE4_MIN_WIN", 4),
+        )) |promotion| {
             K = 4;
             bestSil = promotion.sil;
             ev_sep = promotion.sep;
