@@ -1,6 +1,36 @@
 // DNAEngineBroker.swift — one resident DNA3 process shared by live translation,
 // action rail, summary, reconcile, and Q&A. Requests are priority-serialized so
 // Metal never runs two model-sized DNA processes concurrently.
+//
+// WEDGE RECOVERY (2026-07-25). `active` is cleared only by the engine's own
+// turn-terminating output, and pump() is gated on `active == nil`. So a turn
+// that never produces "[perf] generation" stopped EVERY DNA client — live
+// captions, interim captions, the action rail and the summary — permanently,
+// with no log and no user-visible error. A per-request watchdog now bounds that.
+//
+// On expiry the process is TERMINATED and relaunched rather than drained. Why:
+//
+//  * The engine REPL is strictly serial (line in → prefill → generate →
+//    "[perf] generation" → "> "), and silence on stdout is indistinguishable
+//    from the app's side between "still generating, just slow" and "line
+//    dropped, blocked on read". Draining until the next terminator therefore
+//    has no bounded end on exactly the paths that wedge — it renames the wedge
+//    instead of ending it.
+//  * Draining while ALSO admitting new turns is worse than the wedge: a late
+//    reply from the timed-out turn would be parsed as the NEXT turn's reply and
+//    shown against the wrong caption. Silent wrong output beats a stall.
+//  * Terminating removes both risks by construction — the fd closes, no stale
+//    bytes can arrive, and the parser is reset with the process.
+//  * The budget (DNATurnBudget) is derived from the engine's OWN generation cap
+//    at measured throughput with a contention multiplier, so a fired watchdog
+//    means the engine is outside its modelled behaviour. "Wait longer" is not a
+//    recovery strategy for that. The cost paid is one model reload (READY takes
+//    1.4-3.5 s), on a path that is already broken.
+//
+// The engine side was fixed too — its two skip paths (over-long line, empty
+// line) now emit the terminator instead of dropping the turn silently
+// (sovereignLLM main.zig emitEmptyTurn, both dna3-2b and dna3-4b). The watchdog
+// stays as the backstop for wedges that are NOT a known skip path.
 
 import Foundation
 
@@ -42,8 +72,27 @@ final class DNAEngineBroker {
     private var sequence: UInt64 = 0
     private var enginePath: String?
     private var modelPath: String?
+    /// Fires when the active request outlives its budget. Cancelled the moment
+    /// the engine terminates the turn.
+    private var watchdog: Task<Void, Never>?
+    /// Set by the watchdog so the termination handler knows this death was ours
+    /// and the engine should come back.
+    private var restartAfterTermination = false
+    /// CONSECUTIVE wedges — reset by any turn the engine completes normally. A
+    /// model/engine that wedges every turn must not respawn forever.
+    private(set) var wedgeRestarts = 0
+    /// Fixed per-turn budget in seconds; nil = derive it per request from
+    /// DNATurnBudget. Read once from MADI_DNA_TIMEOUT_MS so a wedge can be
+    /// reproduced without a rebuild, and settable so tests need not wait ~30 s.
+    var turnTimeoutOverride: TimeInterval? = DNATurnBudget.override()
+    private static let maxWedgeRestarts = 2
+    /// The engine's own generation cap, passed as SOV_NSTEPS and used as the
+    /// decode term of the watchdog budget — one source of truth.
+    private static let nsteps = 512
 
-    private init() {}
+    // internal (not private) so tests can drive an isolated broker instead of
+    // the app-wide singleton.
+    init() {}
 
     func attach(client: ClientID, engine: URL, model: URL, onReady: @escaping () -> Void) -> Bool {
         clients.insert(client)
@@ -56,14 +105,24 @@ final class DNAEngineBroker {
             if ready { onReady() }
             return true
         }
+        guard launch(engine: engine, model: model) else {
+            clients.remove(client); readyCallbacks.removeValue(forKey: client)
+            return false
+        }
+        return true
+    }
 
+    /// Spawn the engine process. Shared by the first attach and by the
+    /// post-wedge restart, so both paths get identical env/pipes/handlers.
+    @discardableResult
+    private func launch(engine: URL, model: URL) -> Bool {
         let p = Process()
         let input = Pipe(), output = Pipe()
         p.executableURL = engine
         p.arguments = [model.path]
         var env = ProcessInfo.processInfo.environment
         env.removeValue(forKey: "SOV_DEBUG")
-        env["SOV_NSTEPS"] = "512"
+        env["SOV_NSTEPS"] = String(Self.nsteps)
         p.environment = env
         p.standardInput = input
         p.standardOutput = output
@@ -82,7 +141,6 @@ final class DNAEngineBroker {
             enginePath = engine.path; modelPath = model.path
             return true
         } catch {
-            clients.remove(client); readyCallbacks.removeValue(forKey: client)
             return false
         }
     }
@@ -96,6 +154,7 @@ final class DNAEngineBroker {
         stdoutPipe?.fileHandleForReading.readabilityHandler = nil
         if process?.isRunning == true { process?.terminate() }
         resetProcess()
+        wedgeRestarts = 0   // last client left: the next session starts with a full budget
     }
 
     @discardableResult
@@ -126,8 +185,16 @@ final class DNAEngineBroker {
         pump()
     }
 
+    /// Drop this client's QUEUED requests while it stays attached — the in-flight
+    /// turn is not cancellable (the engine has already been written to and owes
+    /// us a terminator). Every dropped request is completed with nil: a caller
+    /// that fans out (SummaryEngine's map/fold) counts completions to know when a
+    /// round is done, so silently discarding them would wedge the caller in the
+    /// same way a missing terminator wedges the broker.
     func cancelPending(client: ClientID) {
+        let dropped = pending.filter { $0.client == client }
         pending.removeAll { $0.client == client }
+        for request in dropped where clients.contains(request.client) { request.completion(nil) }
         reportBusy()
     }
 
@@ -151,11 +218,56 @@ final class DNAEngineBroker {
         active = request
         reportBusy()
         parser = TranslateStreamParser(preserveNewlines: request.preserveNewlines)
+        armWatchdog(for: request)
         switch request.kind {
         case .turn:
             write(request.text + "\n")
         case .prefix(let slot):
             write("%%PFX \(slot) \(request.text)\n")
+        }
+    }
+
+    // MARK: - per-request watchdog
+
+    private func armWatchdog(for request: Request) {
+        watchdog?.cancel()
+        // A prefix registration only prefills, so the decode term makes its
+        // budget strictly more generous than it needs to be — deliberate.
+        let budget = turnTimeoutOverride
+            ?? DNATurnBudget.seconds(promptBytes: request.text.utf8.count,
+                                     steps: Self.nsteps,
+                                     rates: DNATurnBudget.rates(forEnginePath: enginePath ?? ""))
+        let id = request.id
+        watchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(budget * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.watchdogFired(id, budget: budget)
+        }
+    }
+
+    private func disarmWatchdog() {
+        watchdog?.cancel(); watchdog = nil
+    }
+
+    /// The active turn outlived its budget: the engine owes a terminator it is
+    /// never going to send. Kill the process — see the file header for why this
+    /// is a terminate rather than a drain. `terminationHandler` does the rest
+    /// (fail the in-flight + queued requests, then relaunch).
+    private func watchdogFired(_ id: UUID, budget: TimeInterval) {
+        guard let request = active, request.id == id else { return }
+        watchdog = nil
+        NSLog("DNA engine: turn timed out after %.1fs with no [perf] generation — restarting engine (client %@)",
+              budget, request.client.uuidString)
+        guard let p = process else { return }   // already reset; nothing to kill
+        restartAfterTermination = true
+        guard p.isRunning else { return }       // dying already — the handler will land
+        p.terminate()
+        let pid = p.processIdentifier
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // SIGTERM is enough for a REPL blocked on read; this only covers an
+            // engine stuck somewhere that ignores it.
+            if self?.process === p, p.isRunning { kill(pid, SIGKILL) }
         }
     }
 
@@ -175,6 +287,7 @@ final class DNAEngineBroker {
                 guard let request = active, case .prefix(let expected) = request.kind,
                       slot == expected else { continue }
                 active = nil
+                disarmWatchdog(); wedgeRestarts = 0
                 if clients.contains(request.client) { request.completion("PFX_OK") }
                 pump()
                 reportBusy()
@@ -184,6 +297,7 @@ final class DNAEngineBroker {
             case .turnComplete(let text):
                 guard let request = active else { continue }
                 active = nil
+                disarmWatchdog(); wedgeRestarts = 0
                 if clients.contains(request.client) {
                     if case .turn = request.kind { request.completion(text.isEmpty ? nil : text) }
                     else { request.completion(nil) }
@@ -196,12 +310,56 @@ final class DNAEngineBroker {
 
     private func processTerminated() {
         guard process != nil else { return }
-        let callbacks = pending + (active.map { [$0] } ?? [])
-        for request in callbacks where clients.contains(request.client) { request.completion(nil) }
+        disarmWatchdog()
+        let engine = enginePath.map { URL(fileURLWithPath: $0) }
+        let model = modelPath.map { URL(fileURLWithPath: $0) }
+        let restart = restartAfterTermination
+        restartAfterTermination = false
+        let orphans = pending + (active.map { [$0] } ?? [])
+
+        // Order matters: reset (and relaunch) BEFORE firing the completions.
+        // Clients submit their next request from inside the completion handler
+        // (TranslateEngine.completeTurn → pump → submit), so completing first
+        // would append that request to `pending` and then have resetProcess()
+        // wipe it — the client would sit on an inflight turn that can never
+        // complete, i.e. the same wedge one level up.
         resetProcess()
+        // Only a watchdog kill respawns. A death we did not cause keeps the
+        // pre-existing behaviour (fail everything, clients decide) — this change
+        // is scoped to the wedge, not to crash policy.
+        if restart, let engine, let model, !clients.isEmpty {
+            if wedgeRestarts >= Self.maxWedgeRestarts {
+                NSLog("DNA engine: wedged %d times in a row — staying down for this session", wedgeRestarts)
+            } else {
+                wedgeRestarts += 1
+                NSLog("DNA engine: relaunching after wedge (%d/%d)", wedgeRestarts, Self.maxWedgeRestarts)
+                if !launch(engine: engine, model: model) {
+                    NSLog("DNA engine: relaunch failed to spawn %@", engine.path)
+                }
+            }
+        }
+        for request in orphans where clients.contains(request.client) { request.completion(nil) }
+
+        // No engine came back: anything a completion just resubmitted is queued
+        // for a pump that will never run. Fail it too, so no client is left
+        // waiting on a reply that cannot arrive. Bounded — each sweep drains a
+        // client's finite backlog one step further.
+        var sweeps = 0
+        while process == nil, !pending.isEmpty, sweeps < 64 {
+            sweeps += 1
+            let stranded = pending
+            pending.removeAll()
+            for request in stranded where clients.contains(request.client) { request.completion(nil) }
+        }
+        reportBusy()
     }
 
     private func resetProcess() {
+        disarmWatchdog()
+        // Consumed by processTerminated() before this runs; cleared here so a
+        // watchdog kill that races a detach can't arm a restart for some LATER,
+        // unrelated process death.
+        restartAfterTermination = false
         stdoutPipe?.fileHandleForReading.readabilityHandler = nil
         process = nil; stdinPipe = nil; stdoutPipe = nil
         enginePath = nil; modelPath = nil; ready = false

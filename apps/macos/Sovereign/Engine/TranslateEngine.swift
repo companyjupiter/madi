@@ -61,6 +61,14 @@ final class TranslateEngine {
         broker.attach(client: clientID, engine: engine, model: model) { [weak self] in
             guard let self else { return }
             self.ready = true
+            // READY can also mean a RELAUNCHED process (broker wedge recovery),
+            // whose prefix-cache slots are empty. Stale "registered" state would
+            // send "%%TRN <slot> …" to an engine with pfx_ready[slot] == false,
+            // which falls through to the legacy path and translates the literal
+            // "%%TRN 0 " marker as part of the prompt. Re-register instead.
+            self.registeredPrefixes.removeAll()
+            self.registeringPrefixes.removeAll()
+            self.disabledPrefixes.removeAll()
             self.pump()
         }
     }

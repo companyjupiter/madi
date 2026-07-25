@@ -78,6 +78,39 @@ final class TranslateStreamParserTests: XCTestCase {
         XCTAssertEqual(feed(&p, "\n[perf] generation: 1 tok in 1ms (1 tok/s)\n"),
                        [.turnComplete("Bonjour")])
     }
+
+    // The engine's two skip paths used to `continue` with no output the parser
+    // recognised, so the driver's request never completed and the DNA lane
+    // wedged. They now emit the bare terminator (main.zig emitEmptyTurn). Bytes
+    // below are the EXACT capture from a live 2B run, 2026-07-25.
+
+    func testEmptyLineSkipTerminatesTheTurn() {
+        var p = TranslateStreamParser()
+        _ = feed(&p, "READY\n")
+        XCTAssertEqual(feed(&p, "> [perf] generation: 0 tok in 0.0ms (0.0 tok/s)\n"),
+                       [.turnComplete("")])
+    }
+
+    func testOverLongLineSkipTerminatesTheTurn() {
+        var p = TranslateStreamParser()
+        _ = feed(&p, "READY\n")
+        let captured = "> [warn] input line exceeds 32768 bytes — raise SOV_MAX_SEQ (native 262144). Line skipped.\n"
+                     + "[perf] generation: 0 tok in 0.0ms (0.0 tok/s)\n"
+        XCTAssertEqual(feed(&p, captured), [.turnComplete("")])
+    }
+
+    /// The skip terminator must not leave the parser in reply mode — the next
+    /// real turn has to frame normally.
+    func testTurnAfterASkipStillFramesNormally() {
+        var p = TranslateStreamParser()
+        _ = feed(&p, "READY\n")
+        XCTAssertEqual(feed(&p, "> [perf] generation: 0 tok in 0.0ms (0.0 tok/s)\n"),
+                       [.turnComplete("")])
+        _ = feed(&p, "> [chat] 6 tokens, prefilling...\n[perf] prefill: 6 tok in 1ms (6 tok/s)\n")
+        XCTAssertEqual(feed(&p, "Hello"), [.replyDelta("Hello")])
+        XCTAssertEqual(feed(&p, "\n[perf] generation: 1 tok in 1ms (1 tok/s)\n> "),
+                       [.turnComplete("Hello")])
+    }
 }
 
 final class TranslateRoutingTests: XCTestCase {
