@@ -852,17 +852,18 @@ struct ContentView: View {
         .frame(height: 21)
     }
 
+    // Quiet empty state — reached only when a session/file ended with ZERO
+    // recognized lines, so no orb and no "start recording" call-to-action
+    // (neither action is available from this pane; ‹ goes back to the start).
     private var readyState: some View {
-        VStack(spacing: 16) {
-            OrbView()
-            VStack(spacing: 6) {
-                Text(uiLang("기록할 준비가 되었어요", "Ready to record"))
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text(uiLang("‘녹음 시작’을 누르거나, 오디오·영상 파일을 끌어다 놓으세요.", "Press ‘Start recording’, or drop in an audio/video file."))
-                    .font(Theme.Fonts.display).foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-            }
+        VStack(spacing: 6) {
+            Text(uiLang("전사된 내용이 없습니다", "Nothing was transcribed"))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Text(uiLang("음성이 인식되지 않았어요. ‹ 로 돌아가 다시 시도해 보세요.", "No speech was recognized. Go back with ‹ and try again."))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.Colors.textTertiary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)

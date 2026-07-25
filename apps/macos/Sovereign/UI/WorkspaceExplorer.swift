@@ -180,19 +180,21 @@ struct WorkspaceExplorer: View {
                 Spacer()
                 BlackToggle(isOn: $session.autoSaveEnabled)
             }
+            // rev.2 (Figma 318:1595): the underlined path IS the change control —
+            // the separate 변경 button is gone.
             HStack(spacing: 6) {
                 Text(uiLang("폴더", "Folder"))
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.textPrimary)
-                Text(session.autoSaveFolder.lastPathComponent)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .help(session.autoSaveFolder.path)
+                Button { chooseFolder() } label: {
+                    Text(session.autoSaveFolder.lastPathComponent)
+                        .font(.system(size: 13, weight: .medium))
+                        .underline()
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                .buttonStyle(.plain)
+                .help(session.autoSaveFolder.path)
                 Spacer()
-                Button(uiLang("변경", "Change")) { chooseFolder() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.Colors.textPrimary)   // de-accent
             }
             exportButton
         }
