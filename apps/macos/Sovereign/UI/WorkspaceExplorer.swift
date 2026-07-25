@@ -66,7 +66,7 @@ struct WorkspaceExplorer: View {
                         .frame(maxWidth: .infinity)
                         .background {
                             if mode == m {
-                                Capsule().fill(Theme.Colors.surface)
+                                Capsule().fill(Theme.Colors.segmentSelected)
                                     .shadow(color: .black.opacity(0.06), radius: 1, y: 2)
                                     .matchedGeometryEffect(id: "modeSwitcherPill", in: modeSwitcherNS)
                             }
@@ -138,7 +138,7 @@ struct WorkspaceExplorer: View {
         .frame(width: 267)
         .background(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
-                .fill(Theme.Colors.surface)
+                .fill(Theme.Colors.surfaceRaised)
                 .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous)
                     .strokeBorder(Theme.Colors.surfaceSunken, lineWidth: 1))
                 .shadow(color: .black.opacity(0.03), radius: 9, x: 4, y: 4)

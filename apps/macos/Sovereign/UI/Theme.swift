@@ -39,8 +39,46 @@ enum Theme {
         static let surfaceSunken = Color(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return isDark
-                ? NSColor.windowBackgroundColor
+                // windowBackgroundColor equalled the card fill in dark, so every
+                // sunken fill/outline vanished — one visible step above the base.
+                ? NSColor(red: 0.2039, green: 0.2039, blue: 0.2275, alpha: 1.0)   // #34343A (dark)
                 : NSColor(red: 0.9490, green: 0.9490, blue: 0.9686, alpha: 1.0)   // #F2F2F7 (light)
+        })
+        // Elevated card/panel fill. Light keeps the white card (elevation via
+        // shadow); dark lifts the fill one step instead — black drop shadows
+        // are invisible on a dark window, so fill contrast carries elevation.
+        static let surfaceRaised = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(red: 0.1490, green: 0.1490, blue: 0.1686, alpha: 1.0)   // #26262B (dark)
+                : NSColor.controlBackgroundColor                                   // white (light)
+        })
+        // Cards nested inside a raised panel (transport buttons, file/busy
+        // cards). Light = white with its shadow; dark = a MODEST lift above the
+        // panel (#26262B) — raised-on-raised was invisible, but a full-bright
+        // fill overshot ("너무 밝아"), so the card whispers, not shouts.
+        static let surfaceElevated = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(red: 0.1843, green: 0.1843, blue: 0.2078, alpha: 1.0)   // #2F2F35 (dark)
+                : NSColor.controlBackgroundColor                                   // white (light)
+        })
+        // Selected segment/tab pill — must sit ABOVE the sunken track (#34343A)
+        // or the active tab reads pressed-in. Kept separate from the card lift,
+        // which is intentionally dimmer.
+        static let segmentSelected = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(red: 0.2549, green: 0.2549, blue: 0.2863, alpha: 1.0)   // #414149 (dark)
+                : NSColor.controlBackgroundColor                                   // white (light)
+        })
+        // Floating-panel hairline: near-invisible black in light, low-alpha
+        // white in dark (a black hairline disappears on a dark surface).
+        static let hairline = Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(white: 1.0, alpha: 0.12)
+                : NSColor(white: 0.0, alpha: 0.04)
         })
         static let separator = Color(nsColor: .separatorColor)
         static let textPrimary = Color(nsColor: .labelColor)
@@ -50,7 +88,11 @@ enum Theme {
         static let textSecondary = Color(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return isDark
-                ? NSColor.secondaryLabelColor
+                // The system secondaryLabel (white 55%) reads far STRONGER on a
+                // dark surface than light's #3C3C43@60% does on white — meta text
+                // (timecodes, row icons) crowded the primary text. 45% restores
+                // the same perceived primary→secondary step as light mode.
+                ? NSColor(white: 1.0, alpha: 0.45)
                 : NSColor(red: 60 / 255, green: 60 / 255, blue: 67 / 255, alpha: 0.6)
         })
         static let textTertiary = Color(nsColor: .tertiaryLabelColor)

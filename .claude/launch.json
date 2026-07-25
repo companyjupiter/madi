@@ -14,6 +14,12 @@
       "runtimeArgs": ["-m", "http.server", "8791"],
       "cwd": "docs/manual",
       "port": 8791
+    },
+    {
+      "name": "jupiter-site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "/Users/haeminbak/Documents/Project file/jupiter-site"],
+      "port": 5173
     }
   ]
 }

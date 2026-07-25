@@ -57,6 +57,17 @@ struct ContentView: View {
             value.merge(nextValue()) { $1 }
         }
     }
+
+    /// Measured natural height of the input-picker rows — replaces the hand-math
+    /// estimate once known, so the fixed scroll frame hugs the content exactly
+    /// (a too-tall frame read as extra bottom padding inside the panel).
+    private struct MicPanelHeightKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
+        }
+    }
+    @State private var micPanelMeasuredHeight: CGFloat = 0
     // Guard rails for destructive exits (X on the file card / back chevron):
     // confirm before wiping unsaved content, and stop-confirm mid-recording.
     @State private var showDiscardConfirm = false
@@ -160,6 +171,11 @@ struct ContentView: View {
             // Kill the automatic hairline macOS draws under the titlebar when
             // content scrolls (the intermittent "bottom border" below the header).
             w.titlebarSeparatorStyle = .none
+            // The transparent titlebar shows the NSWindow's own background —
+            // the system windowBackground is LIGHTER than our surface in dark
+            // mode, which read as a gray header strip. Paint the window with the
+            // same adaptive color the content uses so the strip disappears.
+            w.backgroundColor = .controlBackgroundColor
             syncWindowMode()
         })
         .onChange(of: showSetToStart) { _, _ in
@@ -636,7 +652,7 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity)
                         .background {
                             if contentMode == isContent {
-                                Capsule().fill(Theme.Colors.surface)
+                                Capsule().fill(Theme.Colors.segmentSelected)
                                     .shadow(color: .black.opacity(0.06), radius: 1, y: 2)
                                     .matchedGeometryEffect(id: "contentModePill", in: contentModeNS)
                             }
@@ -718,15 +734,25 @@ struct ContentView: View {
                 Text(note).font(.system(size: 12)).foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 if session.transcript.hasSpeakerCorrections {
-                    Button(uiLang("화자 교정 되돌리기", "Undo speaker correction")) { session.revertReconcile() }
-                        .controlSize(.small).buttonStyle(.plain).foregroundStyle(Theme.Colors.accent)
+                    // De-accent ink link, pinned to the trailing edge —
+                    // cf. explorer's 변경 button.
+                    Button { session.revertReconcile() } label: {
+                        Text(uiLang("화자 교정 되돌리기", "Undo speaker correction"))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .underline(true, color: Theme.Colors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16).padding(.vertical, 7)
-        .background(Theme.Colors.surfaceSunken)   // de-accent
-        .overlay(alignment: .bottom) { Divider() }
+        // Pill family (matches reviewBar): rounded inset card — bar tint + wand
+        // stay as-is, only the container shape changed from the flat/divider bar.
+        .background(Theme.Colors.surfaceSunken)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .padding(.horizontal, Theme.Space.window)
+        .padding(.top, 5)
     }
 
     private var reviewBar: some View {
@@ -739,24 +765,37 @@ struct ContentView: View {
             scrollTarget = flagged[reviewIndex].line
             scrollTick += 1
         }
-        return HStack(spacing: 8) {
+        // Pill family with reconcileBar: rounded inset card, low-conf tint fill.
+        // The triangle keeps its low-confidence tint as the semantic signal;
+        // type/controls are the shared 12 pt monotone set.
+        return HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
                 .foregroundStyle(Theme.Colors.lowConf)
-            Text(uiLang("검토 필요 \(flagged.count)개", "\(flagged.count) to review", "要確認 \(flagged.count)件")).font(Theme.Fonts.status)
+            Text(uiLang("검토 필요 \(flagged.count)개", "\(flagged.count) to review", "要確認 \(flagged.count)件"))
+                .font(.system(size: 12)).foregroundStyle(Theme.Colors.textPrimary)
             if !flagged.isEmpty {
-                Text("· \(flagged[idx].text)").font(Theme.Fonts.status)
+                Text("· \(flagged[idx].text)").font(.system(size: 12))
                     .foregroundStyle(Theme.Colors.textSecondary).lineLimit(1)
                 Spacer()
-                Text("\(idx + 1)/\(flagged.count)").font(Theme.Fonts.status)
+                Text("\(idx + 1)/\(flagged.count)").font(.system(size: 12))
                     .foregroundStyle(Theme.Colors.textTertiary)
                 ReviewControlView(session: session, controller: review,
                                   reviewIndex: $reviewIndex,
                                   scrollTarget: $scrollTarget,
                                   scrollTick: $scrollTick,
                                   flaggedCount: flagged.count)
-                Button { jump(-1) } label: { Image(systemName: "chevron.up") }
+                Button { jump(-1) } label: {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
                     .buttonStyle(.plain).help(uiLang("이전 검토 단어", "Previous flagged word"))
-                Button { jump(1) } label: { Image(systemName: "chevron.down") }
+                Button { jump(1) } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
                     .buttonStyle(.plain).help(uiLang("다음 검토 단어", "Next flagged word"))
             } else { Spacer() }
         }
@@ -939,12 +978,17 @@ struct ContentView: View {
                     // ABOVE the pill when it doesn't fit below and there IS room
                     // above; otherwise cap it to the room below and let it scroll.
                     let isMic = (which == "mic" || which == "side-mic")
-                    let natural = isMic ? micPanelNaturalHeight : 0
+                    let natural = isMic ? micPanelRowsHeight + 12 : 0   // +12 = panel v-padding
                     let below = geo.size.height - f.maxY - 16
                     let flipUp = isMic && natural > below && f.minY - 8 > natural
-                    langDropdownPanel(which, maxHeight: flipUp ? .infinity : max(120, below))
+                    // Flip-up positioning is BOTTOM-anchored (a spacer frame ending
+                    // 4 px above the pill) so the panel hugs the pill regardless of
+                    // how accurate the height estimate is — the old top offset
+                    // (f.minY - natural) drifted whenever the estimate was off.
+                    langDropdownPanel(which, maxHeight: flipUp ? (f.minY - 16) : max(120, below))
                         .frame(width: f.width)
-                        .offset(x: f.minX, y: flipUp ? (f.minY - natural - 4) : (f.maxY + 4))
+                        .frame(height: flipUp ? f.minY - 4 : nil, alignment: .bottom)
+                        .offset(x: f.minX, y: flipUp ? 0 : (f.maxY + 4))
                 }
             }
             .coordinateSpace(name: "startCard")
@@ -977,10 +1021,10 @@ struct ContentView: View {
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 20) {
                 languageRow
                 setupBlock(uiLang("회의 모드", "Meeting mode")) { meetingChips }
-                setupBlock(uiLang("화자", "Speakers")) { speakerChips }
+                speakerBlock
             }
             .padding(.top, 22)
         }
@@ -1038,12 +1082,12 @@ struct ContentView: View {
     @ViewBuilder private var micPanelRows: some View {
         // 1) Mic devices. Picking one leaves system-audio-only mode so the mic is
         //    actually captured; in 마이크+시스템 it just swaps which mic is used.
-        langCheckRow(uiLang("시스템 기본", "System default"), checked: session.audioSource != .system && session.inputDeviceID == nil, dimmed: false) {
+        micPanelRow(uiLang("시스템 기본", "System default"), selected: session.audioSource != .system && session.inputDeviceID == nil) {
             if session.audioSource == .system { session.audioSource = .mic }
             session.setInputDevice(nil); openLangDropdown = nil
         }
         ForEach(session.availableInputs) { dev in
-            langCheckRow(dev.name, checked: session.audioSource != .system && session.inputDeviceID == dev.id, dimmed: false) {
+            micPanelRow(dev.name, selected: session.audioSource != .system && session.inputDeviceID == dev.id) {
                 if session.audioSource == .system { session.audioSource = .mic }
                 session.setInputDevice(dev.id); openLangDropdown = nil
             }
@@ -1053,12 +1097,36 @@ struct ContentView: View {
         //    reachable only from Settings, so the start screen looked like it
         //    couldn't capture it at all.
         Divider().padding(.vertical, 4).padding(.horizontal, 12)
-        langCheckRow(AudioSource.system.label(uiLang), checked: session.audioSource == .system, dimmed: false) {
+        micPanelRow(AudioSource.system.label(uiLang), selected: session.audioSource == .system) {
             session.audioSource = .system; openLangDropdown = nil
         }
-        langCheckRow(AudioSource.both.label(uiLang), checked: session.audioSource == .both, dimmed: false) {
+        micPanelRow(AudioSource.both.label(uiLang), selected: session.audioSource == .both) {
             session.audioSource = .both; openLangDropdown = nil
         }
+    }
+
+    /// Single-select row for the input picker: plain label + trailing ✓ on the
+    /// current choice (menu-style) — NOT the checkbox rows the multi-select
+    /// output-language panel uses.
+    private func micPanelRow(_ label: String, selected: Bool,
+                             _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // Mic input picker (Figma 463:2851): which device 지금 녹음 시작 captures.
@@ -1119,11 +1187,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
                 Text(uiLang("입력 언어", "Input language"))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(uiLang("출력 언어", "Output language"))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -1235,9 +1303,19 @@ struct ContentView: View {
     /// multi-select topped by an exclusive "번역 안 함" row (stays open).
     /// Estimated natural height of the mic/input panel: one row per mic + the
     /// 시스템 기본 row, the 음원 divider, and the two 음원 rows.
+    /// Rows height for the scroll frame: the live measurement once available,
+    /// else the estimate (first frame only).
+    private var micPanelRowsHeight: CGFloat {
+        micPanelMeasuredHeight > 0 ? micPanelMeasuredHeight : micPanelNaturalHeight
+    }
+
     private var micPanelNaturalHeight: CGFloat {
+        // Measured: a langCheckRow is ~33 pt (8+8 v-padding + ~16 pt line) at the
+        // default type size. 29 underestimated → the panel "fit" below on paper,
+        // skipped the flip, and clipped off the window edge in practice. Slight
+        // OVERestimate is safe: it just biases toward flipping up.
         let rows = CGFloat(1 + session.availableInputs.count + 2)
-        return rows * 29 + 9 + 12          // rows + divider + panel v-padding
+        return rows * 33 + 9 + 12          // rows + divider + panel v-padding
     }
 
     @ViewBuilder
@@ -1245,8 +1323,14 @@ struct ContentView: View {
         VStack(spacing: 0) {
             if which == "mic" || which == "side-mic" {
                 // Scrolls only when the rows can't fit the room under the pill.
-                ScrollView(.vertical) { VStack(spacing: 0) { micPanelRows } }
-                    .frame(height: min(micPanelNaturalHeight, maxHeight))
+                ScrollView(.vertical) {
+                    VStack(spacing: 0) { micPanelRows }
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: MicPanelHeightKey.self, value: g.size.height)
+                        })
+                }
+                .frame(height: min(micPanelRowsHeight, maxHeight))
+                .onPreferenceChange(MicPanelHeightKey.self) { micPanelMeasuredHeight = $0 }
             } else if which == "input" {
                 ForEach(Self.inputLangOptions, id: \.ko) { opt in
                     Button { setLanguage(opt.id) } label: {
@@ -1275,9 +1359,9 @@ struct ContentView: View {
             }
         }
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.Colors.surface))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.Colors.surfaceRaised))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(Color.black.opacity(0.04), lineWidth: 1))
+            .strokeBorder(Theme.Colors.hairline, lineWidth: 1))
         .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
 
@@ -1315,7 +1399,7 @@ struct ContentView: View {
     private func setupBlock<V: View>(_ title: String, optional: Bool = false, @ViewBuilder _ content: () -> V) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 3) {
-                Text(title).font(.system(size: 11, weight: .medium))
+                Text(title).font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
                 if optional {
                     Text(uiLang("*선택", "*Optional")).font(.system(size: 10, weight: .semibold))
@@ -1337,47 +1421,36 @@ struct ContentView: View {
         }
     }
 
-    private var speakerChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
-                // 화자 분리 O/X — off skips the whole diar engine path (all one speaker).
-                diarToggleChip
-                // Count only matters WITH diarization → dim + disable when it's off.
-                HStack(spacing: 4) {
-                    ForEach(SpeakerCount.allCases) { s in
-                        setupChip(s.label(uiLang), selected: session.speakerCount == s) { session.speakerCount = s }
-                    }
-                }
-                .disabled(!session.diarize)
-                .opacity(session.diarize ? 1 : 0.35)
-            }
-        }
-    }
-
-    /// Speaker-separation on/off pill with a colored O/✓ (on) / ✕ (off) badge, so
-    /// the state reads at a glance. Off = no diarization: the engine skips the
-    /// ResNet34 path and every line is one speaker (faster, lighter).
-    private var diarToggleChip: some View {
-        let on = session.diarize
-        let tint = on ? Theme.Colors.accent : Theme.Colors.recording   // green-ish accent / red
-        return Button { session.diarize.toggle() } label: {
-            HStack(spacing: 5) {
-                Image(systemName: on ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(tint)
+    // 화자 분리 (Figma 246:776): section title + 28×16 BlackToggle switch in the
+    // title row; the count chips below dim/disable while separation is off.
+    private var speakerBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
                 Text(uiLang("화자 분리", "Speaker separation"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer(minLength: 8)
+                BlackToggle(isOn: $session.diarize)
+                    .help(uiLang("끄면 화자를 나누지 않고 전부 한 사람으로 처리합니다 (더 빠르고 가벼움).",
+                                 "Off = no speaker separation; everything is one speaker (faster, lighter).",
+                                 "オフにすると話者を分けず、すべて一人として処理します（より速く軽量）。"))
             }
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(Capsule().fill(tint.opacity(0.10)))
-            .overlay(Capsule().strokeBorder(tint.opacity(0.55), lineWidth: 1))
-            .contentShape(Capsule())
+            .padding(.horizontal, 3)
+            speakerChips
         }
-        .buttonStyle(.plain)
-        .help(uiLang("끄면 화자를 나누지 않고 전부 한 사람으로 처리합니다 (더 빠르고 가벼움).",
-                     "Off = no speaker separation; everything is one speaker (faster, lighter).",
-                     "オフにすると話者を分けず、すべて一人として処理します（より速く軽量）。"))
+    }
+
+    private var speakerChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            // Count only matters WITH diarization → dim + disable when it's off.
+            HStack(spacing: 4) {
+                ForEach(SpeakerCount.allCases) { s in
+                    setupChip(s.label(uiLang), selected: session.speakerCount == s) { session.speakerCount = s }
+                }
+            }
+            .disabled(!session.diarize)
+            .opacity(session.diarize ? 1 : 0.35)
+        }
     }
 
     // Figma 246:771 chip: both states keep the white fill and 12px medium ink —
@@ -1425,11 +1498,12 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .padding(.top, 9).padding(.trailing, 11)
             }
-            .frame(maxWidth: .infinity).frame(height: 85)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 85, maxHeight: .infinity)
             .background(
                 // Match the 재생/멈춤 controls: shadow only, no outline.
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Theme.Colors.surface)
+                    .fill(Theme.Colors.surfaceElevated)
                     .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
             )
         } else {
@@ -1443,7 +1517,11 @@ struct ContentView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.Colors.textPrimary)
                 }
-                .frame(maxWidth: .infinity).frame(height: 85)
+                // minHeight, not a fixed height: the zone absorbs whatever extra
+                // height the (taller) 회의 정보 column gives the row, keeping the
+                // two columns bottom-aligned as the left side grows.
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 85, maxHeight: .infinity)
                 .contentShape(RoundedRectangle(cornerRadius: 12))
             }
             .buttonStyle(.plain)
@@ -1577,7 +1655,7 @@ struct ContentView: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .frame(width: 267)
-        .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Theme.Colors.surface))
+        .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(Theme.Colors.surfaceRaised))
         // Clip content to the card shape so the edge-to-edge speaker bar (and its
         // left fade) slide under the card edge instead of painting over the
         // border; the border is then re-drawn ON TOP so it always stays crisp.
@@ -1750,7 +1828,7 @@ struct ContentView: View {
         .background(
             // Match the 재생/멈춤 controls: shadow only, no outline.
             RoundedRectangle(cornerRadius: 8)
-                .fill(Theme.Colors.surface)
+                .fill(Theme.Colors.surfaceElevated)
                 .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
         )
         .confirmationDialog(uiLang("저장되지 않은 기록이 있어요", "You have an unsaved transcript"), isPresented: $showDiscardConfirm, titleVisibility: .visible) {
@@ -1841,9 +1919,10 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity).frame(height: 106)
             .background(
-                // No outline (removed per design); shadow carries the elevation.
+                // No outline (removed per design); shadow carries the elevation
+                // (fill lift in dark — see surfaceRaised).
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Theme.Colors.surface)
+                    .fill(Theme.Colors.surfaceElevated)
                     .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8))
@@ -1861,7 +1940,7 @@ struct ContentView: View {
         .background(
             // Match the 재생/멈춤 controls + file cards: shadow only, no outline.
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Theme.Colors.surface)
+                .fill(Theme.Colors.surfaceElevated)
                 .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
         )
     }
@@ -2122,8 +2201,8 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 0) { options() }
                     .padding(.vertical, 5)
                     .frame(width: width.wrappedValue, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(Theme.Colors.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.black.opacity(0.04)))
+                    .background(RoundedRectangle(cornerRadius: 7).fill(Theme.Colors.surfaceRaised))
+                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.Colors.hairline))
                     .shadow(color: Color.black.opacity(0.02), radius: 1.75, x: 0, y: 4)
                     .offset(y: 27)
             }
