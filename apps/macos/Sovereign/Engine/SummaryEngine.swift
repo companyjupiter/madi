@@ -45,6 +45,16 @@ final class SummaryEngine {
         broker.detach(client: clientID)
     }
 
+    /// Drop QUEUED meeting-intelligence work while staying attached. Used when
+    /// recording ends: a live-rail request queued at .liveRail outranks the
+    /// post-session summary lane (.postSession), so a stale rail extraction left
+    /// in the queue would run FIRST and delay the summary the user is waiting
+    /// for. Dropped requests complete with nil, so the fold/reconcile counters
+    /// still drain.
+    func cancelQueued() {
+        broker.cancelPending(client: clientID)
+    }
+
     private func transcriptOneLine(_ lines: [String]) -> String {
         lines.joined(separator: " / ").replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)

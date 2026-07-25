@@ -212,6 +212,10 @@ final class SessionController: EngineProcessDelegate {
     private func stopLiveRail() {
         liveRailTimer?.invalidate(); liveRailTimer = nil
         liveRailBusy = false; liveRailBusyTicks = 0
+        // Invalidating the timer stops NEW extractions; anything already handed
+        // to the broker still holds a .liveRail slot that outranks the
+        // post-session summary lane. Drop it — the meeting is over.
+        summaryEngine?.cancelQueued()
     }
 
     // file-mode progress (nil when not transcribing a file)

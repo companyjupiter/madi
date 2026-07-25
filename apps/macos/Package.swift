@@ -62,6 +62,13 @@ let package = Package(
                 "Audio/Segmenter.swift",
                 "Engine/TranslateStreamParser.swift",
                 "Engine/TranslationTurnQueue.swift",
+                // Not pure logic — DNAEngineBroker spawns a Process — but it is
+                // Foundation-only, and its wedge-recovery path (per-request
+                // watchdog → terminate → relaunch) is only meaningfully testable
+                // against a real engine-protocol process. The test drives a
+                // stub engine script, never the real DNA3 binary.
+                "Engine/DNATurnBudget.swift",
+                "Engine/DNAEngineBroker.swift",
                 "Dictation/DictationFormatting.swift",
             ]
         ),
