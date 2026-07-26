@@ -518,6 +518,8 @@ struct ContentView: View {
                     // the transcript panel re-diffs once per frame, not once per
                     // word/translation token (Phase 1 anti-twitch).
                     TranscriptView(lines: session.transcript.displayLines, names: session.speakerNames,
+                                   speakerNumbers: session.transcript.speakerNumbers,
+                                   diarizing: session.phase == .recording,
                                    autoRecognizedSpeakers: session.autoRecognizedSpeakers,
                                    mode: viewMode,
                                    onRename: { session.renameSpeaker($0, to: $1) },
@@ -2002,7 +2004,7 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(Theme.Colors.speakerGradient(entry.key))
                         .frame(width: max(4, avail * CGFloat(entry.value / total)))
-                        .help("\(SpeakerID.display(entry.key, names: session.speakerNames, fallback: "Speaker \(entry.key + 1)")) · \(Int((entry.value / total * 100).rounded()))%")
+                        .help("\(SpeakerID.display(entry.key, names: session.speakerNames, fallback: "Speaker \(session.transcript.speakerNumbers.number(entry.key) ?? entry.key + 1)")) · \(Int((entry.value / total * 100).rounded()))%")
                 }
             }
             .animation(.snappy(duration: 0.35), value: total)
@@ -2021,7 +2023,7 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     HStack(spacing: 6) {
                         Circle().fill(Theme.Colors.speaker(entry.key)).frame(width: 6, height: 6)
-                        Text(SpeakerID.display(entry.key, names: session.speakerNames, fallback: "Speaker \(entry.key + 1)"))
+                        Text(SpeakerID.display(entry.key, names: session.speakerNames, fallback: "Speaker \(session.transcript.speakerNumbers.number(entry.key) ?? entry.key + 1)"))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Theme.Colors.textPrimary)
                             .lineLimit(1)
