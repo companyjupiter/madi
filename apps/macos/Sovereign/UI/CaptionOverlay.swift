@@ -98,13 +98,18 @@ struct CaptionView: View {
     /// Newest first: PROVISIONAL interim translation (tracks speech in ~1 s),
     /// else the latest committed line's authoritative translation. `speaker` is
     /// the committed source line's speaker (nil for interim).
-    private var caption: (trans: String, orig: String, live: Bool, speaker: Int?)? {
+    private var caption: (trans: String, orig: String, live: Bool, speaker: Int?,
+                          margin: Double, age: Double)? {
         if !session.livePartial.isEmpty, let t = pick(session.livePartialTranslations) {
-            return (t, session.livePartial, true, nil)
+            return (t, session.livePartial, true, nil, 1.0, 0)
         }
         if let l = session.transcript.lines.last(where: { !$0.translations.isEmpty }),
            let t = pick(l.translations) {
-            return (t, l.text, false, l.speaker)
+            // The captioned line is the newest TRANSLATED one, which can lag the
+            // newest audio — age it against the real tail so a stalled translation
+            // cannot hold the "화자분리중…" label open past the timeout.
+            let tail = session.transcript.lines.last?.end ?? l.end
+            return (t, l.text, false, l.speaker, l.speakerMargin, tail - l.end)
         }
         return nil
     }
@@ -120,7 +125,7 @@ struct CaptionView: View {
             header
             if let c = caption {
                 if let sp = c.speaker, session.speakerNames.count + 1 > 1 {
-                    speakerTag(sp)   // C17: who said it
+                    speakerTag(sp, margin: c.margin, age: c.age)   // C17: who said it
                 }
                 Text(c.trans)
                     .font(.system(size: transFont, weight: .semibold))
@@ -173,10 +178,20 @@ struct CaptionView: View {
     }
 
     /// C17: speaker color dot + name (caption is otherwise speaker-blind).
-    private func speakerTag(_ id: Int) -> some View {
+    /// While the acoustic label is still being decided the tag reads "화자분리중…"
+    /// instead of a number — the number is the thing that churns as the clusterer
+    /// merges and splits, and a climbing count reads as a bug to the user. Past
+    /// SpeakerID.undecidedTimeout the tag commits to the provisional number.
+    private func speakerTag(_ id: Int, margin: Double, age: Double) -> some View {
         HStack(spacing: 5) {
             Circle().fill(Theme.Colors.speaker(id)).frame(width: 8, height: 8)
-            Text(SpeakerID.display(id, names: session.speakerNames, fallback: uiLang("화자 \(id)", "Speaker \(id)", "話者 \(id)")))
+            Text(SpeakerID.display(id,
+                                   names: session.speakerNames,
+                                   number: session.transcript.speakerNumbers.number(id) ?? id,
+                                   margin: margin,
+                                   age: age,
+                                   diarizing: uiLang("화자분리중…", "Separating speakers…", "話者分離中…"),
+                                   fallback: { uiLang("화자 \($0)", "Speaker \($0)", "話者 \($0)") }))
                 .font(.system(size: transFont * 0.42, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
         }

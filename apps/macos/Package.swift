@@ -23,6 +23,7 @@ let package = Package(
                 "AppInfo/LowMemoryGuidePolicy.swift",
                 "Model/AssetManifest.swift",
                 "Transcript/SpeakerID.swift",
+                "Transcript/SpeakerDisplayNumber.swift",
                 "Transcript/TranscriptStore.swift",
                 "Transcript/Exporters.swift",
                 "Transcript/WordMerger.swift",

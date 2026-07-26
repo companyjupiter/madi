@@ -16,6 +16,14 @@ enum TranscriptViewMode { case content, detailed, chat }
 struct TranscriptView: View {
     let lines: [Line]
     let names: [Int: String]
+    /// Stable display numbers for the acoustic ids in `lines` — raw engine ids are
+    /// renumbered by recluster/SPKFIX and must never reach the user directly.
+    var speakerNumbers = SpeakerDisplayNumber()
+    /// True only while capture is running. Gates the "화자분리중…" label: an
+    /// unsettled margin means "still deciding" during a live session, but in a
+    /// finished transcript the clustering is as good as it will get, so those rows
+    /// show their number instead of a permanent in-progress label.
+    var diarizing = false
     var autoRecognizedSpeakers: Set<Int> = []
     var mode: TranscriptViewMode = .detailed
     var onRename: ((Int, String) -> Void)? = nil   // speaker id → new name
@@ -644,7 +652,7 @@ struct TranscriptView: View {
         return HStack {
             if side == .trailing { Spacer(minLength: 40) }
             VStack(alignment: side == .leading ? .leading : .trailing, spacing: 3) {
-                Text(name(line.speaker)).font(Theme.Fonts.speaker).foregroundStyle(color)
+                Text(rowName(line)).font(Theme.Fonts.speaker).foregroundStyle(color)
                 withLiveTail(Text(line.text), isLast: line.id == lines.last?.id)
                     .font(bodyFont)
                     .frame(maxWidth: .infinity, alignment: side == .leading ? .leading : .trailing)
@@ -682,7 +690,7 @@ struct TranscriptView: View {
                     editingSpeaker = line.speaker
                 } label: {
                     HStack(spacing: 4) {
-                        Text(name(line.speaker)).font(.system(size: 14, weight: .bold))
+                        Text(rowName(line)).font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Theme.Colors.textPrimary)
                         if autoRecognizedSpeakers.contains(line.speaker) {
                             Label(uiLang("음성 인식됨", "Voice matched"), systemImage: "checkmark.seal.fill")
@@ -889,8 +897,31 @@ struct TranscriptView: View {
     }
 
     // "Speaker N" (1-based) matches the redesign's side-panel share list, so the
-    // same person carries one label across transcript and stats.
-    private func name(_ id: Int) -> String { SpeakerID.display(id, names: names, fallback: "Speaker \(id + 1)") }
+    // same person carries one label across transcript and stats. N is the STABLE
+    // display number, not the engine id: the id is renumbered by recluster/SPKFIX
+    // mid-session, which is what used to turn Speaker 1 into Speaker 8.
+    private func name(_ id: Int) -> String {
+        SpeakerID.display(id, names: names, fallback: "Speaker \(speakerNumbers.number(id) ?? id + 1)")
+    }
+
+    /// The newest audio position in this transcript — the clock a row's age is
+    /// measured against, so "how long has this stayed undecided" needs no wall-clock.
+    private var latestEnd: Double { lines.last?.end ?? 0 }
+
+    /// Row label: `name`, plus the still-deciding state. While recording, a row
+    /// whose acoustic margin has not settled reads "화자분리중…" rather than a
+    /// number — the number is what churns as the clusterer merges and splits.
+    /// Past `SpeakerID.undecidedTimeout` the row commits to its provisional number:
+    /// the engine's revision window has moved on and no better answer is coming.
+    private func rowName(_ line: Line) -> String {
+        SpeakerID.display(line.speaker,
+                          names: names,
+                          number: speakerNumbers.number(line.speaker) ?? line.speaker + 1,
+                          margin: diarizing ? line.speakerMargin : 1.0,
+                          age: latestEnd - line.end,
+                          diarizing: uiLang("화자분리중…", "Separating speakers…", "話者分離中…"),
+                          fallback: { "Speaker \($0)" })
+    }
     private func timecode(_ t: Double) -> String {
         // Figma 258:1122: always hh:mm:ss ("00:00:00")
         let s = Int(t)

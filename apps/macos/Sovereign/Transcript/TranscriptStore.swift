@@ -132,6 +132,11 @@ final class TranscriptStore {
         displayLines = lines
     }
 
+    /// Stable display numbers for the acoustic ids in `lines`. Engine ids churn
+    /// (recluster renumbering, retroactive SPKFIX); these do not. Every user-facing
+    /// speaker label goes through this — see SpeakerDisplayNumber.
+    private(set) var speakerNumbers = SpeakerDisplayNumber()
+
     private var merger = WordMerger()
     private var spk: [SpeakerLabel] = []      // streaming
     private var spkFix: [SpeakerLabel] = []   // FLUSH
@@ -288,6 +293,10 @@ final class TranscriptStore {
         for (source, destination) in speakerMerges where resolvedSpeaker(destination) == target {
             speakerMerges[source] = target
         }
+        // The merged pair keeps the LOWER display number, so folding 4 into 1
+        // (or 1 into 4 — the direction is the clusterer's choice, not the user's)
+        // never renames the speaker the user has been watching as Speaker 1.
+        speakerNumbers.merge(from: from, into: target)
         applySpeakerOverlays()
     }
 
@@ -333,6 +342,7 @@ final class TranscriptStore {
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
         translationsByLine.removeAll(); editsByLine.removeAll()
         speakerMerges.removeAll(); speakerOverrides.removeAll()
+        speakerNumbers.reset()
         frozen.removeAll(); frozenWordCount = 0
         finalized = false; diarNamespaceBroken = false
         flushRenderNow()
@@ -344,6 +354,10 @@ final class TranscriptStore {
     func load(_ newLines: [Line]) {
         reset()
         lines = newLines
+        // An archived transcript's ids are whatever the engine happened to mint
+        // that session (sparse, gapped). Number them in file order so a re-opened
+        // transcript reads as Speaker 1, 2, 3… exactly like the live one did.
+        speakerNumbers.assignAll(newLines.map(\.speaker))
         for line in newLines where !line.translations.isEmpty {
             let revision = TextRevision.of(line.text)
             translationsByLine[line.id] = line.translations.mapValues {
@@ -452,6 +466,10 @@ final class TranscriptStore {
         lines = frozen + tail
         applyOverlays()
         applyOverlapSpeakers()
+        // Mint display numbers in transcript (time) order, after the overlays have
+        // resolved each line's final speaker. First speaker heard = number 1, and
+        // it stays 1: assignAll only ever adds ids it has not numbered before.
+        speakerNumbers.assignAll(lines.map(\.speaker))
         scheduleRender()
     }
 

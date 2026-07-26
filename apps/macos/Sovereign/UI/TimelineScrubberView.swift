@@ -12,6 +12,9 @@ import SwiftUI
 struct TimelineScrubberView: View {
     let lines: [Line]
     let speakerNames: [Int: String]
+    /// Stable display numbers — engine ids are renumbered mid-session, so lane
+    /// labels must not be derived from the id (see SpeakerDisplayNumber).
+    var speakerNumbers = SpeakerDisplayNumber()
     var onSeek: (UUID) -> Void
 
     // lane 폭주 방지 — 가장 많이 등장한 화자 순으로 이만큼만 그린다.
@@ -45,7 +48,7 @@ struct TimelineScrubberView: View {
     private func speakerLabel(_ id: Int) -> String {
         if id == SpeakerID.unknown { return SpeakerID.unknownLabel }
         if let n = speakerNames[id], !n.isEmpty { return n }
-        return "화자 \(id + 1)"
+        return "화자 \(speakerNumbers.number(id) ?? id + 1)"
     }
 
     var body: some View {

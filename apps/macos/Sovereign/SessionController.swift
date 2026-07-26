@@ -1940,8 +1940,9 @@ final class SessionController: EngineProcessDelegate {
     /// engine is gone, so the DNA3 model has the machine to itself.
     /// Acoustic margin below which a line counts as "uncertain" — the ONLY lines
     /// the LLM may relabel (S3 fusion). Engine margins: confident ≈ 0.4-1.0,
-    /// ambiguous windows measured 0.22-0.32 on the clinic fixture.
-    private static let uncertainMargin = 0.35
+    /// ambiguous windows measured 0.22-0.32 on the clinic fixture. Shared with the
+    /// UI's "화자분리중…" label so the two cannot disagree about what is settled.
+    private static let uncertainMargin = SpeakerID.settledMargin
 
     /// W2/W1/B1 timers — armed while recording, torn down at finalize/reset.
     private func startWatchdog() {
