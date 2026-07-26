@@ -162,6 +162,18 @@ Treat `releases/index.json` and `channels/<channel>/latest.json` as single-write
 mutable metadata. The publisher uses read-modify-write semantics without a
 lock, so run one publisher at a time.
 
+### Git tags
+
+`publish` never touches GitHub, so it does not create the git tag. Tag
+separately, as an annotated `v<version>` tag on the exact `gitSha` recorded in
+`build/local-release/<version>/manifest.json`, and record the artifact sha256 in
+the annotation so a released binary can be traced back to its source.
+
+The tag sequence is therefore allowed to have gaps. `v0.1.3` does not exist and
+should not be created: 0.1.3 and 0.1.4 were both built from `450e527`, so
+`v0.1.4` already tags that tree and a second tag on the same commit would only
+make `git describe` ambiguous.
+
 ---
 
 ## Release-candidate smoke checklist
