@@ -41,10 +41,27 @@ enum SpeakerID {
     /// "the AI may relabel it" and "we show it as still deciding" cannot drift.
     static let settledMargin = 0.35
 
+    /// How long a label may stay undecided before the transcript commits to the
+    /// provisional number anyway. A margin does not improve on its own once the
+    /// engine's recluster / SPKFIX window has moved past that audio, so without a
+    /// timeout a permanently-ambiguous line would read "화자분리중…" for the rest
+    /// of the session — a spinner that never resolves is worse than a best guess.
+    static let undecidedTimeout = 300.0
+
+    /// Whether a label is still genuinely being decided: the margin is unsettled
+    /// AND the audio is recent enough that a revision can still arrive. `age` is
+    /// how far the line sits behind the newest audio, measured on the ENGINE's
+    /// clock rather than wall-clock, so a re-opened transcript reads exactly as it
+    /// did live and the behaviour is deterministic in tests.
+    static func isDeciding(margin: Double, age: Double) -> Bool {
+        margin < settledMargin && age < undecidedTimeout
+    }
+
     /// Live/UI label for a speaker id, with the still-deciding state made visible.
     /// Priority: Unknown → an enrolled/user-given name (a named speaker is never
-    /// shown as undecided) → 화자분리중 while the margin is below `settledMargin`
-    /// → the stable display number.
+    /// shown as undecided) → 화자분리중 while `isDeciding` → the stable display
+    /// number, which is also what an undecided label falls back to once
+    /// `undecidedTimeout` has passed.
     ///
     /// `number` is the already-resolved display number — call sites keep their own
     /// numbering convention (see `display` above), so they decide what an
@@ -53,11 +70,12 @@ enum SpeakerID {
                         names: [Int: String],
                         number: Int,
                         margin: Double,
+                        age: Double = 0,
                         diarizing: @autoclosure () -> String,
                         fallback: (Int) -> String) -> String {
         if id == unknown { return unknownLabel }
         if let n = names[id], !n.isEmpty { return n }
-        if margin < settledMargin { return diarizing() }
+        if isDeciding(margin: margin, age: age) { return diarizing() }
         return fallback(number)
     }
 }

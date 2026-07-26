@@ -904,14 +904,21 @@ struct TranscriptView: View {
         SpeakerID.display(id, names: names, fallback: "Speaker \(speakerNumbers.number(id) ?? id + 1)")
     }
 
+    /// The newest audio position in this transcript — the clock a row's age is
+    /// measured against, so "how long has this stayed undecided" needs no wall-clock.
+    private var latestEnd: Double { lines.last?.end ?? 0 }
+
     /// Row label: `name`, plus the still-deciding state. While recording, a row
     /// whose acoustic margin has not settled reads "화자분리중…" rather than a
     /// number — the number is what churns as the clusterer merges and splits.
+    /// Past `SpeakerID.undecidedTimeout` the row commits to its provisional number:
+    /// the engine's revision window has moved on and no better answer is coming.
     private func rowName(_ line: Line) -> String {
         SpeakerID.display(line.speaker,
                           names: names,
                           number: speakerNumbers.number(line.speaker) ?? line.speaker + 1,
                           margin: diarizing ? line.speakerMargin : 1.0,
+                          age: latestEnd - line.end,
                           diarizing: uiLang("화자분리중…", "Separating speakers…", "話者分離中…"),
                           fallback: { "Speaker \($0)" })
     }

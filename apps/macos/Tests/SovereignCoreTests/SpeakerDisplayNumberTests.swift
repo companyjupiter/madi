@@ -100,6 +100,34 @@ final class SpeakerDisplayNumberTests: XCTestCase {
                                   diarizing: "화자분리중…", fallback: { "Speaker \($0)" })
         XCTAssertEqual(s, SpeakerID.unknownLabel)
     }
+
+    // ── the 300 s undecided timeout ──────────────────────────────────────────
+
+    func testUndecidedLabelCommitsToItsNumberAfterTheTimeout() {
+        // Same unsettled margin, only the age differs.
+        let fresh = SpeakerID.display(3, names: [:], number: 2, margin: 0.24, age: 120,
+                                      diarizing: "화자분리중…", fallback: { "Speaker \($0)" })
+        let stale = SpeakerID.display(3, names: [:], number: 2, margin: 0.24, age: 301,
+                                      diarizing: "화자분리중…", fallback: { "Speaker \($0)" })
+        XCTAssertEqual(fresh, "화자분리중…", "a revision can still arrive")
+        XCTAssertEqual(stale, "Speaker 2", "past the timeout, commit to the provisional number")
+    }
+
+    func testTimeoutBoundaryIsExclusiveAtExactly300s() {
+        XCTAssertTrue(SpeakerID.isDeciding(margin: 0.24, age: 299.9))
+        XCTAssertFalse(SpeakerID.isDeciding(margin: 0.24, age: SpeakerID.undecidedTimeout))
+        XCTAssertEqual(SpeakerID.undecidedTimeout, 300.0)
+    }
+
+    func testAgeDoesNotMakeASettledLabelUndecided() {
+        XCTAssertFalse(SpeakerID.isDeciding(margin: 0.9, age: 0),
+                       "a confident label is never 'deciding', fresh or old")
+        XCTAssertFalse(SpeakerID.isDeciding(margin: 0.9, age: 1000))
+    }
+
+    func testFreshUndecidedLabelStillShowsTheSpinner() {
+        XCTAssertTrue(SpeakerID.isDeciding(margin: 0.34, age: 0))
+    }
 }
 
 // The wiring, not just the struct: numbering happens inside rebuildLive(), so
