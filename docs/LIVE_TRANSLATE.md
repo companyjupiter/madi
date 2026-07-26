@@ -6,15 +6,22 @@ languages: **KO · ZH · JA · EN**. Madi selects a model by physical memory: 2B
 8 GB Macs, quality-default 4B on 16 GB and larger systems. Both use independent
 model-specific sovereign Metal binaries; no llama.cpp/MLX/cloud fallback exists.
 
-## Assets and measured profiles (2026-07-21)
+## Assets and measured profiles (0.1.5, 2026-07-26)
 
-| profile | selection | GGUF bytes | process phys footprint | median prefill | median decode |
-|---|---:|---:|---:|---:|---:|
-| DNA3.0-4B Q4_K_M | 16 GB+ | 2,783,447,424 | 5,119 MB | 414.8 tok/s | 67.3 tok/s |
-| DNA3.0-2B Q4_K_M | 8 GB | 1,312,165,344 | 2,405 MB | 998.7 tok/s | 132.8 tok/s |
+| profile | selection | GGUF bytes | phys footprint | RSS | caption prefill (B=14 / B=21) | decode |
+|---|---:|---:|---:|---:|---:|---:|
+| DNA3.0-4B Q4_K_M | >12 GiB | 2,783,447,424 | **3.3 GB** | 5.34 GB | 70.0 / 74.6 ms | 64.7 tok/s |
+| DNA3.0-2B Q4_K_M | ≤12 GiB | 1,312,165,344 | **1.5 GB** | 2.52 GB | 31.5 / 33.3 ms | 124.1 tok/s |
 
-The 2B process saves **2,714 MB / 53.0%**, with **2.41× prefill** and **1.97×
-decode** on the same 12-turn KO→JA/ZH/EN translation run. Exact 2B model SHA-256:
+Against 0.1.4 (5,119 MB / 2,405 MB footprint): **−40% and −42%**, with caption-turn
+prefill down **−54%** (4B) and **−47%** (2B) and decode +3.7% / flat. Full derivation,
+including the byte accounting and the hypotheses that were refuted along the way, in
+`sovereignLLM/apps/metal-dna3-4b-q4km/PERF_MATRIX.md`.
+
+`phys_footprint` is the number the tier rule reasons about. RSS is higher because the
+GGUF mapping stays resident but evictable and is charged to RSS only.
+
+The 2B still saves **1.8 GB / 55%** against the 4B and is ~2× faster on both phases. Exact 2B model SHA-256:
 `9270db053b27f1ec127e37ad7aaec0efa05dc89fbd158f3c4724e33e478da7a3`.
 The app's `MADI_TRANSLATE_MODEL=2b|4b` override is validation-only; product policy
 is automatic (<12 GiB → 2B, otherwise 4B).
@@ -84,7 +91,11 @@ segments; they arrive slower than translation completes).
 ## Lifecycle / resources
 - **Lazy**: spawn the selected DNA engine only when local intelligence is enabled
   and the matching GGUF is present; all DNA consumers share one resident process.
-- **8 GB**: 2B's measured 2,405 MB replaces the 4B process's 5,119 MB. The short
+- **8 GB**: 2B's measured 1.5 GB replaces the 4B process's 3.3 GB (0.1.5; was
+  2,405 vs 5,119 MB on 0.1.4). A live session is translation + transcription
+  (1.05–1.26 GB) + the app, so the 4B would want ~4.6 GB of an 8 GB machine — better
+  than the ~6.8 GB it needed before, but still the wrong bet with no memory-pressure
+  handling anywhere in the app. The threshold stays at 12 GiB. The short
   queue horizon and coalescing keep memory/latency bounded instead of accumulating
   translations behind speech.
 
