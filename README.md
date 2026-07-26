@@ -7,8 +7,9 @@ auto-detection**, long-audio chunking, and a **near-real-time live meeting mode*
 Metal/MSL + Apple system frameworks (Metal, MPS, Accelerate) — **no
 Python/PyTorch/onnxruntime at runtime**. Korean guide: [README_KR.md](README_KR.md).
 
-> Highlights: peak RSS **1.1 GB** (Q8 + streaming loader), decode **~188 tok/s**,
-> diarization **9.67% DER** on VoxConverse dev (beats pyannote 3.1 SOTA ~11.2%).
+> Highlights: peak RSS **1.05 GB** (Q8 + streaming loader), Whisper decode
+> **~402 tok/s** (jfk) / **~485–496 tok/s** steady, diarization **9.67% DER** on
+> VoxConverse dev (beats pyannote 3.1 SOTA ~11.2%).
 > Full status: [`engine/metal/STATUS.md`](engine/metal/STATUS.md).
 
 ## The primary flow: a local-first macOS app
@@ -170,13 +171,79 @@ dedicated var, so it never collides with the shell locale `$LANG`.
 > For the most accurate final copy, run the whole WAV through `transcribe` once
 > after the meeting. See `testdata/` for a KO+EN regression fixture.
 
-## Performance (jfk, M4 Pro)
-| | baseline | now |
+## Performance
+
+All figures are wall-clock or `vmmap -summary` measurements on the same **M4 Pro**,
+not projections. Two engines ship in the app and are measured separately.
+
+### Transcription — `transcribe` (Sovereign Whisper)
+
+jfk fixture, remeasured 2026-06-19. Canonical copy:
+[`engine/metal/STATUS.md`](engine/metal/STATUS.md); history in
+[`engine/metal/PERF_LOG.md`](engine/metal/PERF_LOG.md).
+
+| metric | baseline | now |
 |---|---|---|
-| encoder/chunk | 1390 ms | ~653 ms |
-| decode | 134 tok/s | ~188 tok/s |
-| peak RSS | 4.78 GB | **1.11 GB** |
+| conv front-end | ~95 ms | **~15 ms** |
+| encoder / 30 s chunk | 1390 ms | **~568 ms** · **~125 ms/chunk** at batch-4 |
+| encoder, live (`AUDIO_CTX=auto`) | — | **~250–300 ms/segment** |
+| decode | 134 tok/s | **~402 tok/s** (jfk, 26 tok) · **~485–496 tok/s** steady |
+| peak RSS | 4.78 GB | **1.05 GB** (jfk) · 1.26 GB (3-min, batch-4 resident) |
 | live (153 s KO+EN, resident) | — | **~35 s (≈4× real-time)** |
+| accuracy | — | LibriSpeech **2.17%** clean / **4.19%** other WER · FLEURS-ko CER **4.05%** |
+
+Accuracy is `PERF_LOG` W-1/W-2b: 2620 + 2939 utterances, official Whisper normaliser
++ jiwer; the Korean CER is the product path with zero empty hypotheses. Reference
+large-v3 publishes clean 2.0 / other 3.9 — so Q8 quantisation and a hand-written
+Metal pipeline land at reference-grade quality.
+
+The encoder is at the Metal-4 tensor-op ceiling (beats MPS 1.18×) and Whisper decode
+is occupancy-bound rather than bandwidth-bound — both closed by measurement, so
+bandwidth-style optimisations do not apply there.
+
+### Live translation — `translate-engine-{2b,4b}` (DNA3)
+
+Optional feature, measured 0.1.4 → 0.1.5. `B` is a turn's prefill token count;
+B ≈ 14–33 is the live-caption band. **Footprint** is GPU weights, **RSS** whole
+process. Canonical copy: `sovereignLLM/apps/metal-dna3-4b-q4km/PERF_MATRIX.md`.
+
+| tier | | footprint | RSS | prefill B=14 | decode |
+|---|---|---:|---:|---:|---:|
+| **4B** (16 GB+) | 0.1.4 | 5.5 G | 7.53 G | 153.4 ms | 62.4 tok/s |
+| | **0.1.5** | **3.3 G** | **5.34 G** | **69.8 ms** | **64.7 tok/s** |
+| **2B** (8 GB) | 0.1.4 | 2.6 G | 3.54 G | 59.6 ms | 125.3 tok/s |
+| | **0.1.5** | **1.5 G** | **2.52 G** | **31.5 ms** | **124.1 tok/s** |
+
+0.1.4 → 0.1.5: footprint **−40%** (4B) / **−42%** (2B), RSS −29%, prefill at B=14
+**−54%** / **−47%**. Decode is essentially flat — the wins are time-to-first-token
+and memory, which is what a live caption feels.
+
+One caption turn end-to-end (B=14 source, ~30 output tokens): 4B **634 → 534 ms**,
+2B **300 → 274 ms**. With 3 target languages the prefill saving triples.
+
+Session budget (translate + whisper), which is what decides the 8 GB tier:
+
+| machine | 0.1.4 | 0.1.5 | headroom gained |
+|---|---|---|---|
+| 8 GB (2B) | 3.9 G | **2.8 G** | +1.1 G |
+| 16 GB (4B) | 6.8 G | **4.6 G** | +2.2 G |
+
+Transcription did not change in that cycle; those rows are the baseline, not a result.
+
+## Version history
+
+Released builds are published to the S3 `stable` channel and served through
+CloudFront; the in-app updater reads `channels/stable/latest.json`. Release
+mechanics and the git-tag rule are in [docs/RELEASE.md](docs/RELEASE.md).
+
+| version | published | tag | highlights |
+|---|---|---|---|
+| **0.1.5** | 2026-07-26 | `v0.1.5` | Stable speaker numbers — the main speaker keeps *Speaker 1* instead of drifting as the clusterer renumbers; `화자분리중…` while a label is undecided, with a 300 s commit timeout (#229). DNA3 translate engine 0.1.5: footprint −40%, prefill −54% at B=14. Corrected translate tier memory constants (#228). Per-turn DNA watchdog + engine relaunch (#227). Side-panel redesign (#220), input-picker drop-up fix (#217). |
+| **0.1.4** | 2026-07-22 | `v0.1.4` | Korean diarization robustness (#226), countdown start-admission fix (#225), first-run model onboarding (#224), system-audio permission UX (#223). |
+| 0.1.3 | 2026-07-22 | — | Same source as 0.1.4 (`450e527`), rebuilt and republished the same day. No separate tag: `v0.1.4` already marks that tree, so a second tag would only make `git describe` ambiguous. |
+| **0.1.2** | 2026-07-20 | `v0.1.2` | M1 / 8 GB live translation on the DNA3-2B tier (#221) and its 8 GB guide (#222); reproducible local S3 releases across operators (#219). |
+| **0.1.1** | 2026-07-20 | `v0.1.1` | Live-diarization silence-birth fix (#218); updates made independent of GitHub delivery (#215). |
+| **0.1.0** | 2026-07-19 | `v0.1.0` | First official stable release. Diarization on/off toggle (#216), S3 release channel. |
 
 ## Project layout
 - `apps/macos/` — the native macOS app (SwiftUI). Pure-logic core is covered by `swift test` (`cd apps/macos && swift test`); packaging scripts live in `apps/macos/scripts/`.
