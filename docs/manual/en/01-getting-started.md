@@ -16,6 +16,18 @@ Welcome to Madi. Madi transcribes and translates your meetings **entirely on thi
 
 Madi's core promise is **sovereignty**. No audio, no transcript, no translation is ever sent to the cloud. Once the models are downloaded it works with the internet unplugged. Your meetings exist only on your device.
 
+## System requirements
+
+| Item | Minimum | Notes |
+|---|---|---|
+| Mac | **Apple Silicon (M1 or later)** | Intel Macs are not supported (arm64 only) |
+| macOS | **14.0 (Sonoma) or later** | |
+| Memory | **8 GB or more** | The baseline machine is an M1 MacBook Air with 8 GB |
+| Disk | **~1 GB** (transcription only) | Add 1.31 GB on an 8 GB Mac, or 2.78 GB on 16 GB+, if you use translation |
+| Internet | Only for the first model download | It runs offline afterwards |
+
+8 GB Macs are fully supported — Madi applies a low-memory profile automatically. See the **8 GB Mac guide** chapter.
+
 ## About the models
 
 Madi uses two kinds of AI model.
@@ -68,6 +80,7 @@ Once recording starts, the window splits into three columns.
 |---|---|
 | **⌘,** | Open Settings |
 | **⌘K** | Command palette (see below) |
+| **⌘F** | Find in transcript |
 | **⌘R** | Start / stop recording |
 | **⌘P** | Pause / resume |
 | **⌘?** | Open this user manual |
@@ -85,6 +98,7 @@ Press **⌘K** for a search box. Run things by name instead of hunting through m
 ## Help menu
 
 - **Madi User Manual (⌘?)** — opens this document. Works offline.
+- **8 GB Mac Guide** — appears only on 8 GB-class Macs.
 - **Install update…** — checks for and installs a new version.
 - **About** — version and licenses.
 

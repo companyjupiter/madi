@@ -196,6 +196,20 @@ else
   echo "  ⚠ docs/manual/index.html missing — Help → 사용자 매뉴얼 will be unavailable"
 fi
 
+# ── 2a-2. third-party notices travel with the binary ────────────────────────
+# MIT requires its notice "in all copies or substantial portions", Apache-2.0
+# §4(a)(d) requires the license + NOTICE with every distribution, and CC BY 4.0
+# §3(a) requires attribution with the material. resnet34_diar.bin (CC BY 4.0),
+# silero_vad.bin and pyannote_osd.bin (MIT) are all inside this bundle, so the
+# notices ship here too — the manual footer carries the short form.
+for f in NOTICE THIRD_PARTY_LICENSES.md; do
+  if [ -f "$ROOT/$f" ]; then
+    cp "$ROOT/$f" "$BUNDLE/Contents/Resources/$f"
+  else
+    echo "  ⚠ $f missing — third-party attribution would not ship with the app"
+  fi
+done
+
 # ── 2b. optional: bundle the model INSIDE the .app (self-contained DMG) ──────
 # Must happen BEFORE signing so the 867 MB model is sealed by the bundle
 # signature. AssetManifest.modelURL then prefers this copy → no download.

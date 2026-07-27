@@ -2,7 +2,7 @@
 
 Madi transcribes meetings live as people speak, and it can also transcribe audio and video files you already have. Everything runs on this Mac — your transcript never leaves the device.
 
-> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
+> Madi's interface can be switched between 한국어 / English / 日本語 under **설정 (⌘,) → 표시 → 언어 / Language**. This manual writes the Korean label first, with the English UI label in parentheses.
 
 ## The first screen — meeting info and getting started
 
@@ -84,14 +84,14 @@ A preset that tunes speaker count and emphasis to the shape of the meeting. Pick
 | **1:1** | 2 speakers · emphasize decisions and follow-ups |
 | **스탠드업** (Standup) | Auto speakers · emphasize actions and blockers |
 | **인터뷰** (Interview) | 2 speakers · preserve question–answer flow |
-| **강의** (Lecture) | 1 speaker · organize around key points |
+| **강의** (Lecture) | 1 speaker · organize around key points — **turns speaker separation off** |
 
 **Note**
 - Choose the meeting mode **before** you start recording. It locks while recording.
 
 ## 화자 (Speaker count)
 
-If you know how many people are in the room, set it to improve speaker separation. On the first screen under **회의 정보 → 화자**, choose **자동** (Auto) **/ 1명 / 2명 / 3명 / 4명 이상** (1 / 2 / 3 / 4+ people).
+If you know how many people are in the room, set it to improve speaker separation. On the first screen under **회의 정보 → 화자**, choose **자동** (Auto) **/ 2명 / 3명 / 4명 / 5명 이상** (2 / 3 / 4 / 5+ people). **There is no "1" option** — for a single presenter, switch **화자 분리** (Speaker separation) off under **설정 → 녹음 → 화자** (the **강의** / Lecture mode does this for you).
 
 Pinning the count when you're sure gives cleaner speaker splits. If you're not sure, leave it on **자동** (Auto). See the **Speakers** page for details.
 

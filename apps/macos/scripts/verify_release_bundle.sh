@@ -17,6 +17,8 @@ required=(
   "$APP/Contents/Resources/assets-small/silero_vad.bin"
   "$APP/Contents/Resources/assets-small/pyannote_osd.bin"
   "$APP/Contents/Resources/assets-small/suppress_tokens.bin"
+  "$APP/Contents/Resources/NOTICE"
+  "$APP/Contents/Resources/THIRD_PARTY_LICENSES.md"
   "$PLIST"
 )
 for path in "${required[@]}"; do

@@ -2,7 +2,7 @@
 
 Madi automatically works out who spoke during a meeting. All of this runs on this Mac.
 
-> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
+> Madi's interface can be switched between 한국어 / English / 日本語 under **설정 (⌘,) → 표시 → 언어 / Language**. This manual writes the Korean label first, with the English UI label in parentheses.
 
 ## Automatic speaker separation
 
@@ -19,7 +19,7 @@ While recording and transcribing, Madi splits speech by speaker automatically.
 If you know how many people are in the room, set it to improve accuracy.
 
 1. On the first screen, go to **회의 정보 → 화자** (Meeting info → Speakers).
-2. Choose **자동** (Auto) **/ 1명 / 2명 / 3명 / 4명 이상** (1 / 2 / 3 / 4+ people).
+2. Choose **자동** (Auto) **/ 2명 / 3명 / 4명 / 5명 이상** (2 / 3 / 4 / 5+ people). There is no "1" option — for a single presenter, turn **화자 분리** off instead.
 
 **Note**
 - Pinning the count when you're sure gives cleaner speaker splits. If you're not sure, leave it on **자동** (Auto).

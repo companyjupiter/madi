@@ -2,7 +2,7 @@
 
 Madi shows your entire save folder as a single workspace. The **workspace explorer** on the right of the window lets you reopen past meetings, change where things are saved, and export in the format you need.
 
-> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
+> Madi's interface can be switched between 한국어 / English / 日本語 under **설정 (⌘,) → 표시 → 언어 / Language**. This manual writes the Korean label first, with the English UI label in parentheses.
 
 ## The workspace explorer
 

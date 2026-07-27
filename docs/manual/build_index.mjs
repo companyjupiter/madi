@@ -13,6 +13,7 @@ const LANGS = [
   { code: 'ko', label: '한국어' },
   { code: 'en', label: 'English' },
   { code: 'ja', label: '日本語' },
+  { code: 'zh', label: '中文' },
 ];
 
 // ── minimal, dependency-free Markdown → HTML (enough for a manual) ──
@@ -25,7 +26,9 @@ function inline(s) {
   out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
   return out;
 }
-const slug = (s) => s.toLowerCase().replace(/[^\w가-힣]+/g, '-').replace(/(^-|-$)/g, '');
+// CJK ranges are kept so ja/zh headings get real anchor ids instead of collapsing
+// to an empty slug (every heading would otherwise share id="").
+const slug = (s) => s.toLowerCase().replace(/[^\w가-힣぀-ヿ一-鿿]+/g, '-').replace(/(^-|-$)/g, '');
 
 function render(md) {
   const lines = md.replace(/\r\n/g, '\n').split('\n');
@@ -108,10 +111,21 @@ function sections(lang) {
 
 const data = Object.fromEntries(LANGS.map((l) => [l.code, sections(l.code)]));
 
+// The per-language footer carries the third-party attribution required by the
+// bundled models' licenses (MIT "in all copies", Apache-2.0 §4, CC BY 4.0 §3(a)).
+// index.html ships inside the .app (Resources/manual), so this footer is the
+// notice that actually travels with the binary — keep it in sync with NOTICE
+// and section 10 of each language's manual.
+const CREDITS = 'Whisper large-v3-turbo (MIT, (c) 2022 OpenAI) · WeSpeaker ResNet34 '
+  + '(toolkit Apache-2.0 · weights CC BY 4.0, (c) the WeSpeaker authors) · Silero VAD '
+  + '(MIT, (c) 2020-present Silero Team) · pyannote segmentation-3.0 (MIT, (c) 2020 CNRS) '
+  + '· DNA3.0-2B/4B (Apache-2.0, (c) Dnotitia Inc.; base Qwen (c) Alibaba Cloud)';
+
 const UI = {
-  ko: { brand: 'Madi 사용자 매뉴얼', tagline: '온디바이스 회의 인텔리전스', toc: '목차', foot: '모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.' },
-  en: { brand: 'Madi User Manual', tagline: 'On-device meeting intelligence', toc: 'Contents', foot: 'Everything runs on this Mac — transcripts, translation and summaries never leave the device.' },
-  ja: { brand: 'Madi ユーザーマニュアル', tagline: 'オンデバイス会議インテリジェンス', toc: '目次', foot: 'すべての処理はこの Mac 内で — 文字起こし・翻訳・要約はデバイスから外に出ません。' },
+  ko: { brand: 'Madi 사용자 매뉴얼', tagline: '온디바이스 회의 인텔리전스', toc: '목차', foot: '모든 처리는 이 Mac에서 — 전사·번역·요약이 기기를 떠나지 않습니다.<br><br>' + CREDITS + '<br>변경 사실을 포함한 전체 고지는 <b>10 · 오픈소스 라이선스</b>를 보십시오.' },
+  en: { brand: 'Madi User Manual', tagline: 'On-device meeting intelligence', toc: 'Contents', foot: 'Everything runs on this Mac — transcripts, translation and summaries never leave the device.<br><br>' + CREDITS + '<br>Full notices, including the change notice, are in <b>10 · Open-Source Licenses</b>.' },
+  ja: { brand: 'Madi ユーザーマニュアル', tagline: 'オンデバイス会議インテリジェンス', toc: '目次', foot: 'すべての処理はこの Mac 内で — 文字起こし・翻訳・要約はデバイスから外に出ません。<br><br>' + CREDITS + '<br>変更の告知を含む全文は <b>10 · オープンソースライセンス</b> をご覧ください。' },
+  zh: { brand: 'Madi 用户手册', tagline: '设备端会议智能', toc: '目录', foot: '所有处理都在这台 Mac 上 — 转写、翻译与摘要不会离开设备。<br><br>' + CREDITS + '<br>包含变更告知的完整声明请见 <b>10 · 开源许可</b>。' },
 };
 
 const navFor = (lang) => data[lang].map((s, n) =>
@@ -217,7 +231,7 @@ const HTML = `<!DOCTYPE html>
   <div class="panes">${langPanes}</div>
 </div>
 <script>
-  var TAG={ko:'온디바이스 회의 인텔리전스',en:'On-device meeting intelligence',ja:'オンデバイス会議インテリジェンス'};
+  var TAG={ko:'온디바이스 회의 인텔리전스',en:'On-device meeting intelligence',ja:'オンデバイス会議インテリジェンス',zh:'设备端会议智能'};
   var panes=[].slice.call(document.querySelectorAll('.lang-pane'));
   var host=document.querySelector('.toc-host');
   var tagEl=document.querySelector('[data-tag]');
@@ -265,7 +279,7 @@ const HTML = `<!DOCTYPE html>
   }
   function openHash(){
     var target=decodeURIComponent(location.hash.replace(/^#/,''));
-    var match=/^(ko|en|ja)-/.exec(target);
+    var match=/^(ko|en|ja|zh)-/.exec(target);
     activate(match ? match[1] : 'ko',!match);
     if(match){ requestAnimationFrame(function(){
       var el=document.getElementById(target); if(el) el.scrollIntoView({block:'start'});

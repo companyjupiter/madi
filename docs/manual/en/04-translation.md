@@ -2,7 +2,7 @@
 
 Madi's translation runs 100% on your device — no cloud, no account. While a meeting is in progress, each spoken line is translated into Korean, English, Japanese and/or Chinese and shown right beneath the original. Madi automatically uses DNA3.0-2B on an 8 GB Mac and DNA3.0-4B on 16 GB or more.
 
-> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
+> Madi's interface can be switched between 한국어 / English / 日本語 under **설정 (⌘,) → 표시 → 언어 / Language**. This manual writes the Korean label first, with the English UI label in parentheses.
 
 ## First: download the translation model
 
