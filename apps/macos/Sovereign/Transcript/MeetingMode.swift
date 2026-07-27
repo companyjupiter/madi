@@ -59,7 +59,9 @@ enum MeetingMode: String, CaseIterable, Identifiable, Codable {
         case .oneOnOne:  return lang("발화자 2명 · 결정과 후속 조치 강조", "2 speakers · emphasize decisions & follow-ups")
         case .standup:   return lang("발화자 자동 · 액션과 블로커 강조", "Auto speakers · emphasize actions & blockers")
         case .interview: return lang("발화자 2명 · 질문·답변 흐름 보존", "2 speakers · preserve question-answer flow")
-        case .lecture:   return lang("발화자 1명 · 핵심 요점 위주 정리", "1 speaker · focus on key takeaways")
+        // NOT "발화자 1명": SpeakerCount has no 1명 option any more (자동/2/3/4/5+),
+        // and this preset's real effect is defaultDiarize=false — say that.
+        case .lecture:   return lang("화자 분리 끔 · 핵심 요점 위주 정리", "Speaker separation off · key takeaways")
         }
     }
 
