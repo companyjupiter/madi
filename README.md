@@ -211,8 +211,15 @@ process. Canonical copy: `sovereignLLM/apps/metal-dna3-4b-q4km/PERF_MATRIX.md`.
 |---|---|---:|---:|---:|---:|
 | **4B** (16 GB+) | 0.1.4 | 5.5 G | 7.53 G | 153.4 ms | 62.4 tok/s |
 | | **0.1.5** | **3.3 G** | **5.34 G** | **69.8 ms** | **64.7 tok/s** |
+| | *unreleased* | *3.20 G* | *5.23 G* | *unchanged* | *67.7 tok/s* |
 | **2B** (8 GB) | 0.1.4 | 2.6 G | 3.54 G | 59.6 ms | 125.3 tok/s |
 | | **0.1.5** | **1.5 G** | **2.52 G** | **31.5 ms** | **124.1 tok/s** |
+| | *unreleased* | *1.54 G* | *2.49 G* | *unchanged* | *130.8 tok/s* |
+
+The *unreleased* rows are on `main` and not in any published build: per-layer V/W2 Q6_K
+is stored as 6.5-bit `ql`/`qh` with the raw GGUF blocks dropped, which is worth decode
+**+3.4%** (4B) / **+2.4%** (2B) and −150 MB / −65 MB of RSS at byte-identical output.
+Both were measured on this model rather than assumed from the other.
 
 0.1.4 → 0.1.5: footprint **−40%** (4B) / **−42%** (2B), RSS −29%, prefill at B=14
 **−54%** / **−47%**. Decode is essentially flat — the wins are time-to-first-token
@@ -258,14 +265,21 @@ mechanics and the git-tag rule are in [docs/RELEASE.md](docs/RELEASE.md).
   `engine/metal/PORT.md` (CUDA→Metal port notes), `engine/metal/bench/*.md`.
 
 ## License / provenance
-Inference code is original work of this project. It reuses two third-party models,
+Inference code is original work of this project. It reuses five third-party models,
 whose notices are retained as required and reproduced in full:
 
 - **OpenAI Whisper** large-v3-turbo — **MIT License**, © 2022 OpenAI
   (transcription). MIT requires keeping the copyright + permission notice.
-- **WeSpeaker** ResNet34 — **Apache License 2.0**, © the WeSpeaker authors
-  (diarization; VoxCeleb-trained — verify dataset terms for commercial use).
-  Apache-2.0 requires keeping the NOTICE + license and stating changes.
+- **WeSpeaker** ResNet34 — toolkit and architecture **Apache License 2.0**;
+  the VoxCeleb-trained **weights are CC BY 4.0**, since WeSpeaker states a
+  pretrained model follows its dataset's license. © the WeSpeaker authors
+  (diarization). Both permit commercial use; both require attribution and a
+  statement of changes, and Apache-2.0 also requires shipping the NOTICE.
+- **Silero VAD** — **MIT License**, © 2020-present Silero Team (speech gating).
+- **pyannote** segmentation-3.0 — **MIT License**, © 2020 CNRS (overlap detection).
+- **DNA3.0-2B / 4B** — **Apache License 2.0**, © Dnotitia Inc.; base model
+  Qwen3.5 © Alibaba Cloud (translation, summary, Q&A — downloaded on demand,
+  not bundled).
 
 See [`NOTICE`](NOTICE) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)
 for the attributions and full license texts; source headers in

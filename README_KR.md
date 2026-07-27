@@ -293,8 +293,15 @@ B ≈ 14–33이 라이브 캡션 대역입니다. **footprint**는 GPU 가중�
 |---|---|---:|---:|---:|---:|
 | **4B** (16 GB+) | 0.1.4 | 5.5 G | 7.53 G | 153.4 ms | 62.4 tok/s |
 | | **0.1.5** | **3.3 G** | **5.34 G** | **69.8 ms** | **64.7 tok/s** |
+| | *미출시* | *3.20 G* | *5.23 G* | *변화 없음* | *67.7 tok/s* |
 | **2B** (8 GB) | 0.1.4 | 2.6 G | 3.54 G | 59.6 ms | 125.3 tok/s |
 | | **0.1.5** | **1.5 G** | **2.52 G** | **31.5 ms** | **124.1 tok/s** |
+| | *미출시* | *1.54 G* | *2.49 G* | *변화 없음* | *130.8 tok/s* |
+
+*미출시* 행은 `main`에 있고 아직 어떤 배포본에도 들어가 있지 않습니다 — 레이어별
+V/W2 Q6_K를 6.5비트 `ql`/`qh`로 저장하고 raw GGUF 블록을 버린 변경으로, 출력이
+바이트 동일인 채 디코드 **+3.4%**(4B) / **+2.4%**(2B), RSS −150 MB / −65 MB입니다.
+두 모델 모두 상대 결과를 가정하지 않고 각자 측정했습니다.
 
 0.1.4 → 0.1.5: footprint **−40%**(4B) / **−42%**(2B), RSS −29%, B=14 prefill
 **−54%** / **−47%**. 디코드는 사실상 그대로입니다 — 이번 이득은 첫 토큰까지의 시간과
@@ -353,14 +360,20 @@ B ≈ 14–33이 라이브 캡션 대역입니다. **footprint**는 GPU 가중�
 - `engine/metal/PORT.md` — CUDA/PTX → Metal 포팅 노트
 
 ## 라이선스 / 출처
-추론 코드는 본 프로젝트의 독자 구현입니다. 두 가지 서드파티 모델을 재사용하며,
+추론 코드는 본 프로젝트의 독자 구현입니다. 다섯 가지 서드파티 모델을 재사용하며,
 요구되는 고지를 코드·배포물에 모두 유지합니다:
 
 - **OpenAI Whisper** large-v3-turbo — **MIT License**, © 2022 OpenAI (전사).
   MIT도 저작권+허가 고지 유지가 **필수**입니다(면제 아님).
-- **WeSpeaker** ResNet34 — **Apache License 2.0**, © WeSpeaker authors
-  (화자분리; VoxCeleb 학습 — 상용/재배포 시 데이터셋 약관 확인). Apache-2.0은
-  NOTICE·라이선스 전문 포함 + 변경 사실 명시가 필요합니다.
+- **WeSpeaker** ResNet34 — 툴킷·아키텍처는 **Apache License 2.0**, VoxCeleb으로
+  학습된 **가중치는 CC BY 4.0** (WeSpeaker가 사전학습 모델은 학습 데이터셋의
+  라이선스를 따른다고 명시). © WeSpeaker authors (화자분리). 둘 다 상업적 사용을
+  허용하며, 귀속 표시와 변경 사실 명시가 필요하고 Apache-2.0은 NOTICE 동봉도
+  요구합니다.
+- **Silero VAD** — **MIT License**, © 2020-present Silero Team (발화 구간 판정).
+- **pyannote** segmentation-3.0 — **MIT License**, © 2020 CNRS (겹침 구간 검출).
+- **DNA3.0-2B / 4B** — **Apache License 2.0**, © Dnotitia Inc.; 베이스 모델
+  Qwen3.5 © Alibaba Cloud (번역·요약·질의응답 — 번들이 아니라 필요 시 다운로드).
 
 전체 고지·라이선스 전문은 [`NOTICE`](NOTICE)·[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md),
 소스 헤더(`engine/metal/transcribe.zig`·`engine/metal/diar_resnet.zig`)에도 동일 고지가 있습니다.

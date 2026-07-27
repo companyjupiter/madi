@@ -69,24 +69,28 @@ enum AssetManifest {
         url: URL(string: "https://huggingface.co/mradermacher/DNA3.0-4B-i1-GGUF/resolve/main/DNA3.0-4B.i1-Q4_K_M.gguf")!,
         sha256: "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8",
         sizeBytes: 2_783_447_424,
-        // 3.3 GB measured on 0.1.5 (was 5.1 on 0.1.4). The engine stopped keeping a second
-        // copy of every Q4_K weight — see sovereignLLM apps/metal-dna3-4b-q4km/PERF_MATRIX.md.
+        // 3.2 GB measured against the current engine (3.35 before per-layer Q6_K packing,
+        // 5.1 on 0.1.4). Two engine changes got it here: dropping the second copy of every
+        // Q4_K weight, then storing V/W2 Q6_K as 6.5-bit ql/qh with no raw blocks — see
+        // sovereignLLM apps/metal-dna3-4b-q4km/PERF_MATRIX.md sections 3 and 12.
         // This is phys_footprint, which is what the tier rule below reasons about; RSS is
-        // higher (5.3 GB) because the GGUF mapping is resident but evictable and is charged
+        // higher (5.2 GB) because the GGUF mapping is resident but evictable and is charged
         // to RSS only. Shown to the user in SettingsView / ModelGateView, so keep it honest.
-        approxRuntimeMemoryGB: 3.3
+        approxRuntimeMemoryGB: 3.2
     )
 
     /// Low-memory live-translation model for 8 GB Macs. Same qwen35 hybrid
     /// architecture/tokenizer as 4B, model-specific Metal binary, Q4_K_M.
-    /// Measured on 0.1.5: 1.5 GB phys_footprint vs 3.3 GB for the 4B (-55%).
-    /// (0.1.4 was 2,405 MB vs 5,119 MB.)
+    /// 1.54 GB phys_footprint against the current engine vs 3.2 GB for the 4B (-52%).
+    /// (0.1.5 shipped at 1.61; 0.1.4 was 2,405 MB vs 5,119 MB.)
     static let translateModel2B = RemoteAsset(
         name: "DNA3.0-2B.i1-Q4_K_M.gguf",
         url: URL(string: "https://huggingface.co/mradermacher/DNA3.0-2B-i1-GGUF/resolve/main/DNA3.0-2B.i1-Q4_K_M.gguf")!,
         sha256: "9270db053b27f1ec127e37ad7aaec0efa05dc89fbd158f3c4724e33e478da7a3",
         sizeBytes: 1_312_165_344,
-        // 1.5 GB measured on 0.1.5 (was 2.4 on 0.1.4).
+        // 1.5 GB. Kept as-is rather than raised: the packing moved the true figure
+        // 1.61 -> 1.54, so this rounded constant is now honest where it was slightly
+        // optimistic before. Do not lower it further without a fresh measurement.
         approxRuntimeMemoryGB: 1.5
     )
 
