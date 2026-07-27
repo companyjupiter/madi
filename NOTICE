@@ -14,11 +14,20 @@ in source and binary redistributions.
                metal/assets/resnet34_diar.bin (format-converted weights)
    Source    : https://github.com/wenet-e2e/wespeaker
    Copyright : Copyright (c) the WeSpeaker authors
-   License   : Apache License, Version 2.0  (see THIRD_PARTY_LICENSES.md §A)
+   License   : Toolkit and model architecture — Apache License, Version 2.0
+               (see THIRD_PARTY_LICENSES.md §A)
+               Pretrained weights — Creative Commons Attribution 4.0
+               International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+               (see THIRD_PARTY_LICENSES.md §E). WeSpeaker states that a
+               pretrained model follows the license of its training dataset, and
+               the VoxCeleb-trained models are therefore CC BY 4.0:
+               https://github.com/wenet-e2e/wespeaker/blob/master/docs/pretrained.md
    Changes   : Re-implemented for CPU inference in Zig; BatchNorm folded; weights
                converted to a flat binary. No substantive change to the model.
-   Note      : VoxCeleb training data carries its own dataset terms — verify them
-               for any commercial/redistribution use of the weights.
+   Note      : CC BY 4.0 permits commercial use and redistribution with
+               attribution. VoxCeleb is assembled from YouTube material and its
+               publishers state that copyright in the source videos remains with
+               the original owners.
 
 -------------------------------------------------------------------------------
 2. OpenAI Whisper — speech-recognition model (transcription)

@@ -6,7 +6,7 @@ license texts are reproduced below; a summary of components and changes is in [`
 | Component | Use | License |
 |---|---|---|
 | **DNA3.0-4B** (dnotitia; Qwen3.5-4B base) — translation + summary/Q&A | downloaded GGUF · `Contents/MacOS/translate-engine` | Apache-2.0 (§A) |
-| **WeSpeaker** ResNet34 (diarization) | `metal/diar_resnet.zig`, `assets/resnet34_diar.bin` | Apache-2.0 (§A) |
+| **WeSpeaker** ResNet34 (diarization) | `metal/diar_resnet.zig`, `assets/resnet34_diar.bin` | Apache-2.0 (§A) · pretrained weights CC BY 4.0 (§E) |
 | **OpenAI Whisper** large-v3-turbo (transcription) | `metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig` | MIT (§B) |
 | **Silero VAD** (voice-activity detection) | `assets/silero_vad.bin` | MIT (§C) |
 | **pyannote** (overlapped-speech detection) | `assets/pyannote_osd.bin` | MIT (§D) |
@@ -17,7 +17,7 @@ license texts are reproduced below; a summary of components and changes is in [`
 
 Applies to the two Apache-2.0 components below; the full license text follows.
 
-- **WeSpeaker** speaker-embedding model — https://github.com/wenet-e2e/wespeaker — Copyright (c) the WeSpeaker authors.
+- **WeSpeaker** speaker-embedding toolkit and model architecture — https://github.com/wenet-e2e/wespeaker — Copyright (c) the WeSpeaker authors. (The *pretrained VoxCeleb weights* we ship are CC BY 4.0 — see §E.)
 - **DNA3.0-4B** translation / summary model (dnotitia; base model Qwen3.5-4B) — https://huggingface.co/dnotitia/DNA3.0-4B — Copyright (c) Dnotitia Inc.; base model Copyright (c) Alibaba Cloud (Qwen).
 
 ```
@@ -289,3 +289,42 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+---
+
+## §E — WeSpeaker pretrained weights (CC BY 4.0)
+
+The WeSpeaker *toolkit and model architecture* are Apache-2.0 (§A). The
+**pretrained weights** we ship are a separate matter: WeSpeaker states that a
+pretrained model follows the license of the dataset it was trained on, and the
+VoxCeleb-trained models are therefore licensed
+**Creative Commons Attribution 4.0 International (CC BY 4.0)**.
+
+- Reference: https://github.com/wenet-e2e/wespeaker/blob/master/docs/pretrained.md
+- Dataset: VoxCeleb — https://www.robots.ox.ac.uk/~vgg/data/voxceleb/
+
+Attribution required by CC BY 4.0 §3(a)(1), reproduced here for the weights
+shipped as `metal/assets/resnet34_diar.bin`:
+
+```
+Creator   : the WeSpeaker authors (https://github.com/wenet-e2e/wespeaker)
+Title     : WeSpeaker ResNet34 speaker-embedding model (VoxCeleb-trained)
+Copyright : Copyright (c) the WeSpeaker authors
+License   : Creative Commons Attribution 4.0 International (CC BY 4.0)
+License   : https://creativecommons.org/licenses/by/4.0/
+Legal code: https://creativecommons.org/licenses/by/4.0/legalcode
+Modified  : YES — the inference path was independently reimplemented in Zig for
+            CPU, BatchNorm was folded into the preceding convolutions, and the
+            weights were converted to a flat binary layout. The model itself is
+            not substantively changed.
+Disclaimer: the material is licensed AS-IS, without warranties of any kind.
+```
+
+CC BY 4.0 §3(a)(2) permits satisfying these conditions by providing a URI to a
+resource carrying the required information; the license URI above is that
+resource, and the full legal code is not reproduced inline for length.
+
+CC BY 4.0 permits commercial use and redistribution provided the attribution
+above travels with the material. Note separately that VoxCeleb is assembled from
+YouTube material and its publishers state that copyright in the source videos
+remains with the original owners.

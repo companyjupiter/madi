@@ -2,7 +2,7 @@
 
 Once a transcript is done you can read it clean, or go in close and fix it. Madi remembers the fixes you make and applies them automatically in later meetings.
 
-> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
+> Madi's interface can be switched between 한국어 / English / 日本語 under **설정 (⌘,) → 표시 → 언어 / Language**. This manual writes the Korean label first, with the English UI label in parentheses.
 
 ## 내용 (Content) vs 상세 (Detail) view
 

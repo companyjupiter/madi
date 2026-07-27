@@ -2,7 +2,7 @@
 
 Open Settings with **⌘, (Command + comma)** — the gear button in the left panel does the same. This is where the **"set it once"** options live, rather than the things you touch every meeting. The tabs across the top are **녹음 · 저장 · 번역 · 단어장 · 모델** (Recording · Save · Translation · Glossary · Model).
 
-> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
+> Madi's interface can be switched between 한국어 / English / 日本語 under **설정 (⌘,) → 표시 → 언어 / Language**. This manual writes the Korean label first, with the English UI label in parentheses.
 
 > **Per-meeting choices** (input/output language, meeting mode, speaker count) are **not** in Settings — they're on the first screen under **회의 정보** (Meeting info). See **Recording and transcription**.
 
@@ -36,6 +36,7 @@ How audio is captured, how live transcription behaves, and how things look.
 
 ### 표시 (Appearance)
 
+- **언어 / Language** — the app's UI language: **한국어 / English / 日本語**. It switches instantly, no restart. (This manual also comes in 中文, but the app UI does not.)
 - **외관** (Appearance) — System / Light / Dark theme.
 
 ### 자막 오버레이 (진료실) (Caption overlay — clinic)

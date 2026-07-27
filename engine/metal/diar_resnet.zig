@@ -5,13 +5,18 @@
 //             → FC 5120→256 → −mean_vec → (L2-norm at clustering)
 //
 // ───────────────────────────────────────────────────────────────────────────
-// THIRD-PARTY ATTRIBUTION — Apache License 2.0
+// THIRD-PARTY ATTRIBUTION — Apache-2.0 (toolkit) + CC BY 4.0 (weights)
 //   Speaker-embedding architecture and pretrained weights derive from WeSpeaker
 //   (ResNet34, VoxCeleb-trained):  https://github.com/wenet-e2e/wespeaker
-//   Copyright (c) the WeSpeaker authors. Licensed under the Apache License,
-//   Version 2.0. This file is an independent reimplementation; the weights are
-//   format-converted, not modified in substance.
-//   Full license text + NOTICE: ../NOTICE and ../THIRD_PARTY_LICENSES.md
+//   Copyright (c) the WeSpeaker authors. The toolkit and architecture are
+//   Apache-2.0; the PRETRAINED WEIGHTS follow their training dataset's license,
+//   so the VoxCeleb models are Creative Commons Attribution 4.0 International
+//   (CC BY 4.0) — https://creativecommons.org/licenses/by/4.0/ — per
+//   https://github.com/wenet-e2e/wespeaker/blob/master/docs/pretrained.md
+//   MODIFIED: this file is an independent Zig CPU reimplementation of the
+//   inference path with BatchNorm folded; the weights are format-converted to a
+//   flat binary, not modified in substance.
+//   Full license text + NOTICE: ../NOTICE and ../THIRD_PARTY_LICENSES.md (§A, §E)
 // ───────────────────────────────────────────────────────────────────────────
 const std = @import("std");
 

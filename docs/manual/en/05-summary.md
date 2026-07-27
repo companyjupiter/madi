@@ -2,7 +2,7 @@
 
 When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. Summary and Q&A use the same hardware-selected model as translation (DNA3.0-2B on 8 GB, 4B on 16 GB or more), and **neither the transcript nor the summary ever leaves this Mac.**
 
-> The app interface is in Korean. Korean UI labels are shown below with an English gloss in parentheses.
+> Madi's interface can be switched between 한국어 / English / 日本語 under **설정 (⌘,) → 표시 → 언어 / Language**. This manual writes the Korean label first, with the English UI label in parentheses.
 
 ## First: the translation/summary model
 
