@@ -84,7 +84,7 @@ A preset that tunes speaker count and emphasis to the shape of the meeting. Pick
 | **1:1** | 2 speakers · emphasize decisions and follow-ups |
 | **스탠드업** (Standup) | Auto speakers · emphasize actions and blockers |
 | **인터뷰** (Interview) | 2 speakers · preserve question–answer flow |
-| **강의** (Lecture) | 1 speaker · organize around key points — **turns speaker separation off** |
+| **강의** (Lecture) | Speaker separation off · key takeaways — for a single presenter |
 
 **Note**
 - Choose the meeting mode **before** you start recording. It locks while recording.

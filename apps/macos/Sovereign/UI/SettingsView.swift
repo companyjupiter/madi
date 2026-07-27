@@ -161,7 +161,11 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Toggle(uiLang("실시간 프리뷰", "Live preview"), isOn: $session.livePreviewEnabled)
-                    .help(uiLang("윈도가 닫히기 전 회색 중간 텍스트 표시(정확도 무손해, 메모리 +~830MB)", "Shows gray interim text before a window closes (no accuracy cost, ~830 MB more memory)."))
+                    // The "+~830MB" figure predates the shared-process preview lane:
+                    // PreviewEngine feeds the SAME resident transcribe process, and
+                    // PREVIEW jobs share every resident weight/scratch buffer with the
+                    // committed STREAM lane — no second copy of the model is loaded.
+                    .help(uiLang("윈도가 닫히기 전 회색 중간 텍스트 표시(정확도 무손해, 상주 엔진을 공유해 두 번째 모델을 띄우지 않음)", "Shows gray interim text before a window closes (no accuracy cost; shares the resident engine instead of loading a second copy of the model)."))
             }
             Section(uiLang("표시", "Display")) {
                 Picker("언어 / Language", selection: $uiLang) {
