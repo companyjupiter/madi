@@ -2585,9 +2585,10 @@ pub fn main() !void {
                 sum_lp += pass_lp; n_lp += pass_nlp; // accumulate for the seg event
                 var ht = try std.time.Timer.start();
                 const text = try bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]);
+                defer alloc.free(text);
                 try chunk_text.appendSlice(text);
                 const env_off = @min(@as(usize, seek_fr) * 20, senv.len);
-                try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, PL, t_off + pass_off, pass_got, senv[env_off..], d_conf);
+                try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, PL, t_off + pass_off, pass_got, senv[env_off..], d_conf, !stream and diar_on);
                 host_ns += ht.read();
             }
             if (pass_garbage) break :seek; // garbage timestamps — don't seek into junk
@@ -3545,7 +3546,7 @@ fn energyEnvelope(s: []const f32, env: []f32) usize {
     return n;
 }
 
-fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, seed_len: u32, t_off: f32, got_samples: usize, env: []const f32, conf_buf: [*]const f32) !void {
+fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []const u32, n_text: u32, seed_len: u32, t_off: f32, got_samples: usize, env: []const f32, conf_buf: [*]const f32, retain_words_for_attribution: bool) !void {
     const SL: usize = seed_len; // this pass's seed length (prompt + sot/lang/task)
     const toks = try loadBpe(bpe_path);
     const E: usize = ENC_SEQ;
@@ -3709,7 +3710,11 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
     const WSpan = struct { s0: usize, s1: usize, txt: []u8, conf: f32 };
     var words = std.ArrayList(WSpan).init(alloc);
     defer words.deinit();
+    defer if (!retain_words_for_attribution) {
+        for (words.items) |w| alloc.free(w.txt);
+    };
     var word = std.ArrayList(u8).init(alloc);
+    defer word.deinit();
     var w_first: usize = 0; // first TEXT-token index of the open word
     var wconf: f32 = 1e30; // min metric over the open word's tokens (lower=uncertain; 1e30 so any metric range works)
     for (0..N) |i| {
@@ -3813,7 +3818,7 @@ fn wordTimestamps(out: anytype, bpe_path: []const u8, ca: [*]f32, out_tokens: []
             try out.print("  [{d:.2}s-{d:.2}s] {s}\n", .{ ts, te, w.txt });
         }
         evWord(ts, te, w.txt, w.conf, -1); // spk resolved later via spk_seg (diar runs after decode)
-        if (!g_preview_job) try g_words.append(.{ .t = ts, .txt = w.txt });
+        if (retain_words_for_attribution) try g_words.append(.{ .t = ts, .txt = w.txt });
     }
 }
 
