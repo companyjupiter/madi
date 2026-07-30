@@ -22,7 +22,7 @@ struct ContentView: View {
     @AppStorage("transcriptChatLayout") private var chatLayout = false
     // The Unknown bucket is not a conversational party — a 2-speaker chat with a
     // rare 미확인 interjection still counts as two-party.
-    private var twoSpeakers: Bool { Set(session.transcript.lines.map { $0.speaker }).subtracting([SpeakerID.unknown]).count == 2 }
+    private var twoSpeakers: Bool { Set(session.transcript.displayLines.map { $0.speaker }).subtracting([SpeakerID.unknown]).count == 2 }
     private var viewMode: TranscriptViewMode {
         if chatLayout && twoSpeakers { return .chat }
         return contentMode ? .content : .detailed
@@ -1627,7 +1627,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     totalTimeBlock
                         .padding(.top, 18)
-                    if !session.transcript.lines.isEmpty {
+                    if !session.transcript.displayLines.isEmpty {
                         speakerSequenceBar.padding(.top, 16)
                         speakerShareList.padding(.top, 18)
                     }
@@ -1640,12 +1640,18 @@ struct ContentView: View {
                     // visibly grows in real time (silence included) instead of
                     // jumping only when a line commits.
                     // ~7fps while recording so the live meter feels alive; the
-                    // energy recompute over the (bounded) line list is cheap.
-                    TimelineView(.periodic(from: .now, by: isRecordingLike ? 0.15 : 1)) { _ in
+                    // live meter itself is driven by `meterLevel`; the expensive
+                    // transcript energy snapshot is cached at displayLines + 1s
+                    // live-span granularity so long recordings don't rescan the
+                    // whole transcript for every mic tick.
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
                         let live = isRecordingLike ? session.recordedSeconds : nil
-                        let energy = EnergyArc.compute(lines: session.transcript.lines,
-                                                       buckets: 64, spanEnd: live)
-                        EnergyArcView(values: energy, lines: session.transcript.lines,
+                        let energy = session.transcript.displayEnergySnapshot(buckets: 64, spanEnd: live)
+                        EnergyArcView(values: energy.values,
+                                      lines: session.transcript.displayLines,
+                                      speakerMix: energy.speakerMix,
+                                      spanStart: energy.spanStart,
+                                      spanEnd: energy.spanEnd,
                                       liveEnd: live,
                                       liveLevel: isRecordingLike ? session.meterLevel : nil) { id in
                             scrollTarget = id; scrollTick += 1
@@ -1992,47 +1998,41 @@ struct ContentView: View {
     /// scrolling; who-spoke-WHEN now lives in the energy flow's speaker colors,
     /// so this bar only answers "how much".
     private var speakerSequenceBar: some View {
-        var times: [Int: Double] = [:]
-        for l in session.transcript.lines { times[l.speaker, default: 0] += max(0, l.end - l.start) }
-        let sorted = times.sorted { $0.value > $1.value }
-        let total = max(0.001, times.values.reduce(0, +))
+        let shares = session.transcript.displaySpeakerShares()
         let spacing: CGFloat = 2
         return GeometryReader { geo in
-            let avail = max(geo.size.width - CGFloat(max(sorted.count - 1, 0)) * spacing, 1)
+            let avail = max(geo.size.width - CGFloat(max(shares.count - 1, 0)) * spacing, 1)
             HStack(spacing: spacing) {
-                ForEach(sorted, id: \.key) { entry in
+                ForEach(shares, id: \.speaker) { entry in
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Theme.Colors.speakerGradient(entry.key))
-                        .frame(width: max(4, avail * CGFloat(entry.value / total)))
-                        .help("\(SpeakerID.display(entry.key, names: session.speakerNames, fallback: "Speaker \(session.transcript.speakerNumbers.number(entry.key) ?? entry.key + 1)")) · \(Int((entry.value / total * 100).rounded()))%")
+                        .fill(Theme.Colors.speakerGradient(entry.speaker))
+                        .frame(width: max(4, avail * CGFloat(entry.fraction)))
+                        .help("\(SpeakerID.display(entry.speaker, names: session.speakerNames, fallback: "Speaker \(session.transcript.speakerNumbers.number(entry.speaker) ?? entry.speaker + 1)")) · \(Int((entry.fraction * 100).rounded()))%")
                 }
             }
-            .animation(.snappy(duration: 0.35), value: total)
+            .animation(.snappy(duration: 0.35), value: shares.map(\.seconds).reduce(0, +))
         }
         .frame(height: 26)
         .help(uiLang("발언 비율 — 화자별 점유", "Speaking share — by speaker"))
     }
 
     private var speakerShareList: some View {
-        var times: [Int: Double] = [:]
-        for l in session.transcript.lines { times[l.speaker, default: 0] += max(0, l.end - l.start) }
-        let total = max(0.001, times.values.reduce(0, +))
-        let sorted = times.sorted { $0.value > $1.value }
+        let shares = session.transcript.displaySpeakerShares()
         return VStack(alignment: .leading, spacing: 12) {
-            ForEach(sorted, id: \.key) { entry in
+            ForEach(shares, id: \.speaker) { entry in
                 HStack(spacing: 0) {
                     HStack(spacing: 6) {
-                        Circle().fill(Theme.Colors.speaker(entry.key)).frame(width: 6, height: 6)
-                        Text(SpeakerID.display(entry.key, names: session.speakerNames, fallback: "Speaker \(session.transcript.speakerNumbers.number(entry.key) ?? entry.key + 1)"))
+                        Circle().fill(Theme.Colors.speaker(entry.speaker)).frame(width: 6, height: 6)
+                        Text(SpeakerID.display(entry.speaker, names: session.speakerNames, fallback: "Speaker \(session.transcript.speakerNumbers.number(entry.speaker) ?? entry.speaker + 1)"))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Theme.Colors.textPrimary)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 8)
-                    Text(mmss(entry.value))
+                    Text(mmss(entry.seconds))
                         .font(.system(size: 13, weight: .medium)).monospacedDigit()
                         .foregroundStyle(Theme.Colors.textTertiary)
-                    Text("\(Int((entry.value / total * 100).rounded()))%")
+                    Text("\(Int((entry.fraction * 100).rounded()))%")
                         .font(.system(size: 13, weight: .semibold)).monospacedDigit()
                         .foregroundStyle(Theme.Colors.textPrimary)
                         .lineLimit(1).fixedSize()

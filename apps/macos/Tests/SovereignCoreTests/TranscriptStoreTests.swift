@@ -115,4 +115,35 @@ final class TranscriptStoreTests: XCTestCase {
 
         XCTAssertEqual(s.lines.first?.overlapSpeakers, [1])
     }
+
+    func testDisplayEnergySnapshotQuantizesLiveSpanToSeconds() {
+        let s = TranscriptStore()
+        s.load([
+            Line(id: UUID(), speaker: 0, start: 0, end: 1,
+                 words: [Word(t0: 0, t1: 1, text: "hello", conf: 1)]),
+        ])
+
+        let a = s.displayEnergySnapshot(buckets: 4, spanEnd: 10.2)
+        let b = s.displayEnergySnapshot(buckets: 4, spanEnd: 10.9)
+        let c = s.displayEnergySnapshot(buckets: 4, spanEnd: 11.0)
+
+        XCTAssertEqual(a.spanEnd, 10)
+        XCTAssertEqual(b.spanEnd, 10)
+        XCTAssertEqual(c.spanEnd, 11)
+    }
+
+    func testDisplaySpeakerSharesAreSortedAndNormalized() {
+        let s = TranscriptStore()
+        s.load([
+            Line(id: UUID(), speaker: 0, start: 0, end: 2,
+                 words: [Word(t0: 0, t1: 2, text: "a", conf: 1)]),
+            Line(id: UUID(), speaker: 1, start: 2, end: 8,
+                 words: [Word(t0: 2, t1: 8, text: "b", conf: 1)]),
+        ])
+
+        let shares = s.displaySpeakerShares()
+        XCTAssertEqual(shares.map(\.speaker), [1, 0])
+        XCTAssertEqual(shares.map(\.seconds), [6, 2])
+        XCTAssertEqual(shares.map(\.fraction).reduce(0, +), 1.0, accuracy: 1e-9)
+    }
 }

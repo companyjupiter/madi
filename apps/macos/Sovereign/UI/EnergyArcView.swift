@@ -11,6 +11,11 @@ import SwiftUI
 struct EnergyArcView: View {
     let values: [Double]
     let lines: [Line]
+    /// Precomputed by EnergyArc.snapshot for long live sessions. When omitted,
+    /// the view falls back to the historical self-contained calculation.
+    var speakerMix: [[(speaker: Int, share: Double)]]? = nil
+    var spanStart: Double? = nil
+    var spanEnd: Double? = nil
     /// Live "now" (same clock as line offsets) while recording — keeps the time
     /// axis and tap-to-seek aligned with the growing span EnergyArc bucketed.
     var liveEnd: Double? = nil
@@ -172,8 +177,8 @@ struct EnergyArcView: View {
     /// and colors describe the same slice, then smoothed across neighbors so
     /// speaker transitions drift like a gradient instead of switching hard.
     private func columnMix(_ count: Int) -> [[(speaker: Int, share: Double)]] {
-        let raw = EnergyArc.speakerShares(lines: lines, buckets: max(1, values.count),
-                                          spanEnd: liveEnd)
+        let raw = speakerMix ?? EnergyArc.speakerShares(lines: lines, buckets: max(1, values.count),
+                                                        spanEnd: liveEnd)
         guard raw.count == values.count, !raw.isEmpty else { return [] }
         // Mirror resampled(to:)'s passthrough + stride math.
         var cols: [[Int: Double]]
@@ -224,11 +229,11 @@ struct EnergyArcView: View {
     }
 
     private var spanT1: Double {
-        max(lines.map(\.end).max() ?? 0, liveEnd ?? 0)
+        spanEnd ?? max(lines.map(\.end).max() ?? 0, liveEnd ?? 0)
     }
 
     private var totalLabel: String {
-        let t0 = lines.map(\.start).min() ?? 0
+        let t0 = spanStart ?? lines.map(\.start).min() ?? 0
         let secs = Int(max(0, spanT1 - t0))
         if secs >= 3600 {
             return String(format: "%d:%02d:%02d", secs / 3600, (secs % 3600) / 60, secs % 60)
@@ -240,7 +245,7 @@ struct EnergyArcView: View {
     // jump to whichever line covers (or is nearest to) that moment.
     private func seek(at x: CGFloat, width: CGFloat) {
         guard width > 0, !lines.isEmpty else { return }
-        let t0 = lines.map(\.start).min() ?? 0
+        let t0 = spanStart ?? lines.map(\.start).min() ?? 0
         let span = spanT1 - t0
         guard span > 0 else { return }
         let frac = max(0, min(1, x / width))

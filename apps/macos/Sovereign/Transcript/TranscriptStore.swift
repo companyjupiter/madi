@@ -83,6 +83,56 @@ private struct TranslationRecord {
     var userEdited: Bool
 }
 
+private struct SpeakerLabelLookup {
+    private let sorted: [SpeakerLabel]
+    private let maxDur: Double
+
+    init(_ labels: [SpeakerLabel]) {
+        sorted = labels.sorted { $0.time < $1.time }
+        maxDur = labels.reduce(0) { max($0, $1.dur) }
+    }
+
+    func at(_ t: Double) -> (speaker: Int, margin: Double) {
+        guard !sorted.isEmpty else { return (0, 1.0) }
+
+        var lo = 0
+        var hi = sorted.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if sorted[mid].time <= t { lo = mid + 1 } else { hi = mid }
+        }
+        let insertion = lo
+
+        // Preserve the old "first sorted label containing t wins" behavior, but
+        // only scan the local overlap window instead of every historical label.
+        var containing: SpeakerLabel? = nil
+        var i = insertion
+        while i > 0 {
+            i -= 1
+            let l = sorted[i]
+            if t - l.time > maxDur { break }
+            if t >= l.time, t <= l.time + l.dur { containing = l }
+        }
+        if let l = containing { return (l.id, l.margin) }
+
+        // If no label covers the word, keep the old nearest-start fallback.
+        var bestIndex = min(insertion, sorted.count - 1)
+        if insertion > 0 {
+            let prev = insertion - 1
+            if abs(sorted[prev].time - t) < abs(sorted[bestIndex].time - t) {
+                bestIndex = prev
+            }
+        }
+        return (sorted[bestIndex].id, 1.0)
+    }
+}
+
+struct SpeakerShareSnapshot: Equatable {
+    var speaker: Int
+    var seconds: Double
+    var fraction: Double
+}
+
 /// The unified per-segment model of the transcript list (Phase 3): one value
 /// carries the transcription (words), speaker attribution, translations and
 /// AI-processing status. `Line` is its historical name across the codebase.
@@ -113,6 +163,30 @@ final class TranscriptStore {
     // untouched by the synchronous writes above (@Observable tracks per key).
     private(set) var displayLines: [Line] = []
     @ObservationIgnored private var renderScheduled = false
+    @ObservationIgnored private var displayRevision: UInt64 = 0
+    @ObservationIgnored private var energyCacheKey: EnergySnapshotCacheKey? = nil
+    @ObservationIgnored private var energyCache: EnergyArc.Snapshot = .empty
+    @ObservationIgnored private var speakerShareCacheRevision: UInt64? = nil
+    @ObservationIgnored private var speakerShareCache: [SpeakerShareSnapshot] = []
+
+    private struct EnergySnapshotCacheKey: Equatable {
+        /// In finished/file views this is the exact display revision. During
+        /// live recording it is 0, because the energy graph intentionally trails
+        /// transcript edits by at most one wall second instead of rebuilding on
+        /// every coalesced word burst.
+        var displayRevision: UInt64
+        var buckets: Int
+        /// Live span is intentionally quantized to whole seconds: the right-edge
+        /// mic meter still animates continuously, while the expensive transcript
+        /// energy pass does not rescan a long meeting 6-10×/s during silence.
+        var spanEndSecond: Int?
+    }
+
+    private func publishDisplayLines(_ newLines: [Line], invalidateEnergy: Bool) {
+        displayRevision &+= 1
+        displayLines = newLines
+        if invalidateEnergy { energyCacheKey = nil }
+    }
 
     /// Coalesced view refresh — many calls within a frame collapse into one
     /// `displayLines` write ~33ms later (the SwiftUI equivalent of rAF batching).
@@ -122,14 +196,46 @@ final class TranscriptStore {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 33_000_000)
             renderScheduled = false
-            displayLines = lines
+            publishDisplayLines(lines, invalidateEnergy: false)
         }
     }
 
     /// Immediate refresh — session boundaries (reset / archive load / finalize)
     /// where a 33ms-stale frame would flash old content.
     private func flushRenderNow() {
-        displayLines = lines
+        publishDisplayLines(lines, invalidateEnergy: true)
+    }
+
+    /// Cached side-panel energy model for live sessions. The source is
+    /// `displayLines`, not raw `lines`, so word/token bursts are already
+    /// coalesced before we build the relatively expensive graph snapshot.
+    func displayEnergySnapshot(buckets: Int, spanEnd: Double? = nil) -> EnergyArc.Snapshot {
+        let n = max(1, buckets)
+        let endSecond = spanEnd.map { Int(max(0, floor($0))) }
+        let key = EnergySnapshotCacheKey(displayRevision: endSecond == nil ? displayRevision : 0,
+                                         buckets: n,
+                                         spanEndSecond: endSecond)
+        if energyCacheKey == key { return energyCache }
+        let effectiveEnd = endSecond.map(Double.init) ?? spanEnd
+        let snap = EnergyArc.snapshot(lines: displayLines, buckets: n, spanEnd: effectiveEnd)
+        energyCacheKey = key
+        energyCache = snap
+        return snap
+    }
+
+    /// Cached speaking-time shares for the side panel's bar + legend. Both
+    /// controls used to rescan the same long transcript independently on every
+    /// SwiftUI body pass.
+    func displaySpeakerShares() -> [SpeakerShareSnapshot] {
+        if speakerShareCacheRevision == displayRevision { return speakerShareCache }
+        var times: [Int: Double] = [:]
+        for l in displayLines { times[l.speaker, default: 0] += max(0, l.end - l.start) }
+        let total = max(0.001, times.values.reduce(0, +))
+        speakerShareCache = times.sorted { $0.value > $1.value }.map {
+            SpeakerShareSnapshot(speaker: $0.key, seconds: $0.value, fraction: $0.value / total)
+        }
+        speakerShareCacheRevision = displayRevision
+        return speakerShareCache
     }
 
     /// Stable display numbers for the acoustic ids in `lines`. Engine ids churn
@@ -141,6 +247,7 @@ final class TranscriptStore {
     private var spk: [SpeakerLabel] = []      // streaming
     private var spkFix: [SpeakerLabel] = []   // FLUSH
     private var spkOv: [SpeakerLabel] = []     // causal rows, replaced at FLUSH
+    @ObservationIgnored private var liveLabelLookupCache: SpeakerLabelLookup? = nil
 
     // ── Frozen prefix (Phase 2) ─────────────────────────────────────────────
     // Lines whose audio is ≥ freezeMargin older than the newest word are
@@ -344,6 +451,7 @@ final class TranscriptStore {
         speakerMerges.removeAll(); speakerOverrides.removeAll()
         speakerNumbers.reset()
         frozen.removeAll(); frozenWordCount = 0
+        liveLabelLookupCache = nil
         finalized = false; diarNamespaceBroken = false
         flushRenderNow()
     }
@@ -388,7 +496,10 @@ final class TranscriptStore {
         case .word(let t0, let t1, let text, let conf):
             merger.add(Word(t0: t0, t1: t1, text: text, conf: conf))
             rebuildLive()
-        case .speaker(let l):        spk.append(l); rebuildLive()
+        case .speaker(let l):
+            spk.append(l)
+            liveLabelLookupCache = nil
+            rebuildLive()
         case .speakerFix(let l):
             // S4: mid-session recluster corrections arrive DURING recording —
             // update the live label windows in place (so earlier lines fix on
@@ -402,7 +513,11 @@ final class TranscriptStore {
                 spk[i] = SpeakerLabel(time: spk[i].time, id: l.id, dur: spk[i].dur, margin: l.margin)
                 touched = true
             }
-            if touched { reassignFrozenSpeakers(); rebuildLive() }
+            if touched {
+                liveLabelLookupCache = nil
+                reassignFrozenSpeakers()
+                rebuildLive()
+            }
         case .speakerOverlap(let l):
             spkOv.append(l)
             applyOverlapSpeakers()
@@ -452,7 +567,7 @@ final class TranscriptStore {
         // Defensive: the frozen prefix must mirror the merger's committed
         // prefix (append-only). If it ever doesn't, thaw rather than misindex.
         if frozenWordCount > all.count { frozen.removeAll(); frozenWordCount = 0 }
-        var tail = group(words: Array(all[frozenWordCount...]), labels: spk)
+        var tail = group(words: Array(all[frozenWordCount...]), lookup: liveLabelLookup())
         // Promote settled tail lines. Conditions: fully older than the freeze
         // watermark; their words already in the merger's committed region (past
         // the holdback churn); and never the last line (it stays live).
@@ -496,42 +611,35 @@ final class TranscriptStore {
     /// frozen; content mode re-merges adjacent same-speaker blocks anyway).
     private func reassignFrozenSpeakers() {
         guard !frozen.isEmpty else { return }
-        let look = labelLookup(spk)
+        let look = liveLabelLookup()
         for i in frozen.indices {
             let mid = (frozen[i].start + frozen[i].end) / 2
-            frozen[i].speaker = look.speakerAt(mid)
-            frozen[i].speakerMargin = look.marginAt(mid)
+            let label = look.at(mid)
+            frozen[i].speaker = label.speaker
+            frozen[i].speakerMargin = label.margin
         }
     }
 
-    /// Speaker/margin lookup over a label set — shared by grouping and by the
-    /// frozen-prefix in-place relabel.
-    private func labelLookup(_ labels: [SpeakerLabel])
-        -> (speakerAt: (Double) -> Int, marginAt: (Double) -> Double) {
-        let sorted = labels.sorted { $0.time < $1.time }
-        func speakerAt(_ t: Double) -> Int {
-            var best = sorted.first?.id ?? 0
-            var bestDist = Double.greatestFiniteMagnitude
-            for l in sorted {
-                if t >= l.time, t <= l.time + l.dur { return l.id }
-                let d = abs(t - l.time)
-                if d < bestDist { bestDist = d; best = l.id }
-            }
-            return best
-        }
-        func marginAt(_ t: Double) -> Double {
-            for l in sorted where t >= l.time && t <= l.time + l.dur { return l.margin }
-            return 1.0
-        }
-        return (speakerAt, marginAt)
+    /// Cached speaker/margin lookup over the live label set. Word events are far
+    /// more frequent than SPK/SPKFIX rows, so the sorted index should survive
+    /// across ordinary live rebuilds.
+    private func liveLabelLookup() -> SpeakerLabelLookup {
+        if let liveLabelLookupCache { return liveLabelLookupCache }
+        let look = SpeakerLabelLookup(spk)
+        liveLabelLookupCache = look
+        return look
     }
 
     /// Group consecutive same-speaker words into lines, breaking on long pauses.
     /// Each word's speaker = the label window covering its onset.
     private func group(words: [Word], labels: [SpeakerLabel]) -> [Line] {
         guard !words.isEmpty else { return [] }
-        let look = labelLookup(labels)
-        return groupLoop(words: words, speakerAt: look.speakerAt, marginAt: look.marginAt)
+        return group(words: words, lookup: SpeakerLabelLookup(labels))
+    }
+
+    private func group(words: [Word], lookup: SpeakerLabelLookup) -> [Line] {
+        guard !words.isEmpty else { return [] }
+        return groupLoop(words: words, lookup: lookup)
     }
 
     /// A word's trailing char ends a sentence → the next word starts a new line.
@@ -543,11 +651,12 @@ final class TranscriptStore {
         return sentenceEnders.contains(ch)
     }
 
-    private func groupLoop(words: [Word], speakerAt: (Double) -> Int, marginAt: (Double) -> Double) -> [Line] {
+    private func groupLoop(words: [Word], lookup: SpeakerLabelLookup) -> [Line] {
         var out: [Line] = []
         for w in words.sorted(by: { $0.t0 < $1.t0 }) {
-            let sp = speakerAt(w.t0)
-            let m = marginAt(w.t0)
+            let label = lookup.at(w.t0)
+            let sp = label.speaker
+            let m = label.margin
             // Break at sentence boundaries too (not just pauses): a completed
             // sentence commits as its own line so it translates ONCE and freezes,
             // instead of re-translating the whole growing monologue from the top

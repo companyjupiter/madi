@@ -36,4 +36,25 @@ final class EnergyArcTests: XCTestCase {
         XCTAssertGreaterThan(e[0], e[9], "early dense/overlapping bucket > late lone bucket")
         XCTAssertEqual(e[5], 0, accuracy: 1e-9, "mid-meeting silence → 0 energy")
     }
+
+    func testSnapshotMatchesLegacyAPIs() {
+        let lines = [
+            line(0, 2, speaker: 0),
+            line(1, 3, speaker: 1, overlap: [0]),
+            line(6, 7, speaker: 0),
+        ]
+
+        let snap = EnergyArc.snapshot(lines: lines, buckets: 8, spanEnd: 10)
+        XCTAssertEqual(snap.values, EnergyArc.compute(lines: lines, buckets: 8, spanEnd: 10))
+
+        let shares = EnergyArc.speakerShares(lines: lines, buckets: 8, spanEnd: 10)
+        XCTAssertEqual(snap.speakerMix.count, shares.count)
+        for i in shares.indices {
+            XCTAssertEqual(snap.speakerMix[i].count, shares[i].count)
+            for j in shares[i].indices {
+                XCTAssertEqual(snap.speakerMix[i][j].speaker, shares[i][j].speaker)
+                XCTAssertEqual(snap.speakerMix[i][j].share, shares[i][j].share, accuracy: 1e-9)
+            }
+        }
+    }
 }

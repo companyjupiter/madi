@@ -11,6 +11,15 @@
 import Foundation
 
 enum EnergyArc {
+    struct Snapshot {
+        var values: [Double]
+        var speakerMix: [[(speaker: Int, share: Double)]]
+        var spanStart: Double
+        var spanEnd: Double
+
+        static let empty = Snapshot(values: [], speakerMix: [], spanStart: 0, spanEnd: 0)
+    }
+
     /// Per-bucket energy in 0...1 over the meeting timespan.
     ///
     /// - Parameters:
@@ -23,23 +32,42 @@ enum EnergyArc {
     ///              low tail instead of the graph freezing at the last commit.
     /// - Returns: `buckets` values in 0...1, or [] when there is no usable span.
     static func compute(lines: [Line], buckets: Int = 30, spanEnd: Double? = nil) -> [Double] {
+        snapshot(lines: lines, buckets: buckets, spanEnd: spanEnd).values
+    }
+
+    /// Energy values + speaker mix computed from the same bucket pass.
+    ///
+    /// Long live sessions render this graph repeatedly while the transcript is
+    /// still growing. Keeping `compute()` and `speakerShares()` as separate full
+    /// scans doubled that UI-side work; `snapshot()` is the shared primitive used
+    /// by the app, while the two older APIs remain as compatibility wrappers for
+    /// tests and pure-logic callers.
+    static func snapshot(lines: [Line], buckets: Int = 30, spanEnd: Double? = nil) -> Snapshot {
         let n = max(1, buckets)
-        guard !lines.isEmpty else { return [] }
+        guard !lines.isEmpty else {
+            return Snapshot(values: [], speakerMix: [], spanStart: 0, spanEnd: max(0, spanEnd ?? 0))
+        }
 
         // Meeting span from the earliest onset to the latest offset (or live now).
-        let t0 = lines.map(\.start).min() ?? 0
-        let t1 = max(lines.map(\.end).max() ?? 0, spanEnd ?? 0)
+        var t0 = Double.greatestFiniteMagnitude
+        var t1 = 0.0
+        for l in lines {
+            t0 = min(t0, l.start)
+            t1 = max(t1, l.end)
+        }
+        t1 = max(t1, spanEnd ?? 0)
         let span = t1 - t0
-        guard span > 0 else { return [] }
+        guard span > 0 else { return Snapshot(values: [], speakerMix: [], spanStart: t0, spanEnd: t1) }
 
         let bucketDur = span / Double(n)
-        guard bucketDur > 0 else { return [] }
+        guard bucketDur > 0 else { return Snapshot(values: [], speakerMix: [], spanStart: t0, spanEnd: t1) }
 
         // Raw energy accumulators per bucket.
         var speech = [Double](repeating: 0, count: n)   // seconds of speech in bucket
         var overlap = [Double](repeating: 0, count: n)  // overlap-weighted speech events
         var turns = [Double](repeating: 0, count: n)    // rapid speaker hand-offs (back-and-forth)
         var words = [Double](repeating: 0, count: n)    // word onsets (speech-rate signal)
+        var speakerSeconds = [[Int: Double]](repeating: [:], count: n)
 
         // Turn-taking energy: a speaker change with only a short gap is lively
         // discussion; the SAME density of continuous monologue is not — so a
@@ -82,6 +110,7 @@ enum EnergyArc {
                 if covered > 0 {
                     speech[b] += covered
                     overlap[b] += covered * ovBoost
+                    speakerSeconds[b][l.speaker, default: 0] += covered
                 }
             }
         }
@@ -103,9 +132,21 @@ enum EnergyArc {
         // Normalize by the busiest bucket, then lift the midtones (γ 0.75):
         // an ordinary talking bucket should read as a mid column, not as
         // either a floor dot or a full spike. Preserves 0→0, peak→1, order.
+        let values: [Double]
         let peak = raw.max() ?? 0
-        guard peak > 0 else { return raw }   // all-silent → all zeros
-        return raw.map { pow(min(1.0, max(0.0, $0 / peak)), 0.75) }
+        if peak > 0 {
+            values = raw.map { pow(min(1.0, max(0.0, $0 / peak)), 0.75) }
+        } else {
+            values = raw   // all-silent → all zeros
+        }
+
+        let mix: [[(speaker: Int, share: Double)]] = speakerSeconds.map { dict in
+            let top = dict.sorted { $0.value > $1.value }.prefix(2)
+            let total = top.reduce(0) { $0 + $1.value }
+            guard total > 0 else { return [] as [(speaker: Int, share: Double)] }
+            return top.map { (speaker: $0.key, share: $0.value / total) }
+        }
+        return Snapshot(values: values, speakerMix: mix, spanStart: t0, spanEnd: t1)
     }
 
     /// Per-bucket speaker mix for the dot-color dithering: who spoke in each
@@ -116,35 +157,6 @@ enum EnergyArc {
     /// yields [].
     static func speakerShares(lines: [Line], buckets: Int = 30,
                               spanEnd: Double? = nil) -> [[(speaker: Int, share: Double)]] {
-        let n = max(1, buckets)
-        guard !lines.isEmpty else { return [] }
-        let t0 = lines.map(\.start).min() ?? 0
-        let t1 = max(lines.map(\.end).max() ?? 0, spanEnd ?? 0)
-        let span = t1 - t0
-        guard span > 0 else { return [] }
-        let bucketDur = span / Double(n)
-        guard bucketDur > 0 else { return [] }
-
-        var secs = [[Int: Double]](repeating: [:], count: n)
-        for l in lines {
-            let s = max(t0, l.start)
-            let e = min(t1, l.end)
-            guard e > s else { continue }
-            var lo = Int((s - t0) / bucketDur)
-            var hi = Int((e - t0) / bucketDur)
-            lo = min(max(lo, 0), n - 1)
-            hi = min(max(hi, 0), n - 1)
-            for b in lo...hi {
-                let bStart = t0 + Double(b) * bucketDur
-                let covered = min(e, bStart + bucketDur) - max(s, bStart)
-                if covered > 0 { secs[b][l.speaker, default: 0] += covered }
-            }
-        }
-        return secs.map { dict in
-            let top = dict.sorted { $0.value > $1.value }.prefix(2)
-            let total = top.reduce(0) { $0 + $1.value }
-            guard total > 0 else { return [] }
-            return top.map { (speaker: $0.key, share: $0.value / total) }
-        }
+        snapshot(lines: lines, buckets: buckets, spanEnd: spanEnd).speakerMix
     }
 }
