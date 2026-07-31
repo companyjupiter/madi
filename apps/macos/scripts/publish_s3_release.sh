@@ -2,6 +2,8 @@
 # Upload versioned DMGs/checksums to S3, then advance public release metadata.
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/../../.." && pwd)"
 DIST="${1:?usage: publish_s3_release.sh <dist> <bucket> <base-url> <prefix> <version> <channel> <publish>}"
 BUCKET="${2:?missing bucket}"
 BASE_URL="${3:?missing public download base URL}"
@@ -17,6 +19,7 @@ PREFIX="${PREFIX#/}"; PREFIX="${PREFIX%/}"
 S3_ROOT="s3://$BUCKET/$PREFIX/releases/$VERSION"
 # CloudFront maps the public domain root to PREFIX via its Origin path.
 HTTP_ROOT="$BASE_URL/releases/$VERSION"
+CHANNEL_ROOT="$BASE_URL/channels/$CHANNEL"
 
 STANDARD=""
 for path in "$DIST"/*.dmg; do
@@ -37,6 +40,92 @@ jq -n \
   --argjson dmg_size "$STANDARD_SIZE" \
   '{schema:1, version:$version, tag:$tag, channel:$channel, dmg_url:$dmg_url, dmg_size:$dmg_size, sha256:$sha256}' \
   > "$DIST/release.json"
+
+sparkle_signature_attributes() {
+  [ "${SPARKLE_APPCAST_SIGN:-1}" = "1" ] || return 0
+  local sparkle_dir output status
+  sparkle_dir="$("$HERE/ensure_sparkle.sh" 2>/dev/null || true)"
+  if [ -z "$sparkle_dir" ] || [ ! -x "$sparkle_dir/bin/sign_update" ]; then
+    echo "  ⚠ Sparkle sign_update not available — appcast will not contain edSignature" >&2
+    return 0
+  fi
+  set +e
+  if [ -n "${SPARKLE_PRIVATE_KEY:-}" ]; then
+    output="$(printf '%s' "$SPARKLE_PRIVATE_KEY" | "$sparkle_dir/bin/sign_update" --ed-key-file - "$STANDARD" 2>&1)"
+    status=$?
+  elif [ -n "${SPARKLE_PRIVATE_KEY_FILE:-}" ]; then
+    output="$("$sparkle_dir/bin/sign_update" --ed-key-file "$SPARKLE_PRIVATE_KEY_FILE" "$STANDARD" 2>&1)"
+    status=$?
+  else
+    output="$("$sparkle_dir/bin/sign_update" "$STANDARD" 2>&1)"
+    status=$?
+  fi
+  set -e
+  if [ "$status" -ne 0 ]; then
+    if [ "${SPARKLE_REQUIRE_SIGNATURE:-0}" = "1" ] \
+      || { [ "$PUBLISH" = true ] && [ "${SPARKLE_ALLOW_UNSIGNED_APPCAST:-0}" != "1" ]; }; then
+      echo "$output" >&2
+      echo "❌ Sparkle update signing failed" >&2
+      exit 1
+    fi
+    echo "  ⚠ Sparkle update signing skipped: $output" >&2
+    return 0
+  fi
+  output="$(printf '%s' "$output" | sed -E 's/(^| )length="[^"]*"//g; s/  +/ /g; s/^ //; s/ $//')"
+  printf '%s' "$output"
+}
+
+write_appcast() {
+  local appcast="$DIST/appcast.xml"
+  local signature_attrs
+  command -v python3 >/dev/null || { echo "❌ python3 is required to write Sparkle appcast" >&2; exit 1; }
+  signature_attrs="$(sparkle_signature_attributes)"
+  env \
+    APPCAST_PATH="$appcast" \
+    APPCAST_TITLE="Madi Updates ($CHANNEL)" \
+    APPCAST_LINK="$CHANNEL_ROOT/appcast.xml" \
+    APPCAST_RELEASE_TITLE="Madi $VERSION" \
+    APPCAST_VERSION="${MADI_BUILD:-1}" \
+    APPCAST_SHORT_VERSION="$VERSION" \
+    APPCAST_DMG_URL="$STANDARD_URL" \
+    APPCAST_DMG_SIZE="$STANDARD_SIZE" \
+    APPCAST_SIGNATURE_ATTRS="$signature_attrs" \
+    python3 - <<'PY'
+import email.utils
+import html
+import os
+from pathlib import Path
+
+def x(value: str) -> str:
+    return html.escape(value, quote=True)
+
+path = Path(os.environ["APPCAST_PATH"])
+signature_attrs = os.environ.get("APPCAST_SIGNATURE_ATTRS", "").strip()
+if signature_attrs:
+    signature_attrs = " " + signature_attrs
+
+path.write_text(f'''<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>{x(os.environ["APPCAST_TITLE"])}</title>
+    <link>{x(os.environ["APPCAST_LINK"])}</link>
+    <description>Madi macOS update feed</description>
+    <item>
+      <title>{x(os.environ["APPCAST_RELEASE_TITLE"])}</title>
+      <pubDate>{email.utils.formatdate(usegmt=True)}</pubDate>
+      <enclosure
+        url="{x(os.environ["APPCAST_DMG_URL"])}"
+        sparkle:version="{x(os.environ["APPCAST_VERSION"])}"
+        sparkle:shortVersionString="{x(os.environ["APPCAST_SHORT_VERSION"])}"
+        length="{x(os.environ["APPCAST_DMG_SIZE"])}"
+        type="application/octet-stream"{signature_attrs} />
+    </item>
+  </channel>
+</rss>
+''', encoding="utf-8")
+PY
+}
 
 upload_immutable() {
   local path="$1" content_type="$2" key="$3" digest existing
@@ -132,11 +221,14 @@ for path in "$DIST"/*.dmg "$DIST/SHA256SUMS.txt"; do
   upload_immutable "$path" "$content_type" "$PREFIX/releases/$VERSION/$(basename "$path")"
 done
 upload_immutable "$DIST/release.json" application/json "$PREFIX/releases/$VERSION/release.json"
+write_appcast
 
 if [ "$PUBLISH" = true ]; then
   update_release_index
   aws s3 cp "$DIST/release.json" "s3://$BUCKET/$PREFIX/channels/$CHANNEL/latest.json" \
     --content-type application/json --cache-control 'no-cache, no-store, must-revalidate' --only-show-errors
+  aws s3 cp "$DIST/appcast.xml" "s3://$BUCKET/$PREFIX/channels/$CHANNEL/appcast.xml" \
+    --content-type application/rss+xml --cache-control 'no-cache, no-store, must-revalidate' --only-show-errors
 fi
 
 {
@@ -147,6 +239,7 @@ fi
     echo "- [$(basename "$path")]($HTTP_ROOT/$(basename "$path"))"
   done
   echo "- [SHA256SUMS.txt]($HTTP_ROOT/SHA256SUMS.txt)"
+  echo "- [Sparkle appcast]($CHANNEL_ROOT/appcast.xml)"
 } > "$DIST/release-notes.md"
 
 echo "✅ uploaded immutable release to $S3_ROOT"

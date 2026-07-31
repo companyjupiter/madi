@@ -66,6 +66,11 @@ engine/metal/bench/runs/*
 !engine/metal/bench/runs/README.md
 .claude/scheduled_tasks.lock
 
+# Local signing/key material. Public keys that must ship in the app belong in
+# Info.plist; private Sparkle/Apple keys must stay outside git.
+keys.txt
+keys.text
+
 # Model weights. sovereignLLM ignores these too; one stray `git add -A` on an
 # unignored 5.3 GB GGUF puts it in history permanently.
 *.gguf

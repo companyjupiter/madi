@@ -88,11 +88,13 @@ publish_release() {
   mkdir -p "$dist"
   printf 'dmg-%s\n' "$version" > "$dist/madi-$version-arm64.dmg"
   printf 'checksum  madi-%s-arm64.dmg\n' "$version" > "$dist/SHA256SUMS.txt"
-  PATH="$FAKE_BIN:$PATH" "$PUBLISH" "$dist" downloads.example \
+  SPARKLE_APPCAST_SIGN=0 SPARKLE_ALLOW_UNSIGNED_APPCAST=1 PATH="$FAKE_BIN:$PATH" "$PUBLISH" "$dist" downloads.example \
     https://downloads.example.test madi "$version" "$channel" "$publish"
 }
 
 INDEX="$MOCK_S3_ROOT/downloads.example/madi/releases/index.json"
+STABLE_APPCAST="$MOCK_S3_ROOT/downloads.example/madi/channels/stable/appcast.xml"
+BETA_APPCAST="$MOCK_S3_ROOT/downloads.example/madi/channels/beta/appcast.xml"
 
 publish_release 0.9.0 stable true
 jq -e '
@@ -105,6 +107,8 @@ jq -e '
   and (.releases[0].size > 0)
   and (.releases[0].publishedAt | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T"))
 ' "$INDEX" >/dev/null
+grep -Fq 'sparkle:shortVersionString="0.9.0"' "$STABLE_APPCAST"
+grep -Fq 'url="https://downloads.example.test/releases/0.9.0/madi-0.9.0-arm64.dmg"' "$STABLE_APPCAST"
 
 publish_release 0.10.0-beta.1 beta true
 jq -e '
@@ -112,6 +116,8 @@ jq -e '
   and (.releases | length == 2)
   and .releases[0].version == "0.10.0-beta.1"
 ' "$INDEX" >/dev/null
+grep -Fq 'sparkle:shortVersionString="0.10.0-beta.1"' "$BETA_APPCAST"
+grep -Fq 'url="https://downloads.example.test/releases/0.10.0-beta.1/madi-0.10.0-beta.1-arm64.dmg"' "$BETA_APPCAST"
 
 publish_release 0.10.0-beta.1 beta true
 jq -e '[.releases[] | select(.version == "0.10.0-beta.1")] | length == 1' "$INDEX" >/dev/null

@@ -252,6 +252,8 @@ run_cli() {
   MADI_RELEASE_BUCKET=test-bucket \
   MADI_RELEASE_PREFIX=madi \
   MADI_DOWNLOAD_BASE_URL=https://downloads.example.test \
+  SPARKLE_APPCAST_SIGN=0 \
+  SPARKLE_ALLOW_UNSIGNED_APPCAST=1 \
   MOCK_S3_ROOT="$WORK/s3" \
   MOCK_AWS_LOG="$MOCK_AWS_LOG" \
   MOCK_GH_ASSET_NAME="${MOCK_GH_ASSET_NAME:-madi-1.2.3-arm64.dmg}" \
@@ -265,6 +267,8 @@ run_wrapper() {
   MADI_RELEASE_BUCKET=test-bucket \
   MADI_RELEASE_PREFIX=madi \
   MADI_DOWNLOAD_BASE_URL=https://downloads.example.test \
+  SPARKLE_APPCAST_SIGN=0 \
+  SPARKLE_ALLOW_UNSIGNED_APPCAST=1 \
   MOCK_S3_ROOT="$WORK/s3" \
   MOCK_AWS_LOG="$MOCK_AWS_LOG" \
   MOCK_GH_ASSET_NAME="${MOCK_GH_ASSET_NAME:-madi-1.2.3-arm64.dmg}" \

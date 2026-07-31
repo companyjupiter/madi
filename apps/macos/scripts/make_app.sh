@@ -15,10 +15,29 @@ APP_DIR="$(cd "$HERE/.." && pwd)"        # apps/macos
 ROOT="$(cd "$APP_DIR/../.." && pwd)"     # repo root (apps/macos → ..)
 OUT="${1:-$APP_DIR/build}"
 BUNDLE="$OUT/Madi.app"
+SPARKLE_ENABLED="${SPARKLE_ENABLED:-1}"
+SPARKLE_DIR=""
+SWIFTC_SPARKLE_FLAGS=()
+
+plist_set_or_add_string() {
+  local plist="$1" key="$2" value="$3"
+  /usr/libexec/PlistBuddy -c "Set :$key $value" "$plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :$key string $value" "$plist"
+}
 
 # ── 0. engine must exist ────────────────────────────────────────────────────
 if [ ! -x "$ROOT/engine/metal/out/transcribe" ]; then
   echo "engine missing — building"; "$HERE/build_engine.sh"
+fi
+
+if [ "$SPARKLE_ENABLED" = "1" ]; then
+  SPARKLE_DIR="$("$HERE/ensure_sparkle.sh")"
+  SWIFTC_SPARKLE_FLAGS=(
+    -F "$SPARKLE_DIR"
+    -framework Sparkle
+    -Xlinker -rpath
+    -Xlinker @executable_path/../Frameworks
+  )
 fi
 
 # ── 1. compile Swift sources ────────────────────────────────────────────────
@@ -89,6 +108,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/AppInfo/LowMemoryGuidePolicy.swift
   "$APP_DIR"/Sovereign/AppInfo/BetaGate.swift
   "$APP_DIR"/Sovereign/AppInfo/UpdateChecker.swift
+  "$APP_DIR"/Sovereign/AppInfo/SparkleUpdater.swift
   "$APP_DIR"/Sovereign/SovereignApp.swift
   "$APP_DIR"/Sovereign/UI/ClinicDisplaySupport.swift
   "$APP_DIR"/Sovereign/UI/L10n.swift
@@ -126,7 +146,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/UpdateView.swift
 )
 swiftc -O -parse-as-library -target arm64-apple-macosx14.0 \
-  "${SRCS[@]}" -o "$OUT/Madi"
+  "${SRCS[@]}" "${SWIFTC_SPARKLE_FLAGS[@]}" -o "$OUT/Madi"
 
 # ── 2. assemble bundle ──────────────────────────────────────────────────────
 echo "[2/4] assemble $BUNDLE"
@@ -134,6 +154,7 @@ rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/assets-small"
 cp "$OUT/Madi" "$BUNDLE/Contents/MacOS/Madi"
 cp "$APP_DIR/Sovereign/Info.plist" "$BUNDLE/Contents/Info.plist"
+BUNDLE_CHANNEL="${MADI_CHANNEL:-stable}"
 
 # Release metadata can be injected by CI without modifying tracked sources.
 # MADI_VERSION is the full SemVer (for example 0.9.1-beta.2); the numeric core
@@ -148,16 +169,30 @@ if [ -n "${MADI_VERSION:-}" ]; then
     *-beta.*) CHANNEL="${MADI_CHANNEL:-beta}" ;;
     *-rc.*)   CHANNEL="${MADI_CHANNEL:-rc}" ;;
   esac
+  BUNDLE_CHANNEL="$CHANNEL"
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING" "$BUNDLE/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${MADI_BUILD:-1}" "$BUNDLE/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :MADIFullVersion $MADI_VERSION" "$BUNDLE/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :MADIChannel $CHANNEL" "$BUNDLE/Contents/Info.plist"
+fi
+if [ "$SPARKLE_ENABLED" = "1" ]; then
+  SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://madi.devart.tv/channels/$BUNDLE_CHANNEL/appcast.xml}"
+  plist_set_or_add_string "$BUNDLE/Contents/Info.plist" "SUFeedURL" "$SPARKLE_FEED_URL"
+  if [ -n "${SPARKLE_PUBLIC_ED_KEY:-}" ]; then
+    plist_set_or_add_string "$BUNDLE/Contents/Info.plist" "SUPublicEDKey" "$SPARKLE_PUBLIC_ED_KEY"
+  elif ! /usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$BUNDLE/Contents/Info.plist" >/dev/null 2>&1; then
+    echo "  ⚠ SPARKLE_PUBLIC_ED_KEY not set — Sparkle archive EdDSA validation is not configured"
+  fi
 fi
 if [ -n "${MADI_BETA_EXPIRY:-}" ]; then
   # Add-or-set: the stable source plist omits MADIBetaExpiry, so a beta release
   # build (which passes this env) must be able to inject the key when absent.
   /usr/libexec/PlistBuddy -c "Set :MADIBetaExpiry $MADI_BETA_EXPIRY" "$BUNDLE/Contents/Info.plist" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :MADIBetaExpiry string $MADI_BETA_EXPIRY" "$BUNDLE/Contents/Info.plist"
+fi
+if [ "$SPARKLE_ENABLED" = "1" ]; then
+  mkdir -p "$BUNDLE/Contents/Frameworks"
+  ditto "$SPARKLE_DIR/Sparkle.framework" "$BUNDLE/Contents/Frameworks/Sparkle.framework"
 fi
 cp "$APP_DIR/Sovereign/Resources/logo_madi.png" "$BUNDLE/Contents/Resources/logo_madi.png"
 cp "$APP_DIR/Sovereign/Resources/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns"
@@ -253,6 +288,16 @@ echo "[3/4] ad-hoc codesign (local dev; Developer ID via sign_notarize.sh)"
 codesign --force --sign - "$BUNDLE/Contents/MacOS/transcribe"
 [ "$BUNDLED_TRANSLATE_4B" = "1" ] && codesign --force --sign - "$BUNDLE/Contents/MacOS/translate-engine-4b"
 [ "$BUNDLED_TRANSLATE_2B" = "1" ] && codesign --force --sign - "$BUNDLE/Contents/MacOS/translate-engine-2b"
+if [ "$SPARKLE_ENABLED" = "1" ]; then
+  SPARKLE_BUNDLE="$BUNDLE/Contents/Frameworks/Sparkle.framework"
+  [ -d "$SPARKLE_BUNDLE/Versions/B/XPCServices/Downloader.xpc" ] \
+    && codesign --force --sign - "$SPARKLE_BUNDLE/Versions/B/XPCServices/Downloader.xpc"
+  [ -d "$SPARKLE_BUNDLE/Versions/B/XPCServices/Installer.xpc" ] \
+    && codesign --force --sign - "$SPARKLE_BUNDLE/Versions/B/XPCServices/Installer.xpc"
+  [ -d "$SPARKLE_BUNDLE/Versions/B/Updater.app" ] \
+    && codesign --force --sign - "$SPARKLE_BUNDLE/Versions/B/Updater.app"
+  codesign --force --sign - "$SPARKLE_BUNDLE"
+fi
 codesign --force --sign - --entitlements "$APP_DIR/Sovereign/Sovereign.entitlements" "$BUNDLE"
 
 # ── 4. optional: seed the model so first run skips the (placeholder) download ─
