@@ -65,3 +65,8 @@ engine/metal/bench/wer_runs/
 engine/metal/bench/runs/*
 !engine/metal/bench/runs/README.md
 .claude/scheduled_tasks.lock
+
+# Model weights. sovereignLLM ignores these too; one stray `git add -A` on an
+# unignored 5.3 GB GGUF puts it in history permanently.
+*.gguf
+*.safetensors

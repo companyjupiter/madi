@@ -211,15 +211,23 @@ process. Canonical copy: `sovereignLLM/apps/metal-dna3-4b-q4km/PERF_MATRIX.md`.
 |---|---|---:|---:|---:|---:|
 | **4B** (16 GB+) | 0.1.4 | 5.5 G | 7.53 G | 153.4 ms | 62.4 tok/s |
 | | **0.1.5** | **3.3 G** | **5.34 G** | **69.8 ms** | **64.7 tok/s** |
-| | *unreleased* | *3.20 G* | *5.23 G* | *unchanged* | *67.7 tok/s* |
+| | *unreleased* | *3.20 G* | *5.23 G* | *unchanged* | *68.5 tok/s* |
 | **2B** (8 GB) | 0.1.4 | 2.6 G | 3.54 G | 59.6 ms | 125.3 tok/s |
 | | **0.1.5** | **1.5 G** | **2.52 G** | **31.5 ms** | **124.1 tok/s** |
 | | *unreleased* | *1.54 G* | *2.49 G* | *unchanged* | *130.8 tok/s* |
 
-The *unreleased* rows are on `main` and not in any published build: per-layer V/W2 Q6_K
-is stored as 6.5-bit `ql`/`qh` with the raw GGUF blocks dropped, which is worth decode
-**+3.4%** (4B) / **+2.4%** (2B) and −150 MB / −65 MB of RSS at byte-identical output.
-Both were measured on this model rather than assumed from the other.
+The *unreleased* rows are on `main` and not in any published build. Two engine changes
+since 0.1.5, both byte-identical in output:
+
+1. **Per-layer V/W2 Q6_K packed** to 6.5-bit `ql`/`qh` with the raw GGUF blocks dropped —
+   decode **+3.4%** (4B) / **+2.4%** (2B), RSS −150 MB / −65 MB.
+2. **Fused-FFN exec split (r2)** on the **4B only** — a further **+0.88%**, no memory
+   change. It measured as *not* a win on the 2B (+0.34% at t=0.43, with double the
+   run-to-run spread), so the 2B deliberately keeps the old split.
+
+Each model was measured on itself; neither result was carried over from the other. The
+r2 figures come from cooled, order-alternating pairs — on this hardware an uncooled or
+fixed-order run moves a 1% effect by more than the effect itself.
 
 0.1.4 → 0.1.5: footprint **−40%** (4B) / **−42%** (2B), RSS −29%, prefill at B=14
 **−54%** / **−47%**. Decode is essentially flat — the wins are time-to-first-token
