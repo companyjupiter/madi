@@ -12,6 +12,10 @@
        as macOS requires; a -beta.N prerelease (beta channel only) would live here. -->
   <key>MADIFullVersion</key>         <string>0.1.1</string>
   <key>MADIChannel</key>             <string>stable</string>
+  <!-- Sparkle self-update. Release builds may override SUFeedURL by channel;
+       SUPublicEDKey is the public half of Madi's Sparkle EdDSA keypair. -->
+  <key>SUFeedURL</key>               <string>https://madi.devart.tv/channels/stable/appcast.xml</string>
+  <key>SUPublicEDKey</key>           <string>VVXBmotFAq9brvHpyyi7Bq1NbnJ8qQr75DbTPWfXWLU=</string>
   <!-- Stable channel: no MADIBetaExpiry → BetaGate stays .active (no expiry
        block / warning banner). A beta build re-adds MADIChannel=beta + MADIBetaExpiry. -->
   <key>CFBundlePackageType</key>     <string>APPL</string>

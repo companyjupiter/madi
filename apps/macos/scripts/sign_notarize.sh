@@ -31,6 +31,16 @@ done < <(find "$APP/Contents/MacOS" -type f -perm -111 -print0)
 for mlib in "$APP/Contents/Resources/whisper.metallib" "$APP/Contents/MacOS/whisper.metallib"; do
   [ -f "$mlib" ] && codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$mlib"
 done
+if [ -d "$APP/Contents/Frameworks/Sparkle.framework" ]; then
+  SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+  [ -d "$SPARKLE/Versions/B/XPCServices/Downloader.xpc" ] \
+    && codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
+  [ -d "$SPARKLE/Versions/B/XPCServices/Installer.xpc" ] \
+    && codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
+  [ -d "$SPARKLE/Versions/B/Updater.app" ] \
+    && codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$SPARKLE/Versions/B/Updater.app"
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$SPARKLE"
+fi
 
 echo "[2/4] sign the app bundle (no --deep; inner already signed)"
 codesign --force --options runtime --timestamp \

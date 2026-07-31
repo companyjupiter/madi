@@ -399,7 +399,7 @@ build_local_release() {
 upload_release() {
   local publish_flag="$1"
   prune_unrequested_artifacts
-  "$HERE/publish_s3_release.sh" "$RELEASE_ROOT" "$RELEASE_BUCKET" "$DOWNLOAD_BASE_URL" "$RELEASE_PREFIX" \
+  MADI_BUILD="$BUILD_NUMBER" "$HERE/publish_s3_release.sh" "$RELEASE_ROOT" "$RELEASE_BUCKET" "$DOWNLOAD_BASE_URL" "$RELEASE_PREFIX" \
     "$VERSION" "$CHANNEL" "$publish_flag" >&2
 }
 

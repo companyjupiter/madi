@@ -152,6 +152,18 @@ requires the schema-1 channel/version contract, pins DMG URLs to
 SHA-256 before opening a downloaded image. GitHub remains the human-facing
 release/support page, not the binary update feed.
 
+Madi also ships Sparkle 2 for one-click self-update. `make_app.sh` fetches the
+pinned Sparkle binary distribution, links `Sparkle.framework`, embeds
+`SUFeedURL=https://madi.devart.tv/channels/<channel>/appcast.xml`, and copies the
+framework into `Contents/Frameworks`. `SUPublicEDKey` is already pinned in the
+source plist; override it with `SPARKLE_PUBLIC_ED_KEY` only when intentionally
+rotating the Sparkle EdDSA key. During publish, `publish_s3_release.sh` writes
+and uploads `channels/<channel>/appcast.xml`; pass `SPARKLE_PRIVATE_KEY_FILE` or
+`SPARKLE_PRIVATE_KEY` so `sign_update` can add `sparkle:edSignature`. Set
+`SPARKLE_ALLOW_UNSIGNED_APPCAST=1` only for local/mock tests; real `publish`
+runs fail if Sparkle signing is unavailable. The legacy `latest.json`/manual-DMG
+window remains as a fallback and integrity diagnostic path.
+
 Normal versioned releases do not need CloudFront invalidation because the
 versioned object paths are immutable and the metadata documents are served with
 no-cache headers. This CLI refuses same-version replacement with different
@@ -207,6 +219,9 @@ Build a fresh bundle, then verify each item on a clean machine / clean App Suppo
 **Signed build (if distributing)**
 - [ ] `sign_notarize.sh` succeeds; `spctl -a -vvv --type exec Madi.app` accepts it.
 - [ ] `make_dmg.sh` produces a stapled DMG that opens without a Gatekeeper warning.
+- [ ] `Help → 업데이트 설치…` opens the Sparkle update flow; `appcast.xml` exists
+      beside `latest.json` for the build channel and has a Sparkle EdDSA signature
+      on production releases.
 
 See [DEMO.md](DEMO.md) for a reproducible transcript/export proof to attach to a release.
 

@@ -61,6 +61,7 @@ enum Appearance: String, CaseIterable, Identifiable {
 @main
 struct SovereignApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    private let sparkleUpdater = SparkleUpdater()
     @State private var downloader = ModelDownloader()
     @State private var session = SessionController()
     @State private var translateDownloader = TranslateModelDownloader()
@@ -106,13 +107,13 @@ struct SovereignApp: App {
                 }
                     .keyboardShortcut("?", modifiers: .command)
                 Divider()
-                HelpMenuExtras()
+                HelpMenuExtras(sparkleUpdater: sparkleUpdater)
             }
         }
 
         // Info window (Help → 정보) — version, channel, beta lifecycle.
         Window(uiLang("Madi 정보", "About Madi"), id: Self.infoWindowID) {
-            InfoView(betaGate: betaGate)
+            InfoView(betaGate: betaGate, sparkleUpdater: sparkleUpdater)
                 .preferredColorScheme(appearance.colorScheme)
         }
         .windowResizability(.contentSize)
@@ -152,6 +153,7 @@ struct SovereignApp: App {
 /// no scene-opening environment).
 private struct HelpMenuExtras: View {
     @Environment(\.openWindow) private var openWindow
+    let sparkleUpdater: SparkleUpdater
     @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
     var body: some View {
         if LowMemoryGuidePolicy.isEightGBClass(
@@ -163,7 +165,11 @@ private struct HelpMenuExtras: View {
             }
             Divider()
         }
-        Button(uiLang("업데이트 설치…", "Install Update…")) { openWindow(id: SovereignApp.updateWindowID) }
+        Button(uiLang("업데이트 설치…", "Install Update…")) { sparkleUpdater.checkForUpdates() }
+            .disabled(!sparkleUpdater.canCheckForUpdates)
+        Button(uiLang("수동 업데이트 다운로드…", "Manual Update Download…")) {
+            openWindow(id: SovereignApp.updateWindowID)
+        }
         Button(uiLang("정보", "About")) { openWindow(id: SovereignApp.infoWindowID) }
     }
 }

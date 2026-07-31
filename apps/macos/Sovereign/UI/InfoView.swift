@@ -1,13 +1,13 @@
 // InfoView.swift — Help → 정보 window. Shows the app's semantic version, release
 // channel, and the beta lifecycle (expiry date + live status from BetaGate), plus
-// quick links. Read-only; the actual update flow lives in UpdateView.
+// quick links. Read-only; the actual one-click update flow lives in Sparkle.
 
 import SwiftUI
 import AppKit
 
 struct InfoView: View {
     @Bindable var betaGate: BetaGate
-    @Environment(\.openWindow) private var openWindow
+    let sparkleUpdater: SparkleUpdater
     @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
     var body: some View {
@@ -39,9 +39,10 @@ struct InfoView: View {
                 Button {
                     NSWorkspace.shared.open(AppVersion.releasesURL)
                 } label: { Label(uiLang("릴리스", "Releases"), systemImage: "shippingbox") }
-                Button { openWindow(id: "madi-update") } label: {
+                Button { sparkleUpdater.checkForUpdates() } label: {
                     Label(uiLang("업데이트 확인", "Check for updates"), systemImage: "arrow.triangle.2.circlepath")
                 }
+                .disabled(!sparkleUpdater.canCheckForUpdates)
             }
             .font(.system(size: 12, weight: .medium, design: .rounded))
             .buttonStyle(.bordered)
