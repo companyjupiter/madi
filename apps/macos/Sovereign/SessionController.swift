@@ -364,6 +364,30 @@ final class SessionController: EngineProcessDelegate {
     /// immediately so a caption doesn't wait ~10s for the window to close. Replaced
     /// by the authoritative per-line translation once the line commits.
     private(set) var livePartialTranslations: [String: String] = [:]
+
+    /// P6: every visible mutation of the caption's provisional translations goes
+    /// through these three paths, so the stability meter observes all of them.
+    private func updateInterimTranslation(lang: String, text: String) {
+        guard livePartialTranslations[lang] != text else { return }
+        TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
+        livePartialTranslations[lang] = text
+    }
+    private func setInterimTranslations(_ translations: [String: String]) {
+        for lang in livePartialTranslations.keys where translations[lang] == nil {
+            TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: nil)
+        }
+        for (lang, text) in translations where livePartialTranslations[lang] != text {
+            TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
+        }
+        livePartialTranslations = translations
+    }
+    /// Boundary teardown — the provisional text is superseded by the committed
+    /// translation (or the session ended). A replacement by the final is not
+    /// flicker, so the meter forgets without counting.
+    private func clearInterimCaption() {
+        TranslationStabilityMetrics.shared.closeCaption()
+        livePartialTranslations = [:]
+    }
     private struct InterimRequest {
         let source: String
         var pending: Set<String>
@@ -777,7 +801,7 @@ final class SessionController: EngineProcessDelegate {
                 // T1 carryover teardown: the real translation replaced the
                 // provisional interim caption for the freshest content.
                 if id == self.transcript.lines.last?.id, self.livePartial.isEmpty {
-                    self.livePartialTranslations = [:]
+                    self.clearInterimCaption()
                 }
             }
             // streaming partial (T5): the reply types itself onto the screen
@@ -787,7 +811,7 @@ final class SessionController: EngineProcessDelegate {
                 if let request = self.interimRequests[id] {
                     guard id == self.activeInterimID, request.source == source,
                           self.livePartial == source else { return }
-                    self.livePartialTranslations[lang] = text
+                    self.updateInterimTranslation(lang: lang, text: text)
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
                     _ = self.transcript.setTranslation(id, lang: lang, text,
@@ -816,7 +840,7 @@ final class SessionController: EngineProcessDelegate {
         if let text, !text.isEmpty { request.translations[lang] = text }
         let isActive = activeInterimID == id
         if isActive, livePartial == source {
-            livePartialTranslations = request.translations
+            setInterimTranslations(request.translations)
             if !request.translations.isEmpty { interimCache.put(source, request.translations) }
         }
         if request.pending.isEmpty {
@@ -850,6 +874,7 @@ final class SessionController: EngineProcessDelegate {
             guard !targets.isEmpty else { return }
             let id = UUID()
             guard t.translate(source, into: targets, id: id, kind: .interim) else { return }
+            TranslationStabilityMetrics.shared.interimTurnsRun += 1
             self.activeInterimID = id
             self.interimRequests[id] = InterimRequest(
                 source: source, pending: Set(targets), translations: [:])
@@ -1391,7 +1416,8 @@ final class SessionController: EngineProcessDelegate {
         interimCache.clear()
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
-        livePartial = ""; livePartialTranslations = [:]
+        livePartial = ""; clearInterimCaption()
+        TranslationStabilityMetrics.shared.reset()
         streamingTranslation = nil; translateQueueDepth = 0
         backlogKeys.removeAll(); translateBacklog = 0
         backfillPendingKeys.removeAll(); backfillRemaining = 0
@@ -1576,7 +1602,8 @@ final class SessionController: EngineProcessDelegate {
         // Streaming preview reuses the main resident process. Tiny clips must
         // never auto-detect independently: with a selected language arm now; in
         // auto mode wait for the committed lane's [lang] lock below.
-        livePartial = ""; livePartialTranslations = [:]
+        livePartial = ""; clearInterimCaption()
+        TranslationStabilityMetrics.shared.reset()   // P6: per-session ledger
         if livePreviewEnabled {
             preview.onText = { [weak self] t in
                 guard let self, t.count <= Self.maxLivePartialChars else { return }
@@ -1834,7 +1861,7 @@ final class SessionController: EngineProcessDelegate {
         // exit beats the FLUSH_END line (finalizeOnce is idempotent).
         if code == 0 { finalizeOnce(); return }
         if phase != .done, phase != .flushing {
-            preview.stop(); livePartial = ""; livePartialTranslations = [:]
+            preview.stop(); livePartial = ""; clearInterimCaption()
             engine = nil
             phase = .error("전사 엔진이 예기치 않게 종료되었어요 (코드 \(code)). 다시 시도해주세요.")
         }
@@ -1880,7 +1907,7 @@ final class SessionController: EngineProcessDelegate {
         for p in pendingEnrollment.pending() { enrollVoiceprint(speaker: p.id, name: p.name) }
         pendingEnrollment.clear()
         engine = nil
-        preview.stop(); livePartial = ""; livePartialTranslations = [:]   // disarm PREVIEW lane + interim text
+        preview.stop(); livePartial = ""; clearInterimCaption()   // disarm PREVIEW lane + interim text
         phase = .done
         // Backfill: lines the live queue shed under load get re-translated now,
         // uncapped, so the on-screen transcript/scrollback is complete after stop
@@ -1910,6 +1937,12 @@ final class SessionController: EngineProcessDelegate {
         }
         translateStableLines(includingLast: true)  // translate the final line(s) too
         interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
+        // P6: print the session's translation-stability ledger after the stop-time
+        // backfill has had time to drain. NE < 0.2 is the target band.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(10))
+            print(TranslationStabilityMetrics.shared.summary())
+        }
         stopLiveRail()       // recording ended — keep the accumulated rail for review
         stopWatchdog()
         segQueue.removeAll(); segmentsInFlight = 0

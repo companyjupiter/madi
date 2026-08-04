@@ -273,6 +273,11 @@ final class TranscriptStore {
     private var translationsByLine: [UUID: [String: TranslationRecord]] = [:]
     private var editsByLine: [UUID: String] = [:]
 
+    /// P6: stable meter key for one (line, language) translation slot.
+    private static func meterKey(_ id: UUID, _ lang: String) -> String {
+        "\(id.uuidString)|\(lang)"
+    }
+
     /// Attach a per-language translation to a line by id (from TranslateEngine, async).
     @discardableResult
     func setTranslation(_ id: UUID, lang: String, _ text: String,
@@ -287,6 +292,7 @@ final class TranscriptStore {
         lines[i].translations[lang] = t
         if userEdited { lines[i].editedTranslations.insert(lang) }
         else { lines[i].editedTranslations.remove(lang) }
+        TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: t)
         scheduleRender()
         return true
     }
@@ -324,6 +330,9 @@ final class TranscriptStore {
                 || record.userEdited != next.userEdited
         }
         if changed {
+            for lang in previous.keys where kept[lang] == nil {
+                TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: nil)
+            }
             translationsByLine[id] = kept
             if let i = lines.firstIndex(where: { $0.id == id }) {
                 lines[i].translations = kept.mapValues(\.text)
@@ -374,6 +383,9 @@ final class TranscriptStore {
     }
 
     private func invalidateTranslations(_ id: UUID, lineIndex: Int) {
+        for lang in (translationsByLine[id] ?? [:]).keys {
+            TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: nil)
+        }
         translationsByLine[id] = nil
         lines[lineIndex].translations.removeAll()
         lines[lineIndex].editedTranslations.removeAll()
@@ -480,7 +492,12 @@ final class TranscriptStore {
         for i in lines.indices {
             if let e = editsByLine[lines[i].id] { lines[i].editedText = e }
             let revision = TextRevision.of(lines[i].text)
-            let valid = (translationsByLine[lines[i].id] ?? [:]).filter { $0.value.sourceRevision == revision }
+            let previous = translationsByLine[lines[i].id] ?? [:]
+            let valid = previous.filter { $0.value.sourceRevision == revision }
+            for lang in previous.keys where valid[lang] == nil {
+                TranslationStabilityMetrics.shared.recordShown(
+                    .panel, key: Self.meterKey(lines[i].id, lang), text: nil)
+            }
             translationsByLine[lines[i].id] = valid
             lines[i].translations = valid.mapValues(\.text)
             lines[i].editedTranslations = Set(valid.compactMap { $0.value.userEdited ? $0.key : nil })
