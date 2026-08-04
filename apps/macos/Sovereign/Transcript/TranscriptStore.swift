@@ -37,6 +37,10 @@ struct Line: Identifiable {
     var speakerMargin: Double = 1.0
     var translations: [String: String] = [:]   // targetLang → text (multi-target live translation)
     var editedTranslations: Set<String> = []   // languages explicitly corrected by the user
+    /// P0: languages whose translation turn was guard-suppressed at THIS text
+    /// revision — no result is coming, so the status row must not keep promising
+    /// one. Lifted automatically when the line's text changes (re-translation).
+    var suppressedTranslations: Set<String> = []
     var editedText: String? = nil     // user edit (live or post); overrides the joined words
     /// Words joined with the engine's spacing convention.
     var joinedText: String {
@@ -57,7 +61,9 @@ struct Line: Identifiable {
     func status(activeLangs: [String], isLiveTail: Bool, translateBusy: Bool) -> SegmentStatus {
         if isLiveTail { return .transcribing }
         if translateBusy, !activeLangs.isEmpty,
-           activeLangs.contains(where: { translations[$0] == nil }) { return .translating }
+           activeLangs.contains(where: { translations[$0] == nil && !suppressedTranslations.contains($0) }) {
+            return .translating
+        }
         return .completed
     }
 }
@@ -272,6 +278,9 @@ final class TranscriptStore {
     // seconds later — or a user edit made mid-recording — still lands.
     private var translationsByLine: [UUID: [String: TranslationRecord]] = [:]
     private var editsByLine: [UUID: String] = [:]
+    /// P0: (line, lang) pairs whose translation was guard-suppressed, keyed to the
+    /// source revision the verdict applies to. A text change lifts the verdict.
+    private var suppressedByLine: [UUID: [String: UInt64]] = [:]
 
     /// P6: stable meter key for one (line, language) translation slot.
     private static func meterKey(_ id: UUID, _ lang: String) -> String {
@@ -302,6 +311,29 @@ final class TranscriptStore {
     @discardableResult
     func editTranslation(_ id: UUID, lang: String, _ text: String) -> Bool {
         setTranslation(id, lang: lang, text, userEdited: true)
+    }
+
+    /// P0: the output guard rejected this (line, lang) turn's FINAL after its
+    /// partials already streamed onto the screen. Roll the provisional text back
+    /// — text the guard judged invalid must not persist as if it were a
+    /// translation — and remember the verdict at this source revision so the
+    /// status row stops promising a result. A later text revision (which
+    /// re-queues translation) lifts the verdict via applyOverlays.
+    @discardableResult
+    func suppressTranslation(_ id: UUID, lang: String, sourceRevision: UInt64? = nil) -> Bool {
+        guard let i = lines.firstIndex(where: { $0.id == id }) else { return false }
+        let current = TextRevision.of(lines[i].text)
+        guard sourceRevision == nil || sourceRevision == current else { return false }
+        if let record = translationsByLine[id]?[lang], record.userEdited { return false }
+        if translationsByLine[id]?[lang] != nil {
+            TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: nil)
+            translationsByLine[id]?[lang] = nil
+            lines[i].translations[lang] = nil
+        }
+        suppressedByLine[id, default: [:]][lang] = current
+        lines[i].suppressedTranslations.insert(lang)
+        scheduleRender()
+        return true
     }
 
     func sourceRevision(for id: UUID) -> UInt64? {
@@ -460,6 +492,7 @@ final class TranscriptStore {
         merger = WordMerger()
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
         translationsByLine.removeAll(); editsByLine.removeAll()
+        suppressedByLine.removeAll()
         speakerMerges.removeAll(); speakerOverrides.removeAll()
         speakerNumbers.reset()
         frozen.removeAll(); frozenWordCount = 0
@@ -501,6 +534,9 @@ final class TranscriptStore {
             translationsByLine[lines[i].id] = valid
             lines[i].translations = valid.mapValues(\.text)
             lines[i].editedTranslations = Set(valid.compactMap { $0.value.userEdited ? $0.key : nil })
+            // P0: a suppression verdict binds to one source revision only.
+            lines[i].suppressedTranslations =
+                Set((suppressedByLine[lines[i].id] ?? [:]).filter { $0.value == revision }.keys)
         }
         applySpeakerOverlays()
     }

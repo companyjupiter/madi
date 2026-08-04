@@ -101,7 +101,23 @@ struct CaptionView: View {
     private var caption: (trans: String, orig: String, live: Bool, speaker: Int?,
                           margin: Double, age: Double)? {
         if !session.livePartial.isEmpty, let t = pick(session.livePartialTranslations) {
-            return (t, session.livePartial, true, nil, 1.0, 0)
+            // P3: pair the translation with the EXACT hypothesis it was generated
+            // from — not the newer livePartial — so the two rows never contradict
+            // (a fresh window otherwise showed new words over the previous
+            // window's translation).
+            let orig = session.livePartialSource.isEmpty ? session.livePartial
+                                                         : session.livePartialSource
+            return (t, orig, true, nil, 1.0, 0)
+        }
+        // P3: the window just committed and the new last line's authoritative
+        // translation hasn't landed yet. Hold the provisional pair through the
+        // gap instead of jumping BACK to an older line's translation (the old
+        // fallthrough read as the caption regressing to earlier content). The
+        // pair is torn down the moment the last line's real translation arrives.
+        if let t = pick(session.livePartialTranslations),
+           !session.livePartialSource.isEmpty,
+           session.transcript.lines.last?.translations.isEmpty ?? true {
+            return (t, session.livePartialSource, true, nil, 1.0, 0)
         }
         if let l = session.transcript.lines.last(where: { !$0.translations.isEmpty }),
            let t = pick(l.translations) {

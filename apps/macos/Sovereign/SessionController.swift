@@ -364,15 +364,21 @@ final class SessionController: EngineProcessDelegate {
     /// immediately so a caption doesn't wait ~10s for the window to close. Replaced
     /// by the authoritative per-line translation once the line commits.
     private(set) var livePartialTranslations: [String: String] = [:]
+    /// P3: the EXACT hypothesis text `livePartialTranslations` were generated
+    /// from. The caption pairs translation with this — never with the newer
+    /// `livePartial` — so its two rows cannot contradict each other, and it can
+    /// hold the pair across the commit gap instead of jumping to an older line.
+    private(set) var livePartialSource: String = ""
 
     /// P6: every visible mutation of the caption's provisional translations goes
     /// through these three paths, so the stability meter observes all of them.
-    private func updateInterimTranslation(lang: String, text: String) {
-        guard livePartialTranslations[lang] != text else { return }
+    private func updateInterimTranslation(lang: String, text: String, source: String) {
+        guard livePartialTranslations[lang] != text else { livePartialSource = source; return }
         TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
         livePartialTranslations[lang] = text
+        livePartialSource = source
     }
-    private func setInterimTranslations(_ translations: [String: String]) {
+    private func setInterimTranslations(_ translations: [String: String], source: String) {
         for lang in livePartialTranslations.keys where translations[lang] == nil {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: nil)
         }
@@ -380,6 +386,7 @@ final class SessionController: EngineProcessDelegate {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
         }
         livePartialTranslations = translations
+        livePartialSource = source
     }
     /// Boundary teardown — the provisional text is superseded by the committed
     /// translation (or the session ended). A replacement by the final is not
@@ -387,6 +394,7 @@ final class SessionController: EngineProcessDelegate {
     private func clearInterimCaption() {
         TranslationStabilityMetrics.shared.closeCaption()
         livePartialTranslations = [:]
+        livePartialSource = ""
     }
     private struct InterimRequest {
         let source: String
@@ -791,6 +799,11 @@ final class SessionController: EngineProcessDelegate {
                 if !text.isEmpty {
                     _ = self.transcript.setTranslation(id, lang: lang, text,
                                                        sourceRevision: revision)
+                } else {
+                    // P0: the guard suppressed the final — roll back the already-
+                    // streamed partial instead of leaving guard-invalid text on
+                    // screen posing as a translation.
+                    _ = self.transcript.suppressTranslation(id, lang: lang, sourceRevision: revision)
                 }
                 self.backlogKeys.remove(completedKey)
                 self.translateBacklog = Set(self.backlogKeys.map(\.id)).count
@@ -811,7 +824,7 @@ final class SessionController: EngineProcessDelegate {
                 if let request = self.interimRequests[id] {
                     guard id == self.activeInterimID, request.source == source,
                           self.livePartial == source else { return }
-                    self.updateInterimTranslation(lang: lang, text: text)
+                    self.updateInterimTranslation(lang: lang, text: text, source: source)
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
                     _ = self.transcript.setTranslation(id, lang: lang, text,
@@ -840,7 +853,7 @@ final class SessionController: EngineProcessDelegate {
         if let text, !text.isEmpty { request.translations[lang] = text }
         let isActive = activeInterimID == id
         if isActive, livePartial == source {
-            setInterimTranslations(request.translations)
+            setInterimTranslations(request.translations, source: source)
             if !request.translations.isEmpty { interimCache.put(source, request.translations) }
         }
         if request.pending.isEmpty {
