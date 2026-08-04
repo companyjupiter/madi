@@ -53,6 +53,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Engine/DNATurnBudget.swift
   "$APP_DIR"/Sovereign/Engine/TranslateStreamParser.swift
   "$APP_DIR"/Sovereign/Engine/TranslationTurnQueue.swift
+  "$APP_DIR"/Sovereign/Engine/TranslationStability.swift
   "$APP_DIR"/Sovereign/Engine/TranslateEngine.swift
   "$APP_DIR"/Sovereign/Engine/SummaryEngine.swift
   "$APP_DIR"/Sovereign/Audio/AudioSource.swift

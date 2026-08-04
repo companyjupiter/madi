@@ -63,6 +63,7 @@ let package = Package(
                 "Audio/Segmenter.swift",
                 "Engine/TranslateStreamParser.swift",
                 "Engine/TranslationTurnQueue.swift",
+                "Engine/TranslationStability.swift",
                 // Not pure logic — DNAEngineBroker spawns a Process — but it is
                 // Foundation-only, and its wedge-recovery path (per-request
                 // watchdog → terminate → relaunch) is only meaningfully testable

@@ -292,7 +292,9 @@ struct TranscriptView: View {
         let st = line.status(activeLangs: activeLangs,
                              isLiveTail: line.id == lines.last?.id && !interimSuffix.isEmpty,
                              translateBusy: translateBusy)
-        if st == .translating, line.translations.isEmpty {
+        if st == .translating, line.translations.isEmpty, line.staleTranslations.isEmpty {
+            // P4: while a stale rendering is on screen, IT is the status — dots
+            // would announce a gap that the reader doesn't experience.
             LoadingDots(color: Theme.Colors.textTertiary)
                 .padding(.top, 2)
                 .transition(.opacity)
@@ -576,20 +578,23 @@ struct TranscriptView: View {
     @ViewBuilder
     private func translationLine(_ lang: String, _ text: String, speaker: Int? = nil,
                                  lineID: UUID? = nil, showTag: Bool = false,
-                                 editable: Bool = false, userEdited: Bool = false) -> some View {
+                                 editable: Bool = false, userEdited: Bool = false,
+                                 stale: Bool = false) -> some View {
         let tag = Self.langTag[lang] ?? lang
         let tagColor = speaker.map { Theme.Colors.speaker($0) } ?? Theme.Colors.accent
         let streaming = lineID != nil && lineID == streamingTransID && lang == streamingTransLang
-        let isEditing = editable && lineID == editingTranslationLine && lang == editingTranslationLang
+        let isEditing = editable && !stale && lineID == editingTranslationLine && lang == editingTranslationLang
         HStack(alignment: .top, spacing: 6) {
             if showTag {
                 Text(tag).font(.system(size: fontSize * 0.72, weight: .semibold))
-                    .foregroundStyle(tagColor).opacity(streaming ? 0.4 : 0.75)
+                    .foregroundStyle(tagColor).opacity(streaming || stale ? 0.4 : 0.75)
                     .frame(width: fontSize * 1.4, alignment: .leading)
             }
             // While this (line, lang) is still streaming, the translation is
             // provisional — render it GRAY, exactly like the transcript's
             // uncommitted gray tail (withLiveTail). It flips to dark on commit.
+            // P4 stale: same gray + italic — an outdated rendering held in place
+            // until the re-translation replaces it (never a loading placeholder).
             if isEditing {
                 TextField(uiLang("번역 교정", "Correct translation"), text: $translationDraft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
@@ -609,9 +614,10 @@ struct TranscriptView: View {
                 (Text(text) + (streaming ? Text(" ▍") : Text("")))
                     .font(.system(size: fontSize * 0.875)).tracking(-0.28)
                     .lineSpacing(fontSize * 0.875 * 0.4)
-                    .foregroundStyle(streaming ? Theme.Colors.textTertiary
-                                               : Theme.Colors.textPrimary.opacity(0.85))
-                if userEdited {
+                    .italic(stale)
+                    .foregroundStyle(streaming || stale ? Theme.Colors.textTertiary
+                                                        : Theme.Colors.textPrimary.opacity(0.85))
+                if userEdited, !stale {
                     Image(systemName: "pencil")
                         .font(.system(size: fontSize * 0.65, weight: .semibold))
                         .foregroundStyle(Theme.Colors.textTertiary)
@@ -621,7 +627,7 @@ struct TranscriptView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
-            guard editable, !streaming, let lineID, onEditTranslation != nil else { return }
+            guard editable, !streaming, !stale, let lineID, onEditTranslation != nil else { return }
             editingTranslationLine = lineID
             editingTranslationLang = lang
             translationDraft = text
@@ -661,6 +667,13 @@ struct TranscriptView: View {
                     translationLine(lang, line.translations[lang]!, speaker: line.speaker,
                                     lineID: line.id, showTag: line.translations.count > 1,
                                     editable: true, userEdited: line.editedTranslations.contains(lang))
+                }
+                // P4: outdated renderings held in place (gray) until replaced.
+                ForEach(line.staleTranslations.keys.sorted().filter { line.translations[$0] == nil },
+                        id: \.self) { lang in
+                    translationLine(lang, line.staleTranslations[lang]!, speaker: line.speaker,
+                                    lineID: line.id, showTag: line.staleTranslations.count > 1,
+                                    stale: true)
                 }
                 segmentStatusRow(line)
             }
@@ -792,6 +805,13 @@ struct TranscriptView: View {
                 translationLine(lang, line.translations[lang]!, speaker: line.speaker,
                                 lineID: line.id, showTag: line.translations.count > 1,
                                 editable: true, userEdited: line.editedTranslations.contains(lang))
+            }
+            // P4: outdated renderings held in place (gray) until replaced.
+            ForEach(line.staleTranslations.keys.sorted().filter { line.translations[$0] == nil },
+                    id: \.self) { lang in
+                translationLine(lang, line.staleTranslations[lang]!, speaker: line.speaker,
+                                lineID: line.id, showTag: line.staleTranslations.count > 1,
+                                stale: true)
             }
             segmentStatusRow(line)
         }
