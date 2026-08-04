@@ -29,6 +29,76 @@ final class ErasureMathTests: XCTestCase {
     }
 }
 
+final class StablePrefixFilterTests: XCTestCase {
+
+    func testPureGrowthPassesThrough() {
+        var f = StablePrefixFilter()
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "We"), "We")
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "We will"), "We will")
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "We will begin"), "We will begin")
+    }
+
+    func testSmallTailRewriteIsAccepted() {
+        var f = StablePrefixFilter()
+        _ = f.stabilize(lang: "English", candidate: "We will begin now")
+        // erases "now" (3) ≤ tolerance → accepted immediately
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "We will begin today"),
+                       "We will begin today")
+    }
+
+    func testDeepRewriteFreezesThenAcceptsOnSecondVerdict() {
+        var f = StablePrefixFilter()
+        _ = f.stabilize(lang: "English", candidate: "The meeting will start in a moment")
+        // Whole-prefix rewording — held on first sight…
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "In a moment the meeting starts"),
+                       "The meeting will start in a moment")
+        // …accepted when a second consecutive candidate still contradicts.
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "In a moment the meeting starts, so"),
+                       "In a moment the meeting starts, so")
+    }
+
+    func testAgreementResetsTheStreak() {
+        var f = StablePrefixFilter()
+        _ = f.stabilize(lang: "English", candidate: "The meeting will start in a moment")
+        _ = f.stabilize(lang: "English", candidate: "Shortly the meeting is going to start")  // held (streak 1)
+        // A candidate that AGREES with the display again clears the streak…
+        XCTAssertEqual(f.stabilize(lang: "English",
+                                   candidate: "The meeting will start in a moment, everyone"),
+                       "The meeting will start in a moment, everyone")
+        // …so a later single contradiction is held again.
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "Something entirely different here"),
+                       "The meeting will start in a moment, everyone")
+    }
+
+    func testShrinkToPrefixIsHeldOnce() {
+        var f = StablePrefixFilter()
+        _ = f.stabilize(lang: "Korean", candidate: "회의를 시작하겠습니다. 회의를 시작하겠습니다. 회의를 시작하겠습니다.")
+        // Loop-collapse shrinks the text (deep erase): un-drawing waits for a
+        // second opinion…
+        XCTAssertEqual(f.stabilize(lang: "Korean", candidate: "회의를 시작하겠습니다."),
+                       "회의를 시작하겠습니다. 회의를 시작하겠습니다. 회의를 시작하겠습니다.")
+        // …and lands when confirmed.
+        XCTAssertEqual(f.stabilize(lang: "Korean", candidate: "회의를 시작하겠습니다."),
+                       "회의를 시작하겠습니다.")
+    }
+
+    func testLanguagesAreIndependentAndResetClears() {
+        var f = StablePrefixFilter()
+        _ = f.stabilize(lang: "English", candidate: "Hello everyone")
+        XCTAssertEqual(f.stabilize(lang: "Japanese", candidate: "皆さんこんにちは"), "皆さんこんにちは")
+        f.reset()
+        // After a window boundary a brand-new sentence replaces freely.
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "Next topic then"), "Next topic then")
+    }
+
+    func testRemoveDropsState() {
+        var f = StablePrefixFilter()
+        _ = f.stabilize(lang: "English", candidate: "Original sentence shown here")
+        f.remove(lang: "English")
+        XCTAssertEqual(f.stabilize(lang: "English", candidate: "Fresh start"), "Fresh start")
+    }
+}
+
 @MainActor
 final class TranslationStabilityMetricsTests: XCTestCase {
 

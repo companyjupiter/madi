@@ -370,29 +370,48 @@ final class SessionController: EngineProcessDelegate {
     /// hold the pair across the commit gap instead of jumping to an older line.
     private(set) var livePartialSource: String = ""
 
+    /// P1: stable-prefix display policy over the raw re-translation stream —
+    /// what the caption shows may only grow, take small tail corrections, or be
+    /// rewritten after two consecutive contradicting candidates. Reset per window.
+    private var interimStabilizer = StablePrefixFilter()
+
     /// P6: every visible mutation of the caption's provisional translations goes
     /// through these three paths, so the stability meter observes all of them.
+    /// livePartialSource moves only when the DISPLAYED text moves, so the caption
+    /// always shows a (hypothesis, translation) pair from the same generation.
     private func updateInterimTranslation(lang: String, text: String, source: String) {
-        guard livePartialTranslations[lang] != text else { livePartialSource = source; return }
-        TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
-        livePartialTranslations[lang] = text
+        let display = interimStabilizer.stabilize(lang: lang, candidate: text)
+        if display != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
+        guard livePartialTranslations[lang] != display else { return }
+        TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: display)
+        livePartialTranslations[lang] = display
         livePartialSource = source
     }
     private func setInterimTranslations(_ translations: [String: String], source: String) {
-        for lang in livePartialTranslations.keys where translations[lang] == nil {
-            TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: nil)
+        var display: [String: String] = [:]
+        for (lang, text) in translations {
+            let d = interimStabilizer.stabilize(lang: lang, candidate: text)
+            if d != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
+            display[lang] = d
         }
-        for (lang, text) in translations where livePartialTranslations[lang] != text {
+        for lang in livePartialTranslations.keys where display[lang] == nil {
+            TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: nil)
+            interimStabilizer.remove(lang: lang)
+        }
+        for (lang, text) in display where livePartialTranslations[lang] != text {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
         }
-        livePartialTranslations = translations
-        livePartialSource = source
+        if livePartialTranslations != display {
+            livePartialTranslations = display
+            livePartialSource = source
+        }
     }
     /// Boundary teardown — the provisional text is superseded by the committed
     /// translation (or the session ended). A replacement by the final is not
     /// flicker, so the meter forgets without counting.
     private func clearInterimCaption() {
         TranslationStabilityMetrics.shared.closeCaption()
+        interimStabilizer.reset()
         livePartialTranslations = [:]
         livePartialSource = ""
     }
@@ -1798,6 +1817,10 @@ final class SessionController: EngineProcessDelegate {
         case .progressChunk(let k): chunksDone = max(chunksDone, k)
         case .wordSectionBegin:
             livePartial = ""; transcript.ingest(event)  // committed → drop interim
+            // P1: window boundary — the carryover pair stays visible (P3), but the
+            // NEXT window's first candidate must replace it freely, not be judged
+            // as a "divergence" from the finished sentence.
+            interimStabilizer.reset()
             lastCommitAt = Date()                        // D19 commit-cadence ring
             translateStableLines()                       // translate now-stable prior lines
         case .languageDetected(let tok):

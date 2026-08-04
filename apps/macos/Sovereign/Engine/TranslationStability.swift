@@ -42,6 +42,65 @@ enum ErasureMath {
     }
 }
 
+/// P1: display policy for the caption's provisional translations.
+///
+/// Raw re-translation regenerates the WHOLE growing hypothesis every turn, so
+/// consecutive candidates legitimately reword earlier text — that rewriting is
+/// exactly the churn users complain about. The filter decides what is shown:
+///
+///   · pure growth (candidate extends the shown text)      → show it all
+///   · tail divergence ≤ `tailTolerance` graphemes         → accept the rewrite
+///     (the industry band allows revisions confined to the visible tail)
+///   · deeper divergence                                   → FREEZE what is
+///     shown; accept only after `agreementRuns` consecutive candidates
+///     contradict it (LocalAgreement-style: one flip is noise, two is a
+///     verdict — and bounds how long a bad early hypothesis can stick)
+///
+/// Shrink-to-prefix (loop-collapse, think-strip) counts as divergence: text
+/// silently un-drawing is the worst-reading mutation, so it also waits for a
+/// second opinion. Reset per caption window — a new sentence starts clean.
+struct StablePrefixFilter {
+    var tailTolerance = 12
+    var agreementRuns = 2
+    private var shown: [String: String] = [:]
+    private var divergenceStreak: [String: Int] = [:]
+
+    /// Feed one language's newest raw candidate; returns the text to display.
+    mutating func stabilize(lang: String, candidate: String) -> String {
+        let display = shown[lang] ?? ""
+        if display.isEmpty || candidate.hasPrefix(display) {
+            shown[lang] = candidate
+            divergenceStreak[lang] = 0
+            return candidate
+        }
+        if ErasureMath.erasure(from: display, to: candidate) <= tailTolerance {
+            shown[lang] = candidate
+            divergenceStreak[lang] = 0
+            return candidate
+        }
+        let streak = (divergenceStreak[lang] ?? 0) + 1
+        if streak >= agreementRuns {
+            shown[lang] = candidate
+            divergenceStreak[lang] = 0
+            return candidate
+        }
+        divergenceStreak[lang] = streak
+        return display
+    }
+
+    /// The language left the display (suppressed / routing change).
+    mutating func remove(lang: String) {
+        shown[lang] = nil
+        divergenceStreak[lang] = nil
+    }
+
+    /// Window boundary — the next sentence must not be judged against this one.
+    mutating func reset() {
+        shown = [:]
+        divergenceStreak = [:]
+    }
+}
+
 /// Session-scoped erasure counters for the two translation surfaces.
 ///
 ///   .caption — the floating caption overlay's provisional interim translations
@@ -73,6 +132,9 @@ final class TranslationStabilityMetrics {
     /// P2 telemetry: interim DNA turns actually spent vs gated away.
     var interimTurnsRun = 0
     var interimTurnsSkipped = 0
+    /// P1 telemetry: candidates the stable-prefix filter held back (each one
+    /// was a whole-prefix rewrite the viewer did NOT see).
+    var stabilizerHolds = 0
 
     /// `text == nil` means the key was removed from screen (counts as full erase
     /// of what was shown). Identical text is a no-op.
@@ -120,6 +182,7 @@ final class TranslationStabilityMetrics {
         }
         return "[translate-stability] \(part(.caption)) | \(part(.panel))"
             + " | finalChars=\(finals) interimTurns=\(interimTurnsRun) gated=\(interimTurnsSkipped)"
+            + " holds=\(stabilizerHolds)"
     }
 
     func reset() {
@@ -127,5 +190,6 @@ final class TranslationStabilityMetrics {
         shown = [:]
         interimTurnsRun = 0
         interimTurnsSkipped = 0
+        stabilizerHolds = 0
     }
 }
