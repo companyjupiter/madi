@@ -36,6 +36,11 @@ struct Line: Identifiable {
     /// the LLM reconcile pass may relabel (S3 fusion gate).
     var speakerMargin: Double = 1.0
     var translations: [String: String] = [:]   // targetLang → text (multi-target live translation)
+    /// P4: translations generated from an OLDER revision of this line's text.
+    /// Display-only (grayed in the panel, excluded from exports/caption): the
+    /// reader keeps the old rendering until the re-translation replaces it in
+    /// place, instead of watching text vanish into a loading placeholder.
+    var staleTranslations: [String: String] = [:]
     var editedTranslations: Set<String> = []   // languages explicitly corrected by the user
     /// P0: languages whose translation turn was guard-suppressed at THIS text
     /// revision — no result is coming, so the status row must not keep promising
@@ -299,6 +304,7 @@ final class TranscriptStore {
         translationsByLine[id, default: [:]][lang] = TranslationRecord(
             text: t, sourceRevision: current, userEdited: userEdited)
         lines[i].translations[lang] = t
+        lines[i].staleTranslations[lang] = nil   // P4: replaced in place
         if userEdited { lines[i].editedTranslations.insert(lang) }
         else { lines[i].editedTranslations.remove(lang) }
         TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: t)
@@ -351,28 +357,22 @@ final class TranscriptStore {
     @discardableResult
     func pruneTranslations(_ id: UUID, validTargets: Set<String>, sourceRevision: UInt64) -> Set<String> {
         let previous = translationsByLine[id] ?? [:]
-        var kept: [String: TranslationRecord] = [:]
-        for (lang, record) in previous
-            where validTargets.contains(lang) && record.sourceRevision == sourceRevision {
-            kept[lang] = record
-        }
-        let changed = previous.count != kept.count || previous.contains { lang, record in
-            guard let next = kept[lang] else { return true }
-            return record.text != next.text || record.sourceRevision != next.sourceRevision
-                || record.userEdited != next.userEdited
-        }
-        if changed {
+        // Routing changes still remove the language outright (it will not be
+        // re-translated, so stale display would linger forever). P4: results
+        // from an older source revision are KEPT — they surface as stale
+        // display text and are replaced in place by the re-translation.
+        let kept = previous.filter { validTargets.contains($0.key) }
+        if kept.count != previous.count {
             for lang in previous.keys where kept[lang] == nil {
                 TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: nil)
             }
             translationsByLine[id] = kept
             if let i = lines.firstIndex(where: { $0.id == id }) {
-                lines[i].translations = kept.mapValues(\.text)
-                lines[i].editedTranslations = Set(kept.compactMap { $0.value.userEdited ? $0.key : nil })
+                refreshTranslationOverlay(id, lineIndex: i)
             }
             scheduleRender()
         }
-        return Set(kept.keys)
+        return Set(kept.filter { $0.value.sourceRevision == sourceRevision }.keys)
     }
 
     /// Replace a line's text (inline editing, live or post). Keyed by the stable
@@ -414,13 +414,11 @@ final class TranscriptStore {
         return true
     }
 
+    /// P4: a source-text edit no longer deletes the line's translations — the
+    /// revision change reclassifies them as stale display text (grayed) until
+    /// the re-translation replaces them in place.
     private func invalidateTranslations(_ id: UUID, lineIndex: Int) {
-        for lang in (translationsByLine[id] ?? [:]).keys {
-            TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: nil)
-        }
-        translationsByLine[id] = nil
-        lines[lineIndex].translations.removeAll()
-        lines[lineIndex].editedTranslations.removeAll()
+        refreshTranslationOverlay(id, lineIndex: lineIndex)
     }
 
     // ── AI reconcile (speaker corrections as OVERLAYS) ──────────────────────
@@ -520,23 +518,29 @@ final class TranscriptStore {
         flushRenderNow()
     }
 
+    /// Recompute one line's translation-derived fields from its records.
+    /// P4: records from an older source revision are no longer DELETED here —
+    /// they surface as `staleTranslations` (grayed) and are replaced in place
+    /// when the re-translation for the new revision lands. The meter counts the
+    /// eventual replacement (old shown text vs new) — going gray erases nothing.
+    private func refreshTranslationOverlay(_ id: UUID, lineIndex i: Int) {
+        let revision = TextRevision.of(lines[i].text)
+        let records = translationsByLine[id] ?? [:]
+        let valid = records.filter { $0.value.sourceRevision == revision }
+        lines[i].translations = valid.mapValues(\.text)
+        lines[i].staleTranslations =
+            records.filter { $0.value.sourceRevision != revision }.mapValues(\.text)
+        lines[i].editedTranslations = Set(valid.compactMap { $0.value.userEdited ? $0.key : nil })
+        // P0: a suppression verdict binds to one source revision only.
+        lines[i].suppressedTranslations =
+            Set((suppressedByLine[id] ?? [:]).filter { $0.value == revision }.keys)
+    }
+
     /// Re-apply id-keyed overlays after any (re)grouping.
     private func applyOverlays() {
         for i in lines.indices {
             if let e = editsByLine[lines[i].id] { lines[i].editedText = e }
-            let revision = TextRevision.of(lines[i].text)
-            let previous = translationsByLine[lines[i].id] ?? [:]
-            let valid = previous.filter { $0.value.sourceRevision == revision }
-            for lang in previous.keys where valid[lang] == nil {
-                TranslationStabilityMetrics.shared.recordShown(
-                    .panel, key: Self.meterKey(lines[i].id, lang), text: nil)
-            }
-            translationsByLine[lines[i].id] = valid
-            lines[i].translations = valid.mapValues(\.text)
-            lines[i].editedTranslations = Set(valid.compactMap { $0.value.userEdited ? $0.key : nil })
-            // P0: a suppression verdict binds to one source revision only.
-            lines[i].suppressedTranslations =
-                Set((suppressedByLine[lines[i].id] ?? [:]).filter { $0.value == revision }.keys)
+            refreshTranslationOverlay(lines[i].id, lineIndex: i)
         }
         applySpeakerOverlays()
     }
