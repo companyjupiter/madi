@@ -374,6 +374,9 @@ final class SessionController: EngineProcessDelegate {
     /// what the caption shows may only grow, take small tail corrections, or be
     /// rewritten after two consecutive contradicting candidates. Reset per window.
     private var interimStabilizer = StablePrefixFilter()
+    /// P2: the hypothesis the last ACCEPTED interim turn translated; the gate
+    /// compares against this, not against what is displayed. Reset per window.
+    private var lastInterimRequestedSource = ""
 
     /// P6: every visible mutation of the caption's provisional translations goes
     /// through these three paths, so the stability meter observes all of them.
@@ -412,6 +415,7 @@ final class SessionController: EngineProcessDelegate {
     private func clearInterimCaption() {
         TranslationStabilityMetrics.shared.closeCaption()
         interimStabilizer.reset()
+        lastInterimRequestedSource = ""
         livePartialTranslations = [:]
         livePartialSource = ""
     }
@@ -902,11 +906,21 @@ final class SessionController: EngineProcessDelegate {
                   !self.livePartial.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
             let source = self.livePartial
+            // P2: don't spend a DNA turn on a hypothesis that adds almost
+            // nothing since the last requested turn (emitter flap, +1 word
+            // tails). The next growth re-arms; the committed translation
+            // covers a gated-away tail at window close.
+            guard InterimTranslateGate.worthTranslating(
+                source: source, lastRequested: self.lastInterimRequestedSource) else {
+                TranslationStabilityMetrics.shared.interimTurnsSkipped += 1
+                return
+            }
             let targets = self.routedTargets(for: source)
             guard !targets.isEmpty else { return }
             let id = UUID()
             guard t.translate(source, into: targets, id: id, kind: .interim) else { return }
             TranslationStabilityMetrics.shared.interimTurnsRun += 1
+            self.lastInterimRequestedSource = source
             self.activeInterimID = id
             self.interimRequests[id] = InterimRequest(
                 source: source, pending: Set(targets), translations: [:])
@@ -1821,6 +1835,7 @@ final class SessionController: EngineProcessDelegate {
             // NEXT window's first candidate must replace it freely, not be judged
             // as a "divergence" from the finished sentence.
             interimStabilizer.reset()
+            lastInterimRequestedSource = ""   // P2: new window, gate starts fresh
             lastCommitAt = Date()                        // D19 commit-cadence ring
             translateStableLines()                       // translate now-stable prior lines
         case .languageDetected(let tok):

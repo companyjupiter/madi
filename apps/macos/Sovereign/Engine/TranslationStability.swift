@@ -101,6 +101,28 @@ struct StablePrefixFilter {
     }
 }
 
+/// P2: admission gate for interim caption turns. Each turn re-translates the
+/// WHOLE hypothesis from scratch (0.4–1.5 s of DNA GPU), and the two interim
+/// emitters (PREVIEW lane / «partial») love to flap between near-identical
+/// texts — so a hypothesis that adds almost nothing since the last REQUESTED
+/// turn is not worth a turn. The next real growth re-arms automatically, and a
+/// gated-away tail is covered by the committed translation at window close.
+enum InterimTranslateGate {
+    /// Grapheme count a pure tail-extension must add to earn a turn.
+    static let minDelta = 6
+
+    static func worthTranslating(source: String, lastRequested: String,
+                                 minDelta: Int = InterimTranslateGate.minDelta) -> Bool {
+        guard !lastRequested.isEmpty else { return true }   // first request of the window
+        if source == lastRequested { return false }         // emitter flap — nothing new
+        if source.hasPrefix(lastRequested) {                // small tail growth waits
+            return source.count - lastRequested.count >= minDelta
+        }
+        if lastRequested.hasPrefix(source) { return false } // shrunk — already covered
+        return true                                         // real rewrite → translate
+    }
+}
+
 /// Session-scoped erasure counters for the two translation surfaces.
 ///
 ///   .caption — the floating caption overlay's provisional interim translations

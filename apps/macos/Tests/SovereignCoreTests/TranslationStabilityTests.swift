@@ -29,6 +29,32 @@ final class ErasureMathTests: XCTestCase {
     }
 }
 
+final class InterimTranslateGateTests: XCTestCase {
+
+    func testFirstRequestAlwaysPasses() {
+        XCTAssertTrue(InterimTranslateGate.worthTranslating(source: "안", lastRequested: ""))
+    }
+
+    func testEmitterFlapAndShrinkAreGated() {
+        XCTAssertFalse(InterimTranslateGate.worthTranslating(
+            source: "회의를 시작하겠습니다", lastRequested: "회의를 시작하겠습니다"))
+        XCTAssertFalse(InterimTranslateGate.worthTranslating(
+            source: "회의를 시작", lastRequested: "회의를 시작하겠습니다"))
+    }
+
+    func testSmallTailGrowthWaitsAndBigGrowthPasses() {
+        XCTAssertFalse(InterimTranslateGate.worthTranslating(
+            source: "회의를 시작하겠습니다 오늘", lastRequested: "회의를 시작하겠습니다"))
+        XCTAssertTrue(InterimTranslateGate.worthTranslating(
+            source: "회의를 시작하겠습니다 오늘의 안건은", lastRequested: "회의를 시작하겠습니다"))
+    }
+
+    func testRealRewritePasses() {
+        XCTAssertTrue(InterimTranslateGate.worthTranslating(
+            source: "회의를 곧 시작할게요", lastRequested: "회의를 시작하겠습니다"))
+    }
+}
+
 final class StablePrefixFilterTests: XCTestCase {
 
     func testPureGrowthPassesThrough() {
