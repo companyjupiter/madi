@@ -1,4 +1,14 @@
 
+## 번역 표시 안정성 배치 — NE 계측 + stable-prefix (2026-08-05, 정본 docs/TRANSLATE_DISPLAY_STABILITY.md)
+| # | idea | result | metric |
+|---|------|--------|--------|
+| P6 | **NE(erasure) 계측** — caption/panel 두 표면, E=\|old\|−LCP(자소), NE=ΣE/최종자수 (Arivazhagan-2020). finalize+10s 요약 로그 | ✅ commit | 목표 밴드 **NE<0.2** (문헌: vanilla re-translation ≈2.1, Google 배포 0.1/BLEU 무손실). 첫 라이브 세션 베이스라인 실측 대기 |
+| P0 | **suppression 롤백** — 가드 기각 최종 시 스트리밍된 partial 제거 + 리비전 귀속 verdict(텍스트 변경 시 자동 해제, user-edit 불가침) | ✅ commit | 가드가 기각한 텍스트가 화면에 정식 번역처럼 영구 잔존하던 실버그 제거 |
+| P3 | 캡션 (원문,번역) **세대일치 페어링** + 커밋 갭 유지 (livePartialSource) | ✅ commit | 커밋 순간 더 오래된 문장으로의 역행 점프 + 새 원문·옛 번역 미스매치 제거 |
+| P1 | **stable-prefix 캡션 표시** — 성장 통과 / 꼬리 ≤12자 즉시 수용 / 깊은 재작성은 2연속 일치 시 수용(LocalAgreement류), 윈도 경계 리셋 | ✅ commit | 전체-프리픽스 재작성이 뷰어에 노출되지 않음 (holds 텔레메트리). 축소(루프붕괴)도 2차 확인 대기 |
+| P4 | 패널 **stale-in-place** — 리비전 무효화 시 삭제 대신 회색·이탤릭 유지→재번역 도착 시 제자리 교체. 라우팅 탈락만 진짜 삭제 | ✅ commit | 소실→dots→재스트리밍 사이클 제거. Line.translations는 리비전-유효만 유지 (export/캡션/블록 소비자 불변) |
+| P2 | **인터림 게이트** — 이미터 플랩/축소 skip, 순수 꼬리 성장 ≥6자만 턴, 리라이트·첫 요청은 통과 | ✅ commit | 중복 DNA 턴 절감 (interimTurns/gated 텔레메트리로 실측) |
+
 ## 배치2: 양방향 언어 + 어텐션 점유율 + prefix-KV 검증 (2026-07-05)
 | # | idea | result | metric |
 |---|------|--------|--------|
