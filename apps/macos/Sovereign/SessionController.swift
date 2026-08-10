@@ -1811,6 +1811,7 @@ final class SessionController: EngineProcessDelegate {
         // auto mode wait for the committed lane's [lang] lock below.
         livePartial = ""; clearInterimCaption()
         TranslationStabilityMetrics.shared.reset()   // P6: per-session ledger
+        registerTerminateFlush()                     // ⌘Q must never eat the numbers
         if livePreviewEnabled {
             preview.onText = { [weak self] t in
                 guard let self, t.count <= Self.maxLivePartialChars else { return }
@@ -2154,11 +2155,13 @@ final class SessionController: EngineProcessDelegate {
         }
         translateStableLines(includingLast: true)  // translate the final line(s) too
         interimCache.clear()   // O3: final lines just consulted the cache — now wipe it (session boundary)
-        // P6: print the session's translation-stability ledger after the stop-time
-        // backfill has had time to drain. NE < 0.2 is the target band.
+        // P6: print the ledger NOW (a ⌘Q inside the 10s window swallowed two
+        // real sessions' numbers), and again after the stop-time backfill has
+        // had time to drain. NE < 0.2 is the target band.
+        print(TranslationStabilityMetrics.shared.summary() + " @final")
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(10))
-            print(TranslationStabilityMetrics.shared.summary())
+            print(TranslationStabilityMetrics.shared.summary() + " @settled")
         }
         stopLiveRail()       // recording ended — keep the accumulated rail for review
         stopWatchdog()
@@ -2193,6 +2196,21 @@ final class SessionController: EngineProcessDelegate {
     /// ambiguous windows measured 0.22-0.32 on the clinic fixture. Shared with the
     /// UI's "화자분리중…" label so the two cannot disagree about what is settled.
     private static let uncertainMargin = SpeakerID.settledMargin
+
+    /// P6: a quit at ANY moment flushes the ledger to stdout — measurement must
+    /// not depend on the user's stop/quit timing.
+    private var terminateFlushRegistered = false
+    private func registerTerminateFlush() {
+        guard !terminateFlushRegistered else { return }
+        terminateFlushRegistered = true
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                print(TranslationStabilityMetrics.shared.summary() + " @terminate")
+            }
+        }
+    }
 
     /// W2/W1/B1 timers — armed while recording, torn down at finalize/reset.
     private func startWatchdog() {
