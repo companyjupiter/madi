@@ -262,6 +262,48 @@ struct InterimDisplayAgreement {
     mutating func reset() { gates = [:] }
 }
 
+/// P10-5: the responsiveness dials, resolved once per session start.
+///
+/// "조금만 더 빨라지면" is a tuning question, not a rebuild question — every
+/// number that trades caption latency against GPU spend is settable without
+/// touching code. Resolution order: environment (dev override) → UserDefaults
+/// (product setting) → shipped default, clamped to a sane range.
+///
+///   interimGuaranteeSeconds  MADI_INTERIM_GUARANTEE_S   default 3.0  [0…10]
+///       seconds between guaranteed interim turns under committed backlog
+///       (0 disables the reservation). Lower = livelier caption, more GPU.
+///   interimDebounceMs        MADI_INTERIM_DEBOUNCE_MS   default 300  [80…1000]
+///       quiet time after a hypothesis change before a turn is considered.
+///   interimMinDelta          MADI_INTERIM_MIN_DELTA     default 6    [1…30]
+///       graphemes a pure tail-extension must add to earn a turn.
+///
+/// (The other 3-second dial, translateTailSeconds, is already a product
+/// setting in 설정 → 번역 — both are meant to be adjusted together.)
+enum InterimTuning {
+    static func resolve(env: String, defaultsKey: String,
+                        default d: Double, min lo: Double, max hi: Double,
+                        environment: [String: String] = ProcessInfo.processInfo.environment,
+                        defaults: UserDefaults = .standard) -> Double {
+        if let raw = environment[env], let v = Double(raw) { return Swift.min(hi, Swift.max(lo, v)) }
+        if defaults.object(forKey: defaultsKey) != nil {
+            return Swift.min(hi, Swift.max(lo, defaults.double(forKey: defaultsKey)))
+        }
+        return d
+    }
+    static var guaranteeSeconds: Double {
+        resolve(env: "MADI_INTERIM_GUARANTEE_S", defaultsKey: "interimGuaranteeSeconds",
+                default: 3.0, min: 0, max: 10)
+    }
+    static var debounceMs: Double {
+        resolve(env: "MADI_INTERIM_DEBOUNCE_MS", defaultsKey: "interimDebounceMs",
+                default: 300, min: 80, max: 1000)
+    }
+    static var minDelta: Int {
+        Int(resolve(env: "MADI_INTERIM_MIN_DELTA", defaultsKey: "interimMinDelta",
+                    default: 6, min: 1, max: 30))
+    }
+}
+
 /// Session-scoped erasure counters for the two translation surfaces.
 ///
 ///   .caption — the floating caption overlay's provisional interim translations

@@ -47,6 +47,11 @@ struct TranscriptView: View {
     var activeLangs: [String] = []
     var translateBusy: Bool = false
     var fontSize: CGFloat = 13     // transcript body text size (user-adjustable)
+    /// Translation rows sit 4pt under the original (was 0.875×, which shrank
+    /// only ~1.6pt at the default size). Subtractive, so raising the body size
+    /// raises the translation with it while keeping the same visual hierarchy;
+    /// floored so extreme small settings stay legible.
+    private var translationFontSize: CGFloat { max(9, fontSize - 4) }
     // A7: the (line, language) whose translation is currently streaming in — a
     // blinking caret ▍ is appended so a half-arrived translation reads as "still
     // typing" rather than a finished (truncated) sentence.
@@ -598,7 +603,7 @@ struct TranscriptView: View {
             if isEditing {
                 TextField(uiLang("번역 교정", "Correct translation"), text: $translationDraft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: fontSize * 0.875))
+                    .font(.system(size: translationFontSize))
                     .onSubmit {
                         guard let lineID else { return }
                         onEditTranslation?(lineID, lang, translationDraft)
@@ -612,8 +617,8 @@ struct TranscriptView: View {
                 .controlSize(.small)
             } else {
                 (Text(text) + (streaming ? Text(" ▍") : Text("")))
-                    .font(.system(size: fontSize * 0.875)).tracking(-0.28)
-                    .lineSpacing(fontSize * 0.875 * 0.4)
+                    .font(.system(size: translationFontSize)).tracking(-0.28)
+                    .lineSpacing(translationFontSize * 0.4)
                     .italic(stale)
                     .foregroundStyle(streaming || stale ? Theme.Colors.textTertiary
                                                         : Theme.Colors.textPrimary.opacity(0.85))
@@ -644,7 +649,7 @@ struct TranscriptView: View {
                     .foregroundStyle(Theme.Colors.accent).opacity(0.55)
                     .frame(width: fontSize * 1.4, alignment: .leading)
             }
-            Text(text).font(.system(size: fontSize * 0.875)).tracking(-0.28)
+            Text(text).font(.system(size: translationFontSize)).tracking(-0.28)
                 .foregroundStyle(Theme.Colors.textSecondary).italic()
         }
     }

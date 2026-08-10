@@ -434,3 +434,39 @@ final class FirstPaintFastPathTests: XCTestCase {
         XCTAssertEqual(g.commit("새 윈도 시작"), "새 윈도 시작")
     }
 }
+
+/// P10-5 — the responsiveness dials must be settable without a rebuild.
+final class InterimTuningTests: XCTestCase {
+
+    func testDefaultsWhenNothingIsSet() {
+        let d = UserDefaults(suiteName: "tuning-test-empty")!
+        d.removePersistentDomain(forName: "tuning-test-empty")
+        XCTAssertEqual(InterimTuning.resolve(env: "X", defaultsKey: "k", default: 3.0,
+                                             min: 0, max: 10, environment: [:], defaults: d), 3.0)
+    }
+
+    func testEnvironmentOverridesEverythingAndClamps() {
+        let d = UserDefaults(suiteName: "tuning-test-env")!
+        d.set(9.0, forKey: "k")
+        XCTAssertEqual(InterimTuning.resolve(env: "X", defaultsKey: "k", default: 3.0,
+                                             min: 0, max: 10, environment: ["X": "1.5"], defaults: d), 1.5)
+        XCTAssertEqual(InterimTuning.resolve(env: "X", defaultsKey: "k", default: 3.0,
+                                             min: 0, max: 10, environment: ["X": "99"], defaults: d), 10.0)
+        XCTAssertEqual(InterimTuning.resolve(env: "X", defaultsKey: "k", default: 3.0,
+                                             min: 0, max: 10, environment: ["X": "garbage"], defaults: d), 9.0,
+                       "unparseable env falls through to defaults")
+        d.removePersistentDomain(forName: "tuning-test-env")
+    }
+
+    func testUserDefaultsClampAndZeroDisable() {
+        let d = UserDefaults(suiteName: "tuning-test-ud")!
+        d.set(0.0, forKey: "k")
+        XCTAssertEqual(InterimTuning.resolve(env: "X", defaultsKey: "k", default: 3.0,
+                                             min: 0, max: 10, environment: [:], defaults: d), 0.0,
+                       "0 must survive (it means 'reservation off'), not fall to the default")
+        d.set(-5.0, forKey: "k")
+        XCTAssertEqual(InterimTuning.resolve(env: "X", defaultsKey: "k", default: 3.0,
+                                             min: 0, max: 10, environment: [:], defaults: d), 0.0)
+        d.removePersistentDomain(forName: "tuning-test-ud")
+    }
+}
