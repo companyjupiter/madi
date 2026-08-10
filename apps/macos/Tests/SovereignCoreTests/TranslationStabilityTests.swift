@@ -512,3 +512,22 @@ final class InterimSentenceScopeTests: XCTestCase {
                      "0 keeps meaning 'reservation off'")
     }
 }
+
+@MainActor
+final class StabilityLedgerFileTests: XCTestCase {
+    func testFlushAppendsToTheLedgerFile() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ledger-test-\(UUID().uuidString)")
+        let m = TranslationStabilityMetrics.shared
+        m.reset()
+        m.flushSummary("@final", directory: dir)
+        m.flushSummary("@terminate", directory: dir)
+        let text = try String(contentsOf: dir.appendingPathComponent("stability.log"), encoding: .utf8)
+        let lines = text.split(separator: "\n")
+        XCTAssertEqual(lines.count, 2, "append, not overwrite")
+        XCTAssertTrue(lines[0].contains("[translate-stability]"))
+        XCTAssertTrue(lines[0].hasSuffix("@final"))
+        XCTAssertTrue(lines[1].hasSuffix("@terminate"))
+        try? FileManager.default.removeItem(at: dir)
+    }
+}
