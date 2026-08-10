@@ -56,8 +56,47 @@ final class DNAEngineBroker {
         let sequence: UInt64
         let text: String
         let preserveNewlines: Bool
+        let enqueuedAt: Double
         let onPartial: ((String) -> Void)?
         let completion: (String?) -> Void
+    }
+
+    // ── P11: caption-pressure gate ──────────────────────────────────────────
+    // Priorities protect captions from QUEUED background work, but a turn that
+    // is already in flight cannot be preempted — and between two caption turns
+    // there is a one-runloop gap where a queued rail/reconcile request used to
+    // win the pump and then hold the single serial engine for its whole (long:
+    // big prompt + up to SOV_NSTEPS output) duration. On device that read as
+    // captions damming up every ~18s/45s and then bursting. While the caption
+    // lane reports pressure (translate backlog), sub-caption work now WAITS —
+    // it is periodic background analysis and the next tick retries — unless it
+    // has already waited `backgroundAgingSeconds` (starvation valve: nonstop
+    // speech never drops pressure to zero).
+    private(set) var captionPressure = 0
+    func reportCaptionPressure(_ depth: Int) {
+        captionPressure = depth
+        if depth == 0 { pump() }   // pressure cleared → release deferred work
+    }
+    nonisolated static let backgroundAgingSeconds: Double = 90
+    /// Injectable for deterministic tests.
+    var clock: () -> Double = { ProcessInfo.processInfo.systemUptime }
+
+    /// Pure selection rule (unit-tested): pick the served request among
+    /// (priority, sequence, waitedSeconds) triples. Highest priority wins,
+    /// FIFO inside a lane; sub-caption priorities are ineligible while
+    /// captionPressure > 0 until they age past the valve.
+    nonisolated static func eligibleIndex(_ items: [(priority: Int, sequence: UInt64, waitedSeconds: Double)],
+                              captionPressure: Int,
+                              aging: Double = DNAEngineBroker.backgroundAgingSeconds) -> Int? {
+        let eligible = items.indices.filter { i in
+            let it = items[i]
+            if it.priority >= Priority.interimCaption.rawValue { return true }
+            return captionPressure == 0 || it.waitedSeconds >= aging
+        }
+        return eligible.max { a, b in
+            let x = items[a], y = items[b]
+            return x.priority == y.priority ? x.sequence > y.sequence : x.priority < y.priority
+        }
     }
 
     private var process: Process?
@@ -166,7 +205,7 @@ final class DNAEngineBroker {
         let id = UUID()
         pending.append(Request(id: id, client: client, kind: .turn,
             priority: priority.rawValue, sequence: sequence,
-            text: oneLine(prompt), preserveNewlines: preserveNewlines,
+            text: oneLine(prompt), preserveNewlines: preserveNewlines, enqueuedAt: clock(),
             onPartial: onPartial, completion: completion))
         reportBusy()
         pump()
@@ -179,7 +218,7 @@ final class DNAEngineBroker {
         sequence &+= 1
         pending.append(Request(id: UUID(), client: client, kind: .prefix(slot: slot),
             priority: priority.rawValue, sequence: sequence,
-            text: oneLine(text), preserveNewlines: false, onPartial: nil,
+            text: oneLine(text), preserveNewlines: false, enqueuedAt: clock(), onPartial: nil,
             completion: { completion($0 != nil) }))
         reportBusy()
         pump()
@@ -206,13 +245,14 @@ final class DNAEngineBroker {
 
     private func pump() {
         guard ready, active == nil, !pending.isEmpty, stdinPipe != nil else { return }
-        let index = pending.indices.max { a, b in
-            let x = pending[a], y = pending[b]
-            // FIFO inside one priority lane preserves transcript order for the
-            // summary map/fold. Translation already applies newest-first before
-            // submitting its single active turn to the broker.
-            return x.priority == y.priority ? x.sequence > y.sequence : x.priority < y.priority
-        }!
+        // FIFO inside one priority lane preserves transcript order for the
+        // summary map/fold. Translation already applies newest-first before
+        // submitting its single active turn to the broker. P11: sub-caption
+        // work is ineligible while the caption lane reports pressure.
+        let now = clock()
+        let triples = pending.map { (priority: $0.priority, sequence: $0.sequence,
+                                     waitedSeconds: now - $0.enqueuedAt) }
+        guard let index = Self.eligibleIndex(triples, captionPressure: captionPressure) else { return }
         let request = pending.remove(at: index)
         guard clients.contains(request.client) else { pump(); return }
         active = request

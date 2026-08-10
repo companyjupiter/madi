@@ -1,4 +1,24 @@
 
+## P11 — 캡션 압력 게이트: 백로그 댐 현상 진단+수정 (2026-08-10, 실화면 관찰 기반)
+
+**관찰(computer-use로 실화면 직접 확인)**: 연속 발화(팟캐스트 EN→KO) 세션에서 번역 백로그
+누적 — 한 라인은 "그래서"에서 멈춤, 이후 3라인 dots, 동시에 "AI가 화자·언어를 검토하는 중".
+lineTr p95 8.6s 꼬리와 사용자 percept "몰렸다가 터짐"의 실체.
+
+**진단(quark 토폴로지 + 코드)**: DNA 프로세스는 단일·직렬이고 `fn__pump`는 **인플라이트 턴을
+선점 못 한다**. 우선순위(committed 100 > interim 80 > rail 30 > post 10)는 *대기열*만 보호 —
+캡션 턴 사이 한 런루프 틈에 rail(18s 주기)/reconcile(45s 주기)의 **긴 턴**(긴 프롬프트 프리필 +
+최대 SOV_NSTEPS=512 출력, 예산 최대 180s)이 pump를 타면 엔진을 수 초~십수 초 점유 → 캡션이
+댐에 막혔다가 한꺼번에 터짐. reconcile은 추가로 one-shot whisper 프로세스를 병렬 스폰해
+Metal GPU 경합까지 유발.
+
+**수정**: ① 브로커 `captionPressure` — TranslateEngine이 자기 큐 깊이를 매 변화마다 보고,
+`eligibleIndex`(순수함수, 유닛테스트 4건)가 **압력>0이면 sub-caption 턴을 부적격 처리**
+(기아 밸브: 90s 대기 시 통과). 압력 0 복귀 시 pump 재개. ② `tickLiveRail`: 백로그 있으면
+큐잉 자체를 skip(다음 18s 재시도). ③ mid-reconcile: 백로그·인플라이트 세그먼트 있으면 skip
+(다음 45s 재시도). rail/reconcile은 주기적 배경 분석이라 지연 비용이 0에 가깝고, 캡션
+적시성이 항상 우선. 472 테스트.
+
 ## P10 — 반응속도×구조 배치 (2026-08-10, TTFT 1급 축 승격)
 
 | # | idea | result | metric |

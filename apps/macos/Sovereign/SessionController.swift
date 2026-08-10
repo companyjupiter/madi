@@ -196,6 +196,9 @@ final class SessionController: EngineProcessDelegate {
     /// no pass is in flight (so the DNA3 GPU spike stays brief + non-overlapping).
     private func tickLiveRail() {
         guard phase == .recording, liveRailEnabled, Self.liveRailCapable else { return }
+        // P11: rail is periodic background analysis — never queue it while the
+        // caption lane has a backlog (the next 18s tick retries).
+        guard translateQueueDepth == 0, translateBacklog == 0 else { return }
         if liveRailBusy {
             // No reply after ~2 ticks (≈36s) ⇒ the engine stalled/died — unwedge.
             liveRailBusyTicks += 1
@@ -2099,6 +2102,11 @@ final class SessionController: EngineProcessDelegate {
             midReconcileTimer = Timer.scheduledTimer(withTimeInterval: 45, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, self.phase == .recording, !self.reconciling else { return }
+                    // P11: reconcile spawns one-shot whisper processes AND long
+                    // DNA turns — both contend with live captions. Wait for a
+                    // quiet moment; the next 45s tick retries.
+                    guard self.translateQueueDepth == 0, self.translateBacklog == 0,
+                          self.segmentsInFlight == 0 else { return }
                     self.kickReconcile(mid: true)   // B1: correct the stable prefix continuously
                 }
             }

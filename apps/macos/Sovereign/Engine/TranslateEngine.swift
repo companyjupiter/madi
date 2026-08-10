@@ -74,6 +74,7 @@ final class TranslateEngine {
     }
 
     func stop() {
+        broker.reportCaptionPressure(0)
         broker.detach(client: clientID)
         ready = false; pending.removeAll(); inflightTurn = nil
         registeredPrefixes.removeAll(); registeringPrefixes.removeAll(); disabledPrefixes.removeAll()
@@ -173,7 +174,13 @@ final class TranslateEngine {
         return accepted
     }
 
-    private func reportQueue() { onQueueChange?(pending.count + (inflightTurn != nil ? 1 : 0)) }
+    private func reportQueue() {
+        let depth = pending.count + (inflightTurn != nil ? 1 : 0)
+        // P11: the broker cannot see this queue — tell it, so long background
+        // turns (rail/reconcile) wait instead of damming the caption stream.
+        broker.reportCaptionPressure(depth)
+        onQueueChange?(depth)
+    }
 
     /// Write the NEXT turn (newest pending) iff the engine is free. One turn in
     /// flight at a time — the DNA3 REPL generates one reply per prompt.

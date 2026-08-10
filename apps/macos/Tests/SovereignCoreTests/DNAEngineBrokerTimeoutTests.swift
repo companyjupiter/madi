@@ -194,3 +194,42 @@ final class DNAEngineBrokerTimeoutTests: XCTestCase {
         XCTAssertNil(DNATurnBudget.override(["MADI_DNA_TIMEOUT_MS": "nope"]))
     }
 }
+
+/// P11 — the caption-pressure gate. A queued rail/reconcile request must not
+/// slip into the one-runloop gap between caption turns and then hold the
+/// serial engine for its whole unpreemptible duration.
+final class CaptionPressureGateTests: XCTestCase {
+
+    private typealias Item = (priority: Int, sequence: UInt64, waitedSeconds: Double)
+    private let caption = DNAEngineBroker.Priority.committedCaption.rawValue
+    private let interim = DNAEngineBroker.Priority.interimCaption.rawValue
+    private let rail = DNAEngineBroker.Priority.liveRail.rawValue
+    private let post = DNAEngineBroker.Priority.postSession.rawValue
+
+    func testBackgroundWaitsUnderPressure() {
+        let items: [Item] = [(rail, 1, 5), (post, 2, 5)]
+        XCTAssertNil(DNAEngineBroker.eligibleIndex(items, captionPressure: 3),
+                     "sub-caption work must idle while the caption lane is backed up")
+        XCTAssertEqual(DNAEngineBroker.eligibleIndex(items, captionPressure: 0), 0,
+                       "pressure cleared → rail (higher lane) runs")
+    }
+
+    func testCaptionLanesAreNeverGated() {
+        let items: [Item] = [(rail, 1, 5), (caption, 2, 0), (interim, 3, 0)]
+        XCTAssertEqual(DNAEngineBroker.eligibleIndex(items, captionPressure: 9), 1,
+                       "committed caption wins regardless of pressure")
+    }
+
+    func testAgingValvePreventsStarvation() {
+        let items: [Item] = [(rail, 1, 120)]
+        XCTAssertEqual(DNAEngineBroker.eligibleIndex(items, captionPressure: 5), 0,
+                       "nonstop speech never drops pressure — an aged request runs anyway")
+        XCTAssertNil(DNAEngineBroker.eligibleIndex([(rail, 1, 30)], captionPressure: 5))
+    }
+
+    func testFifoInsideALaneIsPreserved() {
+        let items: [Item] = [(post, 7, 0), (post, 5, 0), (post, 6, 0)]
+        XCTAssertEqual(DNAEngineBroker.eligibleIndex(items, captionPressure: 0), 1,
+                       "lowest sequence = oldest submission serves first (map/fold order)")
+    }
+}
