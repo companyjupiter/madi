@@ -2158,10 +2158,10 @@ final class SessionController: EngineProcessDelegate {
         // P6: print the ledger NOW (a ⌘Q inside the 10s window swallowed two
         // real sessions' numbers), and again after the stop-time backfill has
         // had time to drain. NE < 0.2 is the target band.
-        print(TranslationStabilityMetrics.shared.summary() + " @final"); fflush(stdout)
+        TranslationStabilityMetrics.shared.flushSummary("@final")
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(10))
-            print(TranslationStabilityMetrics.shared.summary() + " @settled"); fflush(stdout)
+            TranslationStabilityMetrics.shared.flushSummary("@settled")
         }
         stopLiveRail()       // recording ended — keep the accumulated rail for review
         stopWatchdog()
@@ -2207,7 +2207,7 @@ final class SessionController: EngineProcessDelegate {
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { _ in
             MainActor.assumeIsolated {
-                print(TranslationStabilityMetrics.shared.summary() + " @terminate"); fflush(stdout)
+                TranslationStabilityMetrics.shared.flushSummary("@terminate")
             }
         }
     }

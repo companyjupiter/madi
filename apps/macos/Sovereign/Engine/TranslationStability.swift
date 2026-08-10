@@ -507,6 +507,29 @@ final class TranslationStabilityMetrics {
             + " lineTr=\(latencySummary(.lineFirstTranslation))"
     }
 
+    /// Sessions launched from the Dock have no readable stdout — the ledger
+    /// line is ALSO appended to App Support/Madi/stability.log, so a
+    /// measurement exists no matter how the app was started or stopped.
+    func flushSummary(_ tag: String, directory: URL? = nil) {
+        let line = summary() + " " + tag
+        print(line)
+        fflush(stdout)
+        let dir = directory ?? FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Madi", isDirectory: true)
+        guard let dir else { return }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("stability.log")
+        let stamped = ISO8601DateFormatter().string(from: Date()) + " " + line + "\n"
+        if let h = try? FileHandle(forWritingTo: url) {
+            defer { try? h.close() }
+            _ = try? h.seekToEnd()
+            try? h.write(contentsOf: Data(stamped.utf8))
+        } else {
+            try? Data(stamped.utf8).write(to: url)
+        }
+    }
+
     func reset() {
         counters = [:]
         shown = [:]
