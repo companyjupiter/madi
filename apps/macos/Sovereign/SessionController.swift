@@ -966,7 +966,7 @@ final class SessionController: EngineProcessDelegate {
                 row[slot] = text
                 frozenInterim[lang] = row
                 interimCache.put(source, [lang: text])
-                recomposeInterimCaption(lang: lang)
+                recomposeInterimCaption(lang: lang, cause: .refinement)
             }
             if request.pending.isEmpty { interimRequests[id] = nil } else { interimRequests[id] = request }
             return true
@@ -995,9 +995,19 @@ final class SessionController: EngineProcessDelegate {
     /// SENTENCE key — committed lines are sentence-per-line, so when this exact
     /// sentence commits, the committed lane gets its translation for free.
     private func requestSentenceFinal(_ sentence: String, index: Int) {
+        // P13 no-erase handoff: the finished sentence's provisional rendering
+        // MOVES into its frozen slot (composed text stays byte-identical, so
+        // the handoff itself erases nothing on screen); the sentence-final
+        // translation then replaces it in place as a tagged REFINEMENT. The
+        // live NE 0.68 finding was exactly the old blank-then-final double hit.
+        for (lang, cur) in currentInterimDisplay where !cur.isEmpty {
+            var row = frozenInterim[lang] ?? []
+            while row.count <= index { row.append("") }
+            if row[index].isEmpty { row[index] = cur }
+            frozenInterim[lang] = row
+        }
         // The open-sentence display starts a new sentence — its agreement gate
-        // must not judge the next sentence against the finished one, and the
-        // finished sentence's provisional tail leaves the current slot.
+        // must not judge the next sentence against the finished one.
         interimDisplay.reset()
         currentInterimDisplay = [:]
         guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
@@ -1008,7 +1018,7 @@ final class SessionController: EngineProcessDelegate {
                 while row.count <= index { row.append("") }
                 row[index] = tr
                 frozenInterim[lang] = row
-                recomposeInterimCaption(lang: lang)
+                recomposeInterimCaption(lang: lang, cause: .refinement)
             }
             return
         }
@@ -1035,10 +1045,11 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// A frozen slot filled — republish the composed caption for that language.
-    private func recomposeInterimCaption(lang: String) {
+    private func recomposeInterimCaption(
+        lang: String, cause: TranslationStabilityMetrics.ShowCause = .stream) {
         let composed = composedInterim(lang: lang)
         guard !composed.isEmpty, livePartialTranslations[lang] != composed else { return }
-        TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: composed)
+        TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: composed, cause: cause)
         livePartialTranslations[lang] = composed
         livePartialSource = committedInterimSource
     }

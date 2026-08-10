@@ -531,3 +531,20 @@ final class StabilityLedgerFileTests: XCTestCase {
         try? FileManager.default.removeItem(at: dir)
     }
 }
+
+@MainActor
+final class ShowCauseSplitTests: XCTestCase {
+    func testRefinementAndRevisionErasureAreAttributed() {
+        let m = TranslationStabilityMetrics.shared
+        m.reset()
+        m.recordShown(.caption, key: "English", text: "Hello there friend")
+        m.recordShown(.caption, key: "English", text: "Hello there, my friend.", cause: .refinement)
+        m.recordShown(.panel, key: "L|E", text: "first rendering here")
+        m.recordShown(.panel, key: "L|E", text: "first rendering, redone", cause: .revision)
+        let cap = m.counters[.caption]!, pan = m.counters[.panel]!
+        XCTAssertGreaterThan(cap.refinedChars, 0)
+        XCTAssertEqual(cap.refinedChars, cap.erasedChars, "all caption erasure was refinement")
+        XCTAssertEqual(pan.revisionChars, pan.erasedChars)
+        XCTAssertTrue(m.summary().contains("refined="))
+    }
+}

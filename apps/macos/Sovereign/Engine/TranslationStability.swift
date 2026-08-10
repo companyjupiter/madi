@@ -386,10 +386,19 @@ final class TranslationStabilityMetrics {
         case caption, panel
     }
 
+    /// P13: not all erasure reads the same. A REFINEMENT is the sentence-final
+    /// translation replacing that same sentence's provisional rendering (the
+    /// accepted block-finalization polish); a REVISION is a committed line's
+    /// translation replaced because its SOURCE text changed. Both still count
+    /// in NE — the split exists so the ledger can say which kind dominates.
+    enum ShowCause { case stream, refinement, revision }
+
     struct Counters {
         var erasedChars = 0
         var updates = 0    // recordShown calls that changed the text
         var rewrites = 0   // updates with erasure > 0 (what the eye registers)
+        var refinedChars = 0   // erasure attributed to sentence-final refinement
+        var revisionChars = 0  // erasure attributed to source-revision replacement
     }
 
     private(set) var counters: [Surface: Counters] = [:]
@@ -457,7 +466,8 @@ final class TranslationStabilityMetrics {
 
     /// `text == nil` means the key was removed from screen (counts as full erase
     /// of what was shown). Identical text is a no-op.
-    func recordShown(_ surface: Surface, key: String, text: String?) {
+    func recordShown(_ surface: Surface, key: String, text: String?,
+                     cause: ShowCause = .stream) {
         let old = shown[surface, default: [:]][key]
         if let text, !text.isEmpty {
             guard old != text else { return }
@@ -467,6 +477,8 @@ final class TranslationStabilityMetrics {
                 let e = ErasureMath.erasure(from: old, to: text)
                 c.erasedChars += e
                 if e > 0 { c.rewrites += 1 }
+                if cause == .refinement { c.refinedChars += e }
+                if cause == .revision { c.revisionChars += e }
             }
             counters[surface] = c
             shown[surface, default: [:]][key] = text
@@ -498,6 +510,7 @@ final class TranslationStabilityMetrics {
             let c = counters[s, default: Counters()]
             let ne = finals > 0 ? String(format: "%.2f", Double(c.erasedChars) / Double(finals)) : "—"
             return "\(s.rawValue) NE=\(ne) erased=\(c.erasedChars) updates=\(c.updates) rewrites=\(c.rewrites)"
+                + " refined=\(c.refinedChars) rev=\(c.revisionChars)"
         }
         return "[translate-stability] \(part(.caption)) | \(part(.panel))"
             + " | finalChars=\(finals) interimTurns=\(interimTurnsRun) gated=\(interimTurnsSkipped)"

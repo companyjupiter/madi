@@ -304,13 +304,20 @@ final class TranscriptStore {
         guard sourceRevision == nil || sourceRevision == current else { return false }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return false }
+        // P13: a replacement whose predecessor came from an OLDER source
+        // revision is a REVISION (the line's text changed under it) — split out
+        // in the ledger so panel churn is attributable.
+        let cause: TranslationStabilityMetrics.ShowCause =
+            (translationsByLine[id]?[lang]).map { $0.sourceRevision != current ? .revision : .stream }
+            ?? .stream
         translationsByLine[id, default: [:]][lang] = TranslationRecord(
             text: t, sourceRevision: current, userEdited: userEdited)
         lines[i].translations[lang] = t
         lines[i].staleTranslations[lang] = nil   // P4: replaced in place
         if userEdited { lines[i].editedTranslations.insert(lang) }
         else { lines[i].editedTranslations.remove(lang) }
-        TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: t)
+        TranslationStabilityMetrics.shared.recordShown(.panel, key: Self.meterKey(id, lang), text: t,
+                                                       cause: cause)
         scheduleRender()
         return true
     }
