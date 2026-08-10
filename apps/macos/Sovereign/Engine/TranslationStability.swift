@@ -123,6 +123,76 @@ enum InterimTranslateGate {
     }
 }
 
+/// P8: LocalAgreement-2 over the interim hypothesis stream — the SOURCE-side
+/// stabilizer.
+///
+/// Measured 2026-08-10 (real ko1.wav × real DNA3-4B): the residual caption churn
+/// after P1/P2 is dominated not by the display policy but by the preview lane
+/// re-decoding the open window into a different MEANING ("아키테이였습니다" →
+/// "아키텍처에 대해 이야기합니다"). Re-translating a source that changed is not
+/// flicker the display layer can fix; the translation is faithfully tracking it.
+///
+/// So gate the source: hand the translator only the word prefix that two
+/// consecutive decodes agree on (whisper_streaming's LocalAgreement-2), with the
+/// surface form LOCKED at commit time so the committed text is append-only by
+/// construction — the same word can never come back with different punctuation.
+/// Cost is one preview cycle (~1 s) of added lag on the newest words.
+///
+/// Escape hatch: two emitters (PREVIEW lane / «partial») write the hypothesis,
+/// and a pair that flaps between different extents could otherwise stall the
+/// commit forever. After `maxStall` non-advancing hypotheses the newest tail is
+/// committed outright — still append-only, because the locked prefix is kept.
+struct InterimSourceGate {
+    /// Non-advancing hypotheses tolerated before the newest tail is taken anyway.
+    var maxStall: Int
+
+    private var previous: [String] = []
+    private var committed: [String] = []
+    private var stall = 0
+
+    // Explicit: the synthesized memberwise init is private (the state below it
+    // is), so callers could not otherwise tune the stall horizon.
+    init(maxStall: Int = 3) { self.maxStall = maxStall }
+
+    /// Punctuation/case are cosmetic for AGREEMENT purposes — the engine flips
+    /// them between decodes ("안녕하세요." ↔ "안녕하세요") while the word is stable.
+    private static func norm(_ w: String) -> String {
+        w.trimmingCharacters(in: CharacterSet(charactersIn: " ,.!?…\"'")).lowercased()
+    }
+
+    /// Feed the newest hypothesis; returns the stable source to translate.
+    /// The result only ever grows, and never rewrites a word it already returned.
+    mutating func commit(_ hypothesis: String) -> String {
+        let current = hypothesis.split(separator: " ").map(String.init)
+        defer { previous = current }
+        guard !previous.isEmpty else { return committed.joined(separator: " ") }
+
+        var agreed = 0
+        while agreed < previous.count, agreed < current.count,
+              Self.norm(previous[agreed]) == Self.norm(current[agreed]) {
+            agreed += 1
+        }
+        if agreed > committed.count {
+            committed.append(contentsOf: current[committed.count..<agreed])
+            stall = 0
+        } else {
+            stall += 1
+            if stall >= maxStall, current.count > committed.count {
+                committed.append(contentsOf: current[committed.count...])
+                stall = 0
+            }
+        }
+        return committed.joined(separator: " ")
+    }
+
+    /// Window boundary — the next sentence commits from scratch.
+    mutating func reset() {
+        previous = []
+        committed = []
+        stall = 0
+    }
+}
+
 /// Session-scoped erasure counters for the two translation surfaces.
 ///
 ///   .caption — the floating caption overlay's provisional interim translations
@@ -157,6 +227,9 @@ final class TranslationStabilityMetrics {
     /// P1 telemetry: candidates the stable-prefix filter held back (each one
     /// was a whole-prefix rewrite the viewer did NOT see).
     var stabilizerHolds = 0
+    /// P8 telemetry: hypothesis characters withheld from the translator because
+    /// two consecutive decodes had not yet agreed on them.
+    var sourceHeldChars = 0
 
     /// `text == nil` means the key was removed from screen (counts as full erase
     /// of what was shown). Identical text is a no-op.
@@ -204,7 +277,7 @@ final class TranslationStabilityMetrics {
         }
         return "[translate-stability] \(part(.caption)) | \(part(.panel))"
             + " | finalChars=\(finals) interimTurns=\(interimTurnsRun) gated=\(interimTurnsSkipped)"
-            + " holds=\(stabilizerHolds)"
+            + " holds=\(stabilizerHolds) srcHeld=\(sourceHeldChars)"
     }
 
     func reset() {
@@ -213,5 +286,6 @@ final class TranslationStabilityMetrics {
         interimTurnsRun = 0
         interimTurnsSkipped = 0
         stabilizerHolds = 0
+        sourceHeldChars = 0
     }
 }
