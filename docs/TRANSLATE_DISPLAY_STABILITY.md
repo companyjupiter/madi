@@ -31,6 +31,7 @@ Translate는 masking+biasing으로 2.1→0.1, BLEU 무손실). `TranslationStabi
 | 캡션 인터림 | **stable-prefix**: 성장 통과 · 꼬리 ≤12자 즉시 수용 · 깊은 재작성/축소는 2연속 일치 시 수용(LocalAgreement류) · 윈도 경계 리셋 | `StablePrefixFilter`, SessionController 캡션 write 경로 2곳 |
 | 캡션 페어링 | 번역은 그것을 생성한 가설(`livePartialSource`)과만 페어 · 커밋 갭엔 페어 유지(역행 점프 금지) · 진짜 번역 도착 시 해체 | CaptionOverlay `caption` 폴백 체인 |
 | 캡션 턴 게이트 | 이미터 플랩/축소 skip · 순수 꼬리 성장 ≥6자만 DNA 턴 | `InterimTranslateGate` |
+| **표시 커밋 (P9)** | MT 출력에 **LocalAgreement-2**: 연속 2회 번역 결과가 합의한 단어만 캡션에 커밋(표면형 잠금, 언어별) — 캡션이 구조적 append-only가 됨. 실측 4언어쌍 NE **0.00**, 커버리지 54~71%(잔여는 윈도 종료 시 커밋 레인이 채움) | `InterimDisplayAgreement` |
 | **인터림 소스 (P8)** | **LocalAgreement-2**: 연속 2회 디코드가 합의한 단어 접두만 번역기로 · 표면형은 커밋 시 고정(append-only) · stall 3회면 최신 꼬리 강제 커밋(이미터 플랩 기아 방지) | `InterimSourceGate`, `livePartial` didSet |
 | 패널 | **stale-in-place**: 리비전 무효화는 삭제가 아니라 회색·이탤릭 강등 → 재번역 도착 시 제자리 교체 · 라우팅 탈락만 삭제 · dots는 valid도 stale도 없을 때만 | `Line.staleTranslations`, `refreshTranslationOverlay` |
 | 가드 suppress | 기각된 최종은 스트리밍된 partial을 **롤백** + 리비전 귀속 verdict(텍스트 변경 시 해제) — 기각 텍스트가 정식 번역처럼 잔존 금지 | `suppressTranslation` |
@@ -64,7 +65,9 @@ PERF_LOG에 기록.
 
 ## 남은 것
 
-- NE<0.2까지의 잔여 갭: 남은 erasure는 STT가 의미를 바꾸는 구간(합의 후에도 후속 디코드가 뒤집는
-  경우)에 몰려 있다. 다음 후보는 합의 창 확대(LocalAgreement-3) 또는 문장 경계 커밋.
+- ~~NE<0.2 잔여 갭~~ ✅ P9(표시측 LocalAgreement)로 **NE 0.00** 도달 (PERF_LOG 2026-08-10 스윕).
+  스윕 반증 2건도 기록: 문장동결 단독은 악화(V4 0.43 > V2 0.35), 소스 LA-3은 커버리지 손해만.
+- 커버리지(54~71%)·2~3s 지연의 체감 검증 — 실기기 라이브 세션.
+- P7 문장확정 프리셋(백로그) — P9 채택으로 우선순위 하락(캡션이 이미 Camp-B 운영점).
 - P7(백로그): 강의/행사 프리셋 = 문장확정 모드(인터림 번역 off).
 - EN→KO 한정 직독직해 스타일은 엔진 target-prefix 지원이 생기면 재평가.

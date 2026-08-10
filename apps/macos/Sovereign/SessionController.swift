@@ -378,10 +378,12 @@ final class SessionController: EngineProcessDelegate {
     /// hold the pair across the commit gap instead of jumping to an older line.
     private(set) var livePartialSource: String = ""
 
-    /// P1: stable-prefix display policy over the raw re-translation stream —
-    /// what the caption shows may only grow, take small tail corrections, or be
-    /// rewritten after two consecutive contradicting candidates. Reset per window.
-    private var interimStabilizer = StablePrefixFilter()
+    /// P9: display-side LocalAgreement — only words two consecutive MT results
+    /// agree on reach the caption (append-only per language; measured NE 0.00
+    /// across four language pairs). Supersedes the P1 StablePrefixFilter here:
+    /// hold-then-accept still let deep MT rewordings through on the 2nd verdict,
+    /// which was the residual churn after P8. Reset per window.
+    private var interimDisplay = InterimDisplayAgreement()
     /// P2: the hypothesis the last ACCEPTED interim turn translated; the gate
     /// compares against this, not against what is displayed. Reset per window.
     private var lastInterimRequestedSource = ""
@@ -399,9 +401,9 @@ final class SessionController: EngineProcessDelegate {
     /// livePartialSource moves only when the DISPLAYED text moves, so the caption
     /// always shows a (hypothesis, translation) pair from the same generation.
     private func updateInterimTranslation(lang: String, text: String, source: String) {
-        let display = interimStabilizer.stabilize(lang: lang, candidate: text)
+        let display = interimDisplay.feed(lang: lang, candidate: text)
         if display != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
-        guard livePartialTranslations[lang] != display else { return }
+        guard !display.isEmpty, livePartialTranslations[lang] != display else { return }
         TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: display)
         livePartialTranslations[lang] = display
         livePartialSource = source
@@ -409,13 +411,16 @@ final class SessionController: EngineProcessDelegate {
     private func setInterimTranslations(_ translations: [String: String], source: String) {
         var display: [String: String] = [:]
         for (lang, text) in translations {
-            let d = interimStabilizer.stabilize(lang: lang, candidate: text)
+            let d = interimDisplay.feed(lang: lang, candidate: text)
             if d != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
-            display[lang] = d
+            // P9: before first agreement the gate returns "" — keep whatever the
+            // caption already shows rather than blanking it.
+            if d.isEmpty, let existing = livePartialTranslations[lang] { display[lang] = existing }
+            else if !d.isEmpty { display[lang] = d }
         }
         for lang in livePartialTranslations.keys where display[lang] == nil {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: nil)
-            interimStabilizer.remove(lang: lang)
+            interimDisplay.remove(lang: lang)
         }
         for (lang, text) in display where livePartialTranslations[lang] != text {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
@@ -430,7 +435,7 @@ final class SessionController: EngineProcessDelegate {
     /// flicker, so the meter forgets without counting.
     private func clearInterimCaption() {
         TranslationStabilityMetrics.shared.closeCaption()
-        interimStabilizer.reset()
+        interimDisplay.reset()
         lastInterimRequestedSource = ""
         interimSourceGate.reset()
         committedInterimSource = ""
@@ -1855,7 +1860,7 @@ final class SessionController: EngineProcessDelegate {
             // P1: window boundary — the carryover pair stays visible (P3), but the
             // NEXT window's first candidate must replace it freely, not be judged
             // as a "divergence" from the finished sentence.
-            interimStabilizer.reset()
+            interimDisplay.reset()            // P9: display agreement per window
             lastInterimRequestedSource = ""   // P2: new window, gate starts fresh
             interimSourceGate.reset()         // P8: agreement restarts per window
             committedInterimSource = ""

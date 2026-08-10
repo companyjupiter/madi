@@ -42,7 +42,10 @@ enum ErasureMath {
     }
 }
 
-/// P1: display policy for the caption's provisional translations.
+/// P1 (superseded on the caption by P9 InterimDisplayAgreement, 2026-08-10 —
+/// hold-then-accept still admits deep MT rewordings on the second verdict,
+/// measured NE 1.18 vs 0.00; kept as the reference implementation and for
+/// potential panel-side use): display policy for provisional translations.
 ///
 /// Raw re-translation regenerates the WHOLE growing hypothesis every turn, so
 /// consecutive candidates legitimately reword earlier text — that rewriting is
@@ -191,6 +194,39 @@ struct InterimSourceGate {
         committed = []
         stall = 0
     }
+}
+
+/// P9: LocalAgreement-2 on the TRANSLATION output — the display-side commit.
+///
+/// After P8, the source is append-only, but the MT still rewords its own
+/// earlier output as the source grows ("Hello. Today is cloud." →
+/// "Hello. Today, we are talking about…"). Measured 2026-08-10 over four
+/// language pairs (3 KO clips → EN, jfk → KO): committing to the screen only
+/// the words TWO consecutive MT results agree on drives caption erasure to
+/// literally zero (NE 0.00, rewrites 0 on every pair) at 61% mean end-of-window
+/// coverage — the remainder arrives via the committed-lane translation that
+/// already replaces the caption at window close. That is the Camp-B operating
+/// point (Wordly/Interprefy: append-only, ~2-3 s behind).
+///
+/// Reuses InterimSourceGate's exact semantics (word agreement, surface locked
+/// at commit, stall escape) — one gate per target language.
+struct InterimDisplayAgreement {
+    private var gates: [String: InterimSourceGate] = [:]
+
+    /// Feed one language's newest MT candidate; returns the committed text to
+    /// display (append-only per language).
+    mutating func feed(lang: String, candidate: String) -> String {
+        var g = gates[lang] ?? InterimSourceGate()
+        let shown = g.commit(candidate)
+        gates[lang] = g
+        return shown
+    }
+
+    /// The language left the display (suppressed / routing change).
+    mutating func remove(lang: String) { gates[lang] = nil }
+
+    /// Window boundary — the next sentence commits from scratch.
+    mutating func reset() { gates = [:] }
 }
 
 /// Session-scoped erasure counters for the two translation surfaces.

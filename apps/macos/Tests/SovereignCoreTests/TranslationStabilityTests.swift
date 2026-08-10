@@ -249,3 +249,51 @@ final class InterimSourceGateTests: XCTestCase {
         XCTAssertEqual(g.commit("새로운 문장"), "새로운")
     }
 }
+
+final class InterimDisplayAgreementTests: XCTestCase {
+
+    func testCommitsOnlyWordsTwoResultsAgreeOn() {
+        var d = InterimDisplayAgreement()
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello?"), "",
+                       "a single MT result proves nothing yet")
+        // Next result agrees on "hello" (cosmetically different) — the surface
+        // locked is the AGREEING (newest) candidate's, then never changes.
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello. Today is cloud."), "Hello.")
+        // Reworded continuation: the agreed prefix grows only where they match
+        // ("Today" vs "Today," agree cosmetically; "is" vs "we" do not).
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello. Today, we are talking."),
+                       "Hello. Today,")
+    }
+
+    func testDisplayIsAppendOnlyUnderRewording() {
+        var d = InterimDisplayAgreement()
+        var seen: [String] = []
+        for c in ["Hello. Today is cloud.",
+                  "Hello. Today was about cloud-native architecture.",
+                  "Hello. Today, let's talk about cloud-native architecture.",
+                  "Hello today, let's talk about cloud-native architecture. However"] {
+            seen.append(d.feed(lang: "English", candidate: c))
+        }
+        for i in 1..<seen.count {
+            XCTAssertTrue(seen[i].hasPrefix(seen[i - 1]),
+                          "caption must never rewrite: \(seen[i - 1]) → \(seen[i])")
+        }
+    }
+
+    func testLanguagesAreIndependent() {
+        var d = InterimDisplayAgreement()
+        _ = d.feed(lang: "English", candidate: "Hello there")
+        XCTAssertEqual(d.feed(lang: "Japanese", candidate: "こんにちは"), "")
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello there friends"), "Hello there")
+    }
+
+    func testRemoveAndResetClear() {
+        var d = InterimDisplayAgreement()
+        _ = d.feed(lang: "English", candidate: "Some text here")
+        _ = d.feed(lang: "English", candidate: "Some text here too")
+        d.remove(lang: "English")
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Fresh"), "")
+        d.reset()
+        XCTAssertEqual(d.feed(lang: "English", candidate: "New window"), "")
+    }
+}
