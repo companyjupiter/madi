@@ -470,3 +470,45 @@ final class InterimTuningTests: XCTestCase {
         d.removePersistentDomain(forName: "tuning-test-ud")
     }
 }
+
+/// P12 — sentence-scoped interim + adaptive reservation.
+final class InterimSentenceScopeTests: XCTestCase {
+
+    func testSplitAndAdvanceOnlyEverGrows() {
+        var l = InterimSentenceLedger()
+        var r = l.advance(source: "안녕하세요.")
+        XCTAssertEqual(r.newlyCompleted, ["안녕하세요."])
+        XCTAssertEqual(r.current, "")
+        r = l.advance(source: "안녕하세요. 오늘은 클라우드")
+        XCTAssertEqual(r.newlyCompleted, [], "already-counted sentences never repeat")
+        XCTAssertEqual(r.current, "오늘은 클라우드")
+        r = l.advance(source: "안녕하세요. 오늘은 클라우드 네이티브입니다. 다음")
+        XCTAssertEqual(r.newlyCompleted, ["오늘은 클라우드 네이티브입니다."])
+        XCTAssertEqual(r.current, "다음")
+        XCTAssertEqual(l.sentences.count, 2)
+    }
+
+    func testCJKEndersAndNoTrailingEnder() {
+        let (c, cur) = InterimSentenceLedger.split("你好。今天呢")
+        XCTAssertEqual(c, ["你好。"])
+        XCTAssertEqual(cur, "今天呢")
+    }
+
+    func testResetStartsClean() {
+        var l = InterimSentenceLedger()
+        _ = l.advance(source: "문장 하나.")
+        l.reset()
+        let r = l.advance(source: "새 문장.")
+        XCTAssertEqual(r.newlyCompleted, ["새 문장."])
+    }
+
+    func testAdaptiveGuaranteeBands() {
+        XCTAssertEqual(InterimTuning.adaptiveGuarantee(base: 3, committedBacklog: 0), 3)
+        XCTAssertEqual(InterimTuning.adaptiveGuarantee(base: 3, committedBacklog: 2), 3)
+        XCTAssertEqual(InterimTuning.adaptiveGuarantee(base: 3, committedBacklog: 4), 6)
+        XCTAssertNil(InterimTuning.adaptiveGuarantee(base: 3, committedBacklog: 7),
+                     "deep backlog → the reservation yields entirely")
+        XCTAssertNil(InterimTuning.adaptiveGuarantee(base: 0, committedBacklog: 0),
+                     "0 keeps meaning 'reservation off'")
+    }
+}

@@ -123,10 +123,17 @@ final class TranslateEngine {
     private var lastInterimAcceptedAt: Double?
 
     /// True when no interim turn has been accepted within the guarantee window.
+    /// P12 (adaptive): the effective interval stretches with committed backlog —
+    /// ≤2 pending → base, ≤6 → 2× base, deeper → no reservation at all (the
+    /// caption's guaranteed slot must not be what pushes committed lines into
+    /// the shed path). Ordinary admission still applies when the lane is quiet.
     private func interimIsStarved() -> Bool {
-        guard interimGuarantee > 0 else { return false }
+        let committedBacklog = pending.turns.filter { $0.kind == .committed }.count
+            + (inflightTurn?.kind == .committed ? 1 : 0)
+        guard let interval = InterimTuning.adaptiveGuarantee(
+            base: interimGuarantee, committedBacklog: committedBacklog) else { return false }
         guard let last = lastInterimAcceptedAt else { return true }
-        return clock() - last >= interimGuarantee
+        return clock() - last >= interval
     }
 
     @discardableResult
