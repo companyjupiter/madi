@@ -268,9 +268,14 @@ struct ContentView: View {
                 // it — HStack draws later siblings on top by default.
                 sidePanel.zIndex(1)
                 transcriptPane
-                // Always visible in the redesign — the header toggle is gone and
-                // the export/folder controls live in this panel now.
-                WorkspaceExplorer(session: session, isVisible: $showExplorer)
+                // Hidden while recording: the explorer's file/stats content is
+                // post-session material and dead weight next to a live take —
+                // the transcript gets the width instead. It returns at stop.
+                // (Future AI-summary features join as ADDITIONAL TABS here, not
+                // as always-on panels — docs/BACKLOG.md UI direction.)
+                if !isRecordingLike {
+                    WorkspaceExplorer(session: session, isVisible: $showExplorer)
+                }
             }
             .background(
                 ZStack {
