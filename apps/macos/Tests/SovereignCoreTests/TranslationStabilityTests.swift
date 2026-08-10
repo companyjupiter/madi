@@ -180,3 +180,120 @@ final class TranslationStabilityMetricsTests: XCTestCase {
         XCTAssertTrue(m.summary().contains("finalChars=11"))
     }
 }
+
+final class InterimSourceGateTests: XCTestCase {
+
+    func testCommitsOnlyTheAgreedPrefix() {
+        var g = InterimSourceGate()
+        XCTAssertEqual(g.commit("안녕하세요"), "", "first hypothesis has nothing to agree with")
+        // Second decode agrees on "안녕하세요" and adds an unconfirmed tail.
+        XCTAssertEqual(g.commit("안녕하세요 오늘은 클라우드"), "안녕하세요")
+        // Third agrees through "오늘은 클라우드"…
+        XCTAssertEqual(g.commit("안녕하세요 오늘은 클라우드 네이티브"), "안녕하세요 오늘은 클라우드")
+    }
+
+    func testUnstableTailNeverReachesTheTranslator() {
+        var g = InterimSourceGate()
+        _ = g.commit("오늘은 클라우드 아키테이였습니다")
+        // The tail is re-decoded into something different — it must not have
+        // been committed by the earlier call.
+        let out = g.commit("오늘은 클라우드 아키텍처에 대해")
+        XCTAssertEqual(out, "오늘은 클라우드")
+        XCTAssertFalse(out.contains("아키테이였습니다"))
+    }
+
+    func testOutputIsAppendOnlyAcrossACosmeticFlip() {
+        var g = InterimSourceGate()
+        var seen: [String] = []
+        for h in ["안녕하세요. 오늘은", "안녕하세요. 오늘은 클라우드",
+                  "안녕하세요 오늘은 클라우드 네이티브",          // periods vanish
+                  "안녕하세요. 오늘은 클라우드 네이티브 아키텍처"] {
+            seen.append(g.commit(h))
+        }
+        for i in 1..<seen.count {
+            XCTAssertTrue(seen[i].hasPrefix(seen[i - 1]),
+                          "committed source must be append-only: \(seen[i-1]) → \(seen[i])")
+        }
+        // The surface form committed first is the one that survives.
+        XCTAssertTrue(seen.last!.hasPrefix("안녕하세요."))
+    }
+
+    func testStallEscapeHatchCommitsRatherThanStarving() {
+        var g = InterimSourceGate(maxStall: 2)
+        _ = g.commit("하나 둘 셋")
+        XCTAssertEqual(g.commit("하나 둘 셋 넷"), "하나 둘 셋")
+        // Two emitters now flap between different tails, so agreement never
+        // advances past "하나 둘 셋" and the caption would starve.
+        XCTAssertEqual(g.commit("하나 둘 셋 다섯"), "하나 둘 셋", "first stall still waits")
+        let out = g.commit("하나 둘 셋 여섯")   // maxStall reached
+        XCTAssertTrue(out.hasPrefix("하나 둘 셋"), "the locked prefix survives the escape hatch")
+        XCTAssertGreaterThan(out.count, "하나 둘 셋".count, "stall must eventually commit")
+    }
+
+    func testShrinkingHypothesisKeepsCommittedText() {
+        var g = InterimSourceGate()
+        _ = g.commit("하나 둘 셋 넷")
+        let committed = g.commit("하나 둘 셋 넷")
+        XCTAssertEqual(committed, "하나 둘 셋 넷")
+        // A later decode collapses to something shorter — already-committed
+        // words must not be withdrawn.
+        XCTAssertEqual(g.commit("하나 둘"), "하나 둘 셋 넷")
+    }
+
+    func testResetStartsTheNextWindowClean() {
+        var g = InterimSourceGate()
+        _ = g.commit("이전 문장입니다")
+        _ = g.commit("이전 문장입니다 계속")
+        g.reset()
+        XCTAssertEqual(g.commit("새로운"), "")
+        XCTAssertEqual(g.commit("새로운 문장"), "새로운")
+    }
+}
+
+final class InterimDisplayAgreementTests: XCTestCase {
+
+    func testCommitsOnlyWordsTwoResultsAgreeOn() {
+        var d = InterimDisplayAgreement()
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello?"), "",
+                       "a single MT result proves nothing yet")
+        // Next result agrees on "hello" (cosmetically different) — the surface
+        // locked is the AGREEING (newest) candidate's, then never changes.
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello. Today is cloud."), "Hello.")
+        // Reworded continuation: the agreed prefix grows only where they match
+        // ("Today" vs "Today," agree cosmetically; "is" vs "we" do not).
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello. Today, we are talking."),
+                       "Hello. Today,")
+    }
+
+    func testDisplayIsAppendOnlyUnderRewording() {
+        var d = InterimDisplayAgreement()
+        var seen: [String] = []
+        for c in ["Hello. Today is cloud.",
+                  "Hello. Today was about cloud-native architecture.",
+                  "Hello. Today, let's talk about cloud-native architecture.",
+                  "Hello today, let's talk about cloud-native architecture. However"] {
+            seen.append(d.feed(lang: "English", candidate: c))
+        }
+        for i in 1..<seen.count {
+            XCTAssertTrue(seen[i].hasPrefix(seen[i - 1]),
+                          "caption must never rewrite: \(seen[i - 1]) → \(seen[i])")
+        }
+    }
+
+    func testLanguagesAreIndependent() {
+        var d = InterimDisplayAgreement()
+        _ = d.feed(lang: "English", candidate: "Hello there")
+        XCTAssertEqual(d.feed(lang: "Japanese", candidate: "こんにちは"), "")
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello there friends"), "Hello there")
+    }
+
+    func testRemoveAndResetClear() {
+        var d = InterimDisplayAgreement()
+        _ = d.feed(lang: "English", candidate: "Some text here")
+        _ = d.feed(lang: "English", candidate: "Some text here too")
+        d.remove(lang: "English")
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Fresh"), "")
+        d.reset()
+        XCTAssertEqual(d.feed(lang: "English", candidate: "New window"), "")
+    }
+}

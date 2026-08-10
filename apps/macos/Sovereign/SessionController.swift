@@ -357,7 +357,15 @@ final class SessionController: EngineProcessDelegate {
             // last interim translation stays on screen as a provisional caption
             // (T1 carryover) until the committed line's real translation lands.
             // Session reset/stop sites clear livePartialTranslations explicitly.
-            if livePartial != oldValue { scheduleInterimTranslate() }
+            if livePartial != oldValue {
+                // P8: LocalAgreement runs on EVERY hypothesis (here), not inside
+                // the debounced task — agreement needs consecutive observations,
+                // and the debounce drops most of them.
+                committedInterimSource = interimSourceGate.commit(livePartial)
+                TranslationStabilityMetrics.shared.sourceHeldChars +=
+                    max(0, livePartial.count - committedInterimSource.count)
+                scheduleInterimTranslate()
+            }
         }
     }
     /// Provisional translation of the in-progress interim text (lang → text), shown
@@ -370,22 +378,32 @@ final class SessionController: EngineProcessDelegate {
     /// hold the pair across the commit gap instead of jumping to an older line.
     private(set) var livePartialSource: String = ""
 
-    /// P1: stable-prefix display policy over the raw re-translation stream —
-    /// what the caption shows may only grow, take small tail corrections, or be
-    /// rewritten after two consecutive contradicting candidates. Reset per window.
-    private var interimStabilizer = StablePrefixFilter()
+    /// P9: display-side LocalAgreement — only words two consecutive MT results
+    /// agree on reach the caption (append-only per language; measured NE 0.00
+    /// across four language pairs). Supersedes the P1 StablePrefixFilter here:
+    /// hold-then-accept still let deep MT rewordings through on the 2nd verdict,
+    /// which was the residual churn after P8. Reset per window.
+    private var interimDisplay = InterimDisplayAgreement()
     /// P2: the hypothesis the last ACCEPTED interim turn translated; the gate
     /// compares against this, not against what is displayed. Reset per window.
     private var lastInterimRequestedSource = ""
+    /// P8: LocalAgreement-2 over the hypothesis stream — the translator is fed
+    /// only the word prefix two consecutive decodes agreed on (surface locked),
+    /// so it never re-translates a source that changed meaning under it.
+    private var interimSourceGate = InterimSourceGate()
+    /// The stable source currently eligible for interim translation. Monotonic
+    /// within a window; this — not `livePartial` — is what the caption's
+    /// provisional translation corresponds to.
+    private(set) var committedInterimSource = ""
 
     /// P6: every visible mutation of the caption's provisional translations goes
     /// through these three paths, so the stability meter observes all of them.
     /// livePartialSource moves only when the DISPLAYED text moves, so the caption
     /// always shows a (hypothesis, translation) pair from the same generation.
     private func updateInterimTranslation(lang: String, text: String, source: String) {
-        let display = interimStabilizer.stabilize(lang: lang, candidate: text)
+        let display = interimDisplay.feed(lang: lang, candidate: text)
         if display != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
-        guard livePartialTranslations[lang] != display else { return }
+        guard !display.isEmpty, livePartialTranslations[lang] != display else { return }
         TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: display)
         livePartialTranslations[lang] = display
         livePartialSource = source
@@ -393,13 +411,16 @@ final class SessionController: EngineProcessDelegate {
     private func setInterimTranslations(_ translations: [String: String], source: String) {
         var display: [String: String] = [:]
         for (lang, text) in translations {
-            let d = interimStabilizer.stabilize(lang: lang, candidate: text)
+            let d = interimDisplay.feed(lang: lang, candidate: text)
             if d != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
-            display[lang] = d
+            // P9: before first agreement the gate returns "" — keep whatever the
+            // caption already shows rather than blanking it.
+            if d.isEmpty, let existing = livePartialTranslations[lang] { display[lang] = existing }
+            else if !d.isEmpty { display[lang] = d }
         }
         for lang in livePartialTranslations.keys where display[lang] == nil {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: nil)
-            interimStabilizer.remove(lang: lang)
+            interimDisplay.remove(lang: lang)
         }
         for (lang, text) in display where livePartialTranslations[lang] != text {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
@@ -414,8 +435,10 @@ final class SessionController: EngineProcessDelegate {
     /// flicker, so the meter forgets without counting.
     private func clearInterimCaption() {
         TranslationStabilityMetrics.shared.closeCaption()
-        interimStabilizer.reset()
+        interimDisplay.reset()
         lastInterimRequestedSource = ""
+        interimSourceGate.reset()
+        committedInterimSource = ""
         livePartialTranslations = [:]
         livePartialSource = ""
     }
@@ -846,7 +869,7 @@ final class SessionController: EngineProcessDelegate {
                 guard let self else { return }
                 if let request = self.interimRequests[id] {
                     guard id == self.activeInterimID, request.source == source,
-                          self.livePartial == source else { return }
+                          self.committedInterimSource == source else { return }
                     self.updateInterimTranslation(lang: lang, text: text, source: source)
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
@@ -875,7 +898,7 @@ final class SessionController: EngineProcessDelegate {
         request.pending.remove(lang)
         if let text, !text.isEmpty { request.translations[lang] = text }
         let isActive = activeInterimID == id
-        if isActive, livePartial == source {
+        if isActive, committedInterimSource == source {
             setInterimTranslations(request.translations, source: source)
             if !request.translations.isEmpty { interimCache.put(source, request.translations) }
         }
@@ -883,7 +906,9 @@ final class SessionController: EngineProcessDelegate {
             interimRequests[id] = nil
             if isActive {
                 activeInterimID = nil
-                if !livePartial.isEmpty, livePartial != source { scheduleInterimTranslate() }
+                if !committedInterimSource.isEmpty, committedInterimSource != source {
+                    scheduleInterimTranslate()
+                }
             }
         } else {
             interimRequests[id] = request
@@ -903,9 +928,10 @@ final class SessionController: EngineProcessDelegate {
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
             guard let self, gen == self.interimGen, self.activeInterimID == nil,
-                  !self.livePartial.isEmpty else { return }
+                  !self.committedInterimSource.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
-            let source = self.livePartial
+            // P8: translate the AGREED prefix, not the newest hypothesis.
+            let source = self.committedInterimSource
             // P2: don't spend a DNA turn on a hypothesis that adds almost
             // nothing since the last requested turn (emitter flap, +1 word
             // tails). The next growth re-arms; the committed translation
@@ -1834,8 +1860,10 @@ final class SessionController: EngineProcessDelegate {
             // P1: window boundary — the carryover pair stays visible (P3), but the
             // NEXT window's first candidate must replace it freely, not be judged
             // as a "divergence" from the finished sentence.
-            interimStabilizer.reset()
+            interimDisplay.reset()            // P9: display agreement per window
             lastInterimRequestedSource = ""   // P2: new window, gate starts fresh
+            interimSourceGate.reset()         // P8: agreement restarts per window
+            committedInterimSource = ""
             lastCommitAt = Date()                        // D19 commit-cadence ring
             translateStableLines()                       // translate now-stable prior lines
         case .languageDetected(let tok):
