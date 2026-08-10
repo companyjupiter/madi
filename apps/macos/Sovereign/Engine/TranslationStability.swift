@@ -148,14 +148,31 @@ enum InterimTranslateGate {
 struct InterimSourceGate {
     /// Non-advancing hypotheses tolerated before the newest tail is taken anyway.
     var maxStall: Int
+    /// P10-2 first-paint fast path: commit the very first hypothesis of a window
+    /// outright instead of waiting for a second decode to agree with it. The 0→1
+    /// step is where the agreement horizon is felt as "nothing is happening" —
+    /// measured on device as the dominant complaint after P8/P9 — and one
+    /// unconfirmed sentence opening is a cheaper price than an empty caption.
+    /// The paint is PROVISIONAL: it is shown but not committed, so it cannot
+    /// poison the agreement baseline (committing it outright measured a coverage
+    /// collapse — 60% → 4% — because `committed` then outran every later
+    /// agreement and only the stall escape could advance it: NE 0.00 with a
+    /// frozen caption is a metric win and a product loss). The provisional text
+    /// yields to the first genuinely agreed prefix, which is the one revision
+    /// this path trades for responsiveness.
+    var fastFirst = true
 
     private var previous: [String] = []
     private var committed: [String] = []
+    private var provisional = ""
     private var stall = 0
 
     // Explicit: the synthesized memberwise init is private (the state below it
     // is), so callers could not otherwise tune the stall horizon.
-    init(maxStall: Int = 3) { self.maxStall = maxStall }
+    init(maxStall: Int = 3, fastFirst: Bool = true) {
+        self.maxStall = maxStall
+        self.fastFirst = fastFirst
+    }
 
     /// Punctuation/case are cosmetic for AGREEMENT purposes — the engine flips
     /// them between decodes ("안녕하세요." ↔ "안녕하세요") while the word is stable.
@@ -168,7 +185,11 @@ struct InterimSourceGate {
     mutating func commit(_ hypothesis: String) -> String {
         let current = hypothesis.split(separator: " ").map(String.init)
         defer { previous = current }
-        guard !previous.isEmpty else { return committed.joined(separator: " ") }
+        guard !previous.isEmpty else {
+            // P10-2: paint the window's opening immediately, provisionally.
+            if fastFirst { provisional = hypothesis }
+            return provisional
+        }
 
         var agreed = 0
         while agreed < previous.count, agreed < current.count,
@@ -185,6 +206,10 @@ struct InterimSourceGate {
                 stall = 0
             }
         }
+        // Until something is agreed, the provisional opening is what the viewer
+        // has; the first agreed prefix then takes over permanently.
+        if committed.isEmpty { return provisional }
+        provisional = ""
         return committed.joined(separator: " ")
     }
 
@@ -192,6 +217,7 @@ struct InterimSourceGate {
     mutating func reset() {
         previous = []
         committed = []
+        provisional = ""
         stall = 0
     }
 }
@@ -211,12 +237,19 @@ struct InterimSourceGate {
 /// Reuses InterimSourceGate's exact semantics (word agreement, surface locked
 /// at commit, stall escape) — one gate per target language.
 struct InterimDisplayAgreement {
+    /// P10-2: show the first MT result for a window without waiting for a second
+    /// one to agree. Combined with the source-side fast path this removes the
+    /// compounded 0→1 delay (source cycle + MT turn) that made the caption feel
+    /// dead at the start of every window.
+    var fastFirst = true
     private var gates: [String: InterimSourceGate] = [:]
+
+    init(fastFirst: Bool = true) { self.fastFirst = fastFirst }
 
     /// Feed one language's newest MT candidate; returns the committed text to
     /// display (append-only per language).
     mutating func feed(lang: String, candidate: String) -> String {
-        var g = gates[lang] ?? InterimSourceGate()
+        var g = gates[lang] ?? InterimSourceGate(fastFirst: fastFirst)
         let shown = g.commit(candidate)
         gates[lang] = g
         return shown
@@ -267,6 +300,56 @@ final class TranslationStabilityMetrics {
     /// two consecutive decodes had not yet agreed on them.
     var sourceHeldChars = 0
 
+    // ── P10-0: the LATENCY axis ────────────────────────────────────────────
+    // Stability and responsiveness trade against each other — P8/P9 drove
+    // caption erasure to zero and made the app feel SLOWER, which the erasure
+    // meter alone could not show. From now on every translation change records
+    // both, so a win on one axis can never hide a regression on the other.
+
+    /// Monotonic clock; injectable so tests are deterministic.
+    var now: () -> Double = { ProcessInfo.processInfo.systemUptime }
+
+    enum Timing: String, CaseIterable {
+        /// Per TURN: engine request → that turn's first text on screen.
+        case turnTTFT
+        /// Per WINDOW: first interim hypothesis char → first caption paint.
+        case captionFirstPaint
+        /// Per LINE: line becomes translatable → its first translation shown.
+        case lineFirstTranslation
+    }
+    private(set) var samples: [Timing: [Double]] = [:]
+    private var startedAt: [Timing: [String: Double]] = [:]
+
+    /// Open a stopwatch for `key`; a second start for a live key is ignored so
+    /// re-arming (debounce, retry) cannot reset an already-running measurement.
+    func markStart(_ t: Timing, key: String) {
+        guard startedAt[t, default: [:]][key] == nil else { return }
+        startedAt[t, default: [:]][key] = now()
+    }
+    /// Close the stopwatch for `key`. No-op when it was never started or when
+    /// it already fired — first paint is what we measure, not every repaint.
+    func markEnd(_ t: Timing, key: String) {
+        guard let s = startedAt[t]?[key] else { return }
+        startedAt[t]?[key] = nil
+        samples[t, default: []].append(now() - s)
+    }
+    /// The measurement no longer applies (window closed, line dropped).
+    func cancel(_ t: Timing, key: String) { startedAt[t]?[key] = nil }
+    func cancelAll(_ t: Timing) { startedAt[t] = [:] }
+
+    private func pct(_ xs: [Double], _ p: Double) -> Double {
+        guard !xs.isEmpty else { return 0 }
+        let s = xs.sorted()
+        let i = min(s.count - 1, max(0, Int((Double(s.count - 1) * p).rounded())))
+        return s[i]
+    }
+    /// "median/p95 ms (n)" for one timing, or "—" when nothing was measured.
+    func latencySummary(_ t: Timing) -> String {
+        let xs = samples[t, default: []]
+        guard !xs.isEmpty else { return "—" }
+        return String(format: "%.0f/%.0fms(n=%d)", pct(xs, 0.5) * 1000, pct(xs, 0.95) * 1000, xs.count)
+    }
+
     /// `text == nil` means the key was removed from screen (counts as full erase
     /// of what was shown). Identical text is a no-op.
     func recordShown(_ surface: Surface, key: String, text: String?) {
@@ -314,6 +397,9 @@ final class TranslationStabilityMetrics {
         return "[translate-stability] \(part(.caption)) | \(part(.panel))"
             + " | finalChars=\(finals) interimTurns=\(interimTurnsRun) gated=\(interimTurnsSkipped)"
             + " holds=\(stabilizerHolds) srcHeld=\(sourceHeldChars)"
+            + " | ttft=\(latencySummary(.turnTTFT))"
+            + " firstPaint=\(latencySummary(.captionFirstPaint))"
+            + " lineTr=\(latencySummary(.lineFirstTranslation))"
     }
 
     func reset() {
@@ -323,5 +409,7 @@ final class TranslationStabilityMetrics {
         interimTurnsSkipped = 0
         stabilizerHolds = 0
         sourceHeldChars = 0
+        samples = [:]
+        startedAt = [:]
     }
 }

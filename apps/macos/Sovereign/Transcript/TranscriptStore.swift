@@ -283,6 +283,9 @@ final class TranscriptStore {
     // seconds later — or a user edit made mid-recording — still lands.
     private var translationsByLine: [UUID: [String: TranslationRecord]] = [:]
     private var editsByLine: [UUID: String] = [:]
+    /// P10-3: words after which a sentence break has been taken. Keeps live line
+    /// structure monotonic when a re-decode moves the punctuation.
+    private var sentenceBreaks: Set<UUID> = []
     /// P0: (line, lang) pairs whose translation was guard-suppressed, keyed to the
     /// source revision the verdict applies to. A text change lifts the verdict.
     private var suppressedByLine: [UUID: [String: UInt64]] = [:]
@@ -490,7 +493,7 @@ final class TranscriptStore {
         merger = WordMerger()
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
         translationsByLine.removeAll(); editsByLine.removeAll()
-        suppressedByLine.removeAll()
+        suppressedByLine.removeAll(); sentenceBreaks.removeAll()
         speakerMerges.removeAll(); speakerOverrides.removeAll()
         speakerNumbers.reset()
         frozen.removeAll(); frozenWordCount = 0
@@ -572,8 +575,7 @@ final class TranscriptStore {
             }
             if touched {
                 liveLabelLookupCache = nil
-                reassignFrozenSpeakers()
-                rebuildLive()
+                scheduleSpeakerFixRebuild()
             }
         case .speakerOverlap(let l):
             spkOv.append(l)
@@ -584,6 +586,29 @@ final class TranscriptStore {
             applyOverlapSpeakers()
             scheduleRender()
         default: break
+        }
+    }
+
+    // ── P10-4: SPKFIX batch coalescing ──────────────────────────────────────
+    // A mid-session recluster emits its corrections as a BURST of SPKFIX lines,
+    // and each one used to run a full frozen-reassign + tail regroup — N visual
+    // convulsions for one recluster ("라벨이 한꺼번에 뒤집히는" 장면). The label
+    // windows themselves update synchronously above (they are data); only the
+    // derived recompute is coalesced, so one recluster lands as ONE visual
+    // update ~50 ms after its last label.
+    @ObservationIgnored private var spkFixRebuildScheduled = false
+    /// Visible recomputes actually performed for SPKFIX bursts (telemetry/tests).
+    @ObservationIgnored private(set) var speakerFixRebuilds = 0
+    private func scheduleSpeakerFixRebuild() {
+        guard !spkFixRebuildScheduled else { return }
+        spkFixRebuildScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            spkFixRebuildScheduled = false
+            speakerFixRebuilds += 1
+            liveLabelLookupCache = nil
+            reassignFrozenSpeakers()
+            rebuildFromCurrentLabels()
         }
     }
 
@@ -719,13 +744,25 @@ final class TranscriptStore {
             // instead of re-translating the whole growing monologue from the top
             // each time a word lands. (content mode re-merges these into one
             // paragraph, so reading is unchanged.)
+            //
+            // P10-3 split-once: a re-decode can add, drop, or move the very
+            // punctuation this break was made on, which un-split and re-split
+            // lines under the reader ("행이 한꺼번에 문장분리되는" churn) and reset
+            // each affected line's translation. A break is therefore recorded
+            // against the word it followed and honoured from then on, so live
+            // line structure only ever grows.
+            let tail = out.last?.words.last
+            let brokenBefore = tail.map { sentenceBreaks.contains($0.id) } ?? false
             if var last = out.last, last.speaker == sp, w.t0 - last.end < lineBreakGap,
-               !Self.endsSentence(last.words.last?.text) {
+               !brokenBefore, !Self.endsSentence(last.words.last?.text) {
                 last.end = max(last.end, w.t1)
                 last.words.append(w)
                 last.speakerMargin = min(last.speakerMargin, m)
                 out[out.count - 1] = last
             } else {
+                // Remember punctuation-driven breaks only. Gap/speaker breaks are
+                // re-derived from timing and labels, which stay put.
+                if let t = tail, Self.endsSentence(t.text) { sentenceBreaks.insert(t.id) }
                 // id = first word's id → stable across rebuilds (see Line.id note)
                 var line = Line(id: w.id, speaker: sp, start: w.t0, end: w.t1, words: [w])
                 line.speakerMargin = m

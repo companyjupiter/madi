@@ -184,7 +184,7 @@ final class TranslationStabilityMetricsTests: XCTestCase {
 final class InterimSourceGateTests: XCTestCase {
 
     func testCommitsOnlyTheAgreedPrefix() {
-        var g = InterimSourceGate()
+        var g = InterimSourceGate(fastFirst: false)
         XCTAssertEqual(g.commit("안녕하세요"), "", "first hypothesis has nothing to agree with")
         // Second decode agrees on "안녕하세요" and adds an unconfirmed tail.
         XCTAssertEqual(g.commit("안녕하세요 오늘은 클라우드"), "안녕하세요")
@@ -193,7 +193,7 @@ final class InterimSourceGateTests: XCTestCase {
     }
 
     func testUnstableTailNeverReachesTheTranslator() {
-        var g = InterimSourceGate()
+        var g = InterimSourceGate(fastFirst: false)
         _ = g.commit("오늘은 클라우드 아키테이였습니다")
         // The tail is re-decoded into something different — it must not have
         // been committed by the earlier call.
@@ -203,7 +203,7 @@ final class InterimSourceGateTests: XCTestCase {
     }
 
     func testOutputIsAppendOnlyAcrossACosmeticFlip() {
-        var g = InterimSourceGate()
+        var g = InterimSourceGate(fastFirst: false)
         var seen: [String] = []
         for h in ["안녕하세요. 오늘은", "안녕하세요. 오늘은 클라우드",
                   "안녕하세요 오늘은 클라우드 네이티브",          // periods vanish
@@ -219,7 +219,7 @@ final class InterimSourceGateTests: XCTestCase {
     }
 
     func testStallEscapeHatchCommitsRatherThanStarving() {
-        var g = InterimSourceGate(maxStall: 2)
+        var g = InterimSourceGate(maxStall: 2, fastFirst: false)
         _ = g.commit("하나 둘 셋")
         XCTAssertEqual(g.commit("하나 둘 셋 넷"), "하나 둘 셋")
         // Two emitters now flap between different tails, so agreement never
@@ -231,7 +231,7 @@ final class InterimSourceGateTests: XCTestCase {
     }
 
     func testShrinkingHypothesisKeepsCommittedText() {
-        var g = InterimSourceGate()
+        var g = InterimSourceGate(fastFirst: false)
         _ = g.commit("하나 둘 셋 넷")
         let committed = g.commit("하나 둘 셋 넷")
         XCTAssertEqual(committed, "하나 둘 셋 넷")
@@ -241,7 +241,7 @@ final class InterimSourceGateTests: XCTestCase {
     }
 
     func testResetStartsTheNextWindowClean() {
-        var g = InterimSourceGate()
+        var g = InterimSourceGate(fastFirst: false)
         _ = g.commit("이전 문장입니다")
         _ = g.commit("이전 문장입니다 계속")
         g.reset()
@@ -253,7 +253,7 @@ final class InterimSourceGateTests: XCTestCase {
 final class InterimDisplayAgreementTests: XCTestCase {
 
     func testCommitsOnlyWordsTwoResultsAgreeOn() {
-        var d = InterimDisplayAgreement()
+        var d = InterimDisplayAgreement(fastFirst: false)
         XCTAssertEqual(d.feed(lang: "English", candidate: "Hello?"), "",
                        "a single MT result proves nothing yet")
         // Next result agrees on "hello" (cosmetically different) — the surface
@@ -266,7 +266,7 @@ final class InterimDisplayAgreementTests: XCTestCase {
     }
 
     func testDisplayIsAppendOnlyUnderRewording() {
-        var d = InterimDisplayAgreement()
+        var d = InterimDisplayAgreement(fastFirst: false)
         var seen: [String] = []
         for c in ["Hello. Today is cloud.",
                   "Hello. Today was about cloud-native architecture.",
@@ -281,19 +281,156 @@ final class InterimDisplayAgreementTests: XCTestCase {
     }
 
     func testLanguagesAreIndependent() {
-        var d = InterimDisplayAgreement()
+        var d = InterimDisplayAgreement(fastFirst: false)
         _ = d.feed(lang: "English", candidate: "Hello there")
         XCTAssertEqual(d.feed(lang: "Japanese", candidate: "こんにちは"), "")
         XCTAssertEqual(d.feed(lang: "English", candidate: "Hello there friends"), "Hello there")
     }
 
     func testRemoveAndResetClear() {
-        var d = InterimDisplayAgreement()
+        var d = InterimDisplayAgreement(fastFirst: false)
         _ = d.feed(lang: "English", candidate: "Some text here")
         _ = d.feed(lang: "English", candidate: "Some text here too")
         d.remove(lang: "English")
         XCTAssertEqual(d.feed(lang: "English", candidate: "Fresh"), "")
         d.reset()
         XCTAssertEqual(d.feed(lang: "English", candidate: "New window"), "")
+    }
+}
+
+@MainActor
+final class TranslationLatencyTests: XCTestCase {
+
+    private func meter() -> TranslationStabilityMetrics {
+        let m = TranslationStabilityMetrics.shared
+        m.reset()
+        return m
+    }
+
+    func testMeasuresElapsedBetweenStartAndEnd() {
+        let m = meter()
+        var t = 100.0
+        m.now = { t }
+        m.markStart(.turnTTFT, key: "a")
+        t += 0.25
+        m.markEnd(.turnTTFT, key: "a")
+        XCTAssertEqual(m.samples[.turnTTFT]?.first ?? 0, 0.25, accuracy: 0.0001)
+        XCTAssertTrue(m.latencySummary(.turnTTFT).contains("250/250ms"))
+    }
+
+    func testRestartDoesNotResetARunningClock() {
+        let m = meter()
+        var t = 0.0
+        m.now = { t }
+        m.markStart(.captionFirstPaint, key: "window")
+        t += 1.0
+        m.markStart(.captionFirstPaint, key: "window")   // debounce re-arm
+        t += 1.0
+        m.markEnd(.captionFirstPaint, key: "window")
+        XCTAssertEqual(m.samples[.captionFirstPaint]?.first ?? 0, 2.0, accuracy: 0.0001,
+                       "the window clock must start at the FIRST hypothesis char")
+    }
+
+    func testOnlyFirstPaintCounts() {
+        let m = meter()
+        var t = 0.0
+        m.now = { t }
+        m.markStart(.turnTTFT, key: "a")
+        t += 0.4; m.markEnd(.turnTTFT, key: "a")
+        t += 5.0; m.markEnd(.turnTTFT, key: "a")   // later repaints are not TTFT
+        XCTAssertEqual(m.samples[.turnTTFT]?.count, 1)
+    }
+
+    func testCancelDropsTheMeasurement() {
+        let m = meter()
+        m.markStart(.captionFirstPaint, key: "window")
+        m.cancel(.captionFirstPaint, key: "window")
+        m.markEnd(.captionFirstPaint, key: "window")
+        XCTAssertNil(m.samples[.captionFirstPaint]?.first)
+        XCTAssertEqual(m.latencySummary(.captionFirstPaint), "—")
+    }
+
+    func testMedianAndP95AndSummaryWiring() {
+        let m = meter()
+        var t = 0.0
+        m.now = { t }
+        for d in [0.1, 0.2, 0.3, 0.4, 2.0] {
+            m.markStart(.lineFirstTranslation, key: "\(d)")
+            t += d
+            m.markEnd(.lineFirstTranslation, key: "\(d)")
+        }
+        let s = m.latencySummary(.lineFirstTranslation)
+        XCTAssertTrue(s.contains("300/2000ms(n=5)"), "got \(s)")
+        XCTAssertTrue(m.summary().contains("lineTr=300/2000ms"))
+        XCTAssertTrue(m.summary().contains("ttft=—"), "unmeasured axes stay explicit")
+    }
+
+    func testResetClearsLatency() {
+        let m = meter()
+        m.markStart(.turnTTFT, key: "a"); m.markEnd(.turnTTFT, key: "a")
+        m.reset()
+        XCTAssertTrue(m.samples.isEmpty)
+        XCTAssertEqual(m.latencySummary(.turnTTFT), "—")
+    }
+}
+
+/// P10-2 — first-paint fast path. The 0→1 delay (source cycle + MT turn) is
+/// what made the caption feel dead at the start of every window.
+final class FirstPaintFastPathTests: XCTestCase {
+
+    func testSourceGatePaintsTheWindowOpeningImmediately() {
+        var g = InterimSourceGate()   // fastFirst is the shipped default
+        XCTAssertEqual(g.commit("안녕하세요 오늘은"), "안녕하세요 오늘은",
+                       "the first hypothesis must not wait for a second decode")
+    }
+
+    func testProvisionalPaintYieldsToTheFirstAgreedPrefix() {
+        var g = InterimSourceGate()
+        XCTAssertEqual(g.commit("안녕하세요 오늘은"), "안녕하세요 오늘은")
+        // Only "안녕하세요" is agreed — the provisional opening yields to it.
+        // This single correction is the price P10-2 trades for first paint.
+        XCTAssertEqual(g.commit("안녕하세요 오늘의 안건은"), "안녕하세요")
+    }
+
+    func testProvisionalDoesNotPoisonTheAgreementBaseline() {
+        var g = InterimSourceGate()
+        _ = g.commit("안녕하세요 오늘은 클라우드 네이티브 아키텍처")   // long, unconfirmed
+        _ = g.commit("안녕하세요 오늘은")                            // agreement = 2 words
+        // Committing the provisional outright would have frozen the gate here
+        // (measured: coverage 60% → 4%). Growth must still flow.
+        XCTAssertEqual(g.commit("안녕하세요 오늘은 클라우드"), "안녕하세요 오늘은")
+        XCTAssertEqual(g.commit("안녕하세요 오늘은 클라우드 네이티브"),
+                       "안녕하세요 오늘은 클라우드")
+    }
+
+    func testAppendOnlyHoldsFromTheFirstAgreedPrefixOn() {
+        var g = InterimSourceGate()
+        _ = g.commit("안녕하세요 오늘은")
+        var seen = [g.commit("안녕하세요 오늘은 클라우드")]
+        seen.append(g.commit("안녕하세요 오늘은 클라우드 네이티브"))
+        seen.append(g.commit("안녕하세요 오늘은 클라우드 네이티브 아키텍처"))
+        for i in 1..<seen.count {
+            XCTAssertTrue(seen[i].hasPrefix(seen[i - 1]), "\(seen[i-1]) → \(seen[i])")
+        }
+    }
+
+    func testDisplayGatePaintsTheFirstTranslationImmediately() {
+        var d = InterimDisplayAgreement()
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello, today"), "Hello, today")
+        // Nothing agrees yet, so the provisional paint stays rather than blanking.
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hi, this morning"), "Hello, today")
+        // Agreement is between CONSECUTIVE results, so this one still disagrees
+        // with its predecessor ("Hi," vs "Hello,") — provisional holds.
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello, this morning"), "Hello, today")
+        // Now two consecutive results agree on "Hello, this" — it commits, and
+        // the provisional opening yields.
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello, this afternoon"), "Hello, this")
+    }
+
+    func testResetRearmsTheFastPathForTheNextWindow() {
+        var g = InterimSourceGate()
+        _ = g.commit("첫 윈도")
+        g.reset()
+        XCTAssertEqual(g.commit("새 윈도 시작"), "새 윈도 시작")
     }
 }

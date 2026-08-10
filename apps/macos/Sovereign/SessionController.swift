@@ -358,6 +358,12 @@ final class SessionController: EngineProcessDelegate {
             // (T1 carryover) until the committed line's real translation lands.
             // Session reset/stop sites clear livePartialTranslations explicitly.
             if livePartial != oldValue {
+                // P10-0: the window's responsiveness clock starts at the first
+                // hypothesis character, not at the turn — that is what the user
+                // experiences as "how long until I see a translation".
+                if !livePartial.isEmpty {
+                    TranslationStabilityMetrics.shared.markStart(.captionFirstPaint, key: "window")
+                }
                 // P8: LocalAgreement runs on EVERY hypothesis (here), not inside
                 // the debounced task — agreement needs consecutive observations,
                 // and the debounce drops most of them.
@@ -402,6 +408,12 @@ final class SessionController: EngineProcessDelegate {
     /// always shows a (hypothesis, translation) pair from the same generation.
     private func updateInterimTranslation(lang: String, text: String, source: String) {
         let display = interimDisplay.feed(lang: lang, candidate: text)
+        if !display.isEmpty {
+            TranslationStabilityMetrics.shared.markEnd(.captionFirstPaint, key: "window")
+            if let id = activeInterimID {
+                TranslationStabilityMetrics.shared.markEnd(.turnTTFT, key: "\(id.uuidString)|\(lang)")
+            }
+        }
         if display != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
         guard !display.isEmpty, livePartialTranslations[lang] != display else { return }
         TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: display)
@@ -412,6 +424,12 @@ final class SessionController: EngineProcessDelegate {
         var display: [String: String] = [:]
         for (lang, text) in translations {
             let d = interimDisplay.feed(lang: lang, candidate: text)
+            if !d.isEmpty {
+                TranslationStabilityMetrics.shared.markEnd(.captionFirstPaint, key: "window")
+                if let id = activeInterimID {
+                    TranslationStabilityMetrics.shared.markEnd(.turnTTFT, key: "\(id.uuidString)|\(lang)")
+                }
+            }
             if d != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
             // P9: before first agreement the gate returns "" — keep whatever the
             // caption already shows rather than blanking it.
@@ -843,8 +861,10 @@ final class SessionController: EngineProcessDelegate {
                 let revision = self.lineHash(source)
                 let completedKey = TranslationWorkKey(id: id, lang: lang, sourceRevision: revision)
                 if !text.isEmpty {
-                    _ = self.transcript.setTranslation(id, lang: lang, text,
-                                                       sourceRevision: revision)
+                    if self.transcript.setTranslation(id, lang: lang, text, sourceRevision: revision) {
+                        TranslationStabilityMetrics.shared.markEnd(.lineFirstTranslation,
+                                                                   key: id.uuidString)
+                    }
                 } else {
                     // P0: the guard suppressed the final — roll back the already-
                     // streamed partial instead of leaving guard-invalid text on
@@ -873,8 +893,11 @@ final class SessionController: EngineProcessDelegate {
                     self.updateInterimTranslation(lang: lang, text: text, source: source)
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
-                    _ = self.transcript.setTranslation(id, lang: lang, text,
-                                                       sourceRevision: self.lineHash(source))
+                    if self.transcript.setTranslation(id, lang: lang, text,
+                                                      sourceRevision: self.lineHash(source)) {
+                        TranslationStabilityMetrics.shared.markEnd(.lineFirstTranslation,
+                                                                   key: id.uuidString)
+                    }
                 }
             }
             // queue depth (D20) — the engine reports queued + in-flight turns.
@@ -945,6 +968,9 @@ final class SessionController: EngineProcessDelegate {
             guard !targets.isEmpty else { return }
             let id = UUID()
             guard t.translate(source, into: targets, id: id, kind: .interim) else { return }
+            for lang in targets {
+                TranslationStabilityMetrics.shared.markStart(.turnTTFT, key: "\(id.uuidString)|\(lang)")
+            }
             TranslationStabilityMetrics.shared.interimTurnsRun += 1
             self.lastInterimRequestedSource = source
             self.activeInterimID = id
@@ -980,6 +1006,9 @@ final class SessionController: EngineProcessDelegate {
         guard !missing.isEmpty else { translatedHash[line.id] = h; return }
         if forceTargets == nil, translatedHash[line.id] == h { return }
         guard let t = ensureTranslateEngine() else { return }
+        // P10-0: committed-lane responsiveness — line queued → first translation
+        // visible on that line (the transcript panel's felt latency).
+        TranslationStabilityMetrics.shared.markStart(.lineFirstTranslation, key: line.id.uuidString)
         translatedHash[line.id] = h
         // T8: session-invariant FAQ bank first — a recurring clinic phrase costs
         // 0 ms and no DNA3 turn. Conservative exact (normalized) match only.
@@ -1861,6 +1890,7 @@ final class SessionController: EngineProcessDelegate {
             // NEXT window's first candidate must replace it freely, not be judged
             // as a "divergence" from the finished sentence.
             interimDisplay.reset()            // P9: display agreement per window
+            TranslationStabilityMetrics.shared.cancel(.captionFirstPaint, key: "window")
             lastInterimRequestedSource = ""   // P2: new window, gate starts fresh
             interimSourceGate.reset()         // P8: agreement restarts per window
             committedInterimSource = ""

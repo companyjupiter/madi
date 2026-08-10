@@ -135,3 +135,57 @@ final class TranslationOutputPolicyTests: XCTestCase {
         XCTAssertEqual(TranslationOutputPolicy.sourceLanguageName(for: "The meeting starts"), "English")
     }
 }
+
+/// P10-1 — the interim starvation guarantee. On device the committed lane is
+/// busy almost continuously, which starved the caption to 4 turns per session.
+final class InterimReservationTests: XCTestCase {
+
+    private func turn(_ kind: TranslationTurnKind, _ lang: String = "English",
+                      reserved: Bool = false, id: UUID = UUID()) -> TranslationTurn {
+        TranslationTurn(id: id, lang: lang, source: "s", prompt: "p",
+                        prefix: nil, body: nil, retries: 1, kind: kind, reserved: reserved)
+    }
+
+    func testUnreservedInterimIsStillBlockedByCommitted() {
+        var q = TranslationTurnQueue()
+        _ = q.enqueue(turn(.committed))
+        XCTAssertFalse(q.enqueue(turn(.interim)).accepted,
+                       "the existing backpressure must survive")
+    }
+
+    func testReservedInterimBypassesTheCommittedBlock() {
+        var q = TranslationTurnQueue()
+        _ = q.enqueue(turn(.committed))
+        XCTAssertTrue(q.enqueue(turn(.interim, reserved: true)).accepted)
+        XCTAssertTrue(q.enqueue(turn(.interim, reserved: true), blockInterim: true).accepted,
+                      "an in-flight committed turn must not block the reserved slot either")
+    }
+
+    func testReservedInterimIsServedBeforePendingCommitted() {
+        var q = TranslationTurnQueue()
+        _ = q.enqueue(turn(.committed))
+        _ = q.enqueue(turn(.interim, reserved: true))
+        let first = q.popNext()
+        XCTAssertEqual(first?.kind, .interim, "admission alone is not enough — it must RUN")
+        XCTAssertEqual(q.popNext()?.kind, .committed)
+    }
+
+    func testCommittedEvictionSparesTheReservedInterim() {
+        var q = TranslationTurnQueue()
+        _ = q.enqueue(turn(.interim, reserved: true))
+        _ = q.enqueue(turn(.interim, "Japanese"))   // ordinary interim
+        let r = q.enqueue(turn(.committed))
+        XCTAssertEqual(r.displaced.count, 1, "only the unreserved interim is evicted")
+        XCTAssertEqual(r.displaced.first?.lang, "Japanese")
+        XCTAssertTrue(q.turns.contains { $0.reserved })
+    }
+
+    func testReservedSlotDoesNotDisableRevisionCoalescing() {
+        var q = TranslationTurnQueue()
+        let id = UUID()
+        _ = q.enqueue(turn(.interim, reserved: true, id: id))
+        let r = q.enqueue(turn(.interim, reserved: true, id: id))
+        XCTAssertEqual(r.displaced.count, 1, "a newer revision still replaces the older turn")
+        XCTAssertEqual(q.count, 1)
+    }
+}

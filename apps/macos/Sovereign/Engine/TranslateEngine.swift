@@ -109,6 +109,25 @@ final class TranslateEngine {
 
     private static let prefixSlot = ["Korean": 0, "English": 1, "Japanese": 2, "Chinese": 3]
 
+    /// P10-1: interim starvation guarantee. The committed lane is busy almost
+    /// continuously in a live session (every word event queues stable lines), and
+    /// interim work is otherwise rejected whenever ANY committed turn is queued
+    /// or in flight — measured on device: 4 interim turns and ONE caption update
+    /// for a whole session. At most one interim turn per interval may therefore
+    /// bypass the block and jump the queue, so the caption keeps breathing under
+    /// a backlog. 0 disables the guarantee.
+    var interimGuarantee: TimeInterval = 3.0
+    /// Injectable for deterministic tests.
+    var clock: () -> Double = { ProcessInfo.processInfo.systemUptime }
+    private var lastInterimAcceptedAt: Double?
+
+    /// True when no interim turn has been accepted within the guarantee window.
+    private func interimIsStarved() -> Bool {
+        guard interimGuarantee > 0 else { return false }
+        guard let last = lastInterimAcceptedAt else { return true }
+        return clock() - last >= interimGuarantee
+    }
+
     @discardableResult
     func translate(_ text: String, into targets: [String], id: UUID,
                    kind: TranslationTurnKind = .committed) -> Bool {
@@ -121,14 +140,23 @@ final class TranslateEngine {
             ordered.remove(at: i); ordered.append(p)
         }
         var accepted = false
+        // Only the priority language claims the reservation — one guaranteed
+        // turn, not one per target, so a multi-target session cannot flood the
+        // committed lane with jumped interim work.
+        var reservationAvailable = kind == .interim && interimIsStarved()
         for target in ordered {
+            let claimsReservation = reservationAvailable && target == ordered.last
             let turn = TranslationTurn(
                 id: id, lang: target, source: oneLine,
                 prompt: Self.prompt(for: target, text: oneLine),
                 prefix: Self.prefix(for: target), body: oneLine + " =>",
-                retries: 1, kind: kind)
+                retries: 1, kind: kind, reserved: claimsReservation)
             let result = pending.enqueue(
                 turn, blockInterim: inflightTurn?.kind == .committed)
+            if result.accepted {
+                if claimsReservation { reservationAvailable = false }
+                if kind == .interim { lastInterimAcceptedAt = clock() }
+            }
             accepted = accepted || result.accepted
             for old in result.displaced { onDiscard?(old.id, old.lang, old.source) }
         }

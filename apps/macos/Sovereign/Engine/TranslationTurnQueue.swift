@@ -21,6 +21,11 @@ struct TranslationTurn: Equatable {
     let body: String?
     var retries: Int
     let kind: TranslationTurnKind
+    /// P10-1: this interim turn holds the starvation-guarantee slot. It bypasses
+    /// the committed block, survives a committed turn's interim eviction, and is
+    /// served before pending committed work — once, so the caption cannot be
+    /// starved for longer than the guarantee interval under a committed backlog.
+    var reserved: Bool = false
 }
 
 struct TranslationQueueEnqueueResult {
@@ -41,13 +46,15 @@ struct TranslationTurnQueue {
     mutating func enqueue(_ turn: TranslationTurn, blockInterim: Bool = false,
                           replaceExisting: Bool = true)
         -> TranslationQueueEnqueueResult {
-        if turn.kind == .interim, blockInterim || hasCommitted {
+        if turn.kind == .interim, !turn.reserved, blockInterim || hasCommitted {
             return TranslationQueueEnqueueResult(accepted: false, displaced: [])
         }
 
         var displaced: [TranslationTurn] = []
         if turn.kind == .committed {
-            displaced.append(contentsOf: removeAll { $0.kind == .interim })
+            // A reserved interim survives: evicting it would re-open the
+            // starvation window the reservation exists to close.
+            displaced.append(contentsOf: removeAll { $0.kind == .interim && !$0.reserved })
         }
         if !replaceExisting,
            turns.contains(where: { $0.id == turn.id && $0.lang == turn.lang }) {
@@ -61,11 +68,13 @@ struct TranslationTurnQueue {
     /// Highest semantic priority first; newest-first within a lane preserves the
     /// existing live-caption behavior during a backlog.
     var next: TranslationTurn? {
+        if let i = turns.lastIndex(where: { $0.reserved }) { return turns[i] }
         if let i = turns.lastIndex(where: { $0.kind == .committed }) { return turns[i] }
         return turns.last
     }
 
     mutating func popNext() -> TranslationTurn? {
+        if let i = turns.lastIndex(where: { $0.reserved }) { return turns.remove(at: i) }
         if let i = turns.lastIndex(where: { $0.kind == .committed }) {
             return turns.remove(at: i)
         }
