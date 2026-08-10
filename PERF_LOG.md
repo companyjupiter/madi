@@ -1,4 +1,16 @@
 
+## P10 — 반응속도×구조 배치 (2026-08-10, TTFT 1급 축 승격)
+
+| # | idea | result | metric |
+|---|------|--------|--------|
+| P10-0 | **TTFT 계측** — turnTTFT(턴 요청→첫 표시)·captionFirstPaint(첫 가설→첫 페인트)·lineFirstTranslation(라인 큐→첫 번역), median/p95, 주입 가능 클록 | ✅ commit | summary 라인에 `ttft=/firstPaint=/lineTr=` 추가 — **이후 모든 배치는 NE+TTFT 동시 기록** |
+| P10-1 | **인터림 기아 해소** — TranslationTurn.reserved: 3s당 1턴이 committed 블록 우회+선실행+eviction 면제 (우선언어만) | ✅ commit | 실측 원인 = 이중 차단(admission 거부 AND committed 선pop). 일반 인터림 배압·리비전 코얼레싱 불변 (큐 유닛테스트 5건) |
+| P10-2 | **첫 페인트 fast-path** — 윈도 첫 가설/첫 MT 결과를 **provisional로 즉시 표출**, 첫 합의 프리픽스가 도착하면 영구 인계 | ✅ commit | 첫 페인트 **3.00→1.00 프리뷰 주기**, 캡션 NE 0.00→**0.09 평균/0.20 worst** (승인 게이트 ≤0.2 안). ❌ **반증: 첫 가설을 committed로 직접 커밋하면 커버리지 60%→4% 붕괴**(합의 기준선 오염 — NE 0.00인데 캡션이 얼어붙는 지표 승리·제품 패배) → provisional 재설계로 해소, 커버리지 불변 |
+| P10-3 | **split-once 문장분리** — 문장부호 break를 단어에 귀속·영구 존중, 행 구조 단조 증가 | ✅ commit | 재디코드가 문장부호를 옮겨도 un-split/re-split 없음 → 분할 진동이 유발하던 번역 무효화 연쇄 제거 (동결 head의 번역 생존 테스트) |
+| P10-4 | **SPKFIX 배치 코얼레싱** — recluster 버스트 N개 라벨 → 시각 재계산 1회(~50ms), 라벨 데이터는 동기 유지 | ✅ commit | "라벨 한꺼번에 뒤집힘" N회→1회. 스코프 컷 기록: 태그 페이드(무애니메이션 불변식, 시각검증 필요)·커밋 배치 내용 분산(TTFT 악화라 이중축 원칙상 기각) |
+
+실기 TTFT 실측은 다음 라이브 세션에서 `ttft=`/`firstPaint=` 라인으로 확인 (기아 해소+fast-path 전후 비교).
+
 ## P9 실기 라이브 실측 + 다음 지배 축 발견 (2026-08-10, 실기기 마이크 세션)
 
 merge된 main 빌드, 실제 마이크 세션(final 5,176자)의 `[translate-stability]` 로그:
