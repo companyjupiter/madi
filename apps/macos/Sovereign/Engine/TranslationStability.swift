@@ -267,6 +267,56 @@ final class TranslationStabilityMetrics {
     /// two consecutive decodes had not yet agreed on them.
     var sourceHeldChars = 0
 
+    // ── P10-0: the LATENCY axis ────────────────────────────────────────────
+    // Stability and responsiveness trade against each other — P8/P9 drove
+    // caption erasure to zero and made the app feel SLOWER, which the erasure
+    // meter alone could not show. From now on every translation change records
+    // both, so a win on one axis can never hide a regression on the other.
+
+    /// Monotonic clock; injectable so tests are deterministic.
+    var now: () -> Double = { ProcessInfo.processInfo.systemUptime }
+
+    enum Timing: String, CaseIterable {
+        /// Per TURN: engine request → that turn's first text on screen.
+        case turnTTFT
+        /// Per WINDOW: first interim hypothesis char → first caption paint.
+        case captionFirstPaint
+        /// Per LINE: line becomes translatable → its first translation shown.
+        case lineFirstTranslation
+    }
+    private(set) var samples: [Timing: [Double]] = [:]
+    private var startedAt: [Timing: [String: Double]] = [:]
+
+    /// Open a stopwatch for `key`; a second start for a live key is ignored so
+    /// re-arming (debounce, retry) cannot reset an already-running measurement.
+    func markStart(_ t: Timing, key: String) {
+        guard startedAt[t, default: [:]][key] == nil else { return }
+        startedAt[t, default: [:]][key] = now()
+    }
+    /// Close the stopwatch for `key`. No-op when it was never started or when
+    /// it already fired — first paint is what we measure, not every repaint.
+    func markEnd(_ t: Timing, key: String) {
+        guard let s = startedAt[t]?[key] else { return }
+        startedAt[t]?[key] = nil
+        samples[t, default: []].append(now() - s)
+    }
+    /// The measurement no longer applies (window closed, line dropped).
+    func cancel(_ t: Timing, key: String) { startedAt[t]?[key] = nil }
+    func cancelAll(_ t: Timing) { startedAt[t] = [:] }
+
+    private func pct(_ xs: [Double], _ p: Double) -> Double {
+        guard !xs.isEmpty else { return 0 }
+        let s = xs.sorted()
+        let i = min(s.count - 1, max(0, Int((Double(s.count - 1) * p).rounded())))
+        return s[i]
+    }
+    /// "median/p95 ms (n)" for one timing, or "—" when nothing was measured.
+    func latencySummary(_ t: Timing) -> String {
+        let xs = samples[t, default: []]
+        guard !xs.isEmpty else { return "—" }
+        return String(format: "%.0f/%.0fms(n=%d)", pct(xs, 0.5) * 1000, pct(xs, 0.95) * 1000, xs.count)
+    }
+
     /// `text == nil` means the key was removed from screen (counts as full erase
     /// of what was shown). Identical text is a no-op.
     func recordShown(_ surface: Surface, key: String, text: String?) {
@@ -314,6 +364,9 @@ final class TranslationStabilityMetrics {
         return "[translate-stability] \(part(.caption)) | \(part(.panel))"
             + " | finalChars=\(finals) interimTurns=\(interimTurnsRun) gated=\(interimTurnsSkipped)"
             + " holds=\(stabilizerHolds) srcHeld=\(sourceHeldChars)"
+            + " | ttft=\(latencySummary(.turnTTFT))"
+            + " firstPaint=\(latencySummary(.captionFirstPaint))"
+            + " lineTr=\(latencySummary(.lineFirstTranslation))"
     }
 
     func reset() {
@@ -323,5 +376,7 @@ final class TranslationStabilityMetrics {
         interimTurnsSkipped = 0
         stabilizerHolds = 0
         sourceHeldChars = 0
+        samples = [:]
+        startedAt = [:]
     }
 }

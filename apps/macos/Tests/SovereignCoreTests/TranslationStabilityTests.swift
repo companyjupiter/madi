@@ -297,3 +297,79 @@ final class InterimDisplayAgreementTests: XCTestCase {
         XCTAssertEqual(d.feed(lang: "English", candidate: "New window"), "")
     }
 }
+
+@MainActor
+final class TranslationLatencyTests: XCTestCase {
+
+    private func meter() -> TranslationStabilityMetrics {
+        let m = TranslationStabilityMetrics.shared
+        m.reset()
+        return m
+    }
+
+    func testMeasuresElapsedBetweenStartAndEnd() {
+        let m = meter()
+        var t = 100.0
+        m.now = { t }
+        m.markStart(.turnTTFT, key: "a")
+        t += 0.25
+        m.markEnd(.turnTTFT, key: "a")
+        XCTAssertEqual(m.samples[.turnTTFT]?.first ?? 0, 0.25, accuracy: 0.0001)
+        XCTAssertTrue(m.latencySummary(.turnTTFT).contains("250/250ms"))
+    }
+
+    func testRestartDoesNotResetARunningClock() {
+        let m = meter()
+        var t = 0.0
+        m.now = { t }
+        m.markStart(.captionFirstPaint, key: "window")
+        t += 1.0
+        m.markStart(.captionFirstPaint, key: "window")   // debounce re-arm
+        t += 1.0
+        m.markEnd(.captionFirstPaint, key: "window")
+        XCTAssertEqual(m.samples[.captionFirstPaint]?.first ?? 0, 2.0, accuracy: 0.0001,
+                       "the window clock must start at the FIRST hypothesis char")
+    }
+
+    func testOnlyFirstPaintCounts() {
+        let m = meter()
+        var t = 0.0
+        m.now = { t }
+        m.markStart(.turnTTFT, key: "a")
+        t += 0.4; m.markEnd(.turnTTFT, key: "a")
+        t += 5.0; m.markEnd(.turnTTFT, key: "a")   // later repaints are not TTFT
+        XCTAssertEqual(m.samples[.turnTTFT]?.count, 1)
+    }
+
+    func testCancelDropsTheMeasurement() {
+        let m = meter()
+        m.markStart(.captionFirstPaint, key: "window")
+        m.cancel(.captionFirstPaint, key: "window")
+        m.markEnd(.captionFirstPaint, key: "window")
+        XCTAssertNil(m.samples[.captionFirstPaint]?.first)
+        XCTAssertEqual(m.latencySummary(.captionFirstPaint), "—")
+    }
+
+    func testMedianAndP95AndSummaryWiring() {
+        let m = meter()
+        var t = 0.0
+        m.now = { t }
+        for d in [0.1, 0.2, 0.3, 0.4, 2.0] {
+            m.markStart(.lineFirstTranslation, key: "\(d)")
+            t += d
+            m.markEnd(.lineFirstTranslation, key: "\(d)")
+        }
+        let s = m.latencySummary(.lineFirstTranslation)
+        XCTAssertTrue(s.contains("300/2000ms(n=5)"), "got \(s)")
+        XCTAssertTrue(m.summary().contains("lineTr=300/2000ms"))
+        XCTAssertTrue(m.summary().contains("ttft=—"), "unmeasured axes stay explicit")
+    }
+
+    func testResetClearsLatency() {
+        let m = meter()
+        m.markStart(.turnTTFT, key: "a"); m.markEnd(.turnTTFT, key: "a")
+        m.reset()
+        XCTAssertTrue(m.samples.isEmpty)
+        XCTAssertEqual(m.latencySummary(.turnTTFT), "—")
+    }
+}
