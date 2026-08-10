@@ -906,6 +906,7 @@ final class SessionController: EngineProcessDelegate {
                 self.translateQueueDepth = depth
                 self.updatePreviewAdmission()
             }
+            t.interimGuarantee = InterimTuning.guaranteeSeconds   // P10-5 dial
             guard t.start(engine: eng, model: AssetManifest.translateModelURL) else { return nil }
             translate = t
         }
@@ -949,7 +950,7 @@ final class SessionController: EngineProcessDelegate {
         interimGen += 1
         let gen = interimGen
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
+            try? await Task.sleep(for: .milliseconds(Int(InterimTuning.debounceMs)))
             guard let self, gen == self.interimGen, self.activeInterimID == nil,
                   !self.committedInterimSource.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
@@ -960,7 +961,8 @@ final class SessionController: EngineProcessDelegate {
             // tails). The next growth re-arms; the committed translation
             // covers a gated-away tail at window close.
             guard InterimTranslateGate.worthTranslating(
-                source: source, lastRequested: self.lastInterimRequestedSource) else {
+                source: source, lastRequested: self.lastInterimRequestedSource,
+                minDelta: InterimTuning.minDelta) else {
                 TranslationStabilityMetrics.shared.interimTurnsSkipped += 1
                 return
             }
