@@ -373,6 +373,15 @@ final class SessionController: EngineProcessDelegate {
                 committedInterimSource = interimSourceGate.commit(livePartial)
                 TranslationStabilityMetrics.shared.sourceHeldChars +=
                     max(0, livePartial.count - committedInterimSource.count)
+                // P12: completed sentences leave the re-translation loop — one
+                // one-shot turn each, then frozen; turns only chase the OPEN
+                // sentence from here on.
+                let (fresh, current) = interimSentences.advance(source: committedInterimSource)
+                currentInterimSentence = current
+                let base = interimSentences.sentences.count - fresh.count
+                for (i, sentence) in fresh.enumerated() {
+                    requestSentenceFinal(sentence, index: base + i)
+                }
                 scheduleInterimTranslate()
             }
         }
@@ -396,6 +405,16 @@ final class SessionController: EngineProcessDelegate {
     /// P2: the hypothesis the last ACCEPTED interim turn translated; the gate
     /// compares against this, not against what is displayed. Reset per window.
     private var lastInterimRequestedSource = ""
+    /// P12: sentence scope — completed sentences translate ONCE and freeze;
+    /// only the open sentence re-translates (measured: interim prefill −45%,
+    /// coverage +11pt; the one visible refinement per sentence boundary stays
+    /// inside the NE≤0.2 gate).
+    private var interimSentences = InterimSentenceLedger()
+    /// lang → per-completed-sentence frozen translations ("" until its one-shot
+    /// result lands; slots fill in order because the engine is serial).
+    private var frozenInterim: [String: [String]] = [:]
+    /// The open sentence currently eligible for interim translation.
+    private var currentInterimSentence = ""
     /// P8: LocalAgreement-2 over the hypothesis stream — the translator is fed
     /// only the word prefix two consecutive decodes agreed on (surface locked),
     /// so it never re-translates a source that changed meaning under it.
@@ -418,9 +437,12 @@ final class SessionController: EngineProcessDelegate {
             }
         }
         if display != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
-        guard !display.isEmpty, livePartialTranslations[lang] != display else { return }
-        TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: display)
-        livePartialTranslations[lang] = display
+        guard !display.isEmpty else { return }
+        currentInterimDisplay[lang] = display
+        let composed = composedInterim(lang: lang)
+        guard livePartialTranslations[lang] != composed else { return }
+        TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: composed)
+        livePartialTranslations[lang] = composed
         livePartialSource = source
     }
     private func setInterimTranslations(_ translations: [String: String], source: String) {
@@ -432,16 +454,20 @@ final class SessionController: EngineProcessDelegate {
                 if let id = activeInterimID {
                     TranslationStabilityMetrics.shared.markEnd(.turnTTFT, key: "\(id.uuidString)|\(lang)")
                 }
+                currentInterimDisplay[lang] = d
             }
             if d != text { TranslationStabilityMetrics.shared.stabilizerHolds += 1 }
             // P9: before first agreement the gate returns "" — keep whatever the
-            // caption already shows rather than blanking it.
-            if d.isEmpty, let existing = livePartialTranslations[lang] { display[lang] = existing }
-            else if !d.isEmpty { display[lang] = d }
+            // caption already shows rather than blanking it. P12: compose the
+            // frozen sentences in front of the open-sentence display.
+            let composed = composedInterim(lang: lang)
+            if composed.isEmpty, let existing = livePartialTranslations[lang] { display[lang] = existing }
+            else if !composed.isEmpty { display[lang] = composed }
         }
         for lang in livePartialTranslations.keys where display[lang] == nil {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: nil)
             interimDisplay.remove(lang: lang)
+            currentInterimDisplay[lang] = nil
         }
         for (lang, text) in display where livePartialTranslations[lang] != text {
             TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: text)
@@ -460,6 +486,8 @@ final class SessionController: EngineProcessDelegate {
         lastInterimRequestedSource = ""
         interimSourceGate.reset()
         committedInterimSource = ""
+        interimSentences.reset()
+        frozenInterim = [:]; currentInterimDisplay = [:]; currentInterimSentence = ""
         livePartialTranslations = [:]
         livePartialSource = ""
     }
@@ -467,6 +495,9 @@ final class SessionController: EngineProcessDelegate {
         let source: String
         var pending: Set<String>
         var translations: [String: String]
+        /// P12: nil = open-sentence turn (display-gated); an index = one-shot
+        /// translation of the completed sentence that freezes at that slot.
+        var sentence: Int? = nil
     }
     private var interimRequests: [UUID: InterimRequest] = [:]
     private var activeInterimID: UUID?
@@ -891,8 +922,9 @@ final class SessionController: EngineProcessDelegate {
             t.onPartial = { [weak self] id, lang, text, source in
                 guard let self else { return }
                 if let request = self.interimRequests[id] {
-                    guard id == self.activeInterimID, request.source == source,
-                          self.committedInterimSource == source else { return }
+                    guard request.sentence == nil, id == self.activeInterimID,
+                          request.source == source,
+                          self.currentInterimSentence == source else { return }
                     self.updateInterimTranslation(lang: lang, text: text, source: source)
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
@@ -924,8 +956,23 @@ final class SessionController: EngineProcessDelegate {
         guard var request = interimRequests[id], request.source == source else { return false }
         request.pending.remove(lang)
         if let text, !text.isEmpty { request.translations[lang] = text }
+        // P12: a sentence-final result freezes at its slot and recomposes the
+        // caption; it also seeds the O3 cache under the SENTENCE key so the
+        // committed lane can reuse it when this sentence commits as a line.
+        if let slot = request.sentence {
+            if let text, !text.isEmpty {
+                var row = frozenInterim[lang] ?? []
+                while row.count <= slot { row.append("") }
+                row[slot] = text
+                frozenInterim[lang] = row
+                interimCache.put(source, [lang: text])
+                recomposeInterimCaption(lang: lang)
+            }
+            if request.pending.isEmpty { interimRequests[id] = nil } else { interimRequests[id] = request }
+            return true
+        }
         let isActive = activeInterimID == id
-        if isActive, committedInterimSource == source {
+        if isActive, currentInterimSentence == source {
             setInterimTranslations(request.translations, source: source)
             if !request.translations.isEmpty { interimCache.put(source, request.translations) }
         }
@@ -933,7 +980,7 @@ final class SessionController: EngineProcessDelegate {
             interimRequests[id] = nil
             if isActive {
                 activeInterimID = nil
-                if !committedInterimSource.isEmpty, committedInterimSource != source {
+                if !currentInterimSentence.isEmpty, currentInterimSentence != source {
                     scheduleInterimTranslate()
                 }
             }
@@ -941,6 +988,59 @@ final class SessionController: EngineProcessDelegate {
             interimRequests[id] = request
         }
         return true
+    }
+
+    /// P12: one-shot translation of a sentence that just completed in the agreed
+    /// source. Freezes at its slot; also seeds the O3 interim cache under the
+    /// SENTENCE key — committed lines are sentence-per-line, so when this exact
+    /// sentence commits, the committed lane gets its translation for free.
+    private func requestSentenceFinal(_ sentence: String, index: Int) {
+        // The open-sentence display starts a new sentence — its agreement gate
+        // must not judge the next sentence against the finished one, and the
+        // finished sentence's provisional tail leaves the current slot.
+        interimDisplay.reset()
+        currentInterimDisplay = [:]
+        guard !translateTargets.isEmpty, let t = ensureTranslateEngine() else { return }
+        // O3 first: this sentence may already be in the cache (repeat phrase).
+        if let cached = interimCache.get(sentence), !cached.isEmpty {
+            for (lang, tr) in cached {
+                var row = frozenInterim[lang] ?? []
+                while row.count <= index { row.append("") }
+                row[index] = tr
+                frozenInterim[lang] = row
+                recomposeInterimCaption(lang: lang)
+            }
+            return
+        }
+        let targets = routedTargets(for: sentence)
+        guard !targets.isEmpty else { return }
+        let id = UUID()
+        guard t.translate(sentence, into: targets, id: id, kind: .interim) else { return }
+        TranslationStabilityMetrics.shared.interimTurnsRun += 1
+        interimRequests[id] = InterimRequest(
+            source: sentence, pending: Set(targets), translations: [:], sentence: index)
+    }
+
+    /// P12: the open sentence's display-gated text per language (the tail the
+    /// composed caption ends with).
+    private var currentInterimDisplay: [String: String] = [:]
+
+    /// P12: the caption for `lang` = frozen sentence translations + the open
+    /// sentence's display-gated text.
+    private func composedInterim(lang: String) -> String {
+        let head = (frozenInterim[lang] ?? []).filter { !$0.isEmpty }.joined(separator: " ")
+        let cur = currentInterimDisplay[lang] ?? ""
+        if head.isEmpty { return cur }
+        return cur.isEmpty ? head : head + " " + cur
+    }
+
+    /// A frozen slot filled — republish the composed caption for that language.
+    private func recomposeInterimCaption(lang: String) {
+        let composed = composedInterim(lang: lang)
+        guard !composed.isEmpty, livePartialTranslations[lang] != composed else { return }
+        TranslationStabilityMetrics.shared.recordShown(.caption, key: lang, text: composed)
+        livePartialTranslations[lang] = composed
+        livePartialSource = committedInterimSource
     }
 
     /// Debounced (≈0.3s, one in flight) translation of the in-progress interim text
@@ -955,10 +1055,11 @@ final class SessionController: EngineProcessDelegate {
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(Int(InterimTuning.debounceMs)))
             guard let self, gen == self.interimGen, self.activeInterimID == nil,
-                  !self.committedInterimSource.isEmpty else { return }
+                  !self.currentInterimSentence.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
-            // P8: translate the AGREED prefix, not the newest hypothesis.
-            let source = self.committedInterimSource
+            // P8+P12: translate the agreed OPEN SENTENCE — completed sentences
+            // are frozen and never re-enter the loop.
+            let source = self.currentInterimSentence
             // P2: don't spend a DNA turn on a hypothesis that adds almost
             // nothing since the last requested turn (emitter flap, +1 word
             // tails). The next growth re-arms; the committed translation
@@ -1899,6 +2000,8 @@ final class SessionController: EngineProcessDelegate {
             lastInterimRequestedSource = ""   // P2: new window, gate starts fresh
             interimSourceGate.reset()         // P8: agreement restarts per window
             committedInterimSource = ""
+            interimSentences.reset()          // P12: sentence scope per window
+            frozenInterim = [:]; currentInterimDisplay = [:]; currentInterimSentence = ""
             lastCommitAt = Date()                        // D19 commit-cadence ring
             translateStableLines()                       // translate now-stable prior lines
         case .languageDetected(let tok):

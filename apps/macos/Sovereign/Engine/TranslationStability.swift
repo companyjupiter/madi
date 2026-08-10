@@ -302,6 +302,69 @@ enum InterimTuning {
         Int(resolve(env: "MADI_INTERIM_MIN_DELTA", defaultsKey: "interimMinDelta",
                     default: 6, min: 1, max: 30))
     }
+
+    /// P12 (Idea 3): the reservation adapts to committed pressure instead of
+    /// firing blindly every N seconds — under a deep backlog the caption's
+    /// guaranteed slot is what pushes committed lines into the shed path.
+    /// backlog ≤2 → base interval; ≤6 → 2× base; deeper → reservation off
+    /// (ordinary admission still applies when the lane goes quiet). Returns nil
+    /// for "no reservation right now".
+    static func adaptiveGuarantee(base: Double, committedBacklog: Int) -> Double? {
+        guard base > 0 else { return nil }
+        if committedBacklog <= 2 { return base }
+        if committedBacklog <= 6 { return base * 2 }
+        return nil
+    }
+}
+
+/// P12 (Idea 1): sentence-scoped interim translation.
+///
+/// Each interim turn used to re-translate the WHOLE agreed prefix — by the end
+/// of a window that is a 60-80 token prefill every ~3s, and under the P10-1
+/// reservation that cost comes straight out of the committed lane (measured on
+/// device: caption work can take 30-40% of engine time in continuous speech).
+/// The P9 display is append-only anyway, so a sentence that has COMPLETED
+/// inside the agreed source never changes again on screen: translate it once,
+/// freeze its translation, and from then on spend turns only on the OPEN
+/// sentence — a 10-30 token turn instead of the whole window.
+///
+/// (Sentence-freeze was refuted for DISPLAY in the 2026-08-10 sweep because
+/// boundary rewrites leaked to screen; the display-side agreement gate P9 now
+/// filters exactly those, so the refutation no longer applies — re-measured in
+/// the same harness before wiring.)
+struct InterimSentenceLedger {
+    static let enders: Set<Character> = [".", "?", "!", "。", "？", "！", "…"]
+
+    /// Split an agreed source prefix into completed sentences + the open tail.
+    static func split(_ source: String) -> (completed: [String], current: String) {
+        var completed: [String] = []
+        var cur = ""
+        for ch in source {
+            cur.append(ch)
+            if enders.contains(ch) {
+                let t = cur.trimmingCharacters(in: .whitespaces)
+                if !t.isEmpty { completed.append(t) }
+                cur = ""
+            }
+        }
+        return (completed, cur.trimmingCharacters(in: .whitespaces))
+    }
+
+    private(set) var sentences: [String] = []
+
+    /// Feed the newest agreed source; returns sentences that JUST completed
+    /// (each needs exactly one translation turn) and the open tail. The
+    /// completed list only ever grows — the source gate is append-only, so a
+    /// sentence that completed can never un-complete.
+    mutating func advance(source: String) -> (newlyCompleted: [String], current: String) {
+        let (completed, current) = Self.split(source)
+        guard completed.count > sentences.count else { return ([], current) }
+        let fresh = Array(completed[sentences.count...])
+        sentences = completed
+        return (fresh, current)
+    }
+
+    mutating func reset() { sentences = [] }
 }
 
 /// Session-scoped erasure counters for the two translation surfaces.
