@@ -575,8 +575,7 @@ final class TranscriptStore {
             }
             if touched {
                 liveLabelLookupCache = nil
-                reassignFrozenSpeakers()
-                rebuildLive()
+                scheduleSpeakerFixRebuild()
             }
         case .speakerOverlap(let l):
             spkOv.append(l)
@@ -587,6 +586,29 @@ final class TranscriptStore {
             applyOverlapSpeakers()
             scheduleRender()
         default: break
+        }
+    }
+
+    // ── P10-4: SPKFIX batch coalescing ──────────────────────────────────────
+    // A mid-session recluster emits its corrections as a BURST of SPKFIX lines,
+    // and each one used to run a full frozen-reassign + tail regroup — N visual
+    // convulsions for one recluster ("라벨이 한꺼번에 뒤집히는" 장면). The label
+    // windows themselves update synchronously above (they are data); only the
+    // derived recompute is coalesced, so one recluster lands as ONE visual
+    // update ~50 ms after its last label.
+    @ObservationIgnored private var spkFixRebuildScheduled = false
+    /// Visible recomputes actually performed for SPKFIX bursts (telemetry/tests).
+    @ObservationIgnored private(set) var speakerFixRebuilds = 0
+    private func scheduleSpeakerFixRebuild() {
+        guard !spkFixRebuildScheduled else { return }
+        spkFixRebuildScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            spkFixRebuildScheduled = false
+            speakerFixRebuilds += 1
+            liveLabelLookupCache = nil
+            reassignFrozenSpeakers()
+            rebuildFromCurrentLabels()
         }
     }
 

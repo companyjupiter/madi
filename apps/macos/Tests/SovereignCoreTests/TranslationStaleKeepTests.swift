@@ -131,3 +131,36 @@ final class SplitOnceGroupingTests: XCTestCase {
         XCTAssertEqual(s.lines.count, 1, "a new session must not inherit old breaks")
     }
 }
+
+/// P10-4 — one recluster burst must land as ONE visual recompute.
+@MainActor
+final class SpeakerFixCoalescingTests: XCTestCase {
+
+    func testBurstOfFixesCoalescesIntoOneRebuild() async throws {
+        let s = TranscriptStore()
+        // Two speakers' worth of words with live labels at their onsets.
+        s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 2.0, margin: 0.9)))
+        s.ingest(.speaker(SpeakerLabel(time: 2.0, id: 1, dur: 2.0, margin: 0.9)))
+        s.ingest(.word(t0: 0.0, t1: 0.5, text: "첫", conf: 1))
+        s.ingest(.word(t0: 2.1, t1: 2.5, text: "둘", conf: 1))
+        // A recluster batch: both windows relabel in one burst.
+        s.ingest(.speakerFix(SpeakerLabel(time: 0.0, id: 2, dur: 2.0, margin: 0.8)))
+        s.ingest(.speakerFix(SpeakerLabel(time: 2.0, id: 2, dur: 2.0, margin: 0.8)))
+        XCTAssertEqual(s.speakerFixRebuilds, 0, "recompute is deferred past the burst")
+        try await Task.sleep(nanoseconds: 120_000_000)
+        XCTAssertEqual(s.speakerFixRebuilds, 1, "one burst → one visual update")
+        XCTAssertTrue(s.lines.allSatisfy { $0.speaker == 2 },
+                      "…and the corrections all landed")
+    }
+
+    func testLabelDataUpdatesSynchronouslyEvenBeforeTheRebuild() {
+        let s = TranscriptStore()
+        s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 1.0, margin: 0.9)))
+        s.ingest(.word(t0: 0.0, t1: 0.5, text: "가", conf: 1))
+        s.ingest(.speakerFix(SpeakerLabel(time: 0.0, id: 3, dur: 1.0, margin: 0.8)))
+        // A word arriving right after the fix (before the coalesced rebuild)
+        // must already see the corrected label — data is never deferred.
+        s.ingest(.word(t0: 0.6, t1: 0.9, text: "나", conf: 1))
+        XCTAssertEqual(s.lines.first?.speaker, 3)
+    }
+}
