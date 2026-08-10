@@ -148,14 +148,31 @@ enum InterimTranslateGate {
 struct InterimSourceGate {
     /// Non-advancing hypotheses tolerated before the newest tail is taken anyway.
     var maxStall: Int
+    /// P10-2 first-paint fast path: commit the very first hypothesis of a window
+    /// outright instead of waiting for a second decode to agree with it. The 0→1
+    /// step is where the agreement horizon is felt as "nothing is happening" —
+    /// measured on device as the dominant complaint after P8/P9 — and one
+    /// unconfirmed sentence opening is a cheaper price than an empty caption.
+    /// The paint is PROVISIONAL: it is shown but not committed, so it cannot
+    /// poison the agreement baseline (committing it outright measured a coverage
+    /// collapse — 60% → 4% — because `committed` then outran every later
+    /// agreement and only the stall escape could advance it: NE 0.00 with a
+    /// frozen caption is a metric win and a product loss). The provisional text
+    /// yields to the first genuinely agreed prefix, which is the one revision
+    /// this path trades for responsiveness.
+    var fastFirst = true
 
     private var previous: [String] = []
     private var committed: [String] = []
+    private var provisional = ""
     private var stall = 0
 
     // Explicit: the synthesized memberwise init is private (the state below it
     // is), so callers could not otherwise tune the stall horizon.
-    init(maxStall: Int = 3) { self.maxStall = maxStall }
+    init(maxStall: Int = 3, fastFirst: Bool = true) {
+        self.maxStall = maxStall
+        self.fastFirst = fastFirst
+    }
 
     /// Punctuation/case are cosmetic for AGREEMENT purposes — the engine flips
     /// them between decodes ("안녕하세요." ↔ "안녕하세요") while the word is stable.
@@ -168,7 +185,11 @@ struct InterimSourceGate {
     mutating func commit(_ hypothesis: String) -> String {
         let current = hypothesis.split(separator: " ").map(String.init)
         defer { previous = current }
-        guard !previous.isEmpty else { return committed.joined(separator: " ") }
+        guard !previous.isEmpty else {
+            // P10-2: paint the window's opening immediately, provisionally.
+            if fastFirst { provisional = hypothesis }
+            return provisional
+        }
 
         var agreed = 0
         while agreed < previous.count, agreed < current.count,
@@ -185,6 +206,10 @@ struct InterimSourceGate {
                 stall = 0
             }
         }
+        // Until something is agreed, the provisional opening is what the viewer
+        // has; the first agreed prefix then takes over permanently.
+        if committed.isEmpty { return provisional }
+        provisional = ""
         return committed.joined(separator: " ")
     }
 
@@ -192,6 +217,7 @@ struct InterimSourceGate {
     mutating func reset() {
         previous = []
         committed = []
+        provisional = ""
         stall = 0
     }
 }
@@ -211,12 +237,19 @@ struct InterimSourceGate {
 /// Reuses InterimSourceGate's exact semantics (word agreement, surface locked
 /// at commit, stall escape) — one gate per target language.
 struct InterimDisplayAgreement {
+    /// P10-2: show the first MT result for a window without waiting for a second
+    /// one to agree. Combined with the source-side fast path this removes the
+    /// compounded 0→1 delay (source cycle + MT turn) that made the caption feel
+    /// dead at the start of every window.
+    var fastFirst = true
     private var gates: [String: InterimSourceGate] = [:]
+
+    init(fastFirst: Bool = true) { self.fastFirst = fastFirst }
 
     /// Feed one language's newest MT candidate; returns the committed text to
     /// display (append-only per language).
     mutating func feed(lang: String, candidate: String) -> String {
-        var g = gates[lang] ?? InterimSourceGate()
+        var g = gates[lang] ?? InterimSourceGate(fastFirst: fastFirst)
         let shown = g.commit(candidate)
         gates[lang] = g
         return shown
