@@ -76,3 +76,58 @@ final class TranslationStaleKeepTests: XCTestCase {
         XCTAssertFalse(line.staleTranslations.isEmpty)
     }
 }
+
+/// P10-3 — split-once. A re-decode that moves punctuation must not un-split and
+/// re-split live lines under the reader (each oscillation reset a translation).
+@MainActor
+final class SplitOnceGroupingTests: XCTestCase {
+
+    func testPunctuationBreakSurvivesItsOwnDisappearance() {
+        let s = TranscriptStore()
+        s.ingest(.word(t0: 0, t1: 0.3, text: "안녕하세요.", conf: 1))
+        s.ingest(.word(t0: 0.4, t1: 0.7, text: "오늘은", conf: 1))
+        XCTAssertEqual(s.lines.count, 2, "the sentence ender starts a new line")
+        // The next segment re-decodes and the period is gone — the break must hold.
+        s.ingest(.wordSectionBegin)
+        s.ingest(.word(t0: 1.0, t1: 1.3, text: "클라우드", conf: 1))
+        XCTAssertEqual(s.lines.count, 2, "structure must not un-split under the reader")
+        XCTAssertEqual(s.lines.first?.text, "안녕하세요.")
+    }
+
+    func testLineStructureOnlyGrows() {
+        let s = TranscriptStore()
+        var counts: [Int] = []
+        for (i, t) in ["첫째.", "둘째", "셋째.", "넷째", "다섯째"].enumerated() {
+            s.ingest(.word(t0: Double(i) * 0.4, t1: Double(i) * 0.4 + 0.3, text: t, conf: 1))
+            counts.append(s.lines.count)
+        }
+        for i in 1..<counts.count {
+            XCTAssertGreaterThanOrEqual(counts[i], counts[i - 1],
+                                        "live line count must be monotonic: \(counts)")
+        }
+    }
+
+    func testTranslationOfASplitHeadSurvivesLaterWords() {
+        let s = TranscriptStore()
+        s.ingest(.word(t0: 0, t1: 0.3, text: "안녕하세요.", conf: 1))
+        s.ingest(.word(t0: 0.4, t1: 0.7, text: "오늘은", conf: 1))
+        guard let head = s.lines.first?.id, let rev = s.sourceRevision(for: head) else { return XCTFail() }
+        XCTAssertTrue(s.setTranslation(head, lang: "English", "Hello.", sourceRevision: rev))
+        // Words keep arriving on the FOLLOWING line — the frozen head keeps its
+        // translation instead of being regrouped and invalidated.
+        s.ingest(.word(t0: 0.8, t1: 1.1, text: "클라우드", conf: 1))
+        s.ingest(.word(t0: 1.2, t1: 1.5, text: "네이티브", conf: 1))
+        XCTAssertEqual(s.lines.first?.translations["English"], "Hello.")
+        XCTAssertTrue(s.lines.first?.staleTranslations.isEmpty ?? false)
+    }
+
+    func testResetClearsRecordedBreaks() {
+        let s = TranscriptStore()
+        s.ingest(.word(t0: 0, t1: 0.3, text: "안녕하세요.", conf: 1))
+        s.ingest(.word(t0: 0.4, t1: 0.7, text: "오늘은", conf: 1))
+        s.reset()
+        s.ingest(.word(t0: 0, t1: 0.3, text: "안녕하세요", conf: 1))
+        s.ingest(.word(t0: 0.4, t1: 0.7, text: "오늘은", conf: 1))
+        XCTAssertEqual(s.lines.count, 1, "a new session must not inherit old breaks")
+    }
+}
