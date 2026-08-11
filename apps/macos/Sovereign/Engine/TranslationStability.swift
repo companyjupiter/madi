@@ -410,6 +410,10 @@ final class TranslationStabilityMetrics {
     /// P1 telemetry: candidates the stable-prefix filter held back (each one
     /// was a whole-prefix rewrite the viewer did NOT see).
     var stabilizerHolds = 0
+    /// P14 telemetry: cosmetic edits whose translations were re-bound instead of
+    /// invalidated — each one is a re-translation turn NOT spent and a panel
+    /// replacement the viewer did NOT see.
+    var cosmeticRebinds = 0
     /// P8 telemetry: hypothesis characters withheld from the translator because
     /// two consecutive decodes had not yet agreed on them.
     var sourceHeldChars = 0
@@ -514,7 +518,7 @@ final class TranslationStabilityMetrics {
         }
         return "[translate-stability] \(part(.caption)) | \(part(.panel))"
             + " | finalChars=\(finals) interimTurns=\(interimTurnsRun) gated=\(interimTurnsSkipped)"
-            + " holds=\(stabilizerHolds) srcHeld=\(sourceHeldChars)"
+            + " holds=\(stabilizerHolds) srcHeld=\(sourceHeldChars) rebinds=\(cosmeticRebinds)"
             + " | ttft=\(latencySummary(.turnTTFT))"
             + " firstPaint=\(latencySummary(.captionFirstPaint))"
             + " lineTr=\(latencySummary(.lineFirstTranslation))"
@@ -550,6 +554,7 @@ final class TranslationStabilityMetrics {
         interimTurnsSkipped = 0
         stabilizerHolds = 0
         sourceHeldChars = 0
+        cosmeticRebinds = 0
         samples = [:]
         startedAt = [:]
     }
