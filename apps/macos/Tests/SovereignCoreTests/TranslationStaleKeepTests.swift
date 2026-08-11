@@ -164,3 +164,72 @@ final class SpeakerFixCoalescingTests: XCTestCase {
         XCTAssertEqual(s.lines.first?.speaker, 3)
     }
 }
+
+/// P14 — cosmetic edits (punctuation/whitespace/case) re-bind translations to
+/// the new revision instead of invalidating them: no stale demotion, no
+/// re-translation turn, no panel replacement.
+@MainActor
+final class CosmeticRebindTests: XCTestCase {
+
+    override func setUp() async throws { TranslationStabilityMetrics.shared.reset() }
+
+    func testCosmeticEqualityRules() {
+        XCTAssertTrue(TranscriptStore.cosmeticallyEqual("안녕하세요 오늘은", "안녕하세요, 오늘은."))
+        XCTAssertTrue(TranscriptStore.cosmeticallyEqual("Hello World", "hello,  world!"))
+        XCTAssertTrue(TranscriptStore.cosmeticallyEqual("你好。今天", "你好 今天"))
+        XCTAssertFalse(TranscriptStore.cosmeticallyEqual("소버림", "소버린"), "letter change is material")
+        XCTAssertFalse(TranscriptStore.cosmeticallyEqual("오늘은 회의", "오늘은 회의를"),
+                       "a particle is content, not punctuation")
+    }
+
+    func testCosmeticEditKeepsTranslationValid() {
+        let s = TranscriptStore()
+        s.ingest(.word(t0: 0, t1: 0.3, text: "안녕하세요", conf: 1))
+        s.ingest(.word(t0: 0.4, t1: 0.7, text: "오늘은", conf: 1))
+        guard let id = s.lines.first?.id, let rev = s.sourceRevision(for: id) else { return XCTFail() }
+        XCTAssertTrue(s.setTranslation(id, lang: "English", "Hello, today", sourceRevision: rev))
+        // Reconcile-style re-decode: same words, new punctuation.
+        XCTAssertTrue(s.editLine(id, "안녕하세요, 오늘은."))
+        let line = s.lines.first!
+        XCTAssertEqual(line.translations["English"], "Hello, today",
+                       "translation stays VALID — no stale demotion, no dots")
+        XCTAssertTrue(line.staleTranslations.isEmpty)
+        XCTAssertEqual(TranslationStabilityMetrics.shared.cosmeticRebinds, 1)
+        // …and the rebound revision accepts follow-up results normally.
+        guard let rev2 = s.sourceRevision(for: id) else { return XCTFail() }
+        XCTAssertTrue(s.setTranslation(id, lang: "English", "Hello, today.", sourceRevision: rev2))
+    }
+
+    func testMaterialEditStillGoesStale() {
+        let s = TranscriptStore()
+        s.ingest(.word(t0: 0, t1: 0.3, text: "소버림", conf: 1))
+        guard let id = s.lines.first?.id, let rev = s.sourceRevision(for: id) else { return XCTFail() }
+        XCTAssertTrue(s.setTranslation(id, lang: "English", "Soverim", sourceRevision: rev))
+        XCTAssertTrue(s.editLine(id, "소버린"))
+        let line = s.lines.first!
+        XCTAssertNil(line.translations["English"], "material change must invalidate")
+        XCTAssertEqual(line.staleTranslations["English"], "Soverim")
+        XCTAssertEqual(TranslationStabilityMetrics.shared.cosmeticRebinds, 0)
+    }
+
+    func testSuppressionVerdictSurvivesCosmeticEdit() {
+        let s = TranscriptStore()
+        s.ingest(.word(t0: 0, t1: 0.3, text: "안녕하세요", conf: 1))
+        guard let id = s.lines.first?.id, let rev = s.sourceRevision(for: id) else { return XCTFail() }
+        XCTAssertTrue(s.suppressTranslation(id, lang: "Japanese", sourceRevision: rev))
+        XCTAssertTrue(s.editLine(id, "안녕하세요."))
+        XCTAssertTrue(s.lines.first?.suppressedTranslations.contains("Japanese") ?? false,
+                      "the guard's verdict binds to content, not to punctuation")
+    }
+
+    func testCosmeticWordReviewKeepsTranslation() {
+        let s = TranscriptStore()
+        s.ingest(.word(t0: 0, t1: 0.3, text: "안녕하세요", conf: 0.4))
+        s.ingest(.word(t0: 0.4, t1: 0.7, text: "오늘은", conf: 1))
+        guard let id = s.lines.first?.id, let rev = s.sourceRevision(for: id) else { return XCTFail() }
+        XCTAssertTrue(s.setTranslation(id, lang: "English", "Hello today", sourceRevision: rev))
+        XCTAssertTrue(s.editWord(id, index: 0, to: "안녕하세요,"))
+        XCTAssertEqual(s.lines.first?.translations["English"], "Hello today")
+        XCTAssertEqual(TranslationStabilityMetrics.shared.cosmeticRebinds, 1)
+    }
+}

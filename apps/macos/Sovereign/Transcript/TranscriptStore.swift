@@ -385,6 +385,40 @@ final class TranscriptStore {
         return Set(kept.filter { $0.value.sourceRevision == sourceRevision }.keys)
     }
 
+    // ── P14: cosmetic-edit translation rebinding ────────────────────────────
+    // The 2026-08-11 live session attributed 100% of panel erasure to REVISION
+    // replacements, and a large class of those edits — the mid-session
+    // reconcile re-decoding the same audio, glossary/punctuation normalization
+    // — changes only surface form. A translation of "안녕하세요 오늘은" is not
+    // invalidated by the text becoming "안녕하세요, 오늘은": re-bind the existing
+    // records to the new revision instead of stale-ing them and spending DNA
+    // turns re-deriving the same translation.
+    private static let cosmeticChars = Set(",.!?…。、·:;'\"“”‘’()–—-«»") // punctuation only
+    static func cosmeticallyEqual(_ a: String, _ b: String) -> Bool {
+        materialForm(a) == materialForm(b)
+    }
+    private static func materialForm(_ s: String) -> String {
+        String(s.lowercased().unicodeScalars.filter {
+            !CharacterSet.whitespacesAndNewlines.contains($0)
+        }).filter { !Self.cosmeticChars.contains($0) }
+    }
+
+    /// Re-key every provenance record of `id` to the line's CURRENT revision.
+    private func rebindTranslations(_ id: UUID, lineIndex i: Int) {
+        let newRev = TextRevision.of(lines[i].text)
+        if var records = translationsByLine[id] {
+            for (lang, record) in records {
+                var r = record; r.sourceRevision = newRev; records[lang] = r
+            }
+            translationsByLine[id] = records
+        }
+        if var verdicts = suppressedByLine[id] {
+            for lang in verdicts.keys { verdicts[lang] = newRev }
+            suppressedByLine[id] = verdicts
+        }
+        TranslationStabilityMetrics.shared.cosmeticRebinds += 1
+    }
+
     /// Replace a line's text (inline editing, live or post). Keyed by the stable
     /// line id so the edit persists through subsequent live rebuilds.
     @discardableResult
@@ -394,8 +428,10 @@ final class TranscriptStore {
         let current = TextRevision.of(lines[i].text)
         guard expectedRevision == nil || expectedRevision == current else { return false }
         if lines[i].text == t { return true }
+        let cosmetic = Self.cosmeticallyEqual(lines[i].text, t)
         editsByLine[id] = t
         lines[i].editedText = t
+        if cosmetic { rebindTranslations(id, lineIndex: i) }
         invalidateTranslations(id, lineIndex: i)
         scheduleRender()
         return true
@@ -411,6 +447,7 @@ final class TranscriptStore {
         let t = newText.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return false }
         let old = lines[li].words[index]
+        let beforeText = lines[li].text
         lines[li].words[index] = Word(t0: old.t0, t1: old.t1, text: t, conf: 1.0)
         lines[li].editedText = lines[li].joinedText
         editsByLine[lineID] = lines[li].editedText
@@ -418,6 +455,11 @@ final class TranscriptStore {
         // otherwise the next rebuild would resurrect the old amber word.
         if let fi = frozen.firstIndex(where: { $0.id == lineID }) {
             frozen[fi].words = lines[li].words
+        }
+        // P14: a review fix that only touches punctuation/case keeps the
+        // translation (confirming a word is also a common review action).
+        if Self.cosmeticallyEqual(beforeText, lines[li].text) {
+            rebindTranslations(lineID, lineIndex: li)
         }
         invalidateTranslations(lineID, lineIndex: li)
         scheduleRender()
