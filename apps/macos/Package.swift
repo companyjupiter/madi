@@ -25,6 +25,7 @@ let package = Package(
                 "Transcript/SpeakerID.swift",
                 "Transcript/SpeakerDisplayNumber.swift",
                 "Transcript/TranscriptStore.swift",
+                "Transcript/KoreanNumberFormatter.swift",
                 "Transcript/Exporters.swift",
                 "Transcript/WordMerger.swift",
                 "Transcript/EditorCuts.swift",

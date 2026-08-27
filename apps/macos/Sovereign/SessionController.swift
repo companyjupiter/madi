@@ -2130,6 +2130,15 @@ final class SessionController: EngineProcessDelegate {
                 }
             }
         }
+        // Korean spelled-numbers → digits (validated 2026-08-27, docs/ENGINE_EVAL.md:
+        // turbo FLEURS-ko CER 5.63 → 5.30, no engine change). Self-scoped to Hangul
+        // number+counter, so non-Korean lines are a no-op; skips user-edited lines
+        // like the glossary pass, and runs BEFORE the final translation so the DNA
+        // lane sees the formatted text.
+        for line in transcript.lines where line.editedText == nil {
+            let formatted = KoreanNumberFormatter.format(line.text)
+            if formatted != line.text { transcript.editLine(line.id, formatted) }
+        }
         engine?.terminate()
         // Drain mid-session names now that the engine has dumped its centroids
         // (.last/spk<id>.vec) on flush — THIS is the enrollment-timing fix.

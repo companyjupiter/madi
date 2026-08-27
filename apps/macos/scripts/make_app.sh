@@ -74,6 +74,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/SpeakerDisplayNumber.swift
   "$APP_DIR"/Sovereign/Transcript/WordMerger.swift
   "$APP_DIR"/Sovereign/Transcript/TranscriptStore.swift
+  "$APP_DIR"/Sovereign/Transcript/KoreanNumberFormatter.swift
   "$APP_DIR"/Sovereign/Transcript/EditorCuts.swift
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift
   "$APP_DIR"/Sovereign/Transcript/TranscriptArchive.swift
