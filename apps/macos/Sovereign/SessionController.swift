@@ -1108,9 +1108,40 @@ final class SessionController: EngineProcessDelegate {
     /// automatically because its hash changes.
     private func translateStableLines(includingLast: Bool = false) {
         guard !translateTargets.isEmpty else { return }
-        let lines = transcript.lines
+        var lines = transcript.lines
         let upTo = includingLast ? lines.count : max(0, lines.count - 1)
-        for i in 0..<upTo { translateLine(lines[i]) }
+        // Rewrite passes run FIRST, so a line is translated from its final text
+        // instead of being retranslated after a later correction.
+        for i in 0..<upTo { applyTextPasses(lines[i]) }
+        lines = transcript.lines   // a pass may have rewritten line text
+        for i in 0..<min(upTo, lines.count) { translateLine(lines[i]) }
+    }
+
+    /// Lines the USER rewrote by hand. The system passes below must never
+    /// overwrite a manual correction.
+    private var userEditedLines: Set<UUID> = []
+
+    /// Glossary correction + Korean spelled-number → digit formatting, as ONE
+    /// pass so the second treatment sees the first one's output (running them as
+    /// two loops meant a glossary-corrected line was skipped by the number pass,
+    /// which guards on `editedText == nil`).
+    ///
+    /// Applied the moment a line stops being the live tail — the same gate that
+    /// makes it eligible for translation — and again over everything at finalize.
+    /// That timing is what makes live formatting safe: a number only converts
+    /// with its counter attached (팔월 → 8월 needs the 월), and a line that is no
+    /// longer growing cannot be cut mid-number, so there is no convert-then-
+    /// rewrite churn. Because it runs before `translateLine`, the translation is
+    /// produced from the formatted text rather than invalidated by it.
+    private func applyTextPasses(_ line: Line) {
+        guard !userEditedLines.contains(line.id) else { return }
+        var text = line.text
+        if glossary.enabled, let corrected = PersonalVocabulary.correctedLineText(line, glossary) {
+            text = corrected
+        }
+        text = KoreanNumberFormatter.format(text)
+        guard text != line.text else { return }
+        _ = transcript.editLine(line.id, text)
     }
 
     /// Queue one line (hash-gated, FAQ/O3-cached, direction-routed).
@@ -1631,6 +1662,7 @@ final class SessionController: EngineProcessDelegate {
         recordStartedAt = nil; recordEndedAt = nil; pausedAt = nil; pausedAccum = 0
         transcript.reset()
         speakerNames = [:]
+        userEditedLines.removeAll()
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
@@ -1697,6 +1729,8 @@ final class SessionController: EngineProcessDelegate {
     }
 
     func editLine(_ id: UUID, to newText: String) {
+        // Remember it as the user's, so the glossary/number passes leave it alone.
+        userEditedLines.insert(id)
         _ = applyTextCorrection(id, to: newText, expectedRevision: nil, learn: true)
     }
 
@@ -1744,6 +1778,7 @@ final class SessionController: EngineProcessDelegate {
         audioPermissionIssue = nil
         transcript.reset()
         speakerNames = [:]
+        userEditedLines.removeAll()
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
@@ -1868,6 +1903,7 @@ final class SessionController: EngineProcessDelegate {
         terminateTranscriptionEngines()
         transcript.reset()
         speakerNames = [:]
+        userEditedLines.removeAll()
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
@@ -2127,22 +2163,10 @@ final class SessionController: EngineProcessDelegate {
         // is non-destructive — it returns the corrected display string, applied via
         // the existing line-id-keyed edit overlay so Word ids + async translations
         // (keyed by line.id) survive. Skips lines the user already edited.
-        if glossary.enabled {
-            for line in transcript.lines where line.editedText == nil {
-                if let corrected = PersonalVocabulary.correctedLineText(line, glossary) {
-                    transcript.editLine(line.id, corrected)
-                }
-            }
-        }
-        // Korean spelled-numbers → digits (validated 2026-08-27, docs/ENGINE_EVAL.md:
-        // turbo FLEURS-ko CER 5.63 → 5.30, no engine change). Self-scoped to Hangul
-        // number+counter, so non-Korean lines are a no-op; skips user-edited lines
-        // like the glossary pass, and runs BEFORE the final translation so the DNA
-        // lane sees the formatted text.
-        for line in transcript.lines where line.editedText == nil {
-            let formatted = KoreanNumberFormatter.format(line.text)
-            if formatted != line.text { transcript.editLine(line.id, formatted) }
-        }
+        // Sweep every line, including the last one (which was still the live tail
+        // and so never met the stable-line gate) and anything a late glossary rule
+        // now covers.
+        for line in transcript.lines { applyTextPasses(line) }
         engine?.terminate()
         // Drain mid-session names now that the engine has dumped its centroids
         // (.last/spk<id>.vec) on flush — THIS is the enrollment-timing fix.

@@ -89,3 +89,56 @@ final class KoreanNumberFormatterTests: XCTestCase {
         XCTAssertEqual(v, 23); XCTAssertEqual(n, "스물세".count)
     }
 }
+
+/// Live application safety (2026-08-27): formatting now runs the moment a line
+/// stops being the live tail, not only at finalize. The counter anchor is what
+/// makes that safe — a partial number carries no counter yet, so it cannot be
+/// converted and then rewritten when the rest of the word arrives.
+final class KoreanNumberLiveSafetyTests: XCTestCase {
+
+    private func f(_ s: String) -> String { KoreanNumberFormatter.format(s) }
+
+    func testPartialNumberWithoutItsCounterNeverConverts() {
+        // These are prefixes a growing line passes through on the way to
+        // "이천이십년" / "십오일" / "삼십오분". None may convert early.
+        for partial in ["이천이십", "이천", "십오", "삼십", "삼십오", "열한", "스물"] {
+            XCTAssertEqual(f(partial), partial, "\(partial) has no counter yet")
+        }
+    }
+
+    func testConversionAppearsOnlyWhenTheCounterArrives() {
+        XCTAssertEqual(f("이천이십"), "이천이십")
+        XCTAssertEqual(f("이천이십년"), "2020년")   // …and only now
+    }
+
+    func testFormattingIsIdempotent() {
+        // The stable-line pass re-runs on every word ingest; a second pass over
+        // already-formatted text must be a no-op or it would churn the display.
+        let once = f("천구백사십년 팔월 십오일에 열한시 삼십오분")
+        XCTAssertEqual(f(once), once)
+        XCTAssertEqual(once, "1940년 8월 15일에 11시 35분")
+    }
+
+    func testGrowthSequenceConvertsExactlyOnce() {
+        // Simulate the live tail growing word by word: the rendered text must
+        // never convert and then change its mind.
+        var seen: [String] = []
+        var text = ""
+        for word in ["회의는", "이천이십", "오년", "팔월에", "열렸다"] {
+            text = text.isEmpty ? word : text + " " + word
+            seen.append(f(text))
+        }
+        XCTAssertEqual(seen.last, "회의는 이천이십 5년 8월에 열렸다")
+        // The anti-churn property: once something renders as digits it stays
+        // digits — no render may take a digit run away from the one before it.
+        func digitRuns(_ s: String) -> [String] {
+            s.split(whereSeparator: { !$0.isNumber }).map(String.init)
+        }
+        for i in 1..<seen.count {
+            for run in digitRuns(seen[i - 1]) {
+                XCTAssertTrue(digitRuns(seen[i]).contains(run),
+                              "digit run \(run) vanished: \(seen[i - 1]) → \(seen[i])")
+            }
+        }
+    }
+}
