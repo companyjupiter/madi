@@ -1472,7 +1472,11 @@ final class SessionController: EngineProcessDelegate {
             streamWavRoots: [capture.segmentDirectory],
             langCandidates: langCandidatePair,
             anchorVoiceprints: Self.voiceprintsEnabled && isBidirectionalClinicPair && hasEnrolledVoiceprints,
-            encoderF16Cache: ProcessInfo.processInfo.physicalMemory >= 24 * (1 << 30))
+            encoderF16Cache: ProcessInfo.processInfo.physicalMemory >= 24 * (1 << 30),
+            // S4: the user's confirmed corrections bias the DECODER, not just the
+            // post-hoc text. Same opt-in gate as substitution — a mismatched
+            // glossary measurably hurts (docs/ENGINE_EVAL.md S4).
+            biasTerms: PersonalVocabulary.biasTerms(glossary))
     }
 
     /// Any enrolled .vec voiceprints on disk? (S1 anchor precondition)

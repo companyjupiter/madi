@@ -85,10 +85,10 @@ def run_engine(utts, out_path):
     if LANG_TOKEN:
         env['WHISPER_LANG_ID'] = LANG_TOKEN  # forced language (published FLEURS evals force it)
     proc = subprocess.Popen(
-        [f'{M}/out/transcribe', f'{M}/assets/model.safetensors', '/dev/null',
-         f'{M}/assets/WHISPER_BPE.bin'],
+        [f'{M}/out/transcribe', os.environ.get('MADI_MODEL', f'{M}/assets/model.safetensors'),
+         '/dev/null', f'{M}/assets/WHISPER_BPE.bin'],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        text=True, cwd=M, bufsize=1, env=env)
+        text=True, errors='replace', cwd=M, bufsize=1, env=env)
 
     # wait for resident-ready
     for line in proc.stdout:

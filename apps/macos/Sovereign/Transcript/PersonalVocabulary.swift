@@ -45,6 +45,43 @@ enum PersonalVocabulary {
     /// exact key match substitutes — see the phoneticFloor calibration note.
     static let phoneticMinLen = 5
 
+    // ── S4: decode-time biasing ─────────────────────────────────────────────────
+    /// Cap on how many terms go into the engine's `PROMPT` context. The measured
+    /// configuration used 22–36 terms per session; the prompt is encoded once and
+    /// prepended to every decode, so an unbounded list would eat decoder context.
+    static let maxBiasTerms = 32
+    /// Byte-ish cap matching the measured prompt size.
+    static let maxBiasChars = 900
+
+    /// The vocabulary handed to the engine for decode-time biasing (`PROMPT`).
+    ///
+    /// Relevance is the shipping condition, not a nicety: measured 2026-08-27 on
+    /// 60 FLEURS-ko utterances where the baseline had missed a rare word
+    /// (docs/ENGINE_EVAL.md S4), a MATCHED glossary lifted recovery of those words
+    /// 32.7% → 51.0% and CER 7.50% → 7.00%, but a deliberately MISMATCHED glossary
+    /// of the same size left recovery flat (35.6%) and pushed CER to 7.97% — worse
+    /// than shipping no glossary at all. So only CONFIRMED rules (hits ≥ minHits,
+    /// i.e. the user corrected that word more than once) are eligible, strongest
+    /// first, and the list is capped. Returns [] when the glossary is off.
+    static func biasTerms(_ glossary: Glossary) -> [String] {
+        guard glossary.enabled else { return [] }
+        let confirmed = glossary.entries.values
+            .filter { $0.hits >= glossary.minHits && $0.right.count >= minLen }
+            // strongest rules first; `right` breaks ties so the list is deterministic
+            .sorted { ($0.hits, $1.right) > ($1.hits, $0.right) }
+        var seen = Set<String>(), out: [String] = [], chars = 0
+        for e in confirmed {
+            let term = e.right.trimmingCharacters(in: .whitespacesAndNewlines)
+            // a term with whitespace would split into separate bias words engine-side
+            guard !term.isEmpty, !term.contains(" "), seen.insert(term.lowercased()).inserted
+            else { continue }
+            guard chars + term.count + 1 <= maxBiasChars else { break }
+            out.append(term); chars += term.count + 1
+            if out.count >= maxBiasTerms { break }
+        }
+        return out
+    }
+
     /// Lowercase + punctuation trim, then remove only a known Korean particle.
     static func normalize(_ raw: String) -> String {
         let t = surfaceForm(raw)

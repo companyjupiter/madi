@@ -66,6 +66,13 @@ final class EngineProcess {
         /// 24GB+ mode: expand encoder Q8 weights once (~1.25GB) and remove
         /// per-segment dequant dispatches. The preview lane reuses this process.
         var encoderF16Cache = false
+        /// S4 decode-time term biasing (PROMPT env): domain vocabulary encoded once
+        /// as `<|startofprev|>` context so the decoder leans toward these surface
+        /// forms. Empty = off. Terms must be RELEVANT to the session — measured
+        /// 2026-08-27 (docs/ENGINE_EVAL.md S4): a matched glossary lifted rare-word
+        /// recovery 32.7% → 51.0% (CER 7.50 → 7.00), while a deliberately
+        /// MISMATCHED one made CER worse than no glossary at all (7.97%).
+        var biasTerms: [String] = []
     }
 
     private let config: Config
@@ -91,6 +98,9 @@ final class EngineProcess {
         // per-speaker-count speech-gate optimum (bench/VAD_TUNING.md)
         if let p = config.vadProb { env["VAD_PROB"] = String(format: "%.2f", p) }
         if let lang = config.languageTokenID { env["WHISPER_LANG_ID"] = String(lang) }
+        // S4: decode-time biasing toward the user's own vocabulary. Set for BOTH
+        // file and stream modes — the engine encodes it once at startup.
+        if !config.biasTerms.isEmpty { env["PROMPT"] = config.biasTerms.joined(separator: " ") }
 
         if let file = config.fileURL {
             // native FILE mode: 30s-chunk batched decode + offline diarization —
