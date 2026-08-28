@@ -1783,7 +1783,16 @@ pub fn main() !void {
                         if (pv >= vad_prob) chunk_speech_s += 0.032;
                     }
                     { // speech intervals: file-mode RTTM clipping AND live SPK/SPKFIX clipping
-                        var iv = try vad.segmentsFromProbsP(alloc, vad_probs[0..vad_np], @intCast(envU("VAD_MIN_SPEECH_MS", 60)), @intCast(envU("VAD_PAD_MS", 200)));
+                        // VAD_PAD_MS 200 → 120 (2026-08-28, docs/DIAR_EVAL.md): the pad
+                        // exists so a speech edge is not clipped, but 200 ms inflated our
+                        // hypothesized speech to ×1.13 of truth and false alarm was the
+                        // single largest slice of our DER. 120 ms is the optimum on every
+                        // set measured — EN natural 5.45→4.97%, KO blocks 3.81→3.35%,
+                        // KO meeting-style 8.83→5.41% — and below it rising miss overtakes
+                        // the falling FA (60 ms: 5.55 / 4.82 / 5.95). Transcription is
+                        // unaffected, which is the gate that matters for a pad: FLEURS-ko
+                        // CER 5.63→5.62% with 1 of 382 utterances changing.
+                        var iv = try vad.segmentsFromProbsP(alloc, vad_probs[0..vad_np], @intCast(envU("VAD_MIN_SPEECH_MS", 60)), @intCast(envU("VAD_PAD_MS", 120)));
                         defer iv.deinit();
                         for (iv.items) |sg| try g_vad_iv.append(.{ t_off + sg.start, t_off + sg.end });
                     }
