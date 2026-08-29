@@ -1357,8 +1357,16 @@ pub fn main() !void {
     const osd_logp = try alloc.alloc(f32, OSD_NW * 600 * osd.N_CLASSES);
     const osd_nf = try alloc.alloc(usize, OSD_NW);
     var full = std.ArrayList(u8).init(alloc);
-    const SEG_SAMP: usize = 24000; // 1.5 s @ 16 kHz
-    const SEG_SEC: f32 = 1.5;
+    // Speaker-embedding window. DIAR_WIN_MS is a PROBE knob (default 1500 =
+    // historical behavior, bit-exact): the window is the floor on how short a
+    // turn we can label, because a window straddling a speaker change carries a
+    // blend of both voices and half of it is wrong whichever way it is assigned.
+    // Measured 2026-08-28 (docs/DIAR_EVAL.md) on a turn-length sweep holding
+    // speakers and speech volume fixed: confusion runs 1.11% at 5.2 s turns to
+    // 7.53% at 1.3 s turns, while a frame-level model stays at 0.00%.
+    const SEG_SAMP: usize = @max(4000, envU("DIAR_WIN_MS", 1500) * 16);
+    g_diar_win = SEG_SAMP; // the worker slices with this — must not drift
+    const SEG_SEC: f32 = @as(f32, @floatFromInt(SEG_SAMP)) / 16000.0;
     const SEGD: usize = diar.EMB; // 256
     var diar_emb = std.ArrayList(f32).init(alloc); // n × 256
     var diar_bm = std.ArrayList(f32).init(alloc); // per-window RMS (for VAD)
@@ -3962,7 +3970,12 @@ fn maxWinRms(samples: []const f32, got: usize) f32 {
 // Parallel diarization embedding: each 1.5 s window is independent, so a pool
 // of threads embeds them concurrently (~Ncore×). Model is read-only/shared;
 // each diar.embed uses its own arena over the (thread-safe) page allocator.
-const DIAR_WIN: usize = 24000; // 1.5 s
+/// Speaker-embedding window in samples. MUST stay equal to the caller's
+/// SEG_SAMP — the worker slices `samples[w*DIAR_WIN ..][0..DIAR_WIN]` while the
+/// caller computes window COUNT and timestamps from SEG_SAMP, so a mismatch
+/// silently reads each embedding from the wrong point in time and speaker
+/// assignment degenerates to noise. Set once from DIAR_WIN_MS at startup.
+var g_diar_win: usize = 24000; // 1.5 s (default)
 const DiarJob = struct {
     m: *const diar.Model,
     samples: []const f32, // chunk PCM
@@ -3974,10 +3987,10 @@ const DiarJob = struct {
 fn diarWorker(j: *const DiarJob) void {
     var w = j.lo;
     while (w < j.hi) : (w += 1) {
-        const win = j.samples[w * DIAR_WIN ..][0..DIAR_WIN];
+        const win = j.samples[w * g_diar_win ..][0..g_diar_win];
         var e: f64 = 0;
         for (win) |v| e += @as(f64, v) * v;
-        j.rms[w] = @floatCast(@sqrt(e / @as(f64, DIAR_WIN)));
+        j.rms[w] = @floatCast(@sqrt(e / @as(f64, @floatFromInt(g_diar_win))));
         const emb = diar.embed(j.m, win) catch {
             @memset(j.emb[w * diar.EMB ..][0 .. diar.EMB], 0);
             continue;
