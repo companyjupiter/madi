@@ -233,3 +233,86 @@ final class CosmeticRebindTests: XCTestCase {
         XCTAssertEqual(TranslationStabilityMetrics.shared.cosmeticRebinds, 1)
     }
 }
+
+/// P15 — SPKFIX must not restructure the un-frozen tail. A mid-session
+/// recluster flips label windows under EXISTING words; regrouping from those
+/// labels moved line boundaries, changed first-word ids, and made 3-5 rows
+/// vanish at once (delete+insert) with their translations. Structure decisions
+/// are now made once, at the growth head, and persist; SPKFIX only updates
+/// the speaker shown on each line, in place.
+@MainActor
+final class SpeakerFixStructureStabilityTests: XCTestCase {
+
+    /// Build a 4-line tail: two speakers alternating, short turns.
+    private func seed(_ s: TranscriptStore) {
+        s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 2.0, margin: 0.3)))
+        s.ingest(.speaker(SpeakerLabel(time: 2.0, id: 2, dur: 2.0, margin: 0.3)))
+        s.ingest(.speaker(SpeakerLabel(time: 4.0, id: 1, dur: 2.0, margin: 0.3)))
+        s.ingest(.speaker(SpeakerLabel(time: 6.0, id: 2, dur: 2.0, margin: 0.3)))
+        for (i, t) in ["안녕하세요", "반갑습니다", "오늘", "회의를", "시작하죠", "네", "좋습니다", "바로"].enumerated() {
+            let t0 = Double(i)   // 1 word/second → 2 words per label window
+            s.ingest(.word(t0: t0, t1: t0 + 0.8, text: t, conf: 1))
+        }
+    }
+
+    func testSpkfixMergeKeepsStructureAndRelabelsInPlace() async throws {
+        let s = TranscriptStore()
+        seed(s)
+        let before = s.lines.map(\.id)
+        let beforeCount = s.lines.count
+        XCTAssertGreaterThanOrEqual(beforeCount, 3, "seed must span several tail lines")
+        // Recluster verdict: the tentative speaker 2 was really speaker 1 all
+        // along — every window becomes the same label. Regrouping from these
+        // labels would erase EVERY speaker boundary and collapse the tail to
+        // one line (the "3-5 lines vanish at once" report).
+        s.ingest(.speakerFix(SpeakerLabel(time: 2.0, id: 1, dur: 2.0, margin: 0.9)))
+        s.ingest(.speakerFix(SpeakerLabel(time: 6.0, id: 1, dur: 2.0, margin: 0.9)))
+        try await Task.sleep(nanoseconds: 120_000_000)   // coalesced rebuild (~50ms)
+        XCTAssertEqual(s.lines.count, beforeCount,
+                       "a label merge must relabel in place, not collapse rows")
+        XCTAssertEqual(s.lines.map(\.id), before, "line identity must survive the merge verdict")
+        XCTAssertEqual(Set(s.lines.map(\.speaker)), [1], "…but every line now SHOWS speaker 1")
+    }
+
+    func testTranslationSurvivesSpkfixMerge() async throws {
+        let s = TranscriptStore()
+        seed(s)
+        // translate a mid-tail line, then merge its label into the neighbor
+        let line = s.lines[1]
+        guard let rev = s.sourceRevision(for: line.id) else { return XCTFail() }
+        XCTAssertTrue(s.setTranslation(line.id, lang: "English", "Nice to meet you", sourceRevision: rev))
+        s.ingest(.speakerFix(SpeakerLabel(time: 2.0, id: 1, dur: 2.0, margin: 0.9)))
+        try await Task.sleep(nanoseconds: 120_000_000)
+        let after = s.lines.first(where: { $0.id == line.id })
+        XCTAssertNotNil(after, "the translated line must still exist")
+        XCTAssertEqual(after?.translations["English"], "Nice to meet you",
+                       "same id + same text → translation stays VALID, not stale")
+    }
+
+    func testFinalizeStillPerformsTheRealMerge() async throws {
+        let s = TranscriptStore()
+        seed(s)
+        s.ingest(.speakerFix(SpeakerLabel(time: 2.0, id: 1, dur: 2.0, margin: 0.9)))
+        s.ingest(.speakerFix(SpeakerLabel(time: 6.0, id: 1, dur: 2.0, margin: 0.9)))
+        try await Task.sleep(nanoseconds: 120_000_000)
+        let liveCount = s.lines.count
+        XCTAssertGreaterThanOrEqual(liveCount, 3, "live keeps the structure calm")
+        // The one-shot finalize regroup bypasses the ledger: same-speaker
+        // adjacent lines DO merge in the final artifact.
+        s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 8.0, margin: 0.9)))
+        s.finalize()
+        XCTAssertLessThan(s.lines.count, liveCount,
+                          "finalize merges what live only relabeled")
+        XCTAssertEqual(Set(s.lines.map(\.speaker)), [1])
+    }
+
+    func testNewSpeakerStillOpensNewLineAtHead() {
+        let s = TranscriptStore()
+        seed(s)
+        let n = s.lines.count
+        // genuinely new information at the growth head keeps working
+        s.ingest(.speaker(SpeakerLabel(time: 8.0, id: 5, dur: 2.0, margin: 0.9)))
+        s.ingest(.word(t0: 8.2, t1: 8.9, text: "질문이", conf: 1))
+        XCTAssertEqual(s.lines.count, n + 1, "a new speaker at the head still starts a line")
+    }
+}

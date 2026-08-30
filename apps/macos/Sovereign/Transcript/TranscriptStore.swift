@@ -277,6 +277,17 @@ final class TranscriptStore {
     /// Start a new line when the inter-word gap exceeds this (readability —
     /// without it a monologue renders as one giant line).
     private let lineBreakGap = 1.5
+    // P15 — decided-once boundary ledger. A boundary between two adjacent words
+    // is evaluated exactly ONCE, the first time the pair meets at the growth
+    // head, and the decision is replayed on every later rebuild. Mid-session
+    // recluster (SPKFIX) flips label windows under EXISTING words; re-deriving
+    // boundaries from those labels collapsed every merged speaker boundary at
+    // once — 3-5 rows vanished together, translations orphaned (repro:
+    // SpeakerFixStructureStabilityTests). With the ledger, SPKFIX only changes
+    // the speaker SHOWN on each line; the real merge happens at finalize's
+    // one-shot regroup, which bypasses the ledger (finalized == true).
+    @ObservationIgnored private var breakDecided: Set<UUID> = []
+    @ObservationIgnored private var breakAfter: Set<UUID> = []
 
     // Overlays keyed by stable line id (= first word id). Survive the per-word
     // live rebuild and the FLUSH regroup, so an async translation that arrives
@@ -543,6 +554,7 @@ final class TranscriptStore {
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
         translationsByLine.removeAll(); editsByLine.removeAll()
         suppressedByLine.removeAll(); sentenceBreaks.removeAll()
+        breakDecided.removeAll(); breakAfter.removeAll()
         speakerMerges.removeAll(); speakerOverrides.removeAll()
         speakerNumbers.reset()
         frozen.removeAll(); frozenWordCount = 0
@@ -797,20 +809,32 @@ final class TranscriptStore {
             // P10-3 split-once: a re-decode can add, drop, or move the very
             // punctuation this break was made on, which un-split and re-split
             // lines under the reader ("행이 한꺼번에 문장분리되는" churn) and reset
-            // each affected line's translation. A break is therefore recorded
-            // against the word it followed and honoured from then on, so live
-            // line structure only ever grows.
+            // each affected line's translation. P15 generalizes it (see the
+            // ledger note at breakDecided): EVERY boundary decision is made once
+            // and replayed, so label rewrites can't restructure existing lines —
+            // they only change which speaker a line displays.
             let tail = out.last?.words.last
-            let brokenBefore = tail.map { sentenceBreaks.contains($0.id) } ?? false
-            if var last = out.last, last.speaker == sp, w.t0 - last.end < lineBreakGap,
-               !brokenBefore, !Self.endsSentence(last.words.last?.text) {
+            let cont: Bool
+            if !finalized, let t = tail, breakDecided.contains(t.id) {
+                cont = !breakAfter.contains(t.id)   // replay the recorded decision
+            } else {
+                let brokenBefore = tail.map { sentenceBreaks.contains($0.id) } ?? false
+                cont = out.last.map { last in
+                    last.speaker == sp && w.t0 - last.end < lineBreakGap &&
+                    !brokenBefore && !Self.endsSentence(last.words.last?.text)
+                } ?? false
+                if !finalized, let t = tail {       // record the first-adjacency verdict
+                    breakDecided.insert(t.id)
+                    if !cont { breakAfter.insert(t.id) }
+                }
+            }
+            if var last = out.last, cont {
                 last.end = max(last.end, w.t1)
                 last.words.append(w)
                 last.speakerMargin = min(last.speakerMargin, m)
                 out[out.count - 1] = last
             } else {
-                // Remember punctuation-driven breaks only. Gap/speaker breaks are
-                // re-derived from timing and labels, which stay put.
+                // Remember punctuation-driven breaks (also honoured at finalize).
                 if let t = tail, Self.endsSentence(t.text) { sentenceBreaks.insert(t.id) }
                 // id = first word's id → stable across rebuilds (see Line.id note)
                 var line = Line(id: w.id, speaker: sp, start: w.t0, end: w.t1, words: [w])
