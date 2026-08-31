@@ -75,6 +75,47 @@ final class SummaryTemplateTests: XCTestCase {
         XCTAssertEqual(SummaryTemplate.meeting.sections.map(\.tag), ["요약", "액션", "결정"])
     }
 
+    // ── localized picker labels (PR-C) ────────────────────────────────────────
+
+    func testTemplateLabelsLocalize() {
+        XCTAssertEqual(SummaryTemplate.meeting.label(.ko), "회의")
+        XCTAssertEqual(SummaryTemplate.meeting.label(.en), "Meeting")
+        XCTAssertEqual(SummaryTemplate.meeting.label(.ja), "会議")
+        XCTAssertEqual(SummaryTemplate.lecture.label(.ja), "講義")      // key shared with 강의 mode
+        XCTAssertEqual(SummaryTemplate.interview.label(.ja), "面談")    // key shared with 인터뷰 mode
+    }
+
+    /// Japanese must resolve through L10nJa for EVERY template string — a miss
+    /// silently shows English in the ja UI, which is exactly what this catches.
+    func testJapaneseIsTranslatedNotFallingBackToEnglish() {
+        for t in SummaryTemplate.allCases {
+            XCTAssertNotEqual(t.label(.ja), t.label(.en),
+                              "\(t.rawValue) label has no L10nJa entry")
+            XCTAssertNotEqual(t.summaryDescription(.ja), t.summaryDescription(.en),
+                              "\(t.rawValue) description has no L10nJa entry")
+        }
+    }
+
+    func testLabelsAndDescriptionsAreDistinctPerTemplate() {
+        for lang in UILanguage.allCases {
+            let labels = SummaryTemplate.allCases.map { $0.label(lang) }
+            let descs = SummaryTemplate.allCases.map { $0.summaryDescription(lang) }
+            XCTAssertEqual(Set(labels).count, labels.count, "\(lang.rawValue) labels collide")
+            XCTAssertEqual(Set(descs).count, descs.count, "\(lang.rawValue) descriptions collide")
+        }
+    }
+
+    /// The picker caption must keep naming the template's OWN sections — the
+    /// guard against a section change landing without the UI line following it.
+    func testKoreanDescriptionNamesItsOwnSections() {
+        XCTAssertTrue(SummaryTemplate.meeting.summaryDescription(.ko).contains("액션"))
+        XCTAssertTrue(SummaryTemplate.meeting.summaryDescription(.ko).contains("결정"))
+        XCTAssertTrue(SummaryTemplate.lecture.summaryDescription(.ko).contains("요점"))
+        XCTAssertTrue(SummaryTemplate.lecture.summaryDescription(.ko).contains("용어"))
+        XCTAssertTrue(SummaryTemplate.interview.summaryDescription(.ko).contains("문답"))
+        XCTAssertTrue(SummaryTemplate.interview.summaryDescription(.ko).contains("후속"))
+    }
+
     // ── mode → template derivation ────────────────────────────────────────────
 
     func testModeToTemplateDerivation() {

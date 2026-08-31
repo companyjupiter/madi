@@ -308,11 +308,25 @@ final class SessionController: EngineProcessDelegate {
     }
 
     /// Summary template threaded into every summarize call — derived from
-    /// `meetingMode`, overridable per session from the summary sheet (PR-C).
+    /// `meetingMode`, overridable per session from the summary sheet.
     /// Not persisted on its own: the mode is the durable signal.
+    ///
+    /// Changing it INVALIDATES both cached summaries: each was shaped by the old
+    /// template (which also drove the long-meeting fold), so keeping them would
+    /// show 회의-shaped text under a 강의 label. Invalidation lives here — not in
+    /// the view — so every path that re-derives the template (a meeting-mode
+    /// change included) drops the stale text. Regeneration stays the caller's
+    /// choice: only the sheet knows which view the user is looking at.
     var summaryTemplate: SummaryTemplate =
         (MeetingMode(rawValue: UserDefaults.standard.string(forKey: "meetingMode") ?? "") ?? .general)
             .defaultSummaryTemplate
+    {
+        didSet {
+            guard summaryTemplate != oldValue else { return }
+            meetingSummary = nil
+            speakerSummary = nil
+        }
+    }
 
     /// Live segment window (s) — the live FELT-latency knob. Text lands when a
     /// window closes, so a shorter window = snappier live text but less Whisper
@@ -835,7 +849,14 @@ final class SessionController: EngineProcessDelegate {
         return out
     }
 
+    /// New-session reset for everything summary-shaped. Called from `reset()`,
+    /// `start()` and `transcribeFile()` — every session boundary — so the sheet's
+    /// per-session template override expires here too.
     private func clearSummary() {
+        // The sheet's override is documented as "this session only". Without this
+        // it outlived the session that set it: pick 인터뷰 once, start a fresh
+        // 일반-mode meeting, and its auto-saved .md came out in interview format.
+        summaryTemplate = meetingMode.defaultSummaryTemplate
         calendar.clear()
         stopLiveRail(); liveRailItems = []         // new session → reset the live rail
         stopLiveCoach(); coachAgenda = []; liveCoachState = .empty   // reset the coach too

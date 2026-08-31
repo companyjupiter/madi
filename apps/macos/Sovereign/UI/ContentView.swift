@@ -339,6 +339,9 @@ struct ContentView: View {
         showSummary = true
     }
 
+    /// Either summary view is generating — the template picker is locked while so.
+    private var summaryIsBusy: Bool { session.summarizing || session.speakerSummarizing }
+
     // On-device meeting intelligence — summary + action items from the local LLM.
     // The transcript never leaves the Mac (the product moat vs cloud meeting tools).
     private var summarySheet: some View {
@@ -351,14 +354,46 @@ struct ContentView: View {
                 Spacer()
                 Button(uiLang("닫기", "Close")) { showSummary = false }
             }
-            Picker("", selection: $summaryBySpeaker) {
-                Text(uiLang("전체", "Overall")).tag(false)
-                Text(uiLang("화자별", "By speaker")).tag(true)
+            // Two ORTHOGONAL axes: the template picks WHAT the summary extracts,
+            // 전체/화자별 picks which VIEW of it you're reading.
+            HStack(spacing: 10) {
+                Picker("", selection: $summaryBySpeaker) {
+                    Text(uiLang("전체", "Overall")).tag(false)
+                    Text(uiLang("화자별", "By speaker")).tag(true)
+                }
+                .pickerStyle(.segmented).fixedSize()
+                // Symmetric: generate whichever side is missing. It used to fill in
+                // 화자별 only, so arriving on 화자별 (⌘K 화자별 요약, or a template
+                // switch made while on that tab) and toggling back to 전체 showed a
+                // permanently blank sheet — nothing ever regenerated 전체.
+                .onChange(of: summaryBySpeaker) { _, on in
+                    if on {
+                        if session.speakerSummary == nil, !session.speakerSummarizing { session.summarizeBySpeaker() }
+                    } else {
+                        if session.meetingSummary == nil, !session.summarizing { session.summarize() }
+                    }
+                }
+                Picker("", selection: $session.summaryTemplate) {
+                    ForEach(SummaryTemplate.allCases) { t in
+                        Text(t.label(uiLang)).tag(t)
+                    }
+                }
+                .pickerStyle(.segmented).fixedSize()
+                // Disabled mid-generation: summarize() no-ops while busy, so a
+                // switch there would leave the picker showing a template the
+                // in-flight (old-template) result doesn't match.
+                .disabled(summaryIsBusy)
+                .help(uiLang("요약 템플릿 — 회의 모드에서 자동으로 정해지며, 여기서 바꾸면 이 세션에만 적용됩니다",
+                             "Summary template — derived from the meeting mode; changing it here applies to this session only"))
+                .onChange(of: session.summaryTemplate) { _, _ in
+                    // The controller already dropped both cached summaries (they
+                    // were shaped by the old template); regenerate what's visible.
+                    summaryBySpeaker ? session.summarizeBySpeaker() : session.summarize()
+                }
+                Spacer(minLength: 0)
             }
-            .pickerStyle(.segmented).fixedSize()
-            .onChange(of: summaryBySpeaker) { _, on in
-                if on, session.speakerSummary == nil, !session.speakerSummarizing { session.summarizeBySpeaker() }
-            }
+            Text(session.summaryTemplate.summaryDescription(uiLang))
+                .font(Theme.Fonts.status).foregroundStyle(Theme.Colors.textTertiary)
             Divider().overlay(Theme.Colors.separator)
             let busy = summaryBySpeaker ? session.speakerSummarizing : session.summarizing
             let text = summaryBySpeaker ? session.speakerSummary : session.meetingSummary
