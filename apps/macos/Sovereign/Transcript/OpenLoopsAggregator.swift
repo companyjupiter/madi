@@ -9,9 +9,10 @@
 // routes, tried in order, cover the model's two output shapes:
 //   1. LiveActionRail.parse — strict "[결정]/[액션]/[질문] …" tagged lines
 //      (the live-rail / structured summary shape).
-//   2. SummaryDeck.parseSections — "## 액션 아이템" / "## 결정 사항" headers
-//      with "- " bullets (the prose summary shape). Questions fall out of an
-//      extra "미결/질문" header here since SummaryDeck doesn't model them.
+//   2. SummaryDeck.parseSections — action/decision-kind section headers per the
+//      SummarySection registry (액션 아이템·후속 조치 / 결정 사항) with "- "
+//      bullets (the prose summary shape). Questions fall out of an extra
+//      "미결/질문" header here since SummaryDeck doesn't model them.
 //
 // Foundation-only (no SwiftUI/AppKit) → joins SovereignCore + XCTest like
 // PeopleAnalytics. The OpenLoopsView renders the [OpenLoopItem] this produces;
@@ -175,9 +176,11 @@ enum OpenLoopsAggregator {
         }
         for sec in SummaryDeck.parseSections(summary) {
             let kind: OpenLoopItem.Kind
-            if sec.title.contains("액션") { kind = .action }
-            else if sec.title.contains("결정") { kind = .decision }
-            else { continue }   // 요약 paragraphs aren't loops
+            switch SummarySection.kind(forCanon: sec.title) {
+            case .action:   kind = .action     // 액션 아이템 + 인터뷰 후속 조치
+            case .decision: kind = .decision
+            default: continue   // 요약/요점/용어/문답 aren't loops
+            }
             for b in sec.bullets {
                 if kind == .action, let (o, t) = splitOwner(b) { add(.action, o, t) }
                 else { add(kind, nil, b) }

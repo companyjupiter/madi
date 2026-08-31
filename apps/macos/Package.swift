@@ -31,6 +31,8 @@ let package = Package(
                 "Transcript/EditorCuts.swift",
                 "Transcript/Retrieval.swift",
                 "Transcript/SummaryDeck.swift",
+                "Transcript/SummaryTemplate.swift",
+                "Transcript/RecapData.swift",
                 "Transcript/TranscriptArchive.swift",
                 "Transcript/EnergyArc.swift",
                 "Transcript/MeetingMode.swift",

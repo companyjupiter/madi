@@ -59,6 +59,8 @@ dumps `<dir>/.last/spk<id>.vec`). Wired the app side, fully on-device:
   (live/stream only; file-mode has no centroid dump.)
 
 ## Roadmap (the moat, deepened)
+- Summary templates ×3 (회의/강의·발표/인터뷰·상담) — one spine, template-aware
+  condense. Design finalized 2026-08-31: `SUMMARY_TEMPLATES.md`.
 - 9B model A/B for summary/translation quality.
 - 9B model A/B (already listed above).
 

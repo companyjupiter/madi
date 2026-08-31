@@ -133,4 +133,55 @@ final class SummaryFormatTests: XCTestCase {
         // The raw injection markers must not survive into the document content.
         XCTAssertFalse(html.contains("a < b"))
     }
+
+    // ── template shapes: lecture/interview (docs/SUMMARY_TEMPLATES.md) ────────
+
+    private let lectureTagged = """
+    [요약] 분산 시스템의 합의 알고리즘을 다뤘습니다.
+    [요점]
+    - 리더 선출은 과반 투표로 결정된다
+    [용어]
+    - 쿼럼: 합의에 필요한 최소 노드 수
+    """
+
+    private let interviewTagged = """
+    [요약] 채용 인터뷰를 진행했습니다.
+    [문답]
+    - Q: 장애 대응 경험은? → A: 대규모 장애 3건 주도 복구
+    [후속]
+    - 김부장: 레퍼런스 체크
+    """
+
+    func testLectureTaggedSectionsParseAndYieldNoLoops() {
+        let secs = SummaryDeck.parseSections(lectureTagged)
+        XCTAssertEqual(secs.map { $0.title }, ["요약", "핵심 요점", "용어·개념"])
+        XCTAssertEqual(secs[1].bullets, ["리더 선출은 과반 투표로 결정된다"])
+        XCTAssertEqual(secs[2].bullets, ["쿼럼: 합의에 필요한 최소 노드 수"])
+        // A lecture has no decisions/actions — the loops tracker must stay empty.
+        XCTAssertTrue(OpenLoopsAggregator.extractItems(fromSummary: lectureTagged).isEmpty)
+    }
+
+    func testLectureProseSectionsParse() {
+        let secs = SummaryDeck.parseSections("## 핵심 요점\n- 요점1\n\n## 용어·개념\n- 용어1: 정의")
+        XCTAssertEqual(secs.map { $0.title }, ["핵심 요점", "용어·개념"])
+    }
+
+    func testInterviewFollowUpsBecomeActionLoopsAndQaDoesNot() {
+        let secs = SummaryDeck.parseSections(interviewTagged)
+        XCTAssertEqual(secs.map { $0.title }, ["요약", "문답", "후속 조치"])
+        let items = OpenLoopsAggregator.extractItems(fromSummary: interviewTagged)
+        // 후속 조치 is action-kind → owner-split loop; 문답 pairs are answered, not loops.
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.kind, .action)
+        XCTAssertEqual(items.first?.owner, "김부장")
+        XCTAssertEqual(items.first?.text, "레퍼런스 체크")
+    }
+
+    func testHTMLDeckRendersFollowUpAsChecklist() {
+        let html = SummaryDeck.html(summary: interviewTagged, speakerSummary: nil,
+                                    title: "인터뷰", dateText: "d")
+        XCTAssertTrue(html.contains("후속 조치"))
+        XCTAssertTrue(html.contains("checklist"))     // action-kind styling via registry
+        XCTAssertTrue(html.contains("문답"))
+    }
 }
