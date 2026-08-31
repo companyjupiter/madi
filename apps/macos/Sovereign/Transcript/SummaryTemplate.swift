@@ -19,6 +19,28 @@ import Foundation
 enum SummaryTemplate: String, CaseIterable, Identifiable, Codable {
     case meeting, lecture, interview
     var id: String { rawValue }
+
+    /// Segmented-picker label (요약 시트). Japanese resolves through
+    /// L10nJa.table on the English key, like MeetingMode's labels.
+    func label(_ lang: UILanguage) -> String {
+        switch self {
+        case .meeting:   return lang("회의", "Meeting")
+        case .lecture:   return lang("강의", "Lecture")
+        case .interview: return lang("인터뷰", "Interview")
+        }
+    }
+
+    /// One-line caption under the picker: WHICH sections this template produces.
+    /// Hand-written per language rather than joined from `sections`, because the
+    /// registry's canon titles are parsed model output (content, always Korean)
+    /// while this line is UI chrome.
+    func summaryDescription(_ lang: UILanguage) -> String {
+        switch self {
+        case .meeting:   return lang("요약 · 액션 · 결정", "Summary · actions · decisions")
+        case .lecture:   return lang("요약 · 핵심 요점 · 용어", "Summary · key points · terms")
+        case .interview: return lang("요약 · 문답 · 후속 조치", "Summary · Q&A · follow-ups")
+        }
+    }
 }
 
 /// One summary section's tag rules — the registry entry every consumer reads.

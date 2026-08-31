@@ -195,8 +195,25 @@ MeetingMode.summaryPromptSuffix 이관: lecture/interview 서픽스는 템플릿
    final/condense 프롬프트(§2 확정 문안), SummaryReplySanitizer,
    MeetingMode 서픽스 이관, SessionController.summaryTemplate 유도·스레딩,
    CLI 프로브 로그(§7).
-3. **PR-C (UI·i18n·매뉴얼)**: 시트 3-way picker, L10nJa, 매뉴얼
-   ko/en/ja/zh `05-summary` 갱신.
+3. **PR-C (UI·i18n·매뉴얼)** — **완료**: 요약 시트 3-way picker(+섹션 구성 캡션),
+   `SummaryTemplate.label/summaryDescription`, L10nJa 5개 엔트리, 매뉴얼
+   ko/en/ja/zh `05-summary` 갱신 + `index.html` 재생성.
+
+### PR-C 구현 노트 (§4 설계에서 바뀐 점)
+
+- **캐시 무효화는 컨트롤러가 소유**한다. 설계 원안은 시트에서 요약을 지우는
+  그림이었으나 `meetingSummary`/`speakerSummary`가 `private(set)`이라 뷰가 못
+  지운다 — 이게 옳은 경계다. `SessionController.summaryTemplate`의 `didSet`이
+  두 캐시를 함께 버리므로, **회의 모드 변경으로 템플릿이 재유도되는 경로에서도**
+  옛 템플릿 모양의 요약이 남지 않는다. 재생성만 시트가 호출한다(어느 뷰를 보고
+  있는지는 시트만 안다).
+- **생성 중에는 피커 비활성** — `summarize()`가 busy일 때 no-op이라, 활성인 채로
+  두면 피커 라벨과 곧 도착할 (옛 템플릿) 결과가 어긋난다.
+- **캡션은 `sections`에서 조립하지 않고 언어별 손글씨**다. 레지스트리의 canon은
+  모델 출력에서 파싱된 **콘텐츠(항상 한국어)**이고 캡션은 **UI 크롬**이라
+  경계가 다르다. 대신 캡션이 자기 템플릿의 섹션을 계속 지칭하는지 테스트로 고정.
+- 일본어는 `L10nJa.table` 경유(2-arg `lang(ko,en)` + 테이블 엔트리) — MeetingMode
+  라벨과 동일 패턴. `Lecture`/`Interview` 키는 회의 모드 라벨과 공유한다.
 
 ## 7. 2B/4B CLI 프로브 로그 (2026-08-31 — PR-B 착수 전, 완료)
 

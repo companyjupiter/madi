@@ -58,9 +58,20 @@ dumps `<dir>/.last/spk<id>.vec`). Wired the app side, fully on-device:
 - So "김부장" is recognized across meetings — and feeds speaker-aware summaries.
   (live/stream only; file-mode has no centroid dump.)
 
+## Shipped — summary templates ×3 (회의 / 강의·발표 / 인터뷰·상담)
+One spine (`[요약]` head + two tagged sections + `- ` bullets), three templates.
+`SummarySection` is the single registry of tag rules — the deck, recap card and
+open-loops tracker all read section MEANING from it instead of matching tag
+literals, so a template adds sections without touching any parser. The template
+shapes the map-reduce condense too (a long lecture folds preserving 요점·용어,
+not decisions/to-dos). Picked automatically from the meeting mode, overridable
+per session in the summary sheet. 회의 output is byte-identical to before.
+Every prompt was CLI-probed on both shipped models (2B/4B) before landing, and
+`SummaryReplySanitizer` guards the three 2B runaway modes that probe found
+(stray `</think>` restatement, repetition loops, hallucinated section tails).
+Full design + probe log: `SUMMARY_TEMPLATES.md`.
+
 ## Roadmap (the moat, deepened)
-- Summary templates ×3 (회의/강의·발표/인터뷰·상담) — one spine, template-aware
-  condense. Design finalized 2026-08-31: `SUMMARY_TEMPLATES.md`.
 - 9B model A/B for summary/translation quality.
 - 9B model A/B (already listed above).
 

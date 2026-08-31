@@ -38,6 +38,13 @@ enum L10nJa {
         "Auto speakers · emphasize actions & blockers": "話者自動 · アクションとブロッカーを重視",
         "2 speakers · preserve question-answer flow": "話者2名 · 質疑応答の流れを保持",
         "Speaker separation off · key takeaways": "話者分離オフ · 要点中心にまとめる",
+        // 요약 템플릿 (Lecture/Interview keys are shared with the meeting-mode labels above)
+        "Meeting": "会議",
+        "Summary · actions · decisions": "要約・アクション・決定",
+        "Summary · key points · terms": "要約・要点・用語",
+        "Summary · Q&A · follow-ups": "要約・質疑応答・フォローアップ",
+        "Summary template — derived from the meeting mode; changing it here applies to this session only":
+            "要約テンプレート — 会議モードから自動的に決まり、ここで変更するとこのセッションにのみ適用されます",
         "The beta period has ended": "ベータ期間が終了しました",
         "Get the full version": "正式版を入手",
         "Please prepare to move to the full version": "正式版への移行をご準備ください",
