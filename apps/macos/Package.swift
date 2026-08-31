@@ -32,6 +32,7 @@ let package = Package(
                 "Transcript/Retrieval.swift",
                 "Transcript/SummaryDeck.swift",
                 "Transcript/SummaryTemplate.swift",
+                "Transcript/SummaryReplySanitizer.swift",
                 "Transcript/RecapData.swift",
                 "Transcript/TranscriptArchive.swift",
                 "Transcript/EnergyArc.swift",

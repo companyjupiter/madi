@@ -92,6 +92,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/Retrieval.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryDeck.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryTemplate.swift
+  "$APP_DIR"/Sovereign/Transcript/SummaryReplySanitizer.swift
   "$APP_DIR"/Sovereign/Transcript/RecapData.swift
   "$APP_DIR"/Sovereign/Transcript/OpenLoopsAggregator.swift
   "$APP_DIR"/Sovereign/Transcript/GlossaryStore.swift

@@ -70,11 +70,16 @@ final class MeetingModeTests: XCTestCase {
         XCTAssertEqual(MeetingMode.general.config.summaryPromptSuffix, "")
     }
 
-    func testNonGeneralModesAddNonEmptyDistinctSuffixes() {
-        let nonGeneral = MeetingMode.allCases.filter { $0 != .general }
-        let suffixes = nonGeneral.map { $0.config.summaryPromptSuffix }
-        for s in suffixes { XCTAssertFalse(s.isEmpty) }
-        XCTAssertEqual(Set(suffixes).count, suffixes.count, "each mode nudges differently")
+    func testOnlyMeetingTemplateModesKeepSuffixNudges() {
+        // Since the template split (PR-B), lecture/interview map to their own
+        // SummaryTemplate whose prompt carries the shape — their mode suffix is
+        // EMPTY (a suffix on top would double-instruct). Only the meeting-template
+        // modes 1:1/standup keep distinct non-empty nudges.
+        XCTAssertEqual(MeetingMode.lecture.config.summaryPromptSuffix, "")
+        XCTAssertEqual(MeetingMode.interview.config.summaryPromptSuffix, "")
+        let nudged = [MeetingMode.oneOnOne, .standup].map { $0.config.summaryPromptSuffix }
+        for s in nudged { XCTAssertFalse(s.isEmpty) }
+        XCTAssertEqual(Set(nudged).count, nudged.count, "each mode nudges differently")
     }
 
     func testStandupEmphasizesBlockersOneOnOneDecisions() {

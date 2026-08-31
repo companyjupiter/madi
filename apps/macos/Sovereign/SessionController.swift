@@ -301,8 +301,18 @@ final class SessionController: EngineProcessDelegate {
             if let sc = SpeakerCount(rawValue: meetingMode.config.defaultSpeakerCountRaw) {
                 speakerCount = sc
             }
+            // Re-derive the summary template (회의/강의/인터뷰) from the new shape.
+            // The mode is the durable signal; a sheet override (PR-C) is per-session.
+            summaryTemplate = meetingMode.defaultSummaryTemplate
         }
     }
+
+    /// Summary template threaded into every summarize call — derived from
+    /// `meetingMode`, overridable per session from the summary sheet (PR-C).
+    /// Not persisted on its own: the mode is the durable signal.
+    var summaryTemplate: SummaryTemplate =
+        (MeetingMode(rawValue: UserDefaults.standard.string(forKey: "meetingMode") ?? "") ?? .general)
+            .defaultSummaryTemplate
 
     /// Live segment window (s) — the live FELT-latency knob. Text lands when a
     /// window closes, so a shorter window = snappier live text but less Whisper
@@ -682,7 +692,8 @@ final class SessionController: EngineProcessDelegate {
             meetingSummary = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
         }
         summarizing = true; meetingSummary = nil
-        s.summarize(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
+        s.summarize(lines: attributedLines, template: summaryTemplate,
+                    styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// Per-speaker breakdown (who said what / who owns which action), on-device.
@@ -694,7 +705,8 @@ final class SessionController: EngineProcessDelegate {
             speakerSummary = "요약 모델이 없습니다 — 설정 › 번역에서 모델을 먼저 받으세요."; return
         }
         speakerSummarizing = true; speakerSummary = nil
-        s.summarizeBySpeaker(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
+        s.summarizeBySpeaker(lines: attributedLines, template: summaryTemplate,
+                             styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// "Ask the meeting" — answer grounded only in the transcript, on-device.
@@ -1401,7 +1413,8 @@ final class SessionController: EngineProcessDelegate {
     private func autoSummarizeForSave() {
         guard !transcript.lines.isEmpty, !summarizing, let s = ensureSummaryEngine() else { return }
         summarizing = true; meetingSummary = nil
-        s.summarize(lines: attributedLines, styleSuffix: meetingMode.config.summaryPromptSuffix)
+        s.summarize(lines: attributedLines, template: summaryTemplate,
+                    styleSuffix: meetingMode.config.summaryPromptSuffix)
     }
 
     /// Persistent per-speaker voiceprints. When you name a speaker, their centroid
