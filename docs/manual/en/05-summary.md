@@ -1,12 +1,36 @@
 # AI summary and Q&A
 
-When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. Summary and Q&A use the same hardware-selected model as translation (DNA3.0-2B on 8 GB, 4B on 16 GB or more), and **neither the transcript nor the summary ever leaves this Mac.**
+When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. While you're still recording, the **실시간 요약** (Live summary) panel on the right shows the key bullets first (see **Live summary (while recording)** below). Summary and Q&A use the same hardware-selected model as translation (DNA3.0-2B on 8 GB, 4B on 16 GB or more), and **neither the transcript nor the summary ever leaves this Mac.**
 
 > Madi's interface can be switched between 한국어 / English / 日本語 under **설정 (⌘,) → 표시 → 언어 / Language**. This manual writes the Korean label first, with the English UI label in parentheses.
 
 ## First: the translation/summary model
 
 Summary and Q&A use the same on-device model as translation. Without it, the **summary button doesn't appear**. See **Live translation** or **Settings** for how to download it.
+
+## Live summary (while recording)
+
+So you don't lose the thread of a meeting still in progress, once enough conversation has accumulated (six lines or more) the **실시간 요약** (Live summary) panel slides in on the right, with 3–6 key bullets refreshed roughly every 30 seconds.
+
+- **It isn't there at first** — the panel appears the moment the first summary is ready.
+- **It disappears when recording ends** — its place is taken by the full post-session AI summary (the summary sheet).
+- The bottom of the panel reads **온디바이스 · 방금 갱신** (On-device · updated just now) — becoming "N분 전 갱신" (updated N min ago) as time passes — and a small spinner runs while a summary is being generated.
+
+### How it updates — a rolling summary
+
+Each refresh takes in only **the previous summary plus the new utterances since**. That means in a very long session, early details can get pushed out of the summary — this panel's job is "the gist so far", and the full content stays intact in the transcript and the post-session summary.
+
+The summary template (meeting/lecture/interview) is applied **automatically** to match the meeting mode you picked on the first screen; there is no UI for choosing one during a live session. The live summary itself is always a flat bullet list, regardless of template.
+
+### Live transcription and translation always come first
+
+The live summary is only generated when the caption work (transcription and translation) has spare time. If captions are running behind, that round's refresh is skipped. In other words, turning this feature on has **no impact on live caption performance.**
+
+### Requirements and settings
+
+- Requires **16 GB of memory or more** and the **translation/summary model** installed. On Macs with less than 16 GB the feature is disabled and a note is shown in Settings — use the post-session AI summary instead.
+- Turn it on or off with the **녹음 중 실시간 요약 탭** (Live summary tab while recording) toggle under **설정 → 실시간 요약** (Settings → Live summary). It's on by default.
+- Like everything else, it's entirely on-device — neither the transcript nor the live summary leaves this Mac.
 
 ## Generating a meeting summary
 

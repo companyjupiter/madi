@@ -372,9 +372,27 @@
 <li><strong>환자 자막</strong> — 외장 모니터에 크게(원거리 판독용). 환자 언어로 표시.</li>
 </ul>
 <p><strong>설정(⌘,) → 녹음 → 자막 오버레이 (진료실)</strong> 에서 켭니다. 직원 글씨(14–48pt)·환자 글씨(24–96pt)·환자 화면·환자 언어를 각각 지정할 수 있습니다. 진료 의자와 디스플레이 사이 1.5–2.5 m 거리에서 읽기 좋게 큰 글씨를 씁니다.</p></section>
-<section id="ko-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 요약과 질의응답</h1><p>전사가 끝나면 온디바이스 LLM이 회의록을 구조화된 요약으로 정리하고, 회의 내용에 대해 자연어로 질문할 수 있습니다. 요약과 질의응답은 번역과 같은 하드웨어 맞춤 모델(8GB는 DNA3.0-2B, 16GB 이상은 4B)을 쓰며, <strong>전사 내용도 요약도 이 Mac을 떠나지 않습니다.</strong></p>
+<section id="ko-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 요약과 질의응답</h1><p>전사가 끝나면 온디바이스 LLM이 회의록을 구조화된 요약으로 정리하고, 회의 내용에 대해 자연어로 질문할 수 있습니다. 녹음 중에는 우측의 <strong>실시간 요약</strong> 패널이 핵심 불릿을 먼저 보여줍니다 (아래 <strong>실시간 요약 (녹음 중)</strong> 참고). 요약과 질의응답은 번역과 같은 하드웨어 맞춤 모델(8GB는 DNA3.0-2B, 16GB 이상은 4B)을 쓰며, <strong>전사 내용도 요약도 이 Mac을 떠나지 않습니다.</strong></p>
 <h2 id="먼저-번역-요약-모델">먼저: 번역·요약 모델</h2>
 <p>요약과 질의응답은 번역과 같은 온디바이스 모델을 씁니다. 모델이 없으면 <strong>요약 버튼이 나타나지 않습니다.</strong> 받는 법은 <strong>실시간 번역·통역</strong> 또는 <strong>설정</strong> 페이지를 참고하세요.</p>
+<h2 id="실시간-요약-녹음-중">실시간 요약 (녹음 중)</h2>
+<p>녹음 중에도 핵심 흐름을 놓치지 않도록, 대화가 어느 정도 쌓이면(여섯 줄 이상) 우측에 <strong>실시간 요약</strong> 패널이 스르륵 열리고 핵심 요약 불릿 3~6개가 약 30초 간격으로 갱신됩니다.</p>
+<ul>
+<li><strong>처음에는 보이지 않습니다</strong> — 첫 요약이 만들어지는 순간 패널이 나타납니다.</li>
+<li><strong>녹음이 끝나면 사라집니다</strong> — 그 자리는 세션 종료 후의 정식 AI 요약(요약 시트)이 이어받습니다.</li>
+<li>패널 아래쪽에 <strong>온디바이스 · 방금 갱신</strong>(시간이 지나면 "N분 전 갱신")이 표시되고, 요약을 만드는 동안에는 작은 스피너가 돌아갑니다.</li>
+</ul>
+<h3 id="갱신-방식-롤링-요약">갱신 방식 — 롤링 요약</h3>
+<p>각 갱신은 <strong>직전 요약 + 그 이후의 새 발언</strong>만 반영합니다. 그래서 아주 긴 세션에서는 초반 세부 사항이 요약에서 밀려날 수 있습니다 — 이 패널의 목적은 "지금까지의 핵심"이고, 전체 내용은 전사문과 사후 요약에 온전히 남습니다.</p>
+<p>요약 템플릿(회의/강의/인터뷰)은 첫 화면에서 고른 회의 모드에 맞춰 <strong>자동으로</strong> 반영되며, 라이브 중에 따로 고르는 UI는 없습니다. 실시간 요약 자체는 템플릿과 무관하게 항상 평면 불릿 목록입니다.</p>
+<h3 id="실시간-전사-번역이-항상-우선입니다">실시간 전사·번역이 항상 우선입니다</h3>
+<p>실시간 요약은 자막(전사·번역) 작업이 한가할 때만 만들어집니다. 자막이 밀려 있으면 그 회차 갱신은 건너뜁니다. 즉, 이 기능을 켜도 <strong>라이브 자막 성능에는 영향이 없습니다.</strong></p>
+<h3 id="요구-사양과-설정">요구 사양과 설정</h3>
+<ul>
+<li><strong>메모리 16GB 이상</strong>과 <strong>번역·요약 모델 설치</strong>가 필요합니다. 16GB 미만 Mac에서는 이 기능이 비활성화되고 설정에 안내가 표시됩니다 — 세션 종료 후의 AI 요약을 사용하세요.</li>
+<li>켜고 끄기: <strong>설정 → 실시간 요약 → "녹음 중 실시간 요약 탭"</strong> 토글. 기본값은 켜짐입니다.</li>
+<li>다른 기능과 마찬가지로 전부 온디바이스입니다 — 전사 내용도 실시간 요약도 이 Mac을 떠나지 않습니다.</li>
+</ul>
 <h2 id="회의-요약-만들기">회의 요약 만들기</h2>
 <ol>
 <li>전사가 끝난 뒤(녹음 중에는 안 됩니다), 상단 도구 막대의 <strong>✦(반짝이) 버튼</strong>을 누릅니다. 또는 <strong>⌘K</strong> 명령 팔레트에서 <strong>요약 생성</strong>을 고릅니다.</li>
@@ -1042,10 +1060,28 @@ Disclaimer: the material is licensed AS-IS, without warranties of any kind.</cod
 <li><strong>Patient captions</strong> — large, on an external monitor, for reading at a distance, in the patient's language.</li>
 </ul>
 <p>Turn it on in <strong>설정 (⌘,) → 녹음 → 자막 오버레이 (진료실)</strong> (Settings → Recording → Caption overlay (clinic)). You can set staff text size (14–48 pt), patient text size (24–96 pt), which display to use, and the patient's language. The large sizes are meant to read well across the 1.5–2.5 m between a treatment chair and the display.</p></section>
-<section id="en-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI summary and Q&amp;A</h1><p>When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. Summary and Q&amp;A use the same hardware-selected model as translation (DNA3.0-2B on 8 GB, 4B on 16 GB or more), and <strong>neither the transcript nor the summary ever leaves this Mac.</strong></p>
+<section id="en-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI summary and Q&amp;A</h1><p>When a transcript is done, the on-device LLM distills the meeting into a structured summary, and you can ask questions about it in natural language. While you're still recording, the <strong>실시간 요약</strong> (Live summary) panel on the right shows the key bullets first (see <strong>Live summary (while recording)</strong> below). Summary and Q&amp;A use the same hardware-selected model as translation (DNA3.0-2B on 8 GB, 4B on 16 GB or more), and <strong>neither the transcript nor the summary ever leaves this Mac.</strong></p>
 <blockquote>Madi's interface can be switched between 한국어 / English / 日本語 under <strong>설정 (⌘,) → 표시 → 언어 / Language</strong>. This manual writes the Korean label first, with the English UI label in parentheses.</blockquote>
 <h2 id="first-the-translation-summary-model">First: the translation/summary model</h2>
 <p>Summary and Q&amp;A use the same on-device model as translation. Without it, the <strong>summary button doesn't appear</strong>. See <strong>Live translation</strong> or <strong>Settings</strong> for how to download it.</p>
+<h2 id="live-summary-while-recording">Live summary (while recording)</h2>
+<p>So you don't lose the thread of a meeting still in progress, once enough conversation has accumulated (six lines or more) the <strong>실시간 요약</strong> (Live summary) panel slides in on the right, with 3–6 key bullets refreshed roughly every 30 seconds.</p>
+<ul>
+<li><strong>It isn't there at first</strong> — the panel appears the moment the first summary is ready.</li>
+<li><strong>It disappears when recording ends</strong> — its place is taken by the full post-session AI summary (the summary sheet).</li>
+<li>The bottom of the panel reads <strong>온디바이스 · 방금 갱신</strong> (On-device · updated just now) — becoming "N분 전 갱신" (updated N min ago) as time passes — and a small spinner runs while a summary is being generated.</li>
+</ul>
+<h3 id="how-it-updates-a-rolling-summary">How it updates — a rolling summary</h3>
+<p>Each refresh takes in only <strong>the previous summary plus the new utterances since</strong>. That means in a very long session, early details can get pushed out of the summary — this panel's job is "the gist so far", and the full content stays intact in the transcript and the post-session summary.</p>
+<p>The summary template (meeting/lecture/interview) is applied <strong>automatically</strong> to match the meeting mode you picked on the first screen; there is no UI for choosing one during a live session. The live summary itself is always a flat bullet list, regardless of template.</p>
+<h3 id="live-transcription-and-translation-always-come-first">Live transcription and translation always come first</h3>
+<p>The live summary is only generated when the caption work (transcription and translation) has spare time. If captions are running behind, that round's refresh is skipped. In other words, turning this feature on has <strong>no impact on live caption performance.</strong></p>
+<h3 id="requirements-and-settings">Requirements and settings</h3>
+<ul>
+<li>Requires <strong>16 GB of memory or more</strong> and the <strong>translation/summary model</strong> installed. On Macs with less than 16 GB the feature is disabled and a note is shown in Settings — use the post-session AI summary instead.</li>
+<li>Turn it on or off with the <strong>녹음 중 실시간 요약 탭</strong> (Live summary tab while recording) toggle under <strong>설정 → 실시간 요약</strong> (Settings → Live summary). It's on by default.</li>
+<li>Like everything else, it's entirely on-device — neither the transcript nor the live summary leaves this Mac.</li>
+</ul>
 <h2 id="generating-a-meeting-summary">Generating a meeting summary</h2>
 <ol>
 <li>After transcription finishes (not while recording), press the <strong>✦ (sparkles) button</strong> in the top toolbar. Or pick <strong>요약 생성</strong> (Generate summary) from the <strong>⌘K</strong> command palette.</li>
@@ -1716,10 +1752,28 @@ Disclaimer: the material is licensed AS-IS, without warranties of any kind.</cod
 <li><strong>患者字幕</strong> — 外部モニターに大きく、離れた位置から読めるように、患者の言語で。</li>
 </ul>
 <p><strong>설정 (⌘,) → 녹음 → 자막 오버레이 (진료실)</strong>（設定 → 録音 → 字幕オーバーレイ（診察室））でオンにします。スタッフの文字サイズ（14–48 pt）、患者の文字サイズ（24–96 pt）、使用するディスプレイ、患者の言語を設定できます。大きなサイズは、診察チェアとディスプレイの間の 1.5–2.5 m の距離でも読みやすいように設計されています。</p></section>
-<section id="ja-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 要約・質疑応答</h1><p>文字起こしが終わると、オンデバイスの LLM が会議を構造化された要約にまとめ、その内容について自然言語で質問できます。要約と質疑応答は翻訳と同じハードウェア向けモデル（8 GB は DNA3.0-2B、16 GB 以上は 4B）を使い、<strong>文字起こしの内容も要約も、この Mac から外に出ることはありません。</strong></p>
+<section id="ja-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 要約・質疑応答</h1><p>文字起こしが終わると、オンデバイスの LLM が会議を構造化された要約にまとめ、その内容について自然言語で質問できます。録音中は、右側の <strong>실시간 요약</strong>（リアルタイム要約）パネルが要点の箇条書きを先に表示します（下の <strong>リアルタイム要約（録音中）</strong> を参照）。要約と質疑応答は翻訳と同じハードウェア向けモデル（8 GB は DNA3.0-2B、16 GB 以上は 4B）を使い、<strong>文字起こしの内容も要約も、この Mac から外に出ることはありません。</strong></p>
 <blockquote>Madi のインターフェースは <strong>설정 (⌘,) → 표시 → 언어 / Language</strong> で 한국어 / English / 日本語 を切り替えられます。本マニュアルは韓国語のラベルを先に示し、括弧内に日本語 UI での表記を添えています。</blockquote>
 <h2 id="まず-翻訳・要約モデル">まず：翻訳・要約モデル</h2>
 <p>要約と質疑応答は、翻訳と同じオンデバイスモデルを使います。これがないと、<strong>要約ボタンが表示されません。</strong> ダウンロード方法は <strong>リアルタイム翻訳・通訳</strong> または <strong>設定</strong> のページを参照してください。</p>
+<h2 id="リアルタイム要約-録音中">リアルタイム要約（録音中）</h2>
+<p>録音中も話の流れを見失わないように、会話がある程度たまると（6 行以上）、右側に <strong>실시간 요약</strong>（リアルタイム要約）パネルがすっと開き、要点をまとめた箇条書き 3〜6 個が約 30 秒間隔で更新されます。</p>
+<ul>
+<li><strong>最初は表示されません</strong> — 最初の要約ができた瞬間にパネルが現れます。</li>
+<li><strong>録音が終わると消えます</strong> — その役割は、セッション終了後の正式な AI 要約（要約シート）が引き継ぎます。</li>
+<li>パネルの下部には <strong>온디바이스 · 방금 갱신</strong>（オンデバイス・たった今更新）と表示されます（時間がたつと「N분 전 갱신」（N 分前に更新）に変わります）。要約の生成中は、小さなスピナーが回ります。</li>
+</ul>
+<h3 id="更新のしくみ-ローリング要約">更新のしくみ — ローリング要約</h3>
+<p>各更新は <strong>直前の要約 + それ以降の新しい発言</strong> だけを反映します。そのため、非常に長いセッションでは、序盤の細かい内容が要約から押し出されることがあります — このパネルの目的は「ここまでの要点」であり、全体の内容は文字起こしとセッション後の要約にそのまま残ります。</p>
+<p>要約テンプレート（会議 / 講義 / 面談）は、最初の画面で選んだ 회의 모드（会議モード）に合わせて <strong>自動で</strong> 反映され、ライブ中に選ぶ UI はありません。リアルタイム要約そのものは、テンプレートに関係なく常にフラットな箇条書きのリストです。</p>
+<h3 id="リアルタイムの文字起こし・翻訳が常に優先です">リアルタイムの文字起こし・翻訳が常に優先です</h3>
+<p>リアルタイム要約は、字幕（文字起こし・翻訳）の処理に余裕があるときにだけ作られます。字幕が遅れているときは、その回の更新をスキップします。つまり、この機能をオンにしても <strong>ライブ字幕の性能には影響しません。</strong></p>
+<h3 id="動作要件と設定">動作要件と設定</h3>
+<ul>
+<li><strong>メモリ 16 GB 以上</strong> と <strong>翻訳・要約モデルのインストール</strong> が必要です。16 GB 未満の Mac ではこの機能は無効になり、設定に案内が表示されます — セッション終了後の AI 要約をお使いください。</li>
+<li>オン / オフの切り替え: <strong>설정 → 실시간 요약 → 「녹음 중 실시간 요약 탭」</strong>（設定 → リアルタイム要約 → 「録音中のリアルタイム要約タブ」）トグル。既定ではオンです。</li>
+<li>ほかの機能と同じく、すべてオンデバイスで動作します — 文字起こしの内容もリアルタイム要約も、この Mac から外に出ることはありません。</li>
+</ul>
 <h2 id="会議の要約を作成する">会議の要約を作成する</h2>
 <ol>
 <li>文字起こしが終わったあと（録音中はできません）、上部ツールバーの <strong>✦（キラキラ）ボタン</strong> を押します。または <strong>⌘K</strong> のコマンドパレットから <strong>요약 생성</strong>（要約を生成）を選びます。</li>
@@ -2390,10 +2444,28 @@ Disclaimer: the material is licensed AS-IS, without warranties of any kind.</cod
 <li><strong>患者字幕</strong> —— 大号，显示在外接显示器上，便于远距离阅读，使用患者的语言。</li>
 </ul>
 <p>在 <strong>설정 (⌘,) → 녹음 → 자막 오버레이 (진료실)</strong>（设置 → 录音 → 字幕浮层（诊室））中开启。你可以设置工作人员文字大小（14–48 pt）、患者文字大小（24–96 pt）、使用哪块显示器以及患者的语言。较大的字号是为了在治疗椅与显示屏之间 1.5–2.5 米的距离上依然清晰可读。</p></section>
-<section id="zh-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 摘要与问答</h1><p>转写完成后，设备端 LLM 会把会议提炼成结构化的摘要，你也可以用自然语言就会议内容提问。摘要与问答使用与翻译相同的、按硬件自动选定的模型（8 GB 上为 DNA3.0-2B，16 GB 及以上为 4B），并且<strong>转写稿和摘要都不会离开这台 Mac。</strong></p>
+<section id="zh-05-summary" class="doc"><div class="doc-num">05</div><h1 class="doc-title">AI 摘要与问答</h1><p>转写完成后，设备端 LLM 会把会议提炼成结构化的摘要，你也可以用自然语言就会议内容提问。录音进行中，右侧的 <strong>실시간 요약</strong>（实时摘要）面板会先展示核心要点（参见下文<strong>实时摘要（录音中）</strong>一节）。摘要与问答使用与翻译相同的、按硬件自动选定的模型（8 GB 上为 DNA3.0-2B，16 GB 及以上为 4B），并且<strong>转写稿和摘要都不会离开这台 Mac。</strong></p>
 <blockquote>Madi 的界面可在 <strong>설정 (⌘,) → 표시 → 언어 / Language</strong> 中于 한국어 / English / 日本語 之间切换（暂无中文界面）。下文以韩语标签为准，括号内为中文说明。</blockquote>
 <h2 id="第一步-翻译-摘要模型">第一步：翻译/摘要模型</h2>
 <p>摘要与问答使用与翻译相同的设备端模型。没有它时，<strong>摘要按钮不会出现</strong>。下载方法参见<strong>实时翻译</strong>或<strong>设置</strong>。</p>
+<h2 id="实时摘要-录音中">实时摘要（录音中）</h2>
+<p>为了在录音进行中也不错过讨论的主线，当对话累积到一定程度（六行以上）时，右侧会滑出 <strong>실시간 요약</strong>（实时摘要）面板，并以约 30 秒的间隔更新 3～6 条核心摘要要点。</p>
+<ul>
+<li><strong>一开始并不可见</strong> —— 第一份摘要生成的那一刻，面板才会出现。</li>
+<li><strong>录音结束后即消失</strong> —— 其角色由会话结束后的正式 AI 摘要（<strong>회의 요약</strong>（会议摘要）面板）接手。</li>
+<li>面板底部会显示 <strong>온디바이스 · 방금 갱신</strong>（设备端 · 刚刚更新；随时间推移变为 “N분 전 갱신”（N 分钟前更新）），生成摘要期间还会转动一个小加载指示。</li>
+</ul>
+<h3 id="更新方式-滚动摘要">更新方式 —— 滚动摘要</h3>
+<p>每次更新只基于<strong>上一份摘要 + 之后的新发言</strong>。因此在特别长的会话中，早期的细节可能被挤出摘要 —— 这个面板的目的是“到目前为止的核心”，完整内容会原封不动地留在转写稿与事后摘要里。</p>
+<p>摘要模板（会议/讲座/访谈）会依据你在第一个界面选的会议模式<strong>自动</strong>生效，录音期间没有另行选择的 UI。实时摘要本身与模板无关，始终是一份扁平的要点列表。</p>
+<h3 id="实时转写与翻译始终优先">实时转写与翻译始终优先</h3>
+<p>实时摘要只在字幕（转写与翻译）工作空闲时才生成。字幕一旦积压，那一轮更新就会被跳过。也就是说，即使开启这项功能，<strong>实时字幕的性能也不受影响。</strong></p>
+<h3 id="硬件要求与设置">硬件要求与设置</h3>
+<ul>
+<li>需要<strong>内存 16 GB 及以上</strong>并<strong>已安装翻译/摘要模型</strong>。在内存不足 16 GB 的 Mac 上此功能会被停用，并在设置中显示相应说明 —— 请改用会话结束后的 AI 摘要。</li>
+<li>开关位置：<strong>설정 → 실시간 요약 → “녹음 중 실시간 요약 탭”</strong>（设置 → 实时摘要 → “录音中的实时摘要标签页”）开关。默认开启。</li>
+<li>与其他功能一样全部在设备端运行 —— 转写稿和实时摘要都不会离开这台 Mac。</li>
+</ul>
 <h2 id="生成会议摘要">生成会议摘要</h2>
 <ol>
 <li>转写完成后（不是录音进行中），按顶部工具栏的 <strong>✦（星光）按钮</strong>。也可以从 <strong>⌘K</strong> 命令面板中选择 <strong>요약 생성</strong>（生成摘要）。</li>

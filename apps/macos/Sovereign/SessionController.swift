@@ -221,6 +221,74 @@ final class SessionController: EngineProcessDelegate {
         summaryEngine?.cancelQueued()
     }
 
+    // ── live rolling summary (우측 요약 탭) ──
+    // Forked from the live-rail scheduler above (per-feature fork, not shared) —
+    // same no-degradation envelope, laxer cadence: LiveSummary.tickSeconds (30 s)
+    // and minNewLines (6) vs the rail's 18 s / 3, and the LOWEST broker lane.
+
+    /// Start the rolling-summary loop for a live recording. Same ≥16 GB gate as
+    /// the rail: the machines it admits always run the 4B (12 GB model-tier
+    /// boundary), the only model the live prompt was probed healthy on.
+    private func startLiveSummary() {
+        liveSummaryTimer?.invalidate(); liveSummaryTimer = nil
+        guard Self.liveRailCapable, liveSummaryEnabled else { return }
+        liveSummaryText = nil; liveSummaryUpdatedAt = nil
+        liveSummaryLastCount = 0; liveSummaryWindowStart = 0
+        liveSummaryBusy = false; liveSummaryBusyTicks = 0
+        liveSummaryTimer = Timer.scheduledTimer(withTimeInterval: LiveSummary.tickSeconds, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickLiveSummary() }
+        }
+    }
+
+    /// One rolling update: only while recording, only when the caption lane is
+    /// idle (P11 — the broker's aging valve is the second line of defense), only
+    /// when enough NEW lines landed, one request in flight. The request carries
+    /// the previous summary + just the new lines (rolling carry), so old
+    /// transcript text never re-enters the live loop.
+    private func tickLiveSummary() {
+        guard phase == .recording, liveSummaryEnabled, Self.liveRailCapable else { return }
+        guard translateQueueDepth == 0, translateBacklog == 0 else { return }
+        if liveSummaryBusy {
+            // Unwedge after ~4 ticks (≈120 s) — past the broker's 90 s aging
+            // valve. But a long wait is usually a QUEUE (e.g. dozens of serial
+            // mid-session reconcile parts share this .postSession lane), not a
+            // dead engine — the request will still answer eventually. So on
+            // unwedge, ROLL THE WATERMARK BACK to where that request's window
+            // began: the retry re-sends the accumulated window, and since lane
+            // replies arrive FIFO the retry's (superset) reply lands last —
+            // nothing said in the stuck window can silently drop out of the
+            // rolling summary (review finding).
+            liveSummaryBusyTicks += 1
+            if liveSummaryBusyTicks >= 4 {
+                liveSummaryBusy = false; liveSummaryBusyTicks = 0
+                liveSummaryLastCount = liveSummaryWindowStart
+            }
+            return
+        }
+        let total = transcript.lines.count
+        // A mid-session recluster (P15) can SHRINK the line count — clamp the
+        // watermark or `suffix(total - last)` goes negative (precondition crash).
+        if liveSummaryLastCount > total { liveSummaryLastCount = total }
+        guard total >= liveSummaryLastCount + LiveSummary.minNewLines else { return }
+        guard let s = ensureSummaryEngine() else { return }
+        // Slice BEFORE attributing — a 2-hour meeting shouldn't re-render every
+        // line's speaker label per tick just to feed the newest handful.
+        let newLines = transcript.lines.suffix(total - liveSummaryLastCount).map {
+            "\(SpeakerID.display($0.speaker, names: speakerNames, fallback: "화자\($0.speaker)")): \($0.text)"
+        }
+        liveSummaryWindowStart = liveSummaryLastCount
+        liveSummaryLastCount = total
+        liveSummaryBusy = true; liveSummaryBusyTicks = 0
+        s.liveSummarize(carry: liveSummaryText, lines: newLines, template: summaryTemplate)
+    }
+
+    private func stopLiveSummary() {
+        liveSummaryTimer?.invalidate(); liveSummaryTimer = nil
+        liveSummaryBusy = false; liveSummaryBusyTicks = 0
+        // The pane disappears with the recording; the post-session summary is
+        // the authoritative replacement (full transcript, template sections).
+    }
+
     // file-mode progress (nil when not transcribing a file)
     private(set) var fileName: String = ""
     private(set) var chunksDone = 0
@@ -677,6 +745,15 @@ final class SessionController: EngineProcessDelegate {
                         // (cheap, ≤ once per 18s rail tick), not per word event.
                         if added { self.recomputeCoach() }
                     }
+                case "live-summary":
+                    // Rolling update landed (already sanitized engine-side).
+                    // Empty/nil ⇒ keep the previous summary — a blank pane and a
+                    // poisoned carry are both worse than a stale one.
+                    self.liveSummaryBusy = false; self.liveSummaryBusyTicks = 0
+                    if let text, !text.isEmpty {
+                        self.liveSummaryText = text
+                        self.liveSummaryUpdatedAt = Date()
+                    }
                 case "reconcile":
                     self.applyReconcile(text)
                 default: break
@@ -859,6 +936,7 @@ final class SessionController: EngineProcessDelegate {
         summaryTemplate = meetingMode.defaultSummaryTemplate
         calendar.clear()
         stopLiveRail(); liveRailItems = []         // new session → reset the live rail
+        stopLiveSummary(); liveSummaryText = nil; liveSummaryUpdatedAt = nil
         stopLiveCoach(); coachAgenda = []; liveCoachState = .empty   // reset the coach too
         linePlayer.stop(); sourceMediaURL = nil   // new session → drop click-to-play audio
         summaryEngine?.stop(); summaryEngine = nil
@@ -1260,6 +1338,40 @@ final class SessionController: EngineProcessDelegate {
     static let liveRailCapable = ProcessInfo.processInfo.physicalMemory >= 16 * (1 << 30)
     var liveRailEnabled: Bool = (UserDefaults.standard.object(forKey: "liveRailEnabled") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(liveRailEnabled, forKey: "liveRailEnabled") }
+    }
+
+    // ── live rolling summary state (scheduler lives next to the rail's above) ──
+    /// Default ON (unlike the rail): the 요약 tab only appears once a summary
+    /// actually lands, so an idle default costs nothing on gated-out machines.
+    var liveSummaryEnabled: Bool = (UserDefaults.standard.object(forKey: "liveSummaryEnabled") as? Bool) ?? true {
+        didSet {
+            UserDefaults.standard.set(liveSummaryEnabled, forKey: "liveSummaryEnabled")
+            if !liveSummaryEnabled { stopLiveSummary(); liveSummaryText = nil }
+            else {
+                // Re-arm in ANY active session phase (paused, counting down,
+                // engine starting …) — the tick's own .recording guard keeps a
+                // pre-recording timer idle. Gating on .recording alone killed
+                // the loop for the rest of the session when the toggle was
+                // flipped mid-pause (review finding).
+                switch phase {
+                case .idle, .done, .error: break   // start() arms the next session
+                default: startLiveSummary()
+                }
+            }
+        }
+    }
+    /// Sanitized rolling summary (flat bullets) — doubles as the next carry.
+    private(set) var liveSummaryText: String? = nil
+    private(set) var liveSummaryUpdatedAt: Date? = nil
+    private(set) var liveSummaryBusy = false
+    private var liveSummaryTimer: Timer?
+    private var liveSummaryLastCount = 0
+    private var liveSummaryWindowStart = 0   // in-flight request's window origin (unwedge rollback)
+    private var liveSummaryBusyTicks = 0
+    /// The right-side pane opens with the first landed summary ("양이 모이면
+    /// 열리면서") and lives only through the recording.
+    var liveSummaryPaneVisible: Bool {
+        liveSummaryText != nil && liveSummaryEnabled
     }
 
     /// Host-facing live coach / teleprompter toggle (agenda coverage + unanswered
@@ -1834,11 +1946,20 @@ final class SessionController: EngineProcessDelegate {
         // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
         // first caption's translation doesn't pay the cold start.
         _ = ensureTranslateEngine()
+        // Live-summary prewarm: with translation OFF the line above spawns
+        // nothing (targets gate), and the summary's first tick would cold-launch
+        // the 4B mid-recording — model load competing with Whisper decode. Same
+        // dead time, same resident broker; a no-op when translation already
+        // warmed it or the gate/model rules the feature out.
+        if translateTargets.isEmpty, Self.liveRailCapable, liveSummaryEnabled {
+            _ = ensureSummaryEngine()
+        }
         // Prefill from the live calendar event. ContentView observes calendar.event.id
         // and calls ensurePrepBrief() on change, so we do NOT call it here too (that
         // double-ran the headless aggregation and raced two detached tasks).
         if Self.calendarPrepEnabled { Task { await calendar.loadCurrentEvent() } }
         startLiveRail()                              // throttled live action extraction (≥16GB + on)
+        startLiveSummary()                           // rolling 요약 tab (≥16GB + on, lowest lane)
         startLiveCoach()                             // throttled coach recompute (~1Hz while recording)
         phase = .engineStarting
 
@@ -2246,6 +2367,7 @@ final class SessionController: EngineProcessDelegate {
             TranslationStabilityMetrics.shared.flushSummary("@settled")
         }
         stopLiveRail()       // recording ended — keep the accumulated rail for review
+        stopLiveSummary()    // pane closes with the recording; 정식 요약 takes over
         stopWatchdog()
         segQueue.removeAll(); segmentsInFlight = 0
         stopLiveCoach(); recomputeCoach()   // stop the 1Hz loop, snapshot the final transcript once

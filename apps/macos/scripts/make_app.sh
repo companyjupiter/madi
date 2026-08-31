@@ -93,6 +93,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/SummaryDeck.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryTemplate.swift
   "$APP_DIR"/Sovereign/Transcript/SummaryReplySanitizer.swift
+  "$APP_DIR"/Sovereign/Transcript/LiveSummary.swift
   "$APP_DIR"/Sovereign/Transcript/RecapData.swift
   "$APP_DIR"/Sovereign/Transcript/OpenLoopsAggregator.swift
   "$APP_DIR"/Sovereign/Transcript/GlossaryStore.swift
@@ -133,6 +134,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/PrepBriefView.swift
   "$APP_DIR"/Sovereign/UI/ReviewControlView.swift
   "$APP_DIR"/Sovereign/UI/GlossarySettingsView.swift
+  "$APP_DIR"/Sovereign/UI/LiveSummaryPane.swift
   "$APP_DIR"/Sovereign/UI/RecapCardView.swift
   "$APP_DIR"/Sovereign/UI/TimelineScrubberView.swift
   "$APP_DIR"/Sovereign/UI/EnergyArcView.swift

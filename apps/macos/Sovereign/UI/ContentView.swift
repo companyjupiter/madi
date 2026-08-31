@@ -271,12 +271,18 @@ struct ContentView: View {
                 // Hidden while recording: the explorer's file/stats content is
                 // post-session material and dead weight next to a live take —
                 // the transcript gets the width instead. It returns at stop.
-                // (Future AI-summary features join as ADDITIONAL TABS here, not
-                // as always-on panels — docs/BACKLOG.md UI direction.)
+                // During a recording its slot instead hosts the LIVE tab set —
+                // today the rolling 실시간 요약 pane, which slides in once the
+                // first summary lands ("양이 모이면 열리면서") and leaves with
+                // the recording (docs/BACKLOG.md 2026-08-11 우측 패널 방향).
                 if !isRecordingLike {
                     WorkspaceExplorer(session: session, isVisible: $showExplorer)
+                } else if session.liveSummaryPaneVisible {
+                    LiveSummaryPane(session: session)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
+            .animation(.snappy(duration: 0.3), value: session.liveSummaryPaneVisible)
             .background(
                 ZStack {
                     Theme.Colors.surface
