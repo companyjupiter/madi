@@ -95,6 +95,17 @@ final class SummaryEngine {
         enqueue("live-rail", LiveActionRail.prompt(String(t.suffix(chunkChars))))
     }
 
+    /// LIVE rolling core summary — carry (the previous summary) + only the NEW
+    /// lines since it, → an updated flat bullet list for the right-side 요약 tab.
+    /// Rides the LOWEST broker lane (.postSession — see enqueue), input capped in
+    /// LiveSummary.prompt, so one request's in-flight time stays ~1-2 s on the 4B
+    /// (probed): the worst it can ever delay a caption turn. "live-summary" tag.
+    func liveSummarize(carry: String?, lines: [String], template: SummaryTemplate) {
+        let t = transcriptOneLine(lines)
+        guard !t.isEmpty else { onResult?("live-summary", nil); return }
+        enqueue("live-summary", LiveSummary.prompt(carry: carry, window: t, template: template))
+    }
+
     /// POST-SESSION diarization/language reconcile — the model reads the numbered,
     /// speaker-labeled transcript and proposes conservative speaker merges /
     /// relabels / wrong-language flags. Reply is parsed caller-side by
@@ -209,6 +220,9 @@ final class SummaryEngine {
     }
 
     private func enqueue(_ tag: String, _ prompt: String) {
+        // live-rail rides its own lane (30); live-summary DELIBERATELY falls to
+        // .postSession (10) with everything else — the rolling summary is the
+        // least urgent work this engine does, and captions (80/100) outrank both.
         let priority: DNAEngineBroker.Priority = tag == "live-rail" ? .liveRail : .postSession
         broker.submit(client: clientID, prompt: prompt, priority: priority,
                       preserveNewlines: true) { [weak self] text in
@@ -236,7 +250,10 @@ final class SummaryEngine {
             if foldRemaining <= 0 { runFoldRound(foldAcc) }
             return
         }
-        if tag == "summary" || tag == "speakers" {
+        if tag == "summary" || tag == "speakers" || tag == "live-summary" {
+            // live-summary replies are headerless bullet lists — the sanitizer's
+            // dedupe + default line cap still guard the runaway modes, and the
+            // head-marker miss just falls through to the longest-segment rule.
             let cleaned = SummaryReplySanitizer.sanitize(
                 out, headMarker: tag == "speakers" ? "■" : "[요약]")
             onResult?(tag, cleaned.isEmpty ? nil : cleaned)

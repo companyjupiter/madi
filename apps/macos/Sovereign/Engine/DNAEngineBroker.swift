@@ -408,5 +408,15 @@ final class DNAEngineBroker {
         reportBusy()
     }
 
-    private func reportBusy() { onBusyChange?(active != nil || !pending.isEmpty) }
+    /// Busy means CAPTION-priority work only. The sole consumer gates the
+    /// throwaway STT preview ("committed Whisper > DNA caption > preview"), and
+    /// that yield was always about captions — sub-caption work (live summary,
+    /// rail, post-session lanes) must not freeze the live preview for its whole
+    /// non-preemptible turn (1-3.5 s measured for a live-summary request).
+    private func reportBusy() {
+        let captionFloor = Priority.interimCaption.rawValue
+        let busy = (active.map { $0.priority >= captionFloor } ?? false)
+            || pending.contains { $0.priority >= captionFloor }
+        onBusyChange?(busy)
+    }
 }

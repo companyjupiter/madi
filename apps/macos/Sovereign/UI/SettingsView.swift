@@ -97,6 +97,19 @@ struct SettingsView: View {
                             "Waits this long after the last spoken line stops changing before translating it. Shorter shows captions sooner but may translate an unfinished sentence. Committed (next-line-started) lines translate immediately regardless."))
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section(uiLang("실시간 요약", "Live summary")) {
+                Toggle(uiLang("녹음 중 실시간 요약 탭", "Live summary tab while recording"), isOn: $session.liveSummaryEnabled)
+                    .disabled(!SessionController.liveRailCapable || !AssetManifest.translateAvailable)
+                Text(!SessionController.liveRailCapable
+                     ? uiLang("16GB 이상 메모리에서 사용할 수 있습니다. 이 Mac에서는 세션 종료 후 A.I 요약을 이용하세요.",
+                              "Available on 16 GB+ machines. On this Mac, use the post-session A.I summary instead.")
+                     : !AssetManifest.translateAvailable
+                     ? uiLang("번역·요약 모델(\(variant.displayName))이 있어야 사용할 수 있습니다.",
+                              "Requires the translation/summary model (\(variant.displayName)).")
+                     : uiLang("대화가 어느 정도 쌓이면 우측에 핵심 요약 탭이 열리고 30초 간격으로 갱신됩니다. 실시간 전사·번역이 우선이라, 자막 작업이 밀려 있으면 갱신을 건너뜁니다.",
+                              "Once enough has been said, a core-summary tab opens on the right and refreshes about every 30 s. Live transcription/translation always comes first — updates are skipped while caption work is pending."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section(uiLang("AI 교정 (세션 종료 후)", "AI correction (after session)")) {
                 Toggle(uiLang("화자·언어 자동 교정", "Auto-correct speakers & language"), isOn: $session.aiReconcileEnabled)
                     .disabled(!AssetManifest.translateAvailable)

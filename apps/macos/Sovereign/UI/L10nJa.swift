@@ -45,6 +45,14 @@ enum L10nJa {
         "Summary · Q&A · follow-ups": "要約・質疑応答・フォローアップ",
         "Summary template — derived from the meeting mode; changing it here applies to this session only":
             "要約テンプレート — 会議モードから自動的に決まり、ここで変更するとこのセッションにのみ適用されます",
+        // 실시간 요약 (live rolling summary tab)
+        "Live summary": "リアルタイム要約",
+        "just updated": "たった今更新",
+        "Live summary tab while recording": "録音中のリアルタイム要約タブ",
+        "Available on 16 GB+ machines. On this Mac, use the post-session A.I summary instead.":
+            "メモリ 16 GB 以上の Mac で利用できます。この Mac ではセッション終了後の A.I 要約をご利用ください。",
+        "Once enough has been said, a core-summary tab opens on the right and refreshes about every 30 s. Live transcription/translation always comes first — updates are skipped while caption work is pending.":
+            "会話がある程度たまると右側に要点タブが開き、約 30 秒ごとに更新されます。リアルタイムの文字起こし・翻訳が常に優先され、字幕処理が残っている間は更新をスキップします。",
         "The beta period has ended": "ベータ期間が終了しました",
         "Get the full version": "正式版を入手",
         "Please prepare to move to the full version": "正式版への移行をご準備ください",
