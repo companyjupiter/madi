@@ -133,6 +133,12 @@ extension SummaryTemplate {
     //    quotes into its output.
     //  · Count limits ("최대 5쌍", "3개만") are nudges the 2B ignores — the hard
     //    ceiling is SummaryReplySanitizer's per-section bulletCap.
+    //  · lecture/interview carry LiveSummary's probed language pin ("반드시 …
+    //    같은 언어로만 … (영어면 영어로)") — 2B EN lecture hangul 424→0,
+    //    interview stops echoing the format spec into [요약]. The SAME pin
+    //    REGRESSED .meeting (4B copies the '담당자' placeholder, 2B EN runs
+    //    away + drops [결정]) and every condensePrompt (2B EN runaways), so
+    //    those stay byte-identical — see docs/SUMMARY_TEMPLATES.md §7.
 
     /// The final-format prompt for a transcript that fits one request.
     /// `.meeting` is byte-for-byte today's baseline prompt (golden-tested).
@@ -143,12 +149,12 @@ extension SummaryTemplate {
                 + "형식: [요약] 핵심을 2-4문장. [액션] 각 줄 '- 담당자: 할 일'(없으면 생략). "
                 + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(t)" + styleSuffix
         case .lecture:
-            return "다음 강의/발표 전사를 요약하세요. 전사와 같은 언어로 답하세요. "
+            return "다음 강의/발표 전사를 요약하세요. 반드시 전사와 같은 언어로만 답하세요(전사가 영어면 영어로). "
                 + "형식: [요약] 핵심을 2-4문장. [요점] 각 줄을 - 요점 형태로 3-5개. "
                 + "[용어] 전사에 등장한 용어 중 가장 중요한 3개만 각 줄 - 용어: 한 줄 설명"
                 + "(없으면 생략). 따옴표 없이, 다른 말 없이 이 형식만. 전사: \(t)" + styleSuffix
         case .interview:
-            return "다음 인터뷰/상담 전사를 요약하세요. 전사와 같은 언어로 답하세요. "
+            return "다음 인터뷰/상담 전사를 요약하세요. 반드시 전사와 같은 언어로만 답하세요(전사가 영어면 영어로). "
                 + "형식: [요약] 핵심을 2-4문장. [문답] 주요 문답 최대 5쌍, 질문은 - Q: 로 쓰고 "
                 + "바로 아랫줄에 답변을 - A: 로. [후속] 앞으로 하기로 한 일만 각 줄 - 이름: 할 일"
                 + "(없으면 생략). 따옴표 없이, 다른 말 없이 이 형식만. 전사: \(t)" + styleSuffix
