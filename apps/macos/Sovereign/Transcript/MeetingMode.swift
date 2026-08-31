@@ -96,13 +96,17 @@ struct MeetingModeConfig: Equatable {
     /// re-weight sections for this shape. EMPTY for `.general` (baseline — appending
     /// "" must be a no-op so general stays byte-for-byte today's prompt). Korean,
     /// imperative, a nudge not a command.
+    ///
+    /// lecture/interview are EMPTY since the template split (PR-B): those shapes
+    /// map to their own SummaryTemplate whose finalPrompt already carries the
+    /// shape — a mode suffix on top would double-instruct the model. Only the
+    /// meeting-template modes (1:1/standup) keep a nudge.
     var summaryPromptSuffix: String {
         switch mode {
         case .general:   return ""
         case .oneOnOne:  return " 1:1 회의이므로 합의된 결정과 후속 조치를 특히 강조하세요."
         case .standup:   return " 스탠드업이므로 각자의 액션과 블로커를 특히 강조하세요."
-        case .interview: return " 인터뷰이므로 핵심 질문과 답변을 짝지어 정리하세요."
-        case .lecture:   return " 강의이므로 핵심 주제와 요점을 항목별로 정리하세요."
+        case .interview, .lecture: return ""
         }
     }
 

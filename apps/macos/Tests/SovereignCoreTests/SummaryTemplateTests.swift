@@ -85,6 +85,62 @@ final class SummaryTemplateTests: XCTestCase {
         XCTAssertEqual(MeetingMode.interview.defaultSummaryTemplate, .interview)
     }
 
+    // ── engine prompts (PR-B) ─────────────────────────────────────────────────
+
+    /// GOLDEN: the meeting final/condense prompts must stay byte-for-byte the
+    /// legacy SummaryEngine strings — every existing meeting summary, CLI
+    /// verification, and saved output depends on this baseline.
+    func testMeetingFinalPromptIsByteIdenticalToLegacy() {
+        XCTAssertEqual(
+            SummaryTemplate.meeting.finalPrompt(transcript: "T", styleSuffix: ""),
+            "다음 회의록을 요약하세요. 회의록과 같은 언어로 답하세요. "
+            + "형식: [요약] 핵심을 2-4문장. [액션] 각 줄 '- 담당자: 할 일'(없으면 생략). "
+            + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: T")
+        // styleSuffix appends AFTER the transcript, exactly like the legacy code.
+        XCTAssertTrue(SummaryTemplate.meeting
+            .finalPrompt(transcript: "T", styleSuffix: " 넛지").hasSuffix("회의록: T 넛지"))
+    }
+
+    func testMeetingCondensePromptIsByteIdenticalToLegacy() {
+        XCTAssertEqual(
+            SummaryTemplate.meeting.condensePrompt(chunk: "C"),
+            "다음 회의 내용을 화자(이름)·핵심·결정·할 일을 보존하며 간결히 요약하세요. "
+            + "회의록과 같은 언어로, 군더더기 없이. 내용: C")
+    }
+
+    /// Every template's final prompt asks for exactly its own section tags, and
+    /// the non-meeting prompts carry the probe-driven guards (따옴표 금지).
+    func testTemplatePromptsAskForTheirOwnTags() {
+        for t in SummaryTemplate.allCases {
+            let p = t.finalPrompt(transcript: "T", styleSuffix: "")
+            for sec in t.sections { XCTAssertTrue(p.contains("[\(sec.tag)]"), "\(t.rawValue) missing [\(sec.tag)]") }
+            XCTAssertTrue(p.contains("다른 말 없이 이 형식만"))
+        }
+        XCTAssertTrue(SummaryTemplate.lecture.finalPrompt(transcript: "T", styleSuffix: "").contains("따옴표 없이"))
+        XCTAssertTrue(SummaryTemplate.interview.finalPrompt(transcript: "T", styleSuffix: "").contains("따옴표 없이"))
+    }
+
+    /// Template-aware condense: what a chunk must PRESERVE names the template's
+    /// own material (the meeting wording would lose 요점·용어 on a long lecture).
+    func testCondensePromptsPreserveTemplateMaterial() {
+        XCTAssertTrue(SummaryTemplate.lecture.condensePrompt(chunk: "C").contains("요점"))
+        XCTAssertTrue(SummaryTemplate.lecture.condensePrompt(chunk: "C").contains("용어"))
+        XCTAssertTrue(SummaryTemplate.interview.condensePrompt(chunk: "C").contains("질문·답변 짝"))
+        XCTAssertTrue(SummaryTemplate.interview.condensePrompt(chunk: "C").contains("후속"))
+    }
+
+    /// bulletCap values the sanitizer enforces (probe-tuned: 2B ignores in-prompt
+    /// count limits, so these ARE the format contract's hard ceiling).
+    func testBulletCaps() {
+        XCTAssertEqual(SummarySection.qa.bulletCap, 10)        // 5쌍 × Q/A 2줄
+        XCTAssertEqual(SummarySection.keypoint.bulletCap, 5)
+        XCTAssertEqual(SummarySection.term.bulletCap, 5)
+        XCTAssertEqual(SummarySection.followUp.bulletCap, 6)
+        for sec in [SummarySection.gist, .action, .decision] {
+            XCTAssertEqual(sec.bulletCap, SummaryReplySanitizer.defaultBulletCap)
+        }
+    }
+
     // ── round-trip through the deck parser ────────────────────────────────────
 
     /// Every registry section's model tag resolves back to its canon title via

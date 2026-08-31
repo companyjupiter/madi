@@ -63,12 +63,19 @@ final class SummaryEngine {
     /// Summarize a speaker-attributed transcript ("화자: 발언" lines), map-reducing
     /// over chunks so arbitrarily long meetings fit the engine's context.
     private var foldStyleSuffix = ""   // mode prompt nudge appended to the FINAL format prompt
+    private var foldTemplate: SummaryTemplate = .meeting   // shapes final + condense prompts
 
-    func summarize(lines: [String], styleSuffix: String = "") { beginFold(lines, finalTag: "summary", styleSuffix: styleSuffix) }
+    func summarize(lines: [String], template: SummaryTemplate = .meeting, styleSuffix: String = "") {
+        beginFold(lines, finalTag: "summary", template: template, styleSuffix: styleSuffix)
+    }
 
     /// Per-speaker breakdown: each speaker's key point + the actions they own.
     /// Leverages persistent speaker identity (voiceprints) — "who is on the hook".
-    func summarizeBySpeaker(lines: [String], styleSuffix: String = "") { beginFold(lines, finalTag: "speakers", styleSuffix: styleSuffix) }
+    /// The speakers view is template-agnostic, but the template still shapes the
+    /// map-reduce condense (what a long session must preserve on the way down).
+    func summarizeBySpeaker(lines: [String], template: SummaryTemplate = .meeting, styleSuffix: String = "") {
+        beginFold(lines, finalTag: "speakers", template: template, styleSuffix: styleSuffix)
+    }
 
     /// One-line meeting TITLE from the transcript, on-device. Single budget-capped
     /// request (a title is short — no map-reduce fold). The raw reply is sanitized
@@ -104,6 +111,8 @@ final class SummaryEngine {
     }
 
     // The final-format prompt (single fitting text → the user-facing output).
+    // The speakers view is template-agnostic; the default (summary) prompt comes
+    // from the template registry — .meeting is byte-for-byte the legacy prompt.
     private func finalPrompt(_ tag: String, _ t: String) -> String {
         switch tag {
         case "speakers":
@@ -111,18 +120,18 @@ final class SummaryEngine {
                 + "각 화자마다 '■ 이름: 핵심 발언 1문장. 맡은 일: - 할 일'(맡은 일 없으면 그 부분 생략). "
                 + "다른 말 없이 이 형식만. 회의록: \(t)" + foldStyleSuffix
         default:
-            return "다음 회의록을 요약하세요. 회의록과 같은 언어로 답하세요. "
-                + "형식: [요약] 핵심을 2-4문장. [액션] 각 줄 '- 담당자: 할 일'(없으면 생략). "
-                + "[결정] 각 줄 '- 결정사항'(없으면 생략). 다른 말 없이 이 형식만. 회의록: \(t)" + foldStyleSuffix
+            return foldTemplate.finalPrompt(transcript: t, styleSuffix: foldStyleSuffix)
         }
     }
-    // Intermediate "condense" prompt — preserve names, decisions, and to-dos.
+    // Intermediate "condense" prompt — what a chunk must preserve is
+    // template-shaped (SummaryTemplate.condensePrompt; .meeting = legacy).
     private func condensePrompt(_ t: String) -> String {
-        "다음 회의 내용을 화자(이름)·핵심·결정·할 일을 보존하며 간결히 요약하세요. "
-            + "회의록과 같은 언어로, 군더더기 없이. 내용: \(t)"
+        foldTemplate.condensePrompt(chunk: t)
     }
 
-    private func beginFold(_ lines: [String], finalTag: String, styleSuffix: String = "") {
+    private func beginFold(_ lines: [String], finalTag: String,
+                           template: SummaryTemplate = .meeting, styleSuffix: String = "") {
+        foldTemplate = template
         foldStyleSuffix = styleSuffix
         let full = transcriptOneLine(lines)
         guard !full.isEmpty else { onResult?(finalTag, nil); return }
@@ -219,9 +228,18 @@ final class SummaryEngine {
             return
         }
         if tag == "fold" {
-            if !out.isEmpty { foldAcc.append(out) }
+            // Sanitize each condense reply so 2B repetition loops / think leaks
+            // never feed the next fold round (they'd compound).
+            let cleaned = SummaryReplySanitizer.sanitize(out, headMarker: "[요약]")
+            if !cleaned.isEmpty { foldAcc.append(cleaned) }
             foldRemaining -= 1
             if foldRemaining <= 0 { runFoldRound(foldAcc) }
+            return
+        }
+        if tag == "summary" || tag == "speakers" {
+            let cleaned = SummaryReplySanitizer.sanitize(
+                out, headMarker: tag == "speakers" ? "■" : "[요약]")
+            onResult?(tag, cleaned.isEmpty ? nil : cleaned)
             return
         }
         onResult?(tag, out.isEmpty ? nil : out)
