@@ -24,6 +24,11 @@ Do not reimplement release logic, mutate S3 directly, or hand-edit `index.json`.
    - bucket and prefix
    - latestUrl and indexUrl
    - whether AWS or GitHub auth is required
+   - `signing.mode` — `developer-id` (sign + notarize + staple) or `adhoc`.
+     Report the mode to the user BEFORE publishing; when it is `adhoc`, quote
+     `signing.reason` so they know what credential is missing. For a real
+     user-facing release prefer `--require-notarized` once credentials exist
+     (`MADI_SIGNING` and credential setup: docs/RELEASE.md §2).
 
 3. Choose exactly one CLI action:
    - `build` — local DMG build or reuse only

@@ -54,7 +54,32 @@ Bundled `.bin` list is kept in sync between `make_app.sh` (`ASSETS[]`) and
 
 ## 2. Developer ID sign + notarize (distribution)
 
-Secrets are passed as env vars — never commit them.
+**Integrated into `madi_release.sh` (2026-09-01):** build/upload/publish
+auto-detect signing. When BOTH a "Developer ID Application" identity (env
+`SIGN_ID`, or the sole one in the keychain) AND notary credentials
+(`NOTARY_PROFILE`, the `NOTARY_KEY`/`NOTARY_KEY_ID`/`NOTARY_ISSUER` API-key
+triplet, or `APPLE_ID`+`TEAM_ID`+`APP_PW`) are present, the pipeline signs +
+notarizes + staples the app (`sign_notarize.sh`) and then the DMG. Otherwise it
+falls back to ad-hoc with a loud warning. Control with:
+
+- `MADI_SIGNING=auto|adhoc|developer-id` (default auto; `developer-id` fails
+  instead of falling back)
+- `--require-notarized` — fail build/upload/publish unless notarization is
+  available (recommended for real releases once credentials exist)
+
+`plan --json` reports the resolved mode under `signing:{mode,reason}` and the
+manifest records `signing` per artifact set; a cached artifact whose recorded
+signing differs from the current environment is rebuilt, never reused.
+
+One-time credential setup (owner-only — requires the Apple Developer account):
+
+1. Apple Developer Program 가입 → Xcode/developer.apple.com에서 **Developer ID
+   Application** 인증서 발급, 로그인 키체인에 설치.
+2. App-specific password 발급(appleid.apple.com) 후:
+   `xcrun notarytool store-credentials madi --apple-id <이메일> --team-id <TEAMID>`
+   → 이후 릴리스는 `NOTARY_PROFILE=madi`만으로 동작.
+
+Manual per-app invocation (what the pipeline calls internally):
 
 ```sh
 SIGN_ID="Developer ID Application: NAME (TEAMID)" \

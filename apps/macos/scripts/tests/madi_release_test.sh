@@ -248,6 +248,7 @@ chmod +x "$FAKE_BIN"/*
 
 run_cli() {
   PATH="$FAKE_BIN:/usr/bin:/bin:/usr/sbin:/sbin" \
+  MADI_SIGNING="${MADI_SIGNING_OVERRIDE:-adhoc}" \
   MADI_BUILD=42 \
   MADI_RELEASE_BUCKET=test-bucket \
   MADI_RELEASE_PREFIX=madi \
@@ -263,6 +264,7 @@ run_cli() {
 
 run_wrapper() {
   PATH="$FAKE_BIN:/usr/bin:/bin:/usr/sbin:/sbin" \
+  MADI_SIGNING="${MADI_SIGNING_OVERRIDE:-adhoc}" \
   MADI_BUILD=42 \
   MADI_RELEASE_BUCKET=test-bucket \
   MADI_RELEASE_PREFIX=madi \
@@ -298,6 +300,32 @@ expect_ok "plan rc semver should map channel=rc" run_cli plan 1.2.3-rc.1 --json
 [ "$(json_field "$WORK/stdout" '.channel')" = "rc" ] || die "rc prerelease should map to rc channel"
 pass
 
+# ── signing resolution ──────────────────────────────────────────────────────
+expect_ok "plan should report the resolved signing mode" run_cli plan 1.2.3 --json
+jq -e '.signing.mode == "adhoc" and (.signing.reason | type == "string")' "$WORK/stdout" >/dev/null \
+  || die "plan JSON should expose signing.mode=adhoc with a reason when forced ad-hoc"
+
+expect_fail "--require-notarized must fail a build when signing is unavailable" \
+  run_cli build 1.2.3 --require-notarized --skip-tests --json
+
+expect_ok "--require-notarized is advisory-only for plan" \
+  run_cli plan 1.2.3 --require-notarized --json
+
+# MADI_SIGNING=developer-id must refuse to fall back when credentials are
+# absent. Notary env vars are explicitly blanked so this stays deterministic on
+# machines that DO have credentials in the calling shell (a keychain identity
+# alone is not enough — notary credentials are also required).
+if MADI_SIGNING_OVERRIDE=developer-id NOTARY_PROFILE= NOTARY_KEY= NOTARY_KEY_ID= NOTARY_ISSUER= APPLE_ID= TEAM_ID= APP_PW= \
+  run_cli plan 1.2.3 --json >"$WORK/stdout" 2>"$WORK/stderr"; then
+  die "MADI_SIGNING=developer-id without credentials should be rejected"
+fi
+pass
+
+if MADI_SIGNING_OVERRIDE=bogus run_cli plan 1.2.3 --json >"$WORK/stdout" 2>"$WORK/stderr"; then
+  die "MADI_SIGNING=bogus should be rejected"
+fi
+pass
+
 expect_fail "invalid semver should be rejected" run_cli plan 1.2 --json
 expect_fail "unknown subcommand should be rejected" run_cli nonsense 1.2.3 --json
 expect_fail "invalid beta expiry should be rejected" run_cli plan 1.2.3 --beta-expiry tomorrow --json
@@ -326,6 +354,7 @@ jq -n \
       assetsSha256: $assets_sha256,
       betaExpiry: "2026-12-01",
       includeOffline: false,
+      signing: "adhoc",
       artifacts: [
         {name: ("madi-" + $version + "-arm64.dmg")}
       ]

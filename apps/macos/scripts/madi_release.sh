@@ -13,10 +13,22 @@ Subcommands:
   promote-github  legacy flow: reuse the existing GitHub Release DMG asset, publish it to S3, and undraft the GitHub Release
 
 Common options:
-  --offline       include the offline DMG in local/build/upload/publish flows
-  --skip-tests    skip release gates
-  --beta-expiry   override beta/rc expiry date (YYYY-MM-DD)
-  --json          write only one JSON object to stdout; all logs go to stderr
+  --offline            include the offline DMG in local/build/upload/publish flows
+  --skip-tests         skip release gates
+  --beta-expiry        override beta/rc expiry date (YYYY-MM-DD)
+  --json               write only one JSON object to stdout; all logs go to stderr
+  --require-notarized  fail build/upload/publish unless Developer ID signing +
+                       notarization credentials are available
+
+Signing (resolved automatically; see plan output's "signing"):
+  MADI_SIGNING=auto|adhoc|developer-id   (default auto)
+    auto          Developer ID sign + notarize + staple when both a
+                  "Developer ID Application" identity (SIGN_ID or the sole one
+                  in the keychain) AND notary credentials (NOTARY_PROFILE, the
+                  NOTARY_KEY/NOTARY_KEY_ID/NOTARY_ISSUER triplet, or
+                  APPLE_ID/TEAM_ID/APP_PW) are present; otherwise ad-hoc.
+    adhoc         force the ad-hoc path even when credentials exist
+    developer-id  fail instead of silently falling back to ad-hoc
 EOF
 }
 
@@ -81,6 +93,9 @@ INCLUDE_OFFLINE=0
 RUN_TESTS=1
 JSON_MODE=0
 BETA_EXPIRY=""
+REQUIRE_NOTARIZED=0
+SIGNING_MODE=""
+SIGNING_REASON=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -97,6 +112,9 @@ while [ "$#" -gt 0 ]; do
       ;;
     --json)
       JSON_MODE=1
+      ;;
+    --require-notarized)
+      REQUIRE_NOTARIZED=1
       ;;
     -h|--help)
       usage
@@ -188,6 +206,60 @@ run_release_gates() {
   (cd "$ROOT/apps/macos" && swift test) >&2
 }
 
+# Decide developer-id vs ad-hoc signing for THIS invocation. Auto-detection is
+# deliberate: the same command notarizes on a machine with credentials and
+# still works (loudly ad-hoc) on one without, and the manifest records which.
+resolve_signing() {
+  local requested="${MADI_SIGNING:-auto}"
+  case "$requested" in
+    adhoc)
+      SIGNING_MODE=adhoc
+      SIGNING_REASON="forced by MADI_SIGNING=adhoc"
+      return 0
+      ;;
+    auto|developer-id) ;;
+    *) die "MADI_SIGNING must be auto, adhoc, or developer-id (got: $requested)" ;;
+  esac
+
+  local identity="${SIGN_ID:-}"
+  if [ -z "$identity" ]; then
+    local ids count
+    ids="$(security find-identity -v -p codesigning 2>/dev/null \
+      | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | sort -u)"
+    count="$(printf '%s\n' "$ids" | awk 'NF { c++ } END { print c + 0 }')"
+    if [ "$count" -eq 1 ]; then
+      identity="$ids"
+    elif [ "$count" -gt 1 ]; then
+      SIGNING_REASON="multiple Developer ID Application identities in the keychain — set SIGN_ID"
+    fi
+  fi
+
+  local notary_ok=0
+  if [ -n "${NOTARY_PROFILE:-}" ] \
+    || { [ -n "${NOTARY_KEY:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTARY_ISSUER:-}" ]; } \
+    || { [ -n "${APPLE_ID:-}" ] && [ -n "${TEAM_ID:-}" ] && [ -n "${APP_PW:-}" ]; }; then
+    notary_ok=1
+  fi
+
+  if [ -n "$identity" ] && [ "$notary_ok" = 1 ]; then
+    SIGNING_MODE=developer-id
+    SIGNING_REASON=""
+    SIGN_ID="$identity"
+    export SIGN_ID
+  else
+    SIGNING_MODE=adhoc
+    if [ -n "$identity" ]; then
+      SIGNING_REASON="no notary credentials (set NOTARY_PROFILE, the NOTARY_KEY triplet, or APPLE_ID/TEAM_ID/APP_PW)"
+    else
+      : "${SIGNING_REASON:=no Developer ID Application identity in the keychain (install the certificate or set SIGN_ID)}"
+    fi
+  fi
+
+  if [ "$requested" = developer-id ] && [ "$SIGNING_MODE" != developer-id ]; then
+    die "MADI_SIGNING=developer-id but signing is unavailable: $SIGNING_REASON"
+  fi
+}
+
 run_preflight() {
   local asset_count asset_line asset_lines digest
 
@@ -196,6 +268,15 @@ run_preflight() {
   fi
 
   require_cmd jq
+  resolve_signing
+  if [ "$REQUIRE_NOTARIZED" = 1 ] && [ "$SIGNING_MODE" != developer-id ]; then
+    case "$COMMAND" in
+      build|upload|publish)
+        die "--require-notarized but signing is unavailable: $SIGNING_REASON"
+        ;;
+      *) : ;;
+    esac
+  fi
   case "$COMMAND" in
     upload|publish|promote-github)
       require_cmd aws
@@ -232,17 +313,45 @@ refresh_release_assets() {
   "$HERE/prepare_release_assets.sh" "$TMP_ASSET_ARCHIVE" "$ASSETS_SHA256" >&2
 }
 
+# Developer ID path for the DMG itself: sign, notarize, staple. The app inside
+# is already notarized+stapled (sign_notarize.sh), so this second submission is
+# quick and gives the DMG its own ticket — no first-open Gatekeeper lag.
+sign_and_staple_dmg() {
+  local dmg="$1"
+  codesign --force --timestamp --sign "$SIGN_ID" "$dmg" >&2
+  if [ -n "${NOTARY_PROFILE:-}" ]; then
+    xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait >&2
+  elif [ -n "${NOTARY_KEY:-}" ]; then
+    xcrun notarytool submit "$dmg" --key "$NOTARY_KEY" \
+      --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait >&2
+  else
+    xcrun notarytool submit "$dmg" \
+      --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APP_PW" --wait >&2
+  fi
+  xcrun stapler staple "$dmg" >&2
+}
+
 build_dmg() {
   local build_dir="$1" dmg_version="$2" final_name="$3"
   shift 3
   mkdir -p "$build_dir"
   env "$@" "$HERE/make_app.sh" "$build_dir" >&2
   "$HERE/verify_release_bundle.sh" "$build_dir/Madi.app" "$VERSION" >&2
+  if [ "$SIGNING_MODE" = developer-id ]; then
+    "$HERE/sign_notarize.sh" "$build_dir/Madi.app" >&2
+  else
+    log "⚠️  signing: ad-hoc — $SIGNING_REASON (Gatekeeper will warn users)"
+  fi
   (
     cd "$RELEASE_ROOT"
+    # make_dmg's own staple stays skipped in BOTH modes: at that point the DMG
+    # is never notarized yet. The developer-id path staples it right after.
     SKIP_STAPLE=1 "$HERE/make_dmg.sh" "$build_dir/Madi.app" "$dmg_version" >&2
   )
   mv "$RELEASE_ROOT/Madi-$dmg_version.dmg" "$RELEASE_ROOT/$final_name"
+  if [ "$SIGNING_MODE" = developer-id ]; then
+    sign_and_staple_dmg "$RELEASE_ROOT/$final_name"
+  fi
 }
 
 ensure_offline_model() {
@@ -306,6 +415,7 @@ can_reuse_artifacts() {
     --arg assets_url "$ASSETS_URL" \
     --arg assets_sha256 "$ASSETS_SHA256" \
     --arg beta_expiry "$BETA_EXPIRY" \
+    --arg signing "$SIGNING_MODE" \
     --argjson include_offline "$(json_bool "$INCLUDE_OFFLINE")" \
     '
       .version == $version
@@ -318,6 +428,7 @@ can_reuse_artifacts() {
       and .assetsSha256 == $assets_sha256
       and .betaExpiry == $beta_expiry
       and .includeOffline == $include_offline
+      and .signing == $signing
       and any(.artifacts[]?; .name == ("madi-" + $version + "-arm64.dmg"))
       and (if $include_offline then any(.artifacts[]?; .name == ("madi-" + $version + "-offline-arm64.dmg")) else true end)
     ' "$RELEASE_ROOT/manifest.json" >/dev/null || return 1
@@ -497,6 +608,7 @@ save_manifest() {
     --arg release_notes "$release_notes" \
     --arg github_dmg_name "$GITHUB_DMG_NAME" \
     --arg github_dmg_sha256 "$GITHUB_DMG_SHA256" \
+    --arg signing "$SIGNING_MODE" \
     --argjson include_offline "$(json_bool "$INCLUDE_OFFLINE")" \
     --argjson git_dirty "$(json_bool "$GIT_DIRTY")" \
     --argjson published "$(json_bool "$published")" \
@@ -517,6 +629,7 @@ save_manifest() {
         channel: $channel,
         buildNumber: $build_number,
         includeOffline: $include_offline,
+        signing: $signing,
         published: $published,
         releaseRoot: $release_root,
         bucket: $bucket,
@@ -603,6 +716,8 @@ emit_plan_json() {
     --argjson action_promote_github "$(json_bool "$action_promote_github")" \
     --argjson requires_aws "$(json_bool "$requires_aws")" \
     --argjson requires_gh "$(json_bool "$requires_gh")" \
+    --arg signing_mode "$SIGNING_MODE" \
+    --arg signing_reason "$SIGNING_REASON" \
     '
       {
         schema: 1,
@@ -633,6 +748,10 @@ emit_plan_json() {
           upload: $action_upload,
           publishMetadata: $action_publish,
           promoteGithubRelease: $action_promote_github
+        },
+        signing: {
+          mode: $signing_mode,
+          reason: (if $signing_reason == "" then null else $signing_reason end)
         },
         requirements: {
           aws: $requires_aws,
