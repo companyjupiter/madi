@@ -105,15 +105,32 @@ final class SummaryTemplateTests: XCTestCase {
         }
     }
 
-    /// The picker caption must keep naming the template's OWN sections — the
-    /// guard against a section change landing without the UI line following it.
+    /// The picker caption must keep naming the template's OWN sections. Driven
+    /// FROM the registry, not from copied literals: change a template's sections
+    /// and this fails until the caption follows, which is the drift it exists to
+    /// catch. (Korean only — en/ja captions are translations of this one, and
+    /// their per-language wording is covered by the distinctness tests above.)
     func testKoreanDescriptionNamesItsOwnSections() {
-        XCTAssertTrue(SummaryTemplate.meeting.summaryDescription(.ko).contains("액션"))
-        XCTAssertTrue(SummaryTemplate.meeting.summaryDescription(.ko).contains("결정"))
-        XCTAssertTrue(SummaryTemplate.lecture.summaryDescription(.ko).contains("요점"))
-        XCTAssertTrue(SummaryTemplate.lecture.summaryDescription(.ko).contains("용어"))
-        XCTAssertTrue(SummaryTemplate.interview.summaryDescription(.ko).contains("문답"))
-        XCTAssertTrue(SummaryTemplate.interview.summaryDescription(.ko).contains("후속"))
+        for t in SummaryTemplate.allCases {
+            let caption = t.summaryDescription(.ko)
+            for sec in t.sections {
+                XCTAssertTrue(caption.contains(sec.tag),
+                              "\(t.rawValue) caption '\(caption)' doesn't name its [\(sec.tag)] section")
+            }
+        }
+    }
+
+    /// …and doesn't name sections it does NOT produce (a stale caption left over
+    /// from a section swap would still pass the test above).
+    func testKoreanDescriptionNamesNothingElse() {
+        for t in SummaryTemplate.allCases {
+            let caption = t.summaryDescription(.ko)
+            let mine = Set(t.sections.map(\.tag))
+            for sec in SummarySection.registry where !mine.contains(sec.tag) {
+                XCTAssertFalse(caption.contains(sec.tag),
+                               "\(t.rawValue) caption '\(caption)' names [\(sec.tag)], which it doesn't produce")
+            }
+        }
     }
 
     // ── mode → template derivation ────────────────────────────────────────────

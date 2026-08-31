@@ -58,7 +58,7 @@ For how to pick the meeting mode, see **Recording and transcription → 회의 �
 
 ### Changing it in the sheet regenerates on the spot
 
-- Switching the template **discards the summaries made so far — both 전체 (Overall) and 화자별 (By speaker)** — and generates them again with the new template.
+- Switching the template **discards the summaries made so far — both 전체 (Overall) and 화자별 (By speaker)**. The side you're looking at is regenerated right away; the other one is made when you switch to that tab. (The 화자별 breakdown's own format doesn't depend on the template.)
 - While a summary is being generated the toggle is dimmed and can't be used. It becomes available again once generation finishes.
 - A template you switch to in the sheet is a **temporary change for this session only**. It isn't saved anywhere, and changing the meeting mode puts it back to what the mode calls for. To keep using that template from now on, change the meeting mode on the first screen instead.
 
