@@ -3,6 +3,8 @@
 // path is the real one-click app replacement flow.
 
 import Foundation
+
+#if canImport(Sparkle)
 import Sparkle
 
 @MainActor
@@ -29,3 +31,14 @@ final class SparkleUpdater {
         updaterController.updater.checkForUpdatesInBackground()
     }
 }
+#else
+// SPARKLE_ENABLED=0 builds compile without Sparkle.framework on the search
+// path; the updater becomes inert (menu item disabled) and the manual
+// UpdateChecker remains the only update path.
+@MainActor
+final class SparkleUpdater {
+    var canCheckForUpdates: Bool { false }
+    func checkForUpdates() {}
+    func checkForUpdatesInBackground() {}
+}
+#endif

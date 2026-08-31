@@ -64,4 +64,6 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-exec "$CLI" "$MODE" "$VERSION" "${PASSTHRU[@]}"
+# ${arr[@]+...} guard: bash 3.2's set -u treats expanding an empty array as
+# an unbound variable, and PASSTHRU is empty unless optional flags were given
+exec "$CLI" "$MODE" "$VERSION" ${PASSTHRU[@]+"${PASSTHRU[@]}"}
