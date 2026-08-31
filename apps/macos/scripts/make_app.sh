@@ -150,8 +150,10 @@ SRCS=(
   "$APP_DIR"/Sovereign/UI/InfoView.swift
   "$APP_DIR"/Sovereign/UI/UpdateView.swift
 )
+# ${arr[@]+...} guard: bash 3.2's set -u treats expanding an empty array as
+# an unbound variable, and SWIFTC_SPARKLE_FLAGS is empty when SPARKLE_ENABLED=0
 swiftc -O -parse-as-library -target arm64-apple-macosx14.0 \
-  "${SRCS[@]}" "${SWIFTC_SPARKLE_FLAGS[@]}" -o "$OUT/Madi"
+  "${SRCS[@]}" ${SWIFTC_SPARKLE_FLAGS[@]+"${SWIFTC_SPARKLE_FLAGS[@]}"} -o "$OUT/Madi"
 
 # ── 2. assemble bundle ──────────────────────────────────────────────────────
 echo "[2/4] assemble $BUNDLE"
