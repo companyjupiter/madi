@@ -1,114 +1,16 @@
 // RecapCardView.swift — a shareable post-meeting one-pager. Renders the on-device
-// summary as a single fixed-width card: derived title + date, TL;DR, 결정 목록,
-// 담당자별 액션, 화자별 발화시간(막대), 그리고 한 줄 인용. "복사"는 Markdown 한
-// 페이지를 NSPasteboard로, "내보내기…"는 같은 Markdown을 파일로 저장한다.
+// summary as a single fixed-width card: derived title + date, TL;DR, 템플릿 섹션
+// (요점/용어/문답), 결정 목록, 담당자별 액션, 화자별 발화시간(막대), 그리고 한 줄
+// 인용. "복사"는 Markdown 한 페이지를 NSPasteboard로, "내보내기…"는 같은
+// Markdown을 파일로 저장한다.
 //
-// 모든 파싱/집계 로직은 이 파일 안의 RecapData 에 모여 있고 (SessionController 무수정),
-// 섹션 분리는 SummaryDeck.parseSections 를 그대로 재사용한다 — [요약]/[액션]/[결정]
-// 토큰 규칙이 슬라이드 덱과 한 곳에서 관리된다.
+// 파싱/집계 로직은 Transcript/RecapData.swift (SovereignCore, 단위테스트 대상)로
+// 추출됐고, 섹션 의미는 SummarySection 레지스트리(SummaryTemplate.swift)에서
+// 읽는다 — 태그 규칙이 슬라이드 덱·오픈 루프와 한 곳에서 관리된다.
 
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
-
-/// Pure value model for the recap card — built from a TranscriptStore + summary
-/// text, no SwiftUI/engine dependency, so it's trivially testable in isolation.
-struct RecapData {
-    struct Talk: Identifiable {
-        let speaker: Int
-        let name: String
-        let seconds: Double
-        var id: Int { speaker }
-    }
-
-    var title: String
-    var dateText: String
-    var tldr: [String]          // TL;DR 문장/불릿 (요약 섹션)
-    var decisions: [String]     // 결정 사항
-    var actions: [String]       // 액션 아이템 (담당자 prefix 포함될 수 있음)
-    var talk: [Talk]            // 화자별 발화시간 (내림차순)
-    var totalTalk: Double       // 막대 정규화용 최대값(= 최댓값 화자)
-    var quote: String?          // 가장 긴 한 줄 인용
-
-    /// Build from the live/archived transcript + the on-device summary text.
-    static func make(lines: [Line],
-                     names: [Int: String],
-                     summary: String?,
-                     title: String,
-                     date: Date) -> RecapData {
-        let df = DateFormatter(); df.dateFormat = "yyyy년 M월 d일 (EEE)"; df.locale = Locale(identifier: "ko_KR")
-        let dateText = df.string(from: date)
-
-        // ── sections (reuse the deck's tolerant parser) ──
-        var tldr: [String] = [], decisions: [String] = [], actions: [String] = []
-        if let summary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            for sec in SummaryDeck.parseSections(summary) {
-                let items = sec.bullets + sec.paras
-                if sec.title.contains("액션") { actions += items }
-                else if sec.title.contains("결정") { decisions += items }
-                else { tldr += items }   // 요약/기타
-            }
-        }
-
-        // ── talk-time per speaker ──
-        var secs: [Int: Double] = [:]
-        for l in lines {
-            let d = max(0, l.end - l.start)
-            secs[l.speaker, default: 0] += d
-        }
-        let talk = secs
-            .map { Talk(speaker: $0.key,
-                        name: SpeakerID.display($0.key, names: names, fallback: "화자\($0.key)"),
-                        seconds: $0.value) }
-            .sorted { $0.seconds > $1.seconds }
-        let maxTalk = talk.map(\.seconds).max() ?? 0
-
-        // ── key quote: the longest single line (proxy for a substantive remark) ──
-        let quote = lines
-            .map(\.text)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.count >= 8 }
-            .max(by: { $0.count < $1.count })
-
-        return RecapData(title: title.isEmpty ? "회의 요약" : title,
-                         dateText: dateText,
-                         tldr: tldr, decisions: decisions, actions: actions,
-                         talk: talk, totalTalk: maxTalk, quote: quote)
-    }
-
-    /// One-page Markdown — what "복사"/"내보내기" emit.
-    var markdown: String {
-        var s = "# \(title)\n\n_\(dateText)_\n"
-        if !tldr.isEmpty {
-            s += "\n## TL;DR\n"
-            for t in tldr { s += "- \(t)\n" }
-        }
-        if !decisions.isEmpty {
-            s += "\n## 결정\n"
-            for d in decisions { s += "- \(d)\n" }
-        }
-        if !actions.isEmpty {
-            s += "\n## 액션\n"
-            for a in actions { s += "- [ ] \(a)\n" }
-        }
-        if !talk.isEmpty {
-            s += "\n## 발화 시간\n"
-            for t in talk { s += "- \(t.name): \(RecapData.clock(t.seconds))\n" }
-        }
-        if let quote, !quote.isEmpty {
-            s += "\n> \(quote)\n"
-        }
-        return s
-    }
-
-    /// m:ss / h:mm:ss clock for a duration in seconds.
-    static func clock(_ seconds: Double) -> String {
-        let t = Int(seconds.rounded())
-        let h = t / 3600, m = (t % 3600) / 60, sec = t % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec)
-                     : String(format: "%d:%02d", m, sec)
-    }
-}
 
 /// Sheet-style one-pager. Width fixed (~520) for a consistent shareable layout.
 struct RecapCardView: View {
@@ -138,11 +40,13 @@ struct RecapCardView: View {
                 VStack(alignment: .leading, spacing: Theme.Space.panelGap) {
                     titleBlock(d)
                     if !d.tldr.isEmpty { section("TL;DR", d.tldr) }
+                    // 템플릿 전용 섹션 (핵심 요점/용어·개념/문답) — 회의 요약에선 빈 배열.
+                    ForEach(d.extras) { e in section(e.title, e.items) }
                     if !d.decisions.isEmpty { section(uiLang("결정", "Decisions"), d.decisions, accent: true) }
                     if !d.actions.isEmpty { actionBlock(d.actions) }
                     if !d.talk.isEmpty { talkBlock(d) }
                     if let q = d.quote, !q.isEmpty { quoteBlock(q) }
-                    if d.tldr.isEmpty && d.decisions.isEmpty && d.actions.isEmpty {
+                    if d.tldr.isEmpty && d.decisions.isEmpty && d.actions.isEmpty && d.extras.isEmpty {
                         emptyHint
                     }
                 }

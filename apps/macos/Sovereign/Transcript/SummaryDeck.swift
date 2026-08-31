@@ -44,11 +44,11 @@ enum SummaryDeck {
     }
 
     // ── parsing ──────────────────────────────────────────────────────────────
-    private static let headers: [(canon: String, keys: [String])] = [
-        ("요약", ["요약", "summary", "개요"]),
-        ("액션 아이템", ["액션", "할 일", "할일", "action", "to-do", "todo"]),
-        ("결정 사항", ["결정", "decision"]),
-    ]
+    // Derived from the section registry (SummaryTemplate.swift) — the single
+    // source of tag rules, shared with RecapData + OpenLoopsAggregator. Registry
+    // order IS matching precedence (legacy 요약/액션/결정 first).
+    private static let headers: [(canon: String, keys: [String])] =
+        SummarySection.registry.map { ($0.canon, $0.aliases) }
 
     /// Split tolerant of the model's formatting (brackets, **bold**, headings).
     static func parseSections(_ text: String) -> [Section] {
@@ -108,7 +108,8 @@ enum SummaryDeck {
         var inner = ""
         for p in s.paras { inner += "<p>\(esc(p))</p>\n" }
         if !s.bullets.isEmpty {
-            let isAction = s.title.contains("액션")
+            // action-kind sections (액션 아이템 + 후속 조치) render as checklists.
+            let isAction = SummarySection.kind(forCanon: s.title) == .action
             inner += "<ul class=\"\(isAction ? "checklist" : "")\">\n"
             for b in s.bullets { inner += "<li>\(esc(b))</li>\n" }
             inner += "</ul>\n"
