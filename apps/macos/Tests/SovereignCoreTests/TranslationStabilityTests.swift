@@ -287,6 +287,21 @@ final class InterimDisplayAgreementTests: XCTestCase {
         XCTAssertEqual(d.feed(lang: "English", candidate: "Hello there friends"), "Hello there")
     }
 
+    /// T1: what may be handed back to the engine as a forced reply prefix is the
+    /// AGREED text only — a provisional (fast-first) opening is shown but never
+    /// forced, because forcing it would make the first hypothesis permanent.
+    func testCommittedTextExcludesProvisionalOpening() {
+        var d = InterimDisplayAgreement(fastFirst: true)
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello there"), "Hello there",
+                       "fast-first paints the opening provisionally")
+        XCTAssertEqual(d.committed(lang: "English"), "", "…but nothing is agreed yet")
+        XCTAssertEqual(d.feed(lang: "English", candidate: "Hello there, friends"), "Hello there,")
+        XCTAssertEqual(d.committed(lang: "English"), "Hello there,")
+        XCTAssertEqual(d.committed(lang: "Japanese"), "", "unknown language forces nothing")
+        d.reset()
+        XCTAssertEqual(d.committed(lang: "English"), "")
+    }
+
     func testRemoveAndResetClear() {
         var d = InterimDisplayAgreement(fastFirst: false)
         _ = d.feed(lang: "English", candidate: "Some text here")

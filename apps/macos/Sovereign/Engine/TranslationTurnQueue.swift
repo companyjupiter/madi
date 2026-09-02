@@ -26,6 +26,11 @@ struct TranslationTurn: Equatable {
     /// served before pending committed work — once, so the caption cannot be
     /// starved for longer than the guarantee interval under a committed backlog.
     var reserved: Bool = false
+    /// T1: an already-displayed, AGREED translation prefix for this (line, lang)
+    /// — the engine prefills it as forced assistant tokens and generates only
+    /// the tail, instead of re-decoding text the viewer is already looking at.
+    /// Interim turns only; nil = free decode (committed turns, retries).
+    var forced: String? = nil
 }
 
 struct TranslationQueueEnqueueResult {

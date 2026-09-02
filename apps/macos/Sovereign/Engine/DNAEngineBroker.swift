@@ -106,6 +106,14 @@ final class DNAEngineBroker {
     private var clients: Set<ClientID> = []
     private var readyCallbacks: [ClientID: () -> Void] = [:]
     private var ready = false
+    /// Capability tokens the running engine declared ("[caps] …" before READY).
+    /// Cleared on relaunch so a swapped binary is never assumed to accept what
+    /// the previous one did.
+    private(set) var capabilities: Set<String> = []
+    /// T1: the engine accepts a ` %%FP <text>` forced reply prefix on a turn line.
+    /// An engine without it would translate the marker as prompt text, so the
+    /// driver must never send one unless this is true.
+    var supportsForcedPrefix: Bool { capabilities.contains("fp") }
     private var pending: [Request] = []
     private var active: Request?
     private var sequence: UInt64 = 0
@@ -319,6 +327,10 @@ final class DNAEngineBroker {
     private func ingest(_ data: Data) {
         for event in parser.ingest(data) {
             switch event {
+            case .capabilities(let tokens):
+                // Printed by the engine once per launch, right before READY — so a
+                // relaunched (older/newer) binary re-declares what it accepts.
+                capabilities = Set(tokens)
             case .ready:
                 ready = true
                 for callback in readyCallbacks.values { callback() }
@@ -402,7 +414,7 @@ final class DNAEngineBroker {
         restartAfterTermination = false
         stdoutPipe?.fileHandleForReading.readabilityHandler = nil
         process = nil; stdinPipe = nil; stdoutPipe = nil
-        enginePath = nil; modelPath = nil; ready = false
+        enginePath = nil; modelPath = nil; ready = false; capabilities = []
         pending.removeAll(); active = nil
         parser = TranslateStreamParser()
         reportBusy()
