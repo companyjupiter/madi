@@ -9,6 +9,21 @@ final class TranslationTurnQueueTests: XCTestCase {
                         prefix: nil, body: nil, retries: 1, kind: kind)
     }
 
+    // 0.3.1 live regression: the "Now:" turn marker rendered into the target
+    // language and echoed at the head of translations (self-reinforcing via the
+    // T5 example pair). The sanitizer must strip marker, separator and arrow echoes.
+    func testCleanStripsPromptMarkerEcho() {
+        XCTAssertEqual(TranslationOutputPolicy.clean("现在： 这是一种后来将定义世界观的视角。"), "这是一种后来将定义世界观的视角。")
+        XCTAssertEqual(TranslationOutputPolicy.clean("이제: 나중에 그 세계관을 정의할 것입니다."), "나중에 그 세계관을 정의할 것입니다.")
+        XCTAssertEqual(TranslationOutputPolicy.clean("Now: No."), "No.")
+        XCTAssertEqual(TranslationOutputPolicy.clean(". 동안 겪어야만 했던 것들"), "동안 겪어야만 했던 것들")
+        XCTAssertEqual(TranslationOutputPolicy.clean("後の世界観を定義するもの =>"), "後の世界観を定義するもの")
+        XCTAssertEqual(TranslationOutputPolicy.clean("现在：否。 </think> 现在：否。"), "否。")
+        // untouched: ordinary sentences that merely start with a time word
+        XCTAssertEqual(TranslationOutputPolicy.clean("이제 여기에서 멈추고 내일 계속합니다."), "이제 여기에서 멈추고 내일 계속합니다.")
+        XCTAssertEqual(TranslationOutputPolicy.clean("Now we can start."), "Now we can start.")
+    }
+
     func testCommittedTurnEvictsPendingInterimAndRunsFirst() {
         var queue = TranslationTurnQueue()
         let interim = turn(source: "draft", kind: .interim)

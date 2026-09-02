@@ -166,8 +166,46 @@ enum TranslationOutputPolicy {
             }
         }
 
+        text = stripPromptMarkerEcho(text)
         return collapseConsecutiveSentences(text)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The turn body is "<example> . Now: <text> =>". With a real example pair in
+    /// the slot (T5) the model sometimes treats the "Now:" marker as part of the
+    /// text and renders it in the target language ("现在：", "이제:", "今："), or
+    /// echoes the separator / the trailing arrow. Seen live on 0.3.1 (EN→ZH/KO);
+    /// once leaked, the committed line becomes the next example and the marker
+    /// self-reinforces for the rest of the session. Strip those echoes here — the
+    /// single sanitizer both the streaming and the final path go through, so the
+    /// stored example pair is clean too.
+    static func stripPromptMarkerEcho(_ raw: String) -> String {
+        var text = raw
+        let markers = ["Now", "now", "现在", "現在", "이제", "지금", "현재", "今", "いま", "Text", "텍스트", "文本"]
+        var changed = true
+        while changed {
+            changed = false
+            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            for m in markers {
+                for colon in [":", "："] {
+                    if t.hasPrefix(m + colon) {
+                        text = String(t.dropFirst(m.count + colon.count))
+                        changed = true
+                        break
+                    }
+                }
+                if changed { break }
+            }
+            if changed { continue }
+            // separator echo: a leading ". " / "; " / "。 " before the actual translation
+            if let first = t.first, ".;。；".contains(first), t.count > 1,
+               t.dropFirst().first.map({ $0 == " " || $0 == "\u{3000}" }) == true {
+                text = String(t.dropFirst(2)); changed = true; continue
+            }
+            if t.hasSuffix("=>") { text = String(t.dropLast(2)); changed = true; continue }
+            text = t
+        }
+        return text
     }
 
     static func shouldRetry(_ output: String, source: String, target: String) -> Bool {
