@@ -166,6 +166,27 @@ final class SummaryTemplateTests: XCTestCase {
             + "회의록과 같은 언어로, 군더더기 없이. 내용: C")
     }
 
+    /// GOLDEN: lecture/interview carry LiveSummary's probed language pin —
+    /// 2026-08-31 2B/4B CLI 프로브: soft "전사와 같은 언어로" left 2B EN lecture
+    /// at 424 hangul chars; the pin produced 0 and stopped the interview
+    /// format-spec echo into [요약]. The SAME pin regressed .meeting and every
+    /// condensePrompt (docs/SUMMARY_TEMPLATES.md §7) — those must NOT carry it,
+    /// which testMeetingFinalPromptIsByteIdenticalToLegacy and
+    /// testMeetingCondensePromptIsByteIdenticalToLegacy already pin.
+    func testProbedLanguageInstructionIsPinnedOnLectureAndInterview() {
+        let pinned = "반드시 전사와 같은 언어로만 답하세요(전사가 영어면 영어로)."
+        for t in [SummaryTemplate.lecture, .interview] {
+            let p = t.finalPrompt(transcript: "T", styleSuffix: "")
+            XCTAssertTrue(p.contains(pinned), "\(t.rawValue) missing language pin")
+            XCTAssertFalse(p.contains("전사와 같은 언어로 답하세요"), "\(t.rawValue) kept soft wording")
+        }
+        // Refuted surfaces stay unpinned (2B EN runaways / 4B placeholder copy).
+        XCTAssertFalse(SummaryTemplate.meeting.finalPrompt(transcript: "T", styleSuffix: "").contains("반드시"))
+        for t in SummaryTemplate.allCases {
+            XCTAssertFalse(t.condensePrompt(chunk: "C").contains("반드시"))
+        }
+    }
+
     /// Every template's final prompt asks for exactly its own section tags, and
     /// the non-meeting prompts carry the probe-driven guards (따옴표 금지).
     func testTemplatePromptsAskForTheirOwnTags() {
