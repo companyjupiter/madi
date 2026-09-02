@@ -112,9 +112,12 @@ struct ContentView: View {
     @State private var firstRunModelChoice: FirstRunModelSetupChoice? = nil
 
     /// Low-confidence word occurrences, in transcript order, for the review queue.
+    /// P0: read from the display snapshot (refreshed at ≤30 fps together with
+    /// displayLines) — scanning `transcript.lines` here subscribed this whole body
+    /// to every word/token write and was one root of the live-session stall.
     private var flaggedWords: [(line: UUID, text: String)] {
         var out: [(UUID, String)] = []
-        for l in session.transcript.lines {
+        for l in session.transcript.displayLines {
             for w in l.words where w.conf < Theme.confThreshold {
                 let t = w.text.trimmingCharacters(in: .whitespaces)
                 if !t.isEmpty { out.append((l.id, t)) }
@@ -198,7 +201,7 @@ struct ContentView: View {
             }
             // A live recording stopped with nothing transcribed → there's no
             // session to review, so drop straight back to the Set to start panel.
-            if case .done = new, session.transcript.lines.isEmpty,
+            if case .done = new, session.transcript.displayLines.isEmpty,
                session.sourceMediaURL == nil {
                 session.reset()
             }
@@ -255,7 +258,7 @@ struct ContentView: View {
     // (transcribeFile isn't called until 파일로 시작하기), so the card stays up with
     // the file staged. Any start → phase leaves .idle → expands into mainLayout.
     private var showSetToStart: Bool {
-        if case .idle = session.phase, session.transcript.lines.isEmpty { return true }
+        if case .idle = session.phase, session.transcript.displayLines.isEmpty { return true }
         return false
     }
 
@@ -516,11 +519,16 @@ struct ContentView: View {
     }
 
     private func recomputeFind(resetIndex: Bool) {
+        let before: UUID? = findIndex < findMatches.count ? findMatches[findIndex] : nil
         let pairs = session.transcript.displayLines.map { (id: $0.id, text: $0.text) }
         findMatches = TranscriptFind.matchingLineIDs(pairs, query: findQuery)
         if resetIndex { findIndex = 0 }
         else if findIndex >= findMatches.count { findIndex = max(0, findMatches.count - 1) }
-        scrollToCurrentFind()
+        // P0: a live recording recomputes on every new line; re-scrolling each
+        // time was a programmatic jump that released follow mode. Scroll only
+        // when the CURRENT match actually changed (or the user reset the index).
+        let after: UUID? = findIndex < findMatches.count ? findMatches[findIndex] : nil
+        if resetIndex || after != before { scrollToCurrentFind() }
     }
     private func moveFind(_ d: Int) {
         guard !findMatches.isEmpty else { return }
@@ -585,13 +593,14 @@ struct ContentView: View {
                                    onEdit: { session.editLine($0, to: $1) },
                                    onEditTranslation: { session.editTranslation($0, lang: $1, to: $2) },
                                    onEditWord: { session.editWord($0, index: $1, to: $2) },
-                                   lockedLineID: isRecordingLike ? session.transcript.lines.last?.id : nil,
+                                   lockedLineID: isRecordingLike ? session.transcript.displayLastLineID : nil,
                                    onRequestDetailed: { contentMode = false },
                                    onPlay: session.sourceMediaURL != nil ? { session.playLine($0) } : nil,
                                    playingLine: session.linePlayer.currentLine,
                                    onScrolledFromTopChange: { transcriptScrolled = $0 },
                                    findQuery: session.showFindBar ? findQuery : "",
-                                   findCurrentLine: (session.showFindBar && findIndex < findMatches.count) ? findMatches[findIndex] : nil)
+                                   findCurrentLine: (session.showFindBar && findIndex < findMatches.count) ? findMatches[findIndex] : nil,
+                                   isLive: isRecordingLike)
                         .frame(maxWidth: 700)
                         .frame(maxWidth: .infinity)
                         // Top+bottom fades (Figma 188:733 / 195:1039): scrolled
@@ -1802,7 +1811,7 @@ struct ContentView: View {
     /// True in file mode, or once a live session is done with transcribed content.
     private var showFileCard: Bool {
         if session.sourceMediaURL != nil { return true }
-        if case .done = session.phase, !session.transcript.lines.isEmpty { return true }
+        if case .done = session.phase, !session.transcript.displayLines.isEmpty { return true }
         return false
     }
 
@@ -1898,7 +1907,7 @@ struct ContentView: View {
     /// Excludes file sessions (source media persists) and opened archives
     /// (fileName is set from the .md that's already on disk).
     private var hasUnsavedTranscript: Bool {
-        !session.transcript.lines.isEmpty && session.lastAutoSaved == nil
+        !session.transcript.displayLines.isEmpty && session.lastAutoSaved == nil
             && session.sourceMediaURL == nil && session.fileName.isEmpty
     }
 
@@ -2383,7 +2392,7 @@ struct ContentView: View {
             // of the unwired editor analysis (SessionController.editorFeaturesEnabled).
         } label: { Label(uiLang("내보내기", "Export"), systemImage: "square.and.arrow.up") }
         .menuStyle(.borderlessButton).fixedSize()
-        .disabled(session.transcript.lines.isEmpty)
+        .disabled(session.transcript.displayLines.isEmpty)
     }
 
     // MARK: helpers

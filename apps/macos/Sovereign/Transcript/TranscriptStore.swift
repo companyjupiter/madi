@@ -14,7 +14,7 @@
 import Foundation
 import Observation
 
-struct Word: Identifiable {
+struct Word: Identifiable, Equatable {
     let id = UUID()
     let t0: Double
     let t1: Double
@@ -22,7 +22,7 @@ struct Word: Identifiable {
     var conf: Double = 1.0   // softmax confidence of the chosen token(s); <1 = uncertain
 }
 
-struct Line: Identifiable {
+struct Line: Identifiable, Equatable {
     // Identity is the FIRST word's id — stable across the per-word live rebuild
     // (a fresh UUID() each rebuild would orphan async translations + user edits).
     var id: UUID
@@ -173,6 +173,13 @@ final class TranscriptStore {
     // what made row heights twitch. Views observing only `displayLines` are
     // untouched by the synchronous writes above (@Observable tracks per key).
     private(set) var displayLines: [Line] = []
+    /// P0 (2026-09-03): values views used to derive from `lines` inside their
+    /// bodies — every such read subscribed the WHOLE view to the synchronous
+    /// per-word / per-token writes and defeated the 30 fps coalescing above
+    /// (ContentView re-evaluated per token; at ~100 lines the main thread
+    /// saturated in SwiftUI layout and the session stalled). They are refreshed
+    /// together with `displayLines`, so views observe only snapshot state.
+    private(set) var displayLastLineID: UUID? = nil
     @ObservationIgnored private var renderScheduled = false
     @ObservationIgnored private var displayRevision: UInt64 = 0
     @ObservationIgnored private var energyCacheKey: EnergySnapshotCacheKey? = nil
@@ -196,6 +203,7 @@ final class TranscriptStore {
     private func publishDisplayLines(_ newLines: [Line], invalidateEnergy: Bool) {
         displayRevision &+= 1
         displayLines = newLines
+        if displayLastLineID != newLines.last?.id { displayLastLineID = newLines.last?.id }
         if invalidateEnergy { energyCacheKey = nil }
     }
 

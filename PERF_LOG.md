@@ -1,3 +1,23 @@
+## P0 — 라이브 세션 정지(메인 스레드 레이아웃 포화) + 팔로우/새 전사 버그 (2026-09-03)
+
+0.3.2 라이브 프로파일링(유튜브 팟캐스트, EN→中·한 2타깃, 13분 28초 정지): `sample` 1896/1896 샘플이 SwiftUI 레이아웃
+(`TranscriptView.body` → `sizeThatFits` 재귀 1396프레임), Whisper는 stdin 대기·번역 엔진 유휴 — 메인 액터가 굳으면 세그먼트 공급·
+번역 디스패치·타이머가 함께 멈춘다. 두 번째 세션(가벼운 머신)에서도 앱 CPU 평균 44%(최대 96%), 뷰가 00:05:41에 20분+ 고정,
+"새 전사" 1→15→7→3→43 요동 재현. 보고서 = `bench/wer_runs/prof/madi-live-profiling.html`(아티팩트), 데이터 `bench/wer_runs/prof/`.
+
+| # | 원인(코드) | 수정 |
+|---|---|---|
+| A1 | `ContentView`·`CaptionOverlay`가 본문에서 `transcript.lines`를 직접 읽어(`lockedLineID`, `flaggedWords` 2회, isEmpty 5곳) 30 fps 스냅샷 코얼레싱이 무력화 — 토큰마다 전체 본문 재평가 | `displayLines`/`displayLastLineID`(publish 시 갱신)만 관찰 |
+| A2 | 상세 행 `row(line)`이 매 스냅샷마다 전 줄의 `attributed(line)` 재생성 + CoreText 재배치(줄 수에 선형) | `RowHost(key:).equatable()` — 행이 그리는 모든 값(줄·이름·편집/리뷰/찾기/스트리밍/재생/폰트/인터림 꼬리)을 키로 비교, 변하지 않은 행은 본문 생략 |
+| A3 | `translateStableLines()`가 단어 이벤트마다 전 줄 정규식 3패스 | 줄별 텍스트 해시 게이트(`stablePassHash`) — 바뀐 줄만 |
+| A4 | 내용 모드 화자 블록 = 구간 전체 하나의 Text(+번역 2개), 24 ms 타자 효과가 문단 전체 재배치 | 블록을 8줄/700자로 분할 |
+| B1 | 팔로우 해제가 기하(`bottomGap > max(240, h/2)`)로도 발생 — 뷰포트 위 성장(늦은 번역·SPKFIX)에 사용자 입력 없이 풀림 | 순수 `TranscriptFollowModel`(Foundation, 테스트 6건): 해제는 휠 위/프로그램 점프뿐, 기하는 핀만 |
+| B2 | "새 전사 N" = `lines.count` 델타, 감소(병합) 시 0 리셋 | 마지막으로 본 줄 id/시각 기준 재계산 |
+| B3 | `liveTail`이 20pt 패딩 안쪽 → 착지 갭 항상 20 > 8, 재무장 불가; 앵커·핀이 `activityText`(무음 15 s면 nil)에 묶임 | liveTail에 바닥 인셋 포함·패딩을 top/horizontal로, `isLive` 파라미터로 앵커·핀 |
+| B4 | 찾기바가 새 줄마다 재스크롤·리뷰 점프가 팔로우 해제와 구분 안 됨 | 현재 매치 변경 시에만 스크롤, 점프는 명시적 `programmaticJump()` + 0.4 s 핀 억제 |
+
+게이트: swift test 573/573(모델 테스트 6건 포함), 앱 빌드 통과. **라이브 재계측(같은 영상, 샘플러+스택 샘플)은 0.3.4 로컬 빌드로 진행.**
+
 ## S3 — Whisper 이전 세그먼트 텍스트 조건화(`<|startofprev|>`): 반증 (2026-09-02)
 
 whisper.cpp `condition_on_previous_text`의 동형. 엔진에 SEG 잡 단위 ` %%PROMPT <text>` 접미(정적 글로서리 뒤에

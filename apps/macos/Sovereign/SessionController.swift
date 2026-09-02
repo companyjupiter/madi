@@ -1230,10 +1230,22 @@ final class SessionController: EngineProcessDelegate {
         let upTo = includingLast ? lines.count : max(0, lines.count - 1)
         // Rewrite passes run FIRST, so a line is translated from its final text
         // instead of being retranslated after a later correction.
-        for i in 0..<upTo { applyTextPasses(lines[i]) }
+        // P0 (2026-09-03): this runs on EVERY word event; re-walking all lines
+        // with the regex passes was a fixed main-actor cost that grew with the
+        // session. A line is re-processed only when its text changed since the
+        // last pass (merges/edits change the hash, so nothing is missed).
+        for i in 0..<upTo {
+            let line = lines[i]
+            let h = line.text.hashValue
+            if stablePassHash[line.id] == h { continue }
+            applyTextPasses(line)
+            stablePassHash[line.id] = transcript.lines.first(where: { $0.id == line.id })?.text.hashValue ?? h
+        }
         lines = transcript.lines   // a pass may have rewritten line text
         for i in 0..<min(upTo, lines.count) { translateLine(lines[i]) }
     }
+    /// line id → text hash at the last applyTextPasses run (see translateStableLines).
+    private var stablePassHash: [UUID: Int] = [:]
 
     /// Lines the USER rewrote by hand. The system passes below must never
     /// overwrite a manual correction.
@@ -1819,7 +1831,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll()
+        translatedHash.removeAll(); stablePassHash.removeAll()
         interimCache.clear()
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
@@ -1935,7 +1947,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll()
+        translatedHash.removeAll(); stablePassHash.removeAll()
         interimCache.clear()
         backlogKeys.removeAll(); translateBacklog = 0
         backfillPendingKeys.removeAll(); backfillRemaining = 0
@@ -2069,7 +2081,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll()
+        translatedHash.removeAll(); stablePassHash.removeAll()
         interimCache.clear()
         clearSummary()
         fileName = url.lastPathComponent

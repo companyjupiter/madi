@@ -116,15 +116,15 @@ struct CaptionView: View {
         // pair is torn down the moment the last line's real translation arrives.
         if let t = pick(session.livePartialTranslations),
            !session.livePartialSource.isEmpty,
-           session.transcript.lines.last?.translations.isEmpty ?? true {
+           session.transcript.displayLines.last?.translations.isEmpty ?? true {
             return (t, session.livePartialSource, true, nil, 1.0, 0)
         }
-        if let l = session.transcript.lines.last(where: { !$0.translations.isEmpty }),
+        if let l = session.transcript.displayLines.last(where: { !$0.translations.isEmpty }),
            let t = pick(l.translations) {
             // The captioned line is the newest TRANSLATED one, which can lag the
             // newest audio — age it against the real tail so a stalled translation
             // cannot hold the "화자분리중…" label open past the timeout.
-            let tail = session.transcript.lines.last?.end ?? l.end
+            let tail = session.transcript.displayLines.last?.end ?? l.end
             return (t, l.text, false, l.speaker, l.speakerMargin, tail - l.end)
         }
         return nil
