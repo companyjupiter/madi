@@ -78,6 +78,7 @@ final class TranslateEngine {
         broker.detach(client: clientID)
         ready = false; pending.removeAll(); inflightTurn = nil
         registeredPrefixes.removeAll(); registeringPrefixes.removeAll(); disabledPrefixes.removeAll()
+        lastPair.removeAll()
     }
 
     /// Queue a translation of `text` into each of `targets` (English language
@@ -91,14 +92,19 @@ final class TranslateEngine {
     // this = the 9B model — deferred A/B.)
     private static let anchor: [String: String] =
         ["Korean": "안녕하세요", "English": "Hello", "Japanese": "こんにちは", "Chinese": "你好"]
-    private static func prompt(for target: String, text: String) -> String {
-        prefix(for: target) + text + " =>"
+    /// T5: the example slot is per turn now (previous committed pair when usable,
+    /// else the anchor) — see TranslatePrompt. The cached prefix is the head only.
+    private static func prompt(for target: String, text: String, example: TranslatePrompt.Example?) -> String {
+        prefix(for: target) + TranslatePrompt.body(text: text, example: example, anchor: anchor[target] ?? "Hello")
     }
 
     private static func prefix(for target: String) -> String {
-        let a = anchor[target] ?? "Hello"
-        return "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — Hello => \(a) . Now: "
+        "Translate the following into \(target). Reply with only the translation in \(target), no notes. Example — "
     }
+
+    /// T5: the last committed (source, translation) per target language — the
+    /// discourse context the next turn's example carries. Session-scoped.
+    private var lastPair: [String: TranslatePrompt.Example] = [:]
 
     /// Retry prompt deliberately changes both the instruction and token layout.
     /// The 2B model responds more reliably when the source language is explicit;
@@ -166,10 +172,12 @@ final class TranslateEngine {
         var reservationAvailable = kind == .interim && interimIsStarved()
         for target in ordered {
             let claimsReservation = reservationAvailable && target == ordered.last
+            let example = TranslatePrompt.usableExample(lastPair[target], for: oneLine)
             let turn = TranslationTurn(
                 id: id, lang: target, source: oneLine,
-                prompt: Self.prompt(for: target, text: oneLine),
-                prefix: Self.prefix(for: target), body: oneLine + " =>",
+                prompt: Self.prompt(for: target, text: oneLine, example: example),
+                prefix: Self.prefix(for: target),
+                body: TranslatePrompt.body(text: oneLine, example: example, anchor: Self.anchor[target] ?? "Hello"),
                 retries: 1, kind: kind, reserved: claimsReservation,
                 forced: Self.forcedPrefix(forced[target], kind: kind))
             let result = pending.enqueue(
@@ -281,6 +289,11 @@ final class TranslateEngine {
             }
             if turn.retries == 0 { onResult?(turn.id, turn.lang, "", turn.source) }
             return   // retry pending, or report a completed suppressed echo
+        }
+        // T5: a committed line's translation becomes the next turn's example for
+        // this language (interim previews are disposable and never become context).
+        if turn.kind == .committed, !cleaned.isEmpty {
+            lastPair[turn.lang] = TranslatePrompt.Example(source: turn.source, target: cleaned)
         }
         // Empty is a terminal result too: request-generation and backfill
         // barriers must drain even when the model returns no usable text.
