@@ -33,6 +33,36 @@ struct TranslationTurn: Equatable {
     var forced: String? = nil
 }
 
+/// T5 (2026-09-02): the per-turn prompt body. The instruction head is the cached
+/// `%%PFX` prefix ("…Example — "); the body carries the EXAMPLE and the source.
+/// The example is the previous committed (source => translation) pair for this
+/// target when one exists — Korean drops subjects, and a lone sentence cannot
+/// recover them. Measured on a 40-item null-subject probe (PERF_LOG T5): 4B
+/// pronoun hit 15→22/40, chrF++ 54.7→57.8 (+38 ms prefill); 2B chrF++ 47.8→53.1
+/// and the "Hello => Hello" identity example's think-leak rambling gone
+/// (304→148 ms/turn). Without a usable pair it falls back to the in-target
+/// anchor, which reproduces the previous prompt byte for byte.
+enum TranslatePrompt {
+    struct Example: Equatable { let source: String; let target: String }
+
+    static func body(text: String, example: Example?, anchor: String) -> String {
+        let ex = example.map { "\($0.source) => \($0.target)" } ?? "Hello => \(anchor)"
+        return "\(ex) . Now: \(text) =>"
+    }
+
+    /// An example is usable when both halves are single-line, non-empty and short
+    /// enough to keep the prefill in the fixed-cost regime, and it is not the very
+    /// sentence being translated (a repeat phrase would otherwise be its own
+    /// example and invite echo).
+    static func usableExample(_ ex: Example?, for text: String, maxChars: Int = 200) -> Example? {
+        guard let ex, !ex.source.isEmpty, !ex.target.isEmpty,
+              ex.source.count <= maxChars, ex.target.count <= maxChars,
+              !ex.source.contains("\n"), !ex.target.contains("\n"),
+              ex.source != text else { return nil }
+        return ex
+    }
+}
+
 struct TranslationQueueEnqueueResult {
     let accepted: Bool
     let displaced: [TranslationTurn]

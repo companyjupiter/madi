@@ -189,3 +189,30 @@ final class InterimReservationTests: XCTestCase {
         XCTAssertEqual(q.count, 1)
     }
 }
+
+/// T5: the per-turn example slot — previous committed pair when usable, the
+/// in-target anchor otherwise (which must reproduce the pre-T5 prompt layout).
+final class TranslatePromptTests: XCTestCase {
+    func testAnchorFallbackReproducesLegacyLayout() {
+        XCTAssertEqual(TranslatePrompt.body(text: "안녕하세요", example: nil, anchor: "Hello"),
+                       "Hello => Hello . Now: 안녕하세요 =>")
+    }
+
+    func testPreviousPairBecomesTheExample() {
+        let ex = TranslatePrompt.Example(source: "김 대리는 어제 밤늦게까지 배포 작업을 했습니다.",
+                                         target: "Kim worked on the deployment until late last night.")
+        XCTAssertEqual(TranslatePrompt.body(text: "그래서 오늘 늦게 도착했습니다.", example: ex, anchor: "Hello"),
+                       "김 대리는 어제 밤늦게까지 배포 작업을 했습니다. => Kim worked on the deployment until late last night. . Now: 그래서 오늘 늦게 도착했습니다. =>")
+    }
+
+    func testUnusableExamplesFallBack() {
+        let same = TranslatePrompt.Example(source: "같은 문장", target: "Same sentence")
+        XCTAssertNil(TranslatePrompt.usableExample(same, for: "같은 문장"), "its own sentence is not context")
+        XCTAssertNil(TranslatePrompt.usableExample(TranslatePrompt.Example(source: "", target: "x"), for: "y"))
+        XCTAssertNil(TranslatePrompt.usableExample(
+            TranslatePrompt.Example(source: String(repeating: "가", count: 201), target: "long"), for: "y"),
+            "an over-long pair would push the prefill out of the fixed-cost regime")
+        XCTAssertNil(TranslatePrompt.usableExample(TranslatePrompt.Example(source: "a\nb", target: "c"), for: "y"))
+        XCTAssertNotNil(TranslatePrompt.usableExample(TranslatePrompt.Example(source: "이전 문장", target: "Previous"), for: "다음 문장"))
+    }
+}

@@ -85,6 +85,16 @@ retry rejection, and the four-turn low-memory horizon.
 **Prompt (user turn):**
 `Translate the following into {KO한국어|ZH中文|JA日本語|EN English}. Output only the translation, no notes:\n{segment text}`
 
+**Prompt, current (T5, 2026-09-02):** the cached prefix is the instruction head
+`Translate the following into {target}. Reply with only the translation in {target}, no notes. Example — `
+and each turn's body is `{prev source} => {prev translation} . Now: {text} =>` — the
+example slot carries the **previous committed pair for that target language**
+(`TranslatePrompt`), which is what lets a Korean null-subject sentence recover its
+subject; with no usable pair it falls back to the in-target anchor
+(`Hello => 안녕하세요`), byte-identical to the previous prompt. Measured on a
+40-item null-subject probe: 4B pronoun hit 15→22/40, chrF++ +3.1 (+38 ms prefill);
+2B chrF++ +5.2 and the identity example's think-leak rambling gone (PERF_LOG T5).
+
 **Output parse:** read stdout until the `[perf] generation` line (turn complete),
 collect non-control lines → the translation. One in-flight turn at a time (queue
 segments; they arrive slower than translation completes).
