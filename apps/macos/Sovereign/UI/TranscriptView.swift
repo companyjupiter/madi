@@ -78,6 +78,10 @@ struct TranscriptView: View {
     // line; the line at `findCurrentLine` (the active match) gets a stronger fill.
     var findQuery: String = ""
     var findCurrentLine: UUID? = nil
+    /// True while the session is recording/paused. P0: the bottom anchor and the
+    /// follow pin used to key on `activityText != nil`, which goes nil during a
+    /// 15 s silence and flipped the anchor to .top mid-session.
+    var isLive: Bool = false
     @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
     private var bodyFont: Font { .system(size: fontSize) }
 
@@ -85,16 +89,15 @@ struct TranscriptView: View {
     // Jump pill (#8): while the user reads ABOVE the follow zone, new commits
     // don't drag the view (OS anchor releases) — they count up here instead,
     // surfaced as a "새 전사 N" pill that jumps back to the live tail.
-    @State private var atBottom = true
-    @State private var unseenCount = 0
-    // Corrective re-glue: defaultScrollAnchor(.bottom) loses its grip when an
-    // EARLIER line grows (translation backlog attaching above the viewport,
-    // mid-session speaker fixes regrouping blocks) — content grows at the top,
-    // the offset stays, and the OS reads the new gap as "user left the bottom".
-    // followLive tracks REAL user intent instead: only an upward wheel scroll
-    // over the transcript (or a scrollbar-sized jump) releases it; while it
-    // holds, any drift off the bottom snaps back instantly.
-    @State private var followLive = true
+    // P0 (2026-09-03): follow/pill state lives in a pure, unit-tested model
+    // (TranscriptFollowModel). Follow is released ONLY by user intent; geometry
+    // never releases it (content growing above the viewport used to flip it off
+    // and strand the reader minutes behind the live tail), and the pill count is
+    // derived from line identity, not from lines.count deltas (merges reset it).
+    @State private var follow = TranscriptFollowModel()
+    // While a programmatic (animated) scroll is in flight, the corrective pin
+    // must not fight it.
+    @State private var programmaticScrollUntil: Date = .distantPast
     @State private var hovering = false
     @State private var lastGap: CGFloat = 0
     @State private var wheelMonitor: Any? = nil
@@ -221,6 +224,8 @@ struct TranscriptView: View {
     /// The block id is its last line's id so live auto-scroll (which targets
     /// `lines.last.id`) still lands on the newest block.
     private struct SpeakerBlock: Identifiable { let id: UUID; let speaker: Int; let text: String; let lineIDs: [UUID] }
+    private static let blockMaxLines = 8
+    private static let blockMaxChars = 700
     private var blocks: [SpeakerBlock] {
         var out: [SpeakerBlock] = []
         var i = 0
@@ -229,7 +234,14 @@ struct TranscriptView: View {
             var j = i
             var parts: [String] = []
             var ids: [UUID] = []
-            while j < lines.count && lines[j].speaker == sp { parts.append(lines[j].text); ids.append(lines[j].id); j += 1 }
+            var chars = 0
+            // P0: bound a paragraph (max lines / chars) so a long monologue does
+            // not become one ever-growing Text that CoreText re-lays out on every
+            // 24 ms typewriter tick; only the tail block keeps changing.
+            while j < lines.count && lines[j].speaker == sp
+                    && (ids.isEmpty || (ids.count < Self.blockMaxLines && chars < Self.blockMaxChars)) {
+                parts.append(lines[j].text); ids.append(lines[j].id); chars += lines[j].text.count; j += 1
+            }
             out.append(SpeakerBlock(id: lines[j - 1].id, speaker: sp,
                                     text: parts.joined(separator: " "), lineIDs: ids))
             i = j
@@ -248,6 +260,13 @@ struct TranscriptView: View {
     }
 
     private var firstSpeaker: Int? { lines.first?.speaker }
+
+    /// Identity/time of every line — the follow model's view of the transcript.
+    private var lineRefs: [TranscriptFollowModel.LineRef] {
+        lines.map { TranscriptFollowModel.LineRef(id: $0.id, end: $0.end) }
+    }
+    /// Bumped when atBottom flips so the pill's appearance animates.
+    @State private var followTick: UInt = 0
 
     // MARK: inline live continuation
 
@@ -347,7 +366,14 @@ struct TranscriptView: View {
                             }
                         } else {
                             ForEach(lines) { line in
-                                row(line).id(line.id)
+                                // P0: a row's body (AttributedString build + CoreText
+                                // layout) re-ran for EVERY line on every 30 fps
+                                // snapshot; ~100 rows × 3 text rows saturated the
+                                // main thread. The host compares a value key and
+                                // skips unchanged rows.
+                                RowHost(key: rowKey(line)) { row(line) }
+                                    .equatable()
+                                    .id(line.id)
                                     .transaction { $0.animation = nil }
                             }
                         }
@@ -373,9 +399,13 @@ struct TranscriptView: View {
                             .id("statusLine")
                             .transition(.opacity)
                     }
-                    Color.clear.frame(height: Self.tailClearance).id("liveTail")
+                    // P0: the tail marker includes the bottom window inset so
+                    // scrollTo("liveTail", anchor: .bottom) lands on the TRUE
+                    // bottom (the old layout left a permanent 20pt gap that
+                    // defeated every "≤ 8pt = at bottom" rule).
+                    Color.clear.frame(height: Self.tailClearance + Theme.Space.window).id("liveTail")
                 }
-                .padding(Theme.Space.window)
+                .padding([.top, .horizontal], Theme.Space.window)
                 // Direct geometry observation — NOT a PreferenceKey: preference
                 // values published from ScrollView content stopped reaching
                 // .onPreferenceChange on macOS 26 (the handler simply never
@@ -401,7 +431,7 @@ struct TranscriptView: View {
             // Static archive (no activity): a document — open at the TOP. The
             // anchor is fixed at view creation (archives and live sessions each
             // mount a fresh TranscriptView; runtime anchor flips are unreliable).
-            .defaultScrollAnchor(activityText != nil ? .bottom : .top)
+            .defaultScrollAnchor(isLive ? .bottom : .top)
             .coordinateSpace(name: "transcriptScroll")
             .background(GeometryReader { geo in
                 Color.clear
@@ -410,21 +440,15 @@ struct TranscriptView: View {
             })
             .onChange(of: metrics) { _, m in
                 onScrolledFromTopChange?(m.x < -2)
-                // Bottom proximity — inside 120pt counts as "at the bottom"
-                // (matches the OS anchor's follow zone closely enough).
                 let bottomGap = (m.y + m.x) - viewportH
                 lastGap = bottomGap
-                let near = bottomGap <= 120
-                if near != atBottom { withAnimation(.easeOut(duration: 0.2)) { atBottom = near } }
-                if near, unseenCount != 0 { unseenCount = 0 }
-                // Follow intent from geometry: exact bottom re-arms; a jump of
-                // half a viewport+ (scrollbar drag, review jump) releases.
-                if bottomGap <= 8 { followLive = true }
-                else if bottomGap > max(240, viewportH * 0.5) { followLive = false }
-                // The corrective pin (live sessions only): while following, any
-                // gap that appears WITHOUT an upward user scroll is drift from
-                // above-viewport growth — snap back, un-animated.
-                if followLive, activityText != nil, bottomGap > 2 {
+                let wasAtBottom = follow.atBottom
+                let action = follow.geometry(gap: bottomGap, isLive: isLive, lines: lineRefs)
+                if wasAtBottom != follow.atBottom { withAnimation(.easeOut(duration: 0.2)) { followTick &+= 1 } }
+                // The corrective pin: while following, any gap that appears
+                // WITHOUT an upward user scroll is drift from content growth —
+                // snap back, un-animated (never while an animated jump runs).
+                if action == .pinToTail, Date() >= programmaticScrollUntil {
                     proxy.scrollTo("liveTail", anchor: .bottom)
                 }
             }
@@ -436,8 +460,7 @@ struct TranscriptView: View {
                 guard wheelMonitor == nil else { return }
                 wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { ev in
                     if hovering {
-                        if ev.scrollingDeltaY > 2 { followLive = false }
-                        else if ev.scrollingDeltaY < -2, lastGap <= 160 { followLive = true }
+                        follow.userScrolled(deltaY: Double(ev.scrollingDeltaY), gap: Double(lastGap))
                     }
                     return ev
                 }
@@ -445,20 +468,17 @@ struct TranscriptView: View {
             .onDisappear {
                 if let m = wheelMonitor { NSEvent.removeMonitor(m); wheelMonitor = nil }
             }
-            // Count commits that landed below the fold while the user reads above.
-            .onChange(of: lines.count) { old, new in
-                if new > old, !atBottom {
-                    withAnimation(.easeOut(duration: 0.2)) { unseenCount += new - old }
-                } else if new < old {
-                    unseenCount = 0   // session reset / reload
-                }
+            // Lines changed (append / merge / relabel): the pill count is recomputed
+            // from line identity, so a merge never zeroes it.
+            .onChange(of: lineRefs) { _, refs in
+                withAnimation(.easeOut(duration: 0.2)) { follow.linesChanged(refs) }
             }
             // The jump pill itself — floats over the bottom edge, tap = re-glue.
             .overlay(alignment: .bottom) {
-                if !atBottom, unseenCount > 0 {
+                if !follow.atBottom, follow.unseen > 0 {
                     Button {
-                        unseenCount = 0
-                        followLive = true
+                        _ = follow.pillTapped(lineRefs)
+                        programmaticScrollUntil = Date().addingTimeInterval(0.4)
                         withAnimation(.easeOut(duration: 0.25)) {
                             proxy.scrollTo("liveTail", anchor: .bottom)
                         }
@@ -466,7 +486,7 @@ struct TranscriptView: View {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.down")
                                 .font(.system(size: 11, weight: .semibold))
-                            Text(uiLang("새 전사 \(unseenCount)", "\(unseenCount) new", "新規 \(unseenCount)"))
+                            Text(uiLang("새 전사 \(follow.unseen)", "\(follow.unseen) new", "新規 \(follow.unseen)"))
                                 .font(.system(size: 12, weight: .medium)).monospacedDigit()
                         }
                         .foregroundStyle(Theme.Colors.textPrimary)
@@ -490,6 +510,8 @@ struct TranscriptView: View {
             // Keep the word being reviewed on screen as 이전/다음 moves through them.
             .onChange(of: reviewRefIndex) { _, _ in
                 if let ref = currentReviewRef {
+                    follow.programmaticJump()
+                    programmaticScrollUntil = Date().addingTimeInterval(0.4)
                     withAnimation { proxy.scrollTo(ref.lineID, anchor: .center) }
                 }
             }
@@ -497,6 +519,8 @@ struct TranscriptView: View {
             // view glued through commits, typing, translations, status changes.)
             .onChange(of: scrollTick) { _, _ in
                 guard let t = scrollTarget else { return }
+                follow.programmaticJump()
+                programmaticScrollUntil = Date().addingTimeInterval(0.4)
                 // In content mode the line's row doesn't exist — scroll to the
                 // merged block that contains it instead.
                 if mode == .content {
@@ -690,6 +714,49 @@ struct TranscriptView: View {
             .frame(maxWidth: 520, alignment: side == .leading ? .leading : .trailing)
             if side == .leading { Spacer(minLength: 40) }
         }
+    }
+
+    /// Everything `row(line)` renders from — compared by RowHost to skip
+    /// re-rendering rows that did not change. A row being edited is never
+    /// skipped (its drafts live in @State outside the key).
+    private struct RowKey: Equatable {
+        let line: Line
+        let name: String
+        let isLast: Bool
+        let locked: Bool
+        let fontSize: CGFloat
+        let editing: Bool
+        let editingTranslation: String?
+        let reviewHighlight: Bool
+        let reviewPopover: Bool
+        let findQuery: String
+        let findCurrent: Bool
+        let streamingLang: String?
+        let playing: Bool
+        let hasPlay: Bool
+        let canEdit: Bool
+        let activeLangs: [String]
+        let translateBusy: Bool
+        let interimSuffix: String
+        let lang: UILanguage
+    }
+    private func rowKey(_ line: Line) -> RowKey {
+        let isLast = line.id == lines.last?.id
+        return RowKey(line: line, name: rowName(line), isLast: isLast, locked: line.id == lockedLineID,
+                      fontSize: fontSize, editing: editingLine == line.id,
+                      editingTranslation: editingTranslationLine == line.id ? editingTranslationLang : nil,
+                      reviewHighlight: reviewHighlight(line), reviewPopover: currentReviewRef?.lineID == line.id,
+                      findQuery: findQuery, findCurrent: findCurrentLine == line.id,
+                      streamingLang: streamingTransID == line.id ? streamingTransLang : nil,
+                      playing: playingLine == line.id, hasPlay: onPlay != nil, canEdit: onEdit != nil,
+                      activeLangs: activeLangs, translateBusy: translateBusy,
+                      interimSuffix: isLast ? interimSuffix : "", lang: uiLang)
+    }
+    private struct RowHost<Content: View>: View, Equatable {
+        let key: RowKey
+        let content: () -> Content
+        static func == (l: RowHost, r: RowHost) -> Bool { !l.key.editing && !r.key.editing && l.key == r.key }
+        var body: some View { content() }
     }
 
     private func row(_ line: Line) -> some View {
