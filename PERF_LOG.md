@@ -1,3 +1,11 @@
+## S5 — Whisper 디코드 점유율 레버: 반증 (2026-09-02)
+
+self-attn seqlen 분할(CA-SPLIT 레시피, `SA_SPLIT` 옵트인)을 ko1 STREAM 106토큰 디코드로 순서교대 6쌍 실측:
+split 평균 182.2ms vs legacy 183.2ms = **−0.5%, 노이즈 안**(텍스트 동일). self-attn은 층당 ~30µs라 상한이
+작고, GEMV 점유율은 D1(int4 바이트 절반 = 0%)·CA-SPLIT 이후 같은 물리가 두 번 반증됨. 코드는 출하하지
+않고 패치만 보관. 잔여 디코드 시간은 토큰당 ~56개 의존 디스패치 체인의 고정 지연 — 융합 여지는 FUSE-2
+실측률(런치당 ~4µs)로 ≤2.5%. 정본 engine/metal/PERF_LOG.md S5-SELFATTN-SPLIT.
+
 ## S4·S6 — 측정/구조로 닫은 항목 (2026-09-02)
 
 - **S4 빔 서치 오프라인 프로브: 기각.** whisper.cpp(Metal) + 참조 `ggml-large-v3-turbo`로 FLEURS-ko 382:
