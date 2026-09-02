@@ -1,3 +1,35 @@
+## S1 — Whisper 디코더 시퀀스 프리필: 글로서리 PROMPT 시드 −155ms/패스 (2026-09-02)
+
+엔진 헤드룸 리뷰(2026-09-02)의 1순위. S4 글로서리 바이어싱이 켜지면 `<|startofprev|>` +
+용어 토큰(32용어 = **158토큰**)이 매 패스의 시드가 되는데, `transcribe.zig` 시드 루프는 이를
+**토큰당 4층 decodeBlock 순차**로 KV-fill 하고 있었다 — 매 1s 프리뷰와 매 커밋에 반복.
+ENGINE_EVAL S4 판정에는 지연 행이 없었다(채택 당시 미측정 비용).
+
+**구현**: 시드 prefix 전체를 **한 번의 배치 인과 패스**로(`decoder.zig prefillBlock`): 투영은
+M-row F16 GEMM(JIT dequant, cross-KV 빌드와 같은 패턴), self-attn은 (row, head)당 threadgroup
+(`causal_attention_rows`), cross-attn은 공유 KV 행 커널(`flash_cross_attn_f16kv_rows`).
+prefix ≥ 8행만 배치 경로(`DEC_PREFILL_MIN`), sot-only 시드는 종전 순차 경로 그대로 = **바이트동일**.
+스크래치(~40MB)는 첫 긴 prefix에서 **지연 할당**(글로서리 없는 세션 비용 0 — RSS 실측 +2.7MB).
+`DEC_PREFILL=0` 롤백, `DEC_PREFILL_VERIFY=1` = 양 경로 실행 + 층별 K/V 편차 리포트.
+
+| 실측 (M4 Pro, Q8, 32용어=158tok) | 순차(종전) | 프리필 | Δ |
+|---|---:|---:|---:|
+| jfk 파일 decode(시드 포함), 3쌍 순서교대 | 226/225/226 ms | **71/70/70 ms** | **−155 ms/패스** |
+| jfk 시드 단독 (VERIFY 계측) | 190.6 ms | **34.6 ms** | 5.5× |
+| ko1 STREAM(AUDIO_CTX=auto) PREVIEW / SEG decode, 2쌍 | 350 / 345 ms | **196 / 191 ms** | −154 ms |
+| FLEURS-ko 382 엔진 패스 wall | 409 s | **350 s** | −155 ms/utt |
+
+**게이트**: FLEURS-ko 382 CER **5.91% == 5.91%**, 가설 **382/382 바이트 동일**(같은 32용어 프롬프트,
+순차 vs 프리필); jfk PROMPT 텍스트 6/6 동일; PROMPT 없는 jfk 골든 바이트동일; `preview_lane_gate`
+PROMPT 유/무 모두 WIN(27 이벤트 state-equivalent, conf drift ≤0.0005). K/V 편차는 F16 GEMM 급
+(층3 K max|Δ| 5e-2 / max|K| 5.9, 평균 1e-3) — BATCHDEC 선례와 같은 텍스트등가 클래스.
+(참고: 무관 글로서리 자체는 CER 5.63→5.91로 +0.28pt — S4의 "관련성이 배포 조건" 재확인, 본 변경과 무관.)
+
+**해금**: 같은 프리필 경로가 S2(프리뷰 forced-prefix)·S3(직전 세그먼트 조건화)의 선행 조건.
+quark: `fn__prefillBlock`·`fn__prefillEmbed`·`metal_kernel__causal_attention_rows`·
+`metal_kernel__flash_cross_attn_f16kv_rows`·`metal_kernel__qkv_bias_store_rows`·`metal_kernel__emb_pe_rows_q8`
+(+14 atoms), `asset bridge` 갭 0.
+
 ## 실시간 요약 — 무열화 봉투 실측 (2026-08-31)
 
 녹음 중 우측 실시간 요약 탭(롤링 carry, 최저 브로커 레인). CLI 프로브

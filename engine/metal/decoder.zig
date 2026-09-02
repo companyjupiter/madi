@@ -43,6 +43,12 @@ pub const Kernels = struct {
     qkv: mtl.Function, // self-attn qkv: gemv+bias×2+store×2 fused (drops 4 kernels)
     cvt32: mtl.Function, // f32→f16 (batched-decode projection inputs)
     cvt16: mtl.Function, // f16→f32 (batched-decode projection outputs)
+    // S1 sequence prefill (seed/prompt rows as one batched causal pass)
+    deq: mtl.Function, // Q8 [N][K] → F16 [K][N] JIT weight dequant (shared with the encoder)
+    emb_rows: mtl.Function,
+    qkv_rows: mtl.Function,
+    attn_rows: mtl.Function,
+    ca_rows: mtl.Function,
 
     pub fn load() mtl.Error!Kernels {
         // DEC_INT4=1: swap the decode GEMV family to the packed-int4 twins
@@ -57,6 +63,11 @@ pub const Kernels = struct {
         return .{
             .cvt32 = try mtl.getFunction("cvt_f32_f16"),
             .cvt16 = try mtl.getFunction("cvt_f16_f32"),
+            .deq = try mtl.getFunction("dequant_q8_f16"),
+            .emb_rows = try mtl.getFunction("emb_pe_rows_q8"),
+            .qkv_rows = try mtl.getFunction("qkv_bias_store_rows"),
+            .attn_rows = try mtl.getFunction("causal_attention_rows"),
+            .ca_rows = try mtl.getFunction("flash_cross_attn_f16kv_rows"),
             .ln = try mtl.getFunction("layer_norm"),
             .brln = try mtl.getFunction("bias_res_ln"),
             .bias = try mtl.getFunction("bias_add"),
@@ -378,4 +389,107 @@ pub fn decodeBlockBatched(
     try proj(K, s, s.mh, Wf.m2w, s.mo, B, D, MLP);
     try kBias(K, s.mo, L.m2b, B * D, D);
     try kRes(K, x_b, s.mo, B * D); // x += down
+}
+
+// ── S1 sequence prefill ──────────────────────────────────────────────────────
+// The seed prefix (<|startofprev|> prompt terms + sot/lang/task) was KV-filled
+// one token at a time — M sequential passes through all four blocks, each a
+// full set of M=1 GEMV dispatches. Measured on jfk before this: a 32-term
+// glossary = 158 prompt tokens = decode 52 → 228 ms (+176 ms per pass), paid on
+// every 1 s live preview and every committed window. This runs the same M rows
+// as ONE batched causal pass: projections as M-row F16 GEMMs on JIT-dequantized
+// weights (the pattern the per-chunk cross-KV build already uses), attention as
+// one threadgroup per (row, head). Only the self-KV rows survive — exactly what
+// the sequential seed leaves behind (its residual rows were discarded too, and
+// alignment rows below the first text token are never read by wordTimestamps).
+pub const PREFILL_MAX_ROWS: u32 = 320; // longer prefixes fall back to the sequential seed
+
+pub const PScratch = struct {
+    x: [*]f32, // [R][D] residual rows
+    xb: [*]f32, // [R][D] LN rows
+    qkv: [*]f32, // [R][3D] fused qkv projection slab
+    q: [*]f32, // [R][D] biased self-q / cross-q rows
+    ao: [*]f32, // [R][D]
+    mo: [*]f32, // [R][D]
+    mh: [*]f32, // [R][MLP]
+    in16: [*]f16, // [R][MLP] GEMM input staging
+    out16: [*]f16, // [R][MLP] GEMM output staging
+    wdq: [*]f16, // [D][MLP] one JIT-dequantized weight ([K][N], MPS B layout)
+};
+
+fn kDeq(K: Kernels, wdq: [*]f16, w: Q8w, n: u32, k: u32) !void {
+    var a0 = wdq; var a1 = w.qs; var a2 = w.scales; var nn = n; var kk = k;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&nn), P(&kk) };
+    const s = [_]usize{ PS, PS, PS, U, U };
+    try mtl.dispatch(K.deq, .{ (n * k + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+/// out[M×N] (f32) = in[M×K] (f32) · W, W = Q8 [N][K] out-major → JIT F16 [K][N] → MPS F16 GEMM.
+fn pproj(K: Kernels, s: PScratch, in_f32: [*]f32, w: Q8w, out_f32: [*]f32, M: u32, N: u32, Kk: u32) !void {
+    try kDeq(K, s.wdq, w, N, Kk);
+    try kCvt32(K, s.in16, in_f32, M * Kk);
+    try mtl.matmulF16Batched(s.in16, s.wdq, s.out16, M, N, Kk);
+    try kCvt16(K, out_f32, s.out16, M * N);
+}
+fn kBRLNRows(K: Kernels, x: [*]f32, mo: [*]f32, bias: [*]f32, y: [*]f32, g: [*]f32, b: [*]f32, d: u32, rows: u32) !void {
+    var a0 = x; var a1 = mo; var a2 = bias; var a3 = y; var a4 = g; var a5 = b; var nd = d; var ne = EPS;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&a5), P(&nd), P(&ne) };
+    const s = [_]usize{ PS, PS, PS, PS, PS, PS, U, Ff };
+    try mtl.dispatch(K.brln, .{ rows, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+fn kQkvRows(K: Kernels, q_out: [*]f32, slab: [*]f32, qb: [*]f32, vb: [*]f32, kc: [*]f32, vc: [*]f32, pos0: u32, M: u32) !void {
+    var a0 = q_out; var a1 = slab; var a2 = qb; var a3 = vb; var a4 = kc; var a5 = vc; var nd = D; var p0 = pos0; var mm = M;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&a5), P(&nd), P(&p0), P(&mm) };
+    const s = [_]usize{ PS, PS, PS, PS, PS, PS, U, U, U };
+    try mtl.dispatch(K.qkv_rows, .{ (M * D + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+fn kAttnRows(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f32, vc: [*]f32, pos0: u32, M: u32) !void {
+    var a0 = out; var a1 = q; var a2 = kc; var a3 = vc; var p0 = pos0;
+    var hd = HDD; var kvd = D; var nkv = NH; var nh = NH;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&p0), P(&hd), P(&kvd), P(&nkv), P(&nh) };
+    const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U };
+    try mtl.dispatch(K.attn_rows, .{ M * NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+fn kCARows(K: Kernels, out: [*]f32, q: [*]f32, kc: [*]f16, vc: [*]f16, seqlen: u32, M: u32) !void {
+    var a0 = out; var a1 = q; var a2 = kc; var a3 = vc; var sl = seqlen;
+    var hd = HDD; var kvd = D; var nkv = NH; var nh = NH;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&sl), P(&hd), P(&kvd), P(&nkv), P(&nh) };
+    const s = [_]usize{ PS, PS, PS, PS, U, U, U, U, U };
+    try mtl.dispatch(K.ca_rows, .{ M * NH, 1, 1 }, .{ 256, 1, 1 }, &p, &s);
+}
+
+/// x[m] = emb(tokens[m]) + pe[pos0+m] for m in [0, M) — the same two ops the
+/// sequential seed applies per token (embedding dequant, then positional add).
+pub fn prefillEmbed(K: Kernels, s: PScratch, qs: [*]i8, scales: [*]f16, tokens: [*]u32, pe: [*]f32, pos0: u32, M: u32) !void {
+    var a0 = s.x; var a1 = qs; var a2 = scales; var a3 = tokens; var a4 = pe; var nd = D; var p0 = pos0; var mm = M;
+    const p = [_]?*const anyopaque{ P(&a0), P(&a1), P(&a2), P(&a3), P(&a4), P(&nd), P(&p0), P(&mm) };
+    const sz = [_]usize{ PS, PS, PS, PS, PS, U, U, U };
+    try mtl.dispatch(K.emb_rows, .{ (M * D + 255) / 256, 1, 1 }, .{ 256, 1, 1 }, &p, &sz);
+}
+
+/// One decoder block over M prefix rows at positions pos0..pos0+M-1 (residual
+/// rows s.x, modified in place). Fills this layer's self-KV rows in skc/svc;
+/// cross-attends the chunk's precomputed ckc/cvc (enc_ctx columns). No
+/// alignment-score capture (prefix rows are never read by wordTimestamps).
+pub fn prefillBlock(K: Kernels, L: Layer, M: u32, pos0: u32, s: PScratch, skc: [*]f32, svc: [*]f32, ckc: [*]f16, cvc: [*]f16, enc_ctx: u32) !void {
+    // self-attn: LN → fused qkv GEMM → (q+qb, k→cache, v+vb→cache) → causal attn
+    try kLN(K, s.x, s.xb, L.aln_w, L.aln_b, D, M);
+    try pproj(K, s, s.xb, L.qkvw, s.qkv, M, 3 * D, D);
+    try kQkvRows(K, s.q, s.qkv, L.qb, L.vb, skc, svc, pos0, M);
+    try kAttnRows(K, s.ao, s.q, skc, svc, pos0, M);
+    // out proj + residual + cross LN
+    try pproj(K, s, s.ao, L.ow, s.mo, M, D, D);
+    try kBRLNRows(K, s.x, s.mo, L.ob, s.xb, L.caln_w, L.caln_b, D, M);
+    // cross-attn against the shared chunk KV
+    try pproj(K, s, s.xb, L.cqw, s.q, M, D, D);
+    try kBias(K, s.q, L.cqb, M * D, D);
+    try kCARows(K, s.ao, s.q, ckc, cvc, enc_ctx, M);
+    try pproj(K, s, s.ao, L.cow, s.mo, M, D, D);
+    try kBRLNRows(K, s.x, s.mo, L.cob, s.xb, L.mln_w, L.mln_b, D, M);
+    // MLP: up (+bias, gelu) → down (+bias) → residual
+    try pproj(K, s, s.xb, L.m0w, s.mh, M, MLP, D);
+    try kBias(K, s.mh, L.m0b, M * MLP, MLP);
+    try kGelu(K, s.mh, M * MLP);
+    try pproj(K, s, s.mh, L.m2w, s.mo, M, D, MLP);
+    try kBias(K, s.mo, L.m2b, M * D, D);
+    try kRes(K, s.x, s.mo, M * D);
 }

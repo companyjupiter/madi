@@ -94,6 +94,14 @@ fn audioCtx(got_samples: usize) u32 {
 // the space-split prompt words for the seg event's bias_hits.
 var g_prompt: []u32 = &.{};
 var g_bias_words = std.ArrayList([]const u8).init(alloc);
+// S1 sequence prefill: seed/prompt rows as one batched causal pass (decoder.zig
+// prefillBlock). DEC_PREFILL=0 = sequential seed (rollback); DEC_PREFILL_MIN =
+// smallest prefix that takes the batched path (below it the M=1 steps are
+// cheaper than a GEMM setup, and the default sot-only seed stays bit-identical);
+// DEC_PREFILL_VERIFY=1 runs BOTH and reports the K/V-cache delta per layer.
+var g_prefill = true;
+var g_prefill_min: u32 = 8;
+var g_prefill_verify = false;
 const STARTOFPREV: u32 = 50362; // large-v3 special (sot 50258 · translate 50359 · transcribe 50360 · startoflm 50361 · startofprev 50362)
 inline fn q4r(w: f32, blk_max: f32) f32 {
     if (!g_q4 or blk_max <= 0) return w;
@@ -1226,6 +1234,15 @@ pub fn main() !void {
         .ca_sc = (try mtl.allocSlice(f32, dec.NH * ENC_SEQ)).ptr, // 20×1500 normalized scores
         .ca_part = (try mtl.allocSlice(f32, dec.NH * dec.CA_NSPLIT * (2 + dec.HDD))).ptr, // split-attn partials (42 KB)
     };
+    // ── S1 prefill scratch (seed/PROMPT rows as one batched pass) ────────────
+    // Allocated LAZILY on the first prefix long enough to take the batched path
+    // (~40 MB for PREFILL_MAX_ROWS rows) — a session without a glossary PROMPT
+    // never pays for it. Q8 weights only: the int4 repack swaps the GEMV family
+    // but leaves no Q8 source for the JIT dequant.
+    g_prefill = !std.mem.eql(u8, std.posix.getenv("DEC_PREFILL") orelse "1", "0") and g_dec_int4 == 0;
+    g_prefill_min = @intCast(envU("DEC_PREFILL_MIN", 8));
+    g_prefill_verify = std.posix.getenv("DEC_PREFILL_VERIFY") != null;
+    var pscr: ?dec.PScratch = null;
     const skc = try alloc.alloc([*]f32, dec.NL);
     const svc = try alloc.alloc([*]f32, dec.NL);
     for (0..dec.NL) |l| {
@@ -2483,19 +2500,83 @@ pub fn main() !void {
             // command buffer (indirect embed/pos/step; positions restart each
             // pass, KV/ca rows are simply overwritten).
             if (PL >= 2) {
-                d_pos[0] = 0;
-                try mtl.beginCommandBuffer();
-                for (0..PL - 1) |_| {
-                    try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
-                    try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
-                    for (0..dec.NL) |l| {
-                        const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
-                        try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx, actx);
-                    }
-                    try kStep(f_step, d_pos);
+                const M: u32 = PL - 1;
+                // S1: the prefix rows as ONE batched causal pass (decoder.zig
+                // prefillBlock) instead of M sequential decoder steps. Measured
+                // before this: a 32-term glossary = 158 prompt tokens = jfk decode
+                // 52 → 228 ms (+176 ms per pass), paid on every 1 s live preview and
+                // every committed window. Short prefixes (the sot-only seed) stay on
+                // the sequential path — bit-identical to before, and cheaper than a
+                // GEMM setup for 3 rows. DEC_PREFILL_VERIFY=1 runs both: the
+                // sequential seed overwrites the prefilled K/V rows (so the emitted
+                // text is the baseline's) and the delta is reported per layer.
+                const use_prefill = g_prefill and M >= g_prefill_min and M <= dec.PREFILL_MAX_ROWS;
+                if (use_prefill and pscr == null) {
+                    const R: usize = dec.PREFILL_MAX_ROWS;
+                    pscr = .{
+                        .x = (try mtl.allocSlice(f32, R * D)).ptr, .xb = (try mtl.allocSlice(f32, R * D)).ptr,
+                        .qkv = (try mtl.allocSlice(f32, R * 3 * D)).ptr, .q = (try mtl.allocSlice(f32, R * D)).ptr,
+                        .ao = (try mtl.allocSlice(f32, R * D)).ptr, .mo = (try mtl.allocSlice(f32, R * D)).ptr,
+                        .mh = (try mtl.allocSlice(f32, R * MLP)).ptr,
+                        .in16 = (try mtl.allocSlice(f16, R * MLP)).ptr, .out16 = (try mtl.allocSlice(f16, R * MLP)).ptr,
+                        .wdq = (try mtl.allocSlice(f16, @as(usize, D) * MLP)).ptr,
+                    };
                 }
-                try mtl.commitCommandBuffer();
-                try mtl.sync();
+                var snapK: []f32 = &.{};
+                var snapV: []f32 = &.{};
+                if (use_prefill) {
+                    var pft = try std.time.Timer.start();
+                    try mtl.beginCommandBuffer();
+                    try dec.prefillEmbed(Kd, pscr.?, tok_emb.qs, tok_emb.scales, d_tokens.ptr, dec_pe, 0, M);
+                    for (0..dec.NL) |l| try dec.prefillBlock(Kd, dlayers[l], M, 0, pscr.?, skc[l], svc[l], ckc[l], cvc[l], actx);
+                    try mtl.commitCommandBuffer();
+                    try mtl.sync();
+                    if (g_prefill_verify) {
+                        try out.print("[prefill] {d} rows in {d:.1} ms (actx {d})\n", .{ M, @as(f64, @floatFromInt(pft.read())) / 1e6, actx });
+                        snapK = try alloc.alloc(f32, dec.NL * M * D);
+                        snapV = try alloc.alloc(f32, dec.NL * M * D);
+                        for (0..dec.NL) |l| {
+                            @memcpy(snapK[l * M * D ..][0 .. M * D], skc[l][0 .. M * D]);
+                            @memcpy(snapV[l * M * D ..][0 .. M * D], svc[l][0 .. M * D]);
+                        }
+                    }
+                }
+                if (!use_prefill or g_prefill_verify) {
+                    var sqt = try std.time.Timer.start();
+                    d_pos[0] = 0;
+                    try mtl.beginCommandBuffer();
+                    for (0..PL - 1) |_| {
+                        try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
+                        try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
+                        for (0..dec.NL) |l| {
+                            const ca_ctx = dec.CaCtx{ .weights = d_ca.ptr, .tok = d_pos, .heads = layer_heads[l], .inv_n = inv_n, .head_base = head_base[l] };
+                            try dec.decodeBlock(Kd, dlayers[l], d_x, dscr, skc[l], svc[l], ckc[l], cvc[l], d_pos, ca_ctx, actx);
+                        }
+                        try kStep(f_step, d_pos);
+                    }
+                    try mtl.commitCommandBuffer();
+                    try mtl.sync();
+                    if (use_prefill and g_prefill_verify)
+                        try out.print("[prefill] sequential seed {d} rows in {d:.1} ms\n", .{ M, @as(f64, @floatFromInt(sqt.read())) / 1e6 });
+                }
+                if (use_prefill and g_prefill_verify) {
+                    // per-layer K/V delta: prefill (snapshot) vs sequential (now in cache)
+                    for (0..dec.NL) |l| {
+                        var dk: f32 = 0; var mk: f32 = 0; var dv: f32 = 0; var mv: f32 = 0;
+                        var sk: f64 = 0; var sv: f64 = 0;
+                        for (0..M * D) |i| {
+                            const k0 = snapK[l * M * D + i]; const k1 = skc[l][i];
+                            const v0 = snapV[l * M * D + i]; const v1 = svc[l][i];
+                            dk = @max(dk, @abs(k0 - k1)); mk = @max(mk, @abs(k1));
+                            dv = @max(dv, @abs(v0 - v1)); mv = @max(mv, @abs(v1));
+                            sk += @abs(k0 - k1); sv += @abs(v0 - v1);
+                        }
+                        const n: f64 = @floatFromInt(M * D);
+                        try out.print("[prefill-verify] layer {d}: K max|Δ| {e:.2} (max|K| {d:.2}, mean|Δ| {e:.2}) · V max|Δ| {e:.2} (max|V| {d:.2}, mean|Δ| {e:.2})\n", .{ l, dk, mk, sk / n, dv, mv, sv / n });
+                    }
+                    alloc.free(snapK);
+                    alloc.free(snapV);
+                }
             }
             d_pos[0] = PL - 1; // first prediction step
             var n_text: u32 = 0;
