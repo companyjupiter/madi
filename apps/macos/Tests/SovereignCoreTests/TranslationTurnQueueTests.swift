@@ -210,14 +210,14 @@ final class InterimReservationTests: XCTestCase {
 final class TranslatePromptTests: XCTestCase {
     func testAnchorFallbackReproducesLegacyLayout() {
         XCTAssertEqual(TranslatePrompt.body(text: "안녕하세요", example: nil, anchor: "Hello"),
-                       "Hello => Hello . Now: 안녕하세요 =>")
+                       "Hello => Hello . 안녕하세요 =>")
     }
 
     func testPreviousPairBecomesTheExample() {
         let ex = TranslatePrompt.Example(source: "김 대리는 어제 밤늦게까지 배포 작업을 했습니다.",
                                          target: "Kim worked on the deployment until late last night.")
         XCTAssertEqual(TranslatePrompt.body(text: "그래서 오늘 늦게 도착했습니다.", example: ex, anchor: "Hello"),
-                       "김 대리는 어제 밤늦게까지 배포 작업을 했습니다. => Kim worked on the deployment until late last night. . Now: 그래서 오늘 늦게 도착했습니다. =>")
+                       "김 대리는 어제 밤늦게까지 배포 작업을 했습니다. => Kim worked on the deployment until late last night. . 그래서 오늘 늦게 도착했습니다. =>")
     }
 
     func testUnusableExamplesFallBack() {
