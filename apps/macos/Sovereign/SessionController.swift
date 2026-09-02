@@ -1195,7 +1195,14 @@ final class SessionController: EngineProcessDelegate {
             let targets = self.routedTargets(for: source)
             guard !targets.isEmpty else { return }
             let id = UUID()
-            guard t.translate(source, into: targets, id: id, kind: .interim) else { return }
+            // T1: the caption already holds an append-only, AGREED translation
+            // prefix for this open sentence (P9 gate). Hand it to the engine as
+            // forced assistant tokens: the turn prefills it in one batch and
+            // decodes only the tail, instead of re-generating text the viewer is
+            // looking at. Provisional (unagreed) text is never forced.
+            let forced = Dictionary(uniqueKeysWithValues:
+                targets.map { ($0, self.interimDisplay.committed(lang: $0)) })
+            guard t.translate(source, into: targets, id: id, kind: .interim, forced: forced) else { return }
             for lang in targets {
                 TranslationStabilityMetrics.shared.markStart(.turnTTFT, key: "\(id.uuidString)|\(lang)")
             }

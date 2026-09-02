@@ -25,6 +25,9 @@ struct TranslateStreamParser {
     enum Event: Equatable {
         case ready
         case prefixReady(Int)
+        /// "[caps] pfxcache fp" — the engine's capability tokens, printed once
+        /// before READY (T1: `fp` = accepts a ` %%FP <text>` forced reply prefix).
+        case capabilities([String])
         case replyDelta(String)      // full accumulated reply text so far (not a diff)
         case turnComplete(String)    // final reply text for the turn
     }
@@ -95,6 +98,9 @@ struct TranslateStreamParser {
         guard var s = String(data: lineData, encoding: .utf8) else { return nil }
         while s.hasPrefix(">") { s = String(s.dropFirst()).trimmingCharacters(in: .whitespaces) }
         if s == "READY" { return .ready }
+        if s.hasPrefix("[caps] ") {
+            return .capabilities(s.dropFirst(7).split(separator: " ").map(String.init))
+        }
         if s.hasPrefix("PFX_OK ") {
             let fields = s.split(separator: " ")
             if fields.count >= 2, let slot = Int(fields[1]) { return .prefixReady(slot) }

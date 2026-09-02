@@ -136,9 +136,21 @@ final class TranslateEngine {
         return clock() - last >= interval
     }
 
+    /// T1: only an interim turn carries a forced prefix, and only a non-empty,
+    /// single-line one. The engine protocol appends it as ` %%FP <text>` to the
+    /// turn line, so the marker itself must not appear inside the text.
+    private static func forcedPrefix(_ shown: String?, kind: TranslationTurnKind) -> String? {
+        guard kind == .interim, let s = shown else { return nil }
+        let one = s.replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !one.isEmpty, !one.contains("%%FP") else { return nil }
+        return one
+    }
+
     @discardableResult
     func translate(_ text: String, into targets: [String], id: UUID,
-                   kind: TranslationTurnKind = .committed) -> Bool {
+                   kind: TranslationTurnKind = .committed,
+                   forced: [String: String] = [:]) -> Bool {
         let oneLine = text.replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !oneLine.isEmpty else { return false }
@@ -158,7 +170,8 @@ final class TranslateEngine {
                 id: id, lang: target, source: oneLine,
                 prompt: Self.prompt(for: target, text: oneLine),
                 prefix: Self.prefix(for: target), body: oneLine + " =>",
-                retries: 1, kind: kind, reserved: claimsReservation)
+                retries: 1, kind: kind, reserved: claimsReservation,
+                forced: Self.forcedPrefix(forced[target], kind: kind))
             let result = pending.enqueue(
                 turn, blockInterim: inflightTurn?.kind == .committed)
             if result.accepted {
@@ -207,11 +220,18 @@ final class TranslateEngine {
         }
         guard let next = pending.popNext() else { return }
         inflightTurn = next
-        let wirePrompt: String
+        var wirePrompt: String
         if let body = next.body, let slot = Self.prefixSlot[next.lang], registeredPrefixes.contains(next.lang) {
             wirePrompt = "%%TRN \(slot) \(body)"
         } else {
             wirePrompt = next.prompt
+        }
+        // T1: forced assistant prefix — the engine prefills it and echoes it as
+        // the reply head, so the streamed reply still reads as the full text.
+        if let forced = next.forced, broker.supportsForcedPrefix {
+            wirePrompt += " %%FP \(forced)"
+            TranslationStabilityMetrics.shared.interimForcedTurns += 1
+            TranslationStabilityMetrics.shared.interimForcedChars += forced.count
         }
         let priority: DNAEngineBroker.Priority = next.kind == .committed
             ? .committedCaption : .interimCaption

@@ -39,6 +39,14 @@ is automatic (<12 GiB → 2B, otherwise 4B).
 - stdout per turn: `[chat] N tokens, prefilling...` → the reply TEXT → `[perf] generation: …` → `> `.
   Parser strips `[chat]`/`[perf]`/`> ` lines; the remainder is the translation.
 - `SOV_RAW=1` bypasses the template (not used here).
+- **Capabilities**: the engine prints `[caps] pfxcache fp` once before `READY`
+  (parsed into `DNAEngineBroker.capabilities`). `pfxcache` = the `%%PFX`/`%%TRN`
+  prefix-cache protocol; `fp` = **forced reply prefix** (T1, 2026-09-02): a turn
+  line may end with ` %%FP <text>` and the engine prefills `<text>` as already
+  produced assistant tokens, echoes it as the reply head and generates only the
+  tail. madi sends it on **interim** turns only, with the P9-agreed (never
+  provisional) display prefix of the open sentence, and only when the running
+  engine declared `fp` — an older engine would read the marker as prompt text.
 
 ## Architecture
 

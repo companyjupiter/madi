@@ -56,6 +56,19 @@ final class TranslateStreamParserTests: XCTestCase {
         XCTAssertEqual(ev.last, .replyDelta("[요약] 첫 줄\n[액션] 둘째 줄이 충분히 길어서 마커보다 깁니다"))
     }
 
+    /// T1: the engine declares its capability tokens once, right before READY.
+    /// `fp` gates the forced reply prefix — an engine without it must never be
+    /// sent ` %%FP …`, so the tokens have to survive as a typed event.
+    func testCapabilitiesControlEvent() {
+        var p = TranslateStreamParser()
+        XCTAssertEqual(feed(&p, "[caps] pfxcache fp\nREADY\n"),
+                       [.capabilities(["pfxcache", "fp"]), .ready])
+        // an older engine: pfxcache only
+        var q = TranslateStreamParser()
+        XCTAssertEqual(feed(&q, "> [caps] pfxcache\nREADY\n"),
+                       [.capabilities(["pfxcache"]), .ready])
+    }
+
     func testPrefixRegistrationControlEvent() {
         var p = TranslateStreamParser()
         XCTAssertEqual(feed(&p, "> PFX_OK 2 40\n"), [.prefixReady(2)])

@@ -220,6 +220,12 @@ struct InterimSourceGate {
         provisional = ""
         stall = 0
     }
+
+    /// T1: the AGREED prefix only — never the provisional opening. This is the
+    /// text that is safe to hand back to the engine as forced tokens: it is
+    /// already permanent on screen, so forcing it changes nothing the viewer
+    /// sees and only spares its re-generation.
+    var committedText: String { committed.joined(separator: " ") }
 }
 
 /// P9: LocalAgreement-2 on the TRANSLATION output — the display-side commit.
@@ -260,6 +266,9 @@ struct InterimDisplayAgreement {
 
     /// Window boundary — the next sentence commits from scratch.
     mutating func reset() { gates = [:] }
+
+    /// T1: this language's agreed (permanent) display prefix, "" if none yet.
+    func committed(lang: String) -> String { gates[lang]?.committedText ?? "" }
 }
 
 /// P10-5: the responsiveness dials, resolved once per session start.
@@ -407,6 +416,10 @@ final class TranslationStabilityMetrics {
     /// P2 telemetry: interim DNA turns actually spent vs gated away.
     var interimTurnsRun = 0
     var interimTurnsSkipped = 0
+    /// T1 telemetry: interim turns that carried a forced (agreed) display prefix,
+    /// and the characters the engine prefilled instead of re-generating.
+    var interimForcedTurns = 0
+    var interimForcedChars = 0
     /// P1 telemetry: candidates the stable-prefix filter held back (each one
     /// was a whole-prefix rewrite the viewer did NOT see).
     var stabilizerHolds = 0
@@ -518,6 +531,7 @@ final class TranslationStabilityMetrics {
         }
         return "[translate-stability] \(part(.caption)) | \(part(.panel))"
             + " | finalChars=\(finals) interimTurns=\(interimTurnsRun) gated=\(interimTurnsSkipped)"
+            + " forced=\(interimForcedTurns)/\(interimForcedChars)"
             + " holds=\(stabilizerHolds) srcHeld=\(sourceHeldChars) rebinds=\(cosmeticRebinds)"
             + " | ttft=\(latencySummary(.turnTTFT))"
             + " firstPaint=\(latencySummary(.captionFirstPaint))"
@@ -552,6 +566,8 @@ final class TranslationStabilityMetrics {
         shown = [:]
         interimTurnsRun = 0
         interimTurnsSkipped = 0
+        interimForcedTurns = 0
+        interimForcedChars = 0
         stabilizerHolds = 0
         sourceHeldChars = 0
         cosmeticRebinds = 0
