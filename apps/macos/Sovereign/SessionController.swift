@@ -1257,13 +1257,21 @@ final class SessionController: EngineProcessDelegate {
         guard !translateTargets.isEmpty else { return }
         var lines = transcript.lines
         let upTo = includingLast ? lines.count : max(0, lines.count - 1)
+        // P2 (2026-09-03): per word event only the last `stableScanWindow` lines
+        // are visited. Live 0.3.5 at ~400 lines spent 18% of the main thread in
+        // this function — hashing every line's joined text and re-running the
+        // coalescer over the whole transcript on every word. A line is dispatched
+        // the moment it loses last-line status (inside the window by
+        // construction); frozen lines never change text; finalize
+        // (includingLast) still walks everything.
+        let from = includingLast ? 0 : max(0, upTo - Self.stableScanWindow)
         // Rewrite passes run FIRST, so a line is translated from its final text
         // instead of being retranslated after a later correction.
         // P0 (2026-09-03): this runs on EVERY word event; re-walking all lines
         // with the regex passes was a fixed main-actor cost that grew with the
         // session. A line is re-processed only when its text changed since the
         // last pass (merges/edits change the hash, so nothing is missed).
-        for i in 0..<upTo {
+        for i in from..<upTo {
             let line = lines[i]
             let h = line.text.hashValue
             if stablePassHash[line.id] == h { continue }
@@ -1273,7 +1281,7 @@ final class SessionController: EngineProcessDelegate {
         lines = transcript.lines   // a pass may have rewritten line text
         // P1: fragment lines fold into the next stable line of the same speaker and
         // translate with it (one turn per target instead of one per fragment).
-        let stable = Array(lines.prefix(min(upTo, lines.count)))
+        let stable = Array(lines[min(from, lines.count)..<min(upTo, lines.count)])
         let inputs = stable.map { TranslationCoalescer.Input(id: $0.id, speaker: $0.speaker, text: $0.text, start: $0.start, end: $0.end) }
         for run in TranslationCoalescer.runs(inputs, deferTrailing: !includingLast) {
             if run.members.isEmpty, let line = stable.first(where: { $0.id == run.anchor }) {
@@ -1285,6 +1293,10 @@ final class SessionController: EngineProcessDelegate {
     }
     /// line id → text hash at the last applyTextPasses run (see translateStableLines).
     private var stablePassHash: [UUID: Int] = [:]
+    /// Lines visited per word event by translateStableLines (a fragment run is a
+    /// handful of lines; the window only has to contain the line that just lost
+    /// last-line status plus its pending fragments).
+    private static let stableScanWindow = 32
 
     /// Lines the USER rewrote by hand. The system passes below must never
     /// overwrite a manual correction.
