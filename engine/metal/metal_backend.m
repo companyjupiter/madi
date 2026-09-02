@@ -908,16 +908,33 @@ static id<MTLBuffer> resolve_buffer(const void* p, size_t* out_off) {
 // objects are retained for process lifetime (bounded set of shapes). Cuts the
 // per-call ObjC alloc + op re-init overhead (big for the decoder: ~28 GEMV/token).
 typedef struct { int m, n, k, f16; void *dA, *dB, *dC, *mm; } MpsCacheEnt;
-static MpsCacheEnt g_mps_cache[64];
+// Shape cache for the alpha=1/beta=0 fast path. Was 64 entries with NO
+// replacement: once full, every new shape fell to the uncached path forever
+// (fresh descriptors + a fresh MPSMatrixMultiplication per call, ~tens of ms).
+// The S2 preview prefill runs GEMMs whose row count follows the growing window,
+// so shapes churn; keep a larger ring and recycle the oldest entry instead.
+#define MPS_CACHE_CAP 512
+static MpsCacheEnt g_mps_cache[MPS_CACHE_CAP];
 static int g_mps_cache_n = 0;
+static int g_mps_cache_next = 0; // ring cursor once full
 
 static MpsCacheEnt* mps_cache_get(int M, int N, int K, int f16) {
     for (int i = 0; i < g_mps_cache_n; i++) {
         MpsCacheEnt* e = &g_mps_cache[i];
         if (e->m == M && e->n == N && e->k == K && e->f16 == f16) return e;
     }
-    if (g_mps_cache_n >= 64) return NULL;
-    MpsCacheEnt* e = &g_mps_cache[g_mps_cache_n++];
+    MpsCacheEnt* e;
+    if (g_mps_cache_n < MPS_CACHE_CAP) {
+        e = &g_mps_cache[g_mps_cache_n++];
+    } else {
+        e = &g_mps_cache[g_mps_cache_next];
+        g_mps_cache_next = (g_mps_cache_next + 1) % MPS_CACHE_CAP;
+        // recycle: the previously encoded command buffers hold their own refs
+        if (e->dA) CFRelease(e->dA);
+        if (e->dB) CFRelease(e->dB);
+        if (e->dC) CFRelease(e->dC);
+        if (e->mm) CFRelease(e->mm);
+    }
     e->m = M; e->n = N; e->k = K; e->f16 = f16;
     const NSUInteger es = f16 ? 2 : 4;
     const MPSDataType dt = f16 ? MPSDataTypeFloat16 : MPSDataTypeFloat32;

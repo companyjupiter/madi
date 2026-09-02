@@ -2311,7 +2311,12 @@ final class SessionController: EngineProcessDelegate {
     }
 
     private func startPreviewLane() {
-        preview.start { [weak self] wav in self?.engine?.feedPreview(wav: wav) }
+        preview.start { [weak self] wav in
+            guard let self else { return }
+            // S2: the P8 gate's AGREED prefix of this window's hypothesis rides
+            // along; the engine forces it and decodes only the tail.
+            self.engine?.feedPreview(wav: wav, forced: self.interimSourceGate.committedText)
+        }
     }
 
     private func finalizeOnce() {
