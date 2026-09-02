@@ -603,3 +603,193 @@ kernel void ca_accumulate(
         plane++;
     }
 }
+
+// ── S1 sequence prefill — the seed prefix (<|startofprev|> prompt + sot/lang/
+// task) as ONE batched causal pass over M rows instead of M sequential decoder
+// steps. Projections run as M-row F16 GEMMs (MPS) on the host side; these
+// kernels cover the row-wise pieces. Numerics per row mirror the single-token
+// kernels above (same accumulation order inside a row).
+
+// out[m][d] = deq(qs[tokens[m]][d]) + pe[(pos0+m)*dim + d]   (Q8 embedding rows)
+kernel void emb_pe_rows_q8(
+    device float*        out_buf [[buffer(0)]],
+    device const char*   qs      [[buffer(1)]],
+    device const half*   scales  [[buffer(2)]],
+    device const uint*   tokens  [[buffer(3)]],
+    device const float*  pe      [[buffer(4)]],
+    constant uint& dim  [[buffer(5)]],
+    constant uint& pos0 [[buffer(6)]],
+    constant uint& M    [[buffer(7)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const uint total = M * dim;
+    if (gid >= total) return;
+    const uint m = gid / dim;
+    const uint d = gid - m * dim;
+    const uint tok = tokens[m];
+    const uint nb = dim / 32;
+    const float e = (float)qs[(ulong)tok * dim + d] * (float)scales[(ulong)tok * nb + d / 32];
+    out_buf[gid] = e + pe[(ulong)(pos0 + m) * dim + d];
+}
+
+// slab[m] = [q|k|v] row from the fused qkv GEMM (f32, stride 3*dim).
+// q_out[m][d] = q + qb[d]; kc[pos0+m][d] = k (no k bias); vc[pos0+m][d] = v + vb[d]
+kernel void qkv_bias_store_rows(
+    device float*        q_out [[buffer(0)]],
+    device const float*  slab  [[buffer(1)]],
+    device const float*  qb    [[buffer(2)]],
+    device const float*  vb    [[buffer(3)]],
+    device float*        kc    [[buffer(4)]],
+    device float*        vc    [[buffer(5)]],
+    constant uint& dim  [[buffer(6)]],
+    constant uint& pos0 [[buffer(7)]],
+    constant uint& M    [[buffer(8)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const uint total = M * dim;
+    if (gid >= total) return;
+    const uint m = gid / dim;
+    const uint d = gid - m * dim;
+    device const float* row = slab + (ulong)m * 3 * dim;
+    q_out[gid] = row[d] + qb[d];
+    kc[(ulong)(pos0 + m) * dim + d] = row[dim + d];
+    vc[(ulong)(pos0 + m) * dim + d] = row[2 * dim + d] + vb[d];
+}
+
+// Causal self-attention over M query rows: row m (position pos0+m) attends keys
+// [0, pos0+m]. Grid = M*nh threadgroups (tgid → row, head), 256 threads — the
+// body is gpu_attention's with the row's own position, so each row's result is
+// what the single-token kernel would have produced at that step.
+kernel void causal_attention_rows(
+    device float*       out_buf [[buffer(0)]],   // [M][nh*hdd]
+    device const float* q_buf   [[buffer(1)]],   // [M][nh*hdd]
+    device const float* kc      [[buffer(2)]],   // [MAX_TOK][kvd]
+    device const float* vc      [[buffer(3)]],
+    constant uint& pos0 [[buffer(4)]],
+    constant uint& hdd  [[buffer(5)]],
+    constant uint& kvd  [[buffer(6)]],
+    constant uint& nkv  [[buffer(7)]],
+    constant uint& nh   [[buffer(8)]],
+    uint tgid [[threadgroup_position_in_grid]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    threadgroup float scores[512];
+    threadgroup float s8[8];
+    threadgroup float s_part[256];
+    const uint m = tgid / nh;
+    const uint h = tgid % nh;
+    const uint pos = pos0 + m;
+    const uint posP1 = pos + 1;
+    const uint kvh = (h * nkv) / nh;
+    const uint D = nh * hdd;
+    const float rsq = rsqrt((float)hdd);
+    const float LOG2E = 1.4426950408889634f;
+    device const float* qm = q_buf + (ulong)m * D;
+    device float*       om = out_buf + (ulong)m * D;
+
+    for (uint t = ltid; t < posP1; t += 256) {
+        float sum = 0.0f;
+        for (uint d = 0; d < hdd; d++) {
+            sum += qm[h * hdd + d] * kc[(ulong)t * kvd + kvh * hdd + d];
+        }
+        scores[t] = sum * rsq;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    float lmax = -INFINITY;
+    for (uint t = ltid; t < posP1; t += 256) lmax = max(lmax, scores[t]);
+    float mx = block_max(s8, lmax, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    float lsum = 0.0f;
+    for (uint t = ltid; t < posP1; t += 256) {
+        float e = exp2((scores[t] - mx) * LOG2E);
+        scores[t] = e;
+        lsum += e;
+    }
+    float ssum = block_sum(s8, lsum, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float inv = 1.0f / ssum;
+    for (uint t = ltid; t < posP1; t += 256) scores[t] *= inv;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    const uint od = ltid & 63;
+    const uint op = ltid >> 6;
+    const uint t0 = (op * posP1) / 4;
+    const uint t1 = ((op + 1) * posP1) / 4;
+    float psum = 0.0f;
+    for (uint t = t0; t < t1; t++)
+        psum += scores[t] * vc[(ulong)t * kvd + kvh * hdd + od];
+    s_part[op * 64 + od] = psum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (op == 0)
+        om[h * hdd + od] = (s_part[od] + s_part[64 + od]) + (s_part[128 + od] + s_part[192 + od]);
+}
+
+// Cross-attention for M query rows against ONE shared encoder KV (the prefix
+// rows all belong to the same chunk). Grid = M*nh threadgroups. Body =
+// flash_cross_attn_f16kv_batched with the per-slot KV stride removed.
+kernel void flash_cross_attn_f16kv_rows(
+    device float*       out_buf [[buffer(0)]],   // [M][nh*hdd]
+    device const float* q_buf   [[buffer(1)]],   // [M][nh*hdd]
+    device const half*  kc      [[buffer(2)]],   // [seqlen][kvd] (shared)
+    device const half*  vc      [[buffer(3)]],
+    constant uint& seqlen [[buffer(4)]],
+    constant uint& hdd    [[buffer(5)]],
+    constant uint& kvd    [[buffer(6)]],
+    constant uint& nkv    [[buffer(7)]],
+    constant uint& nh     [[buffer(8)]],
+    uint tgid [[threadgroup_position_in_grid]],
+    uint ltid [[thread_position_in_threadgroup]])
+{
+    threadgroup float scores[1504];
+    threadgroup float s8[8];
+    threadgroup float s_part[256];
+    threadgroup float s_qh[64];
+    const uint m = tgid / nh;
+    const uint h = tgid % nh;
+    const uint kvh = (h * nkv) / nh;
+    const uint D = nh * hdd;
+    const float rsq = rsqrt((float)hdd);
+    const float LOG2E = 1.4426950408889634f;
+    device const float* qb = q_buf   + (ulong)m * D;
+    device float*       ob = out_buf + (ulong)m * D;
+
+    for (uint d = ltid; d < hdd; d += 256) s_qh[d] = qb[h * hdd + d];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    threadgroup const float4* q4 = (threadgroup const float4*)s_qh;
+    const uint d4n = hdd >> 2;
+    for (uint t = ltid; t < seqlen; t += 256) {
+        device const half4* k4 = (device const half4*)(kc + (ulong)t * kvd + kvh * hdd);
+        float sum = 0.0f;
+        for (uint i = 0; i < d4n; i++) {
+            const half4 kv = k4[i];
+            const float4 qv = q4[i];
+            sum += qv.x*(float)kv.x + qv.y*(float)kv.y + qv.z*(float)kv.z + qv.w*(float)kv.w;
+        }
+        scores[t] = sum * rsq;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lmax = -INFINITY;
+    for (uint t = ltid; t < seqlen; t += 256) lmax = max(lmax, scores[t]);
+    float mx = block_max(s8, lmax, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float lsum = 0.0f;
+    for (uint t = ltid; t < seqlen; t += 256) { float e = exp2((scores[t]-mx)*LOG2E); scores[t]=e; lsum+=e; }
+    float ssum = block_sum(s8, lsum, ltid);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    float inv = 1.0f / ssum;
+    for (uint t = ltid; t < seqlen; t += 256) scores[t] *= inv;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    const uint od = ltid & 63;
+    const uint op = ltid >> 6;
+    const uint t0 = (op * seqlen) / 4;
+    const uint t1 = ((op + 1) * seqlen) / 4;
+    float psum = 0.0f;
+    for (uint t = t0; t < t1; t++)
+        psum += scores[t] * (float)vc[(ulong)t * kvd + kvh * hdd + od];
+    s_part[op * 64 + od] = psum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (op == 0)
+        ob[h * hdd + od] = (s_part[od] + s_part[64+od]) + (s_part[128+od] + s_part[192+od]);
+}
