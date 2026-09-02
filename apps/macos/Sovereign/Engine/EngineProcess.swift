@@ -165,12 +165,23 @@ final class EngineProcess {
     /// Decode the newest still-open capture window in the same resident process.
     /// The engine serializes PREVIEW behind committed SEG jobs and emits dedicated
     /// markers, so its text is throwaway and cannot enter transcript/diar state.
-    func feedPreview(wav: URL) {
+    /// S2: `forced` = the open window's AGREED source prefix (the app's
+    /// LocalAgreement gate — never provisional). The engine teacher-forces it and
+    /// decodes only the tail, so the preview stops re-decoding the whole window
+    /// every second and its shown text becomes append-only by construction. Sent
+    /// only when the running engine declared `preview-fp`.
+    func feedPreview(wav: URL, forced: String = "") {
         guard EnginePathPolicy.streamWavIsAllowed(wav, roots: config.streamWavRoots) else {
             NSLog("blocked preview wav outside allowed stream roots: \(wav.path)")
             return
         }
-        write("PREVIEW \(wav.path)\n")
+        let one = forced.replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if supportsPreviewForcedPrefix, !one.isEmpty, !one.contains("%%FP") {
+            write("PREVIEW \(wav.path) %%FP \(one)\n")
+        } else {
+            write("PREVIEW \(wav.path)\n")
+        }
     }
 
     /// Finalize: triggers SPKFIX/SPKOV relabel then <<FLUSH_END>>.
@@ -199,12 +210,22 @@ final class EngineProcess {
 
     // MARK: stdout line framing
 
+    /// Capability tokens the running engine printed ("[caps] …", before ready).
+    /// `preview-fp` = accepts `PREVIEW <wav> %%FP <text>`; an engine without it
+    /// would take the marker for part of the path, so the flag gates the send.
+    private(set) var capabilities: Set<String> = []
+    var supportsPreviewForcedPrefix: Bool { capabilities.contains("preview-fp") }
+
     private func ingest(_ chunk: Data) {
         lineBuffer.append(chunk)
         while let nl = lineBuffer.firstIndex(of: 0x0A) {
             let lineData = lineBuffer.subdata(in: lineBuffer.startIndex..<nl)
             lineBuffer.removeSubrange(lineBuffer.startIndex...nl)
             guard let line = String(data: lineData, encoding: .utf8) else { continue }
+            if line.hasPrefix("[caps] ") {
+                capabilities = Set(line.dropFirst(7).split(separator: " ").map(String.init))
+                continue
+            }
             let event = decoder.decode(line: line)
             let structured: [StructuredEvent]
             if event == .segmentEnd || event == .flushEnd { structured = drainStructuredEvents() }

@@ -1251,6 +1251,7 @@ pub fn main() !void {
     }
     const d_x = (try mtl.allocSlice(f32, D)).ptr;
     const d_tokens = try mtl.allocSlice(u32, MAX_TOK);
+    @memset(d_tokens, 0); // bucketed prefill rows may read past this pass's prefix — keep every id valid
     const d_pos = (try mtl.allocSlice(u32, 1)).ptr;
     const d_logits = (try mtl.allocSlice(f32, VOCAB)).ptr;
     const d_conf = (try mtl.allocSlice(f32, MAX_TOK)).ptr; // per-token softmax confidence (unified)
@@ -1517,7 +1518,12 @@ pub fn main() !void {
     // a scratch copy to a target peak for the gates/detectors ONLY. AGC=0 reverts.
     const agc_on = !std.mem.eql(u8, std.posix.getenv("AGC") orelse "1", "0");
     evMeta("whisper-large-v3-turbo-q8", lang_tok, mel.SAMPLE_RATE); // structured contract header (both modes)
-    if (stream) { evReady(); try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{}); }
+    if (stream) {
+        evReady();
+        // capability tokens the app may gate on: preview-fp = `PREVIEW <wav> %%FP <text>`
+        try out.print("[caps] preview-fp\n", .{});
+        try out.print("[stream] ready (model resident; feed '<offset> <wav>' lines on stdin)\n", .{});
+    }
     var stdin_buf: [8192]u8 = undefined;
     const stdin_r = std.io.getStdIn().reader();
 
@@ -1527,6 +1533,9 @@ pub fn main() !void {
         var g_off: f32 = 0;
         var preview_job = false;
         defer g_preview_job = false;
+        // S2: teacher-forced text tokens for THIS preview job (empty = free decode)
+        var preview_forced: []u32 = &.{};
+        defer if (preview_forced.len > 0) alloc.free(preview_forced);
         if (stream) {
             const line = (stdin_r.readUntilDelimiterOrEof(&stdin_buf, '\n') catch null) orelse break :job;
             const trimmed = std.mem.trim(u8, line, " \t\r");
@@ -1640,7 +1649,21 @@ pub fn main() !void {
             }
             if (std.mem.startsWith(u8, trimmed, "PREVIEW ")) {
                 preview_job = true;
-                cur_path = std.mem.trim(u8, trimmed["PREVIEW ".len..], " \t\r");
+                var pv = std.mem.trim(u8, trimmed["PREVIEW ".len..], " \t\r");
+                // S2 (2026-09-02): `PREVIEW <wav> %%FP <agreed source text>` — the app's
+                // LocalAgreement gate has already frozen this prefix of the open window's
+                // hypothesis; teacher-force it (BPE-encoded, KV-filled by the S1 batched
+                // prefill) and decode only the tail instead of re-decoding the whole
+                // window every second. Preview-only: committed SEG jobs stay free decode.
+                if (std.mem.lastIndexOf(u8, pv, " %%FP ")) |fp| {
+                    const ftxt = std.mem.trim(u8, pv[fp + 6 ..], " \t\r");
+                    pv = std.mem.trim(u8, pv[0..fp], " \t\r");
+                    if (ftxt.len > 0) {
+                        const spaced = std.fmt.allocPrint(alloc, " {s}", .{ftxt}) catch ftxt;
+                        preview_forced = bpeEncode(bpe_path, spaced) catch &.{};
+                    }
+                }
+                cur_path = pv;
             } else {
                 const sp = std.mem.indexOfScalar(u8, trimmed, ' ') orelse continue :job;
                 g_off = std.fmt.parseFloat(f32, trimmed[0..sp]) catch 0;
@@ -2493,14 +2516,26 @@ pub fn main() !void {
             if (!ts_mode) { d_tokens[PL] = 50364; PL += 1; } // <|notimestamps|>
             for (0..PL) |q| out_tokens[q] = d_tokens[q];
             const sample_begin: u32 = PL;
-            const max_gen: u32 = MAX_TOK - PL - 1;
+            // S2: the agreed preview prefix rides along as already-generated text —
+            // it is seeded (never predicted) and the decode loop starts after it.
+            // Plain-mode preview passes only: a rescue re-decode (ts_mode) must
+            // stay free, and committed SEG jobs never carry a forced prefix.
+            var F: u32 = 0;
+            if (preview_job and !ts_mode and preview_forced.len > 0 and PL + preview_forced.len + 8 < MAX_TOK) {
+                for (preview_forced) |t| {
+                    d_tokens[PL + F] = t; out_tokens[PL + F] = t;
+                    d_conf[PL + F] = 0; // seeded, never argmaxed — keep it out of avg_logprob
+                    F += 1;
+                }
+            }
+            const max_gen: u32 = MAX_TOK - PL - F - 1;
             const pass_got: usize = cgot - @min(@as(usize, seek_fr) * 320, cgot); // samples in this window
             const pass_off: f32 = @as(f32, @floatFromInt(seek_fr)) * 0.02; // window start within the chunk (s)
             // Seed phase: fill KV[0..P-1) without prediction — recorded as ONE
             // command buffer (indirect embed/pos/step; positions restart each
             // pass, KV/ca rows are simply overwritten).
-            if (PL >= 2) {
-                const M: u32 = PL - 1;
+            if (PL + F >= 2) {
+                const M: u32 = PL + F - 1;
                 // S1: the prefix rows as ONE batched causal pass (decoder.zig
                 // prefillBlock) instead of M sequential decoder steps. Measured
                 // before this: a 32-term glossary = 158 prompt tokens = jfk decode
@@ -2526,9 +2561,16 @@ pub fn main() !void {
                 var snapV: []f32 = &.{};
                 if (use_prefill) {
                     var pft = try std.time.Timer.start();
+                    // Row count bucketed to a multiple of 16: the MPS GEMM path keys
+                    // its descriptor/kernel objects by shape, and a preview prefix that
+                    // grows every second would otherwise mint a new set (~80 ms) per
+                    // length. Padded rows read stale-but-valid token ids and write K/V
+                    // rows the upcoming decode steps overwrite before reading; causal
+                    // rows below M never look at them.
+                    const Mp: u32 = @min(dec.PREFILL_MAX_ROWS, (M + 15) / 16 * 16);
                     try mtl.beginCommandBuffer();
-                    try dec.prefillEmbed(Kd, pscr.?, tok_emb.qs, tok_emb.scales, d_tokens.ptr, dec_pe, 0, M);
-                    for (0..dec.NL) |l| try dec.prefillBlock(Kd, dlayers[l], M, 0, pscr.?, skc[l], svc[l], ckc[l], cvc[l], actx);
+                    try dec.prefillEmbed(Kd, pscr.?, tok_emb.qs, tok_emb.scales, d_tokens.ptr, dec_pe, 0, Mp);
+                    for (0..dec.NL) |l| try dec.prefillBlock(Kd, dlayers[l], Mp, 0, pscr.?, skc[l], svc[l], ckc[l], cvc[l], actx);
                     try mtl.commitCommandBuffer();
                     try mtl.sync();
                     if (g_prefill_verify) {
@@ -2545,7 +2587,7 @@ pub fn main() !void {
                     var sqt = try std.time.Timer.start();
                     d_pos[0] = 0;
                     try mtl.beginCommandBuffer();
-                    for (0..PL - 1) |_| {
+                    for (0..M) |_| {
                         try kEmbInd(f_emb_ind, d_x, tok_emb.qs, tok_emb.scales, d_tokens.ptr, d_pos);
                         try kPeInd(f_pe_ind, d_x, dec_pe, d_pos);
                         for (0..dec.NL) |l| {
@@ -2578,8 +2620,8 @@ pub fn main() !void {
                     alloc.free(snapV);
                 }
             }
-            d_pos[0] = PL - 1; // first prediction step
-            var n_text: u32 = 0;
+            d_pos[0] = PL + F - 1; // first prediction step (after the forced preview prefix, if any)
+            var n_text: u32 = F; // forced tokens count as this pass's text
             var done = false;
             var partial_frozen = false; // stop streaming a runaway hypothesis (see partial emit below)
             while (n_text < max_gen and !done) {
