@@ -45,9 +45,16 @@ struct TranslationTurn: Equatable {
 enum TranslatePrompt {
     struct Example: Equatable { let source: String; let target: String }
 
+    /// Layout: "<src> => <tgt> . <text> =>". The former "Now:" marker between the
+    /// example and the text is gone: with a real example pair the 4B rendered it
+    /// into the target language ("现在：", "이제:") or folded it into the sentence
+    /// ("我们现在经常…"), and the leaked line then became the next example. Measured
+    /// on the 40-item probe without the marker: 4B pronoun 21/40, chrF++ 58.9 (with
+    /// it: 22/40, 57.8); 2B chrF++ 51.0 vs 47.8 anchor-only; marker leaks 0/6 in
+    /// EN→KO/ZH/JA and KO→EN on the 4B. The output sanitizer still strips any echo.
     static func body(text: String, example: Example?, anchor: String) -> String {
         let ex = example.map { "\($0.source) => \($0.target)" } ?? "Hello => \(anchor)"
-        return "\(ex) . Now: \(text) =>"
+        return "\(ex) . \(text) =>"
     }
 
     /// An example is usable when both halves are single-line, non-empty and short
@@ -171,10 +178,11 @@ enum TranslationOutputPolicy {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// The turn body is "<example> . Now: <text> =>". With a real example pair in
-    /// the slot (T5) the model sometimes treats the "Now:" marker as part of the
-    /// text and renders it in the target language ("现在：", "이제:", "今："), or
-    /// echoes the separator / the trailing arrow. Seen live on 0.3.1 (EN→ZH/KO);
+    /// The turn body was "<example> . Now: <text> =>" until 0.3.2. With a real
+    /// example pair in the slot (T5) the model treated the "Now:" marker as part of
+    /// the text and rendered it in the target language ("现在：", "이제:", "今："), or
+    /// echoed the separator / the trailing arrow. The marker is gone from the body
+    /// now; this strip stays as the second line of defence. Seen live on 0.3.1 (EN→ZH/KO);
     /// once leaked, the committed line becomes the next example and the marker
     /// self-reinforces for the rest of the session. Strip those echoes here — the
     /// single sanitizer both the streaming and the final path go through, so the
