@@ -53,7 +53,18 @@ struct WordMerger {
             // segment starts clearly AFTER it (no re-decode coverage).
             let replaced = incoming.first.map { $0.t0 <= h.t1 + eps } ?? false
             if !replaced { commit(h) }
-            else { incoming.removeAll { $0.t1 <= h.t0 + eps } } // drop pre-held strays
+            else {
+                incoming.removeAll { $0.t1 <= h.t0 + eps } // drop pre-held strays
+                // P1 (2026-09-03): the re-decode REPLACES the held word, so it
+                // inherits the held word's identity. Line ids, the P15 boundary
+                // ledger and per-line translations are keyed by the first word's
+                // id — a fresh UUID here changed the line's id at every segment
+                // boundary (rows torn down, translations orphaned, boundaries
+                // re-decided → post-commit merges).
+                if let f = incoming.first {
+                    incoming[0] = Word(id: h.id, t0: f.t0, t1: f.t1, text: f.text, conf: f.conf)
+                }
+            }
         }
 
         guard !incoming.isEmpty else { return }

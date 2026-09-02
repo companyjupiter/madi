@@ -24,6 +24,21 @@ final class TranslationTurnQueueTests: XCTestCase {
         XCTAssertEqual(TranslationOutputPolicy.clean("Now we can start."), "Now we can start.")
     }
 
+    // P1: under a deep committed backlog only the priority language is queued;
+    // the rest are shed to the stop-time backfill.
+    func testSecondaryTargetsShedUnderBacklog() {
+        let r1 = TranslationShedPolicy.committedTargets(requested: ["Chinese", "Korean"], priority: "Korean", committedBacklog: 2, threshold: 6)
+        XCTAssertEqual(r1.send, ["Chinese", "Korean"]); XCTAssertEqual(r1.shed, [])
+        let r2 = TranslationShedPolicy.committedTargets(requested: ["Chinese", "Korean"], priority: "Korean", committedBacklog: 6, threshold: 6)
+        XCTAssertEqual(r2.send, ["Korean"]); XCTAssertEqual(r2.shed, ["Chinese"])
+        let r3 = TranslationShedPolicy.committedTargets(requested: ["Korean"], priority: "Korean", committedBacklog: 20, threshold: 6)
+        XCTAssertEqual(r3.send, ["Korean"]); XCTAssertEqual(r3.shed, [])
+        let r4 = TranslationShedPolicy.committedTargets(requested: ["Chinese", "Korean"], priority: nil, committedBacklog: 20, threshold: 6)
+        XCTAssertEqual(r4.send, ["Chinese", "Korean"])
+        let r5 = TranslationShedPolicy.committedTargets(requested: ["Chinese", "Korean"], priority: "Korean", committedBacklog: 20, threshold: 0)
+        XCTAssertEqual(r5.send, ["Chinese", "Korean"])
+    }
+
     func testCommittedTurnEvictsPendingInterimAndRunsFirst() {
         var queue = TranslationTurnQueue()
         let interim = turn(source: "draft", kind: .interim)

@@ -15,11 +15,17 @@ import Foundation
 import Observation
 
 struct Word: Identifiable, Equatable {
-    let id = UUID()
+    let id: UUID
     let t0: Double
     let t1: Double
     let text: String
     var conf: Double = 1.0   // softmax confidence of the chosen token(s); <1 = uncertain
+    /// `id` defaults to a fresh UUID; WordMerger passes the HELD word's id when the
+    /// next segment's re-decode replaces it, so the line that started with that
+    /// word keeps its identity (P15 boundary ledger, translations, SwiftUI rows).
+    init(id: UUID = UUID(), t0: Double, t1: Double, text: String, conf: Double = 1.0) {
+        self.id = id; self.t0 = t0; self.t1 = t1; self.text = text; self.conf = conf
+    }
 }
 
 struct Line: Identifiable, Equatable {

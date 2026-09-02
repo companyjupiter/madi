@@ -49,8 +49,9 @@ final class SessionController: EngineProcessDelegate {
             return .fileTranscribing(chunksTotal > 0
                 ? Int(Double(chunksDone) / Double(chunksTotal) * 100) : nil)
         }
-        if translateBacklog > 0 { return .translatingBacklogged(translateQueueDepth) }
-        if translateQueueDepth > 0 { return .translating(translateQueueDepth) }
+        // P1: the status shows LINES, not turns (two targets doubled the number).
+        if translateBacklog > 0 { return .translatingBacklogged(max(translateQueuedLines, min(translateQueueDepth, 1))) }
+        if translateQueueDepth > 0 { return .translating(max(translateQueuedLines, 1)) }
         if phase == .recording {
             if micSilent { return .idle }        // the silence WARNING covers this
             return segmentsInFlight > 0 ? .transcribing : .listening
@@ -149,6 +150,18 @@ final class SessionController: EngineProcessDelegate {
     private(set) var streamingTranslation: TranslationRef?
     /// Pending translation turns (queued + in-flight) — the "N줄 대기" status (D20).
     private(set) var translateQueueDepth = 0
+    /// P1: distinct lines queued/in flight (the number the status line shows).
+    private(set) var translateQueuedLines = 0
+    /// P1 coalescing: anchor line id → joined source text sent to the engine, and
+    /// the anchor's own text revision at dispatch (setTranslation's gate).
+    private var coalescedSource: [UUID: String] = [:]
+    private var coalescedRevision: [UUID: UInt64] = [:]
+    /// P1 preview time-slice + STT telemetry.
+    private var lastPreviewAdmitAt: Date = .distantPast
+    private var previewAdmits = 0
+    private var previewLaneStartedAt: Date? = nil
+    private var previewAgingTimer: Timer? = nil
+    private var sttTurnarounds: [Double] = []
     /// Max live translation queue depth (turns). The 8 GB realtime profile keeps
     /// only a four-turn horizon; larger systems retain the legacy 30-turn buffer.
     /// Superseded revisions are coalesced before this cap and never backfilled.
@@ -601,7 +614,22 @@ final class SessionController: EngineProcessDelegate {
     /// PreviewEngine is a latest-only scheduler over the SAME resident process,
     /// so closing this gate never grows a stale queue or duplicates model memory.
     private func updatePreviewAdmission() {
-        preview.setAdmitted(segmentsInFlight == 0 && !dnaBusy)
+        // P1: the PREVIEW lane used to be gated hard on `dnaBusy`; with a
+        // translation backlog that never empties the live gray text never
+        // appeared. Now a preview is admitted at least every `previewAgingSeconds`
+        // even while DNA is busy (≈0.3 s of GPU per slice).
+        let aged = Date().timeIntervalSince(lastPreviewAdmitAt) >= previewAgingSeconds
+        preview.setAdmitted(segmentsInFlight == 0 && (!dnaBusy || aged))
+    }
+    private var previewAgingSeconds: Double { translateQueueDepth <= 6 ? 2 : 4 }
+
+    /// STT/preview telemetry appended to the stability summary at stop.
+    private func sttStatsTag() -> String {
+        let s = sttTurnarounds.sorted()
+        func pct(_ p: Double) -> Double { s.isEmpty ? 0 : s[min(s.count - 1, Int(Double(s.count - 1) * p))] }
+        let minutes = max(1.0 / 60.0, (previewLaneStartedAt.map { Date().timeIntervalSince($0) } ?? 0) / 60)
+        return String(format: "stt n=%d p50=%.2fs p95=%.2fs max=%.2fs previews=%d/min=%.1f",
+                      s.count, pct(0.5), pct(0.95), s.last ?? 0, previewAdmits, Double(previewAdmits) / minutes)
     }
 
     /// Live translation TARGETS — a set of English language NAMES
@@ -991,7 +1019,7 @@ final class SessionController: EngineProcessDelegate {
             t.onDrop = { [weak self] id, lang, source in
                 guard let self else { return }
                 if self.finishInterimTurn(id: id, lang: lang, source: source, text: nil) { return }
-                let key = TranslationWorkKey(id: id, lang: lang, sourceRevision: self.lineHash(source))
+                let key = TranslationWorkKey(id: id, lang: lang, sourceRevision: self.revisionFor(id: id, source: source))
                 self.backlogKeys.insert(key)
                 self.translateBacklog = Set(self.backlogKeys.map(\.id)).count
             }
@@ -1003,7 +1031,7 @@ final class SessionController: EngineProcessDelegate {
                 if self.streamingTranslation == TranslationRef(id: id, lang: lang) {
                     self.streamingTranslation = nil
                 }
-                let revision = self.lineHash(source)
+                let revision = self.revisionFor(id: id, source: source)
                 let completedKey = TranslationWorkKey(id: id, lang: lang, sourceRevision: revision)
                 if !text.isEmpty {
                     if self.transcript.setTranslation(id, lang: lang, text, sourceRevision: revision) {
@@ -1040,7 +1068,7 @@ final class SessionController: EngineProcessDelegate {
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
                     if self.transcript.setTranslation(id, lang: lang, text,
-                                                      sourceRevision: self.lineHash(source)) {
+                                                      sourceRevision: self.revisionFor(id: id, source: source)) {
                         TranslationStabilityMetrics.shared.markEnd(.lineFirstTranslation,
                                                                    key: id.uuidString)
                     }
@@ -1052,6 +1080,7 @@ final class SessionController: EngineProcessDelegate {
                 self.translateQueueDepth = depth
                 self.updatePreviewAdmission()
             }
+            t.onLineDepthChange = { [weak self] n in self?.translateQueuedLines = n }
             t.interimGuarantee = InterimTuning.guaranteeSeconds   // P10-5 dial
             guard t.start(engine: eng, model: AssetManifest.translateModelURL) else { return nil }
             translate = t
@@ -1242,7 +1271,17 @@ final class SessionController: EngineProcessDelegate {
             stablePassHash[line.id] = transcript.lines.first(where: { $0.id == line.id })?.text.hashValue ?? h
         }
         lines = transcript.lines   // a pass may have rewritten line text
-        for i in 0..<min(upTo, lines.count) { translateLine(lines[i]) }
+        // P1: fragment lines fold into the next stable line of the same speaker and
+        // translate with it (one turn per target instead of one per fragment).
+        let stable = Array(lines.prefix(min(upTo, lines.count)))
+        let inputs = stable.map { TranslationCoalescer.Input(id: $0.id, speaker: $0.speaker, text: $0.text, start: $0.start, end: $0.end) }
+        for run in TranslationCoalescer.runs(inputs) {
+            if run.members.isEmpty, let line = stable.first(where: { $0.id == run.anchor }) {
+                translateLine(line)
+            } else {
+                translateRun(run, lines: stable)
+            }
+        }
     }
     /// line id → text hash at the last applyTextPasses run (see translateStableLines).
     private var stablePassHash: [UUID: Int] = [:]
@@ -1272,6 +1311,41 @@ final class SessionController: EngineProcessDelegate {
         text = KoreanNumberFormatter.format(text)
         guard text != line.text else { return }
         _ = transcript.editLine(line.id, text)
+    }
+
+    /// The source revision a turn's result must match: for a coalesced run the
+    /// engine echoes the JOINED text, but the anchor line's own revision gates
+    /// setTranslation/suppressTranslation, so map it back.
+    private func revisionFor(id: UUID, source: String) -> UInt64 {
+        if coalescedSource[id] == source, let r = coalescedRevision[id] { return r }
+        return lineHash(source)
+    }
+
+    /// P1: translate a fragment run as ONE turn per target on its anchor line;
+    /// the fragment lines are marked suppressed (covered by the anchor's
+    /// translation) instead of costing a turn each.
+    private func translateRun(_ run: TranslationCoalescer.Run, lines: [Line]) {
+        guard let anchor = lines.first(where: { $0.id == run.anchor }) else { return }
+        let h = lineHash(run.text)
+        let anchorRevision = lineHash(anchor.text)
+        let routed = Set(routedTargets(for: run.text))
+        for m in run.members {
+            guard let ml = lines.first(where: { $0.id == m }) else { continue }
+            let mh = lineHash(ml.text)
+            if translatedHash[m] == mh { continue }
+            translatedHash[m] = mh
+            for lang in routed { _ = transcript.suppressTranslation(m, lang: lang) }
+        }
+        let existing = transcript.pruneTranslations(anchor.id, validTargets: routed, sourceRevision: anchorRevision)
+        let missing = routed.subtracting(existing)
+        guard !missing.isEmpty else { translatedHash[anchor.id] = h; return }
+        if translatedHash[anchor.id] == h { return }
+        guard let t = ensureTranslateEngine() else { return }
+        TranslationStabilityMetrics.shared.markStart(.lineFirstTranslation, key: anchor.id.uuidString)
+        translatedHash[anchor.id] = h
+        coalescedSource[anchor.id] = run.text
+        coalescedRevision[anchor.id] = anchorRevision
+        t.translate(run.text, into: missing.sorted(), id: anchor.id)
     }
 
     /// Queue one line (hash-gated, FAQ/O3-cached, direction-routed).
@@ -1831,7 +1905,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll(); stablePassHash.removeAll()
+        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0
         interimCache.clear()
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
@@ -1947,7 +2021,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll(); stablePassHash.removeAll()
+        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0
         interimCache.clear()
         backlogKeys.removeAll(); translateBacklog = 0
         backfillPendingKeys.removeAll(); backfillRemaining = 0
@@ -2081,7 +2155,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll(); stablePassHash.removeAll()
+        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0
         interimCache.clear()
         clearSummary()
         fileName = url.lastPathComponent
@@ -2257,6 +2331,7 @@ final class SessionController: EngineProcessDelegate {
             // wav; if it stays empty, surface a 누락 의심 marker.
             if !segQueue.isEmpty {
                 let job = segQueue.removeFirst()
+                sttTurnarounds.append(Date().timeIntervalSince(job.fedAt))
                 if job.hadSpeech, wordsSinceSegStart == 0 {
                     // 백로그가 있으면 재시도는 무의미: 뒤 세그먼트가 먼저 커밋해
                     // WordMerger 워터마크가 이 구간을 지나가 복구 단어가 전량
@@ -2323,8 +2398,10 @@ final class SessionController: EngineProcessDelegate {
     }
 
     private func startPreviewLane() {
+        previewLaneStartedAt = Date(); previewAdmits = 0
         preview.start { [weak self] wav in
             guard let self else { return }
+            self.lastPreviewAdmitAt = Date(); self.previewAdmits += 1
             // S2: the P8 gate's AGREED prefix of this window's hypothesis rides
             // along; the engine forces it and decodes only the tail.
             self.engine?.feedPreview(wav: wav, forced: self.interimSourceGate.committedText)
@@ -2385,7 +2462,7 @@ final class SessionController: EngineProcessDelegate {
         // P6: print the ledger NOW (a ⌘Q inside the 10s window swallowed two
         // real sessions' numbers), and again after the stop-time backfill has
         // had time to drain. NE < 0.2 is the target band.
-        TranslationStabilityMetrics.shared.flushSummary("@final")
+        TranslationStabilityMetrics.shared.flushSummary("@final " + sttStatsTag())
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(10))
             TranslationStabilityMetrics.shared.flushSummary("@settled")
@@ -2446,6 +2523,15 @@ final class SessionController: EngineProcessDelegate {
         watchdogTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tickWatchdog() }
         }
+        // P1: re-evaluate preview admission once a second so the aged slice fires
+        // while DNA stays busy (nothing else re-triggers it during a steady backlog).
+        previewAgingTimer?.invalidate()
+        previewAgingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.phase == .recording, self.dnaBusy else { return }
+                self.updatePreviewAdmission()
+            }
+        }
         if Self.liveRailCapable, aiReconcileEnabled {
             midReconcileTimer?.invalidate()
             midReconcileTimer = Timer.scheduledTimer(withTimeInterval: 45, repeats: true) { [weak self] _ in
@@ -2463,6 +2549,7 @@ final class SessionController: EngineProcessDelegate {
     }
     private func stopWatchdog() {
         watchdogTimer?.invalidate(); watchdogTimer = nil
+        previewAgingTimer?.invalidate(); previewAgingTimer = nil
         midReconcileTimer?.invalidate(); midReconcileTimer = nil
     }
 

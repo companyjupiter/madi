@@ -24,6 +24,21 @@ final class WordMergerTests: XCTestCase {
                        "re-decode B2 replaces held B; no duplicate")
     }
 
+    /// P1: the re-decode that replaces the held word inherits its id, so the line
+    /// that starts with it keeps its identity across the segment boundary.
+    func testRedecodeInheritsHeldWordIdentity() {
+        var m = WordMerger()
+        let held = w(0.5, 0.9, "B")
+        m.add(w(0.0, 0.4, "A"))
+        m.add(held)                  // trailing → held
+        m.segmentBreak()
+        m.add(w(0.5, 0.9, "B2"))     // overlap re-decode of B
+        m.add(w(1.0, 1.4, "C"))
+        m.finish()
+        XCTAssertEqual(m.committed.map { $0.text }, ["A", "B2", "C"])
+        XCTAssertEqual(m.committed[1].id, held.id, "re-decode keeps the held word's id")
+    }
+
     /// The trailing word of the final segment is released on finish() (not lost).
     func testFinishReleasesHeldWord() {
         var m = WordMerger()
