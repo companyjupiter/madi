@@ -206,6 +206,29 @@ final class TranscriptStore {
         var spanEndSecond: Int?
     }
 
+    /// P2 (2026-09-03): low-confidence word refs for the review bar, cached per
+    /// display revision + threshold. ContentView.body recomputed this over every
+    /// word of every line — with a UserDefaults read per word — on each 30 fps
+    /// snapshot (18% of the main thread at ~400 lines, live 0.3.5).
+    @ObservationIgnored private var flaggedCacheKey: (revision: UInt64, threshold: Double)? = nil
+    @ObservationIgnored private var flaggedCache: [(line: UUID, text: String)] = []
+    func flaggedWords(threshold: Double) -> [(line: UUID, text: String)] {
+        let snapshot = displayLines
+        if let k = flaggedCacheKey, k.revision == displayRevision, k.threshold == threshold {
+            return flaggedCache
+        }
+        var out: [(line: UUID, text: String)] = []
+        for l in snapshot {
+            for w in l.words where w.conf < threshold {
+                let t = w.text.trimmingCharacters(in: .whitespaces)
+                if !t.isEmpty { out.append((l.id, t)) }
+            }
+        }
+        flaggedCache = out
+        flaggedCacheKey = (displayRevision, threshold)
+        return out
+    }
+
     private func publishDisplayLines(_ newLines: [Line], invalidateEnergy: Bool) {
         displayRevision &+= 1
         displayLines = newLines
@@ -284,7 +307,13 @@ final class TranscriptStore {
     // immutable, so the rendered list prefix never shifts under the reader.
     // (Mid-session SPKFIX relabels update frozen lines' speaker IN PLACE via
     // reassignFrozenSpeakers — attribute-only, boundaries stay put.)
-    private var frozen: [Line] = []
+    // P2 (2026-09-03): the frozen lines ARE `lines[0..<frozenCount]` — no separate
+    // base array. The old `lines = frozen + tail` re-copied every Line and then
+    // re-applied every overlay (hashing every line's joined text) on EVERY word;
+    // live 0.3.5 at ~400 lines spent ~20% of the main thread there. Mutations
+    // (translations, edits, speaker fixes) already land on `lines[i]` in place, so
+    // a rebuild only splices the live tail and refreshes overlays from the splice.
+    private var frozenCount = 0               // frozen line prefix of `lines`
     private var frozenWordCount = 0           // prefix length into merger words
     private static let freezeMargin = 6.0     // ~2 engine windows behind live
 
@@ -476,11 +505,7 @@ final class TranscriptStore {
         lines[li].words[index] = Word(t0: old.t0, t1: old.t1, text: t, conf: 1.0)
         lines[li].editedText = lines[li].joinedText
         editsByLine[lineID] = lines[li].editedText
-        // If the line is frozen, sync the word fix into the frozen base too —
-        // otherwise the next rebuild would resurrect the old amber word.
-        if let fi = frozen.firstIndex(where: { $0.id == lineID }) {
-            frozen[fi].words = lines[li].words
-        }
+        // (Frozen lines live in `lines` itself — the fix is already in the base.)
         // P14: a review fix that only touches punctuation/case keeps the
         // translation (confirming a word is also a common review action).
         if Self.cosmeticallyEqual(beforeText, lines[li].text) {
@@ -540,10 +565,12 @@ final class TranscriptStore {
         rebuildFromCurrentLabels()
     }
 
-    private func applySpeakerOverlays() {
-        for i in lines.indices {
-            if let ov = speakerOverrides[lines[i].id] { lines[i].speaker = resolvedSpeaker(ov) }
-            else { lines[i].speaker = resolvedSpeaker(lines[i].speaker) }
+    private func applySpeakerOverlays(from: Int = 0) {
+        if from < lines.count {
+            for i in from..<lines.count {
+                if let ov = speakerOverrides[lines[i].id] { lines[i].speaker = resolvedSpeaker(ov) }
+                else { lines[i].speaker = resolvedSpeaker(lines[i].speaker) }
+            }
         }
         scheduleRender()
     }
@@ -571,7 +598,7 @@ final class TranscriptStore {
         breakDecided.removeAll(); breakAfter.removeAll()
         speakerMerges.removeAll(); speakerOverrides.removeAll()
         speakerNumbers.reset()
-        frozen.removeAll(); frozenWordCount = 0
+        frozenCount = 0; frozenWordCount = 0
         liveLabelLookupCache = nil
         finalized = false; diarNamespaceBroken = false
         flushRenderNow()
@@ -614,13 +641,22 @@ final class TranscriptStore {
             Set((suppressedByLine[id] ?? [:]).filter { $0.value == revision }.keys)
     }
 
-    /// Re-apply id-keyed overlays after any (re)grouping.
-    private func applyOverlays() {
-        for i in lines.indices {
+    /// Test hook (TranscriptStorePerfTests): a from-scratch overlay recompute over
+    /// every line, to assert the incremental (tail-only) pass left nothing stale.
+    func recomputeAllOverlaysForTest() {
+        applyOverlays()
+        applyOverlapSpeakers()
+    }
+
+    /// Re-apply id-keyed overlays after any (re)grouping — from `from` on
+    /// (rebuildLive passes the splice point; everything else defaults to all).
+    private func applyOverlays(from: Int = 0) {
+        guard from < lines.count else { return }
+        for i in from..<lines.count {
             if let e = editsByLine[lines[i].id] { lines[i].editedText = e }
             refreshTranslationOverlay(lines[i].id, lineIndex: i)
         }
-        applySpeakerOverlays()
+        applySpeakerOverlays(from: from)
     }
 
     func ingest(_ event: EngineEvent) {
@@ -700,7 +736,7 @@ final class TranscriptStore {
         finalized = true
         // The one-shot full regroup below supersedes the live frozen prefix —
         // thaw so SPKFIX boundaries can reshape the whole transcript once.
-        frozen.removeAll(); frozenWordCount = 0
+        frozenCount = 0; frozenWordCount = 0
         merger.finish()
         // dedupe SPKFIX by window time keeping the LAST entry — mid-session
         // corrections are superseded by the FLUSH full re-emission.
@@ -720,36 +756,44 @@ final class TranscriptStore {
     }
 
     private func rebuildLive() {
-        let all = merger.displayWords
+        let committedCount = merger.committed.count
         // Defensive: the frozen prefix must mirror the merger's committed
         // prefix (append-only). If it ever doesn't, thaw rather than misindex.
-        if frozenWordCount > all.count { frozen.removeAll(); frozenWordCount = 0 }
-        var tail = group(words: Array(all[frozenWordCount...]), lookup: liveLabelLookup())
+        if frozenWordCount > committedCount || frozenCount > lines.count {
+            frozenCount = 0; frozenWordCount = 0
+        }
+        let tailWords = merger.displayWords(from: frozenWordCount)
+        let tail = group(words: tailWords, lookup: liveLabelLookup())
         // Promote settled tail lines. Conditions: fully older than the freeze
         // watermark; their words already in the merger's committed region (past
         // the holdback churn); and never the last line (it stays live).
-        let watermark = (all.last?.t1 ?? 0) - Self.freezeMargin
-        while tail.count > 1, let first = tail.first, first.end < watermark,
-              frozenWordCount + first.words.count <= merger.committed.count {
-            frozen.append(first)
-            frozenWordCount += first.words.count
-            tail.removeFirst()
+        let watermark = (tailWords.last?.t1 ?? 0) - Self.freezeMargin
+        let splice = frozenCount
+        var promoted = 0
+        while tail.count - promoted > 1, tail[promoted].end < watermark,
+              frozenWordCount + tail[promoted].words.count <= committedCount {
+            frozenWordCount += tail[promoted].words.count
+            promoted += 1
         }
-        lines = frozen + tail
-        applyOverlays()
-        applyOverlapSpeakers()
+        frozenCount += promoted
+        // Only the live tail is regrouped: lines before `splice` are frozen and
+        // already carry their overlays (mutations land on `lines[i]` in place).
+        lines.replaceSubrange(splice..<lines.count, with: tail)
+        applyOverlays(from: splice)
+        applyOverlapSpeakers(from: splice)
         // Mint display numbers in transcript (time) order, after the overlays have
         // resolved each line's final speaker. First speaker heard = number 1, and
         // it stays 1: assignAll only ever adds ids it has not numbered before.
-        speakerNumbers.assignAll(lines.map(\.speaker))
+        speakerNumbers.assignAll(tail.map(\.speaker))
         scheduleRender()
     }
 
     /// Project causal/final SPKOV rows onto every currently visible line. This
     /// is rebuilt from the compact event list so future words also inherit an
     /// overlap row that arrived before their line was materialized.
-    private func applyOverlapSpeakers() {
-        for i in lines.indices {
+    private func applyOverlapSpeakers(from: Int = 0) {
+        guard from < lines.count else { return }
+        for i in from..<lines.count {
             lines[i].overlapSpeakers.removeAll(keepingCapacity: true)
             let line = lines[i]
             var seen = Set<Int>()
@@ -767,13 +811,15 @@ final class TranscriptStore {
     /// lines' speaker/margin IN PLACE (attribute-only — boundaries and ids are
     /// frozen; content mode re-merges adjacent same-speaker blocks anyway).
     private func reassignFrozenSpeakers() {
-        guard !frozen.isEmpty else { return }
+        guard frozenCount > 0, frozenCount <= lines.count else { return }
         let look = liveLabelLookup()
-        for i in frozen.indices {
-            let mid = (frozen[i].start + frozen[i].end) / 2
+        for i in 0..<frozenCount {
+            let mid = (lines[i].start + lines[i].end) / 2
             let label = look.at(mid)
-            frozen[i].speaker = label.speaker
-            frozen[i].speakerMargin = label.margin
+            // Same resolution applyOverlays would give a regrouped line.
+            lines[i].speaker = speakerOverrides[lines[i].id].map(resolvedSpeaker)
+                ?? resolvedSpeaker(label.speaker)
+            lines[i].speakerMargin = label.margin
         }
     }
 

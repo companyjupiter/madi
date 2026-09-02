@@ -273,32 +273,13 @@ struct TranscriptView: View {
     /// The part of the live hypothesis that ISN'T already committed — rendered
     /// gray, inline after the last committed line, so a window commit simply
     /// "turns the gray text black" in place instead of swapping blocks (which
-    /// duplicated text and jolted the scroll). Token-overlap heuristic: the
-    /// longest normalized match between the committed tail and the hypothesis
-    /// head is dropped from the front of the hypothesis.
+    /// duplicated text and jolted the scroll). P2: the overlap rule lives in
+    /// InterimDedupe — tolerant of a re-decoded seam word and of a window that
+    /// spans several committed lines (both duplicated whole sentences live).
     private var interimSuffix: String {
         guard !shownInterim.isEmpty, !lines.isEmpty else { return "" }
         let tail = lines.suffix(3).map(\.text).joined(separator: " ")
-        return Self.dedupedContinuation(committedTail: tail, hypothesis: shownInterim)
-    }
-
-    static func dedupedContinuation(committedTail: String, hypothesis: String) -> String {
-        func norm(_ s: Substring) -> String {
-            s.lowercased().trimmingCharacters(in: .punctuationCharacters)
-        }
-        let tailToks = committedTail.split(separator: " ").map(norm).filter { !$0.isEmpty }
-        let hypRaw = hypothesis.split(separator: " ")
-        let hypToks = hypRaw.map(norm)
-        guard !tailToks.isEmpty, !hypToks.isEmpty else { return hypothesis }
-        // Largest m where the last m committed tokens == the first m hypothesis
-        // tokens (normalized). Fully-covered hypothesis → nothing new to show.
-        let maxM = min(tailToks.count, hypToks.count)
-        for m in stride(from: maxM, through: 1, by: -1) {
-            if Array(tailToks.suffix(m)) == Array(hypToks.prefix(m)) {
-                return hypRaw.dropFirst(m).joined(separator: " ")
-            }
-        }
-        return hypothesis
+        return InterimDedupe.continuation(committedTail: tail, hypothesis: shownInterim)
     }
 
     /// Append the gray live continuation to a committed body Text (last row only).

@@ -77,6 +77,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/TranscriptFollowModel.swift
   "$APP_DIR"/Sovereign/Transcript/TranslationCoalescer.swift
   "$APP_DIR"/Sovereign/Transcript/TranslationShedPolicy.swift
+  "$APP_DIR"/Sovereign/Transcript/InterimDedupe.swift
   "$APP_DIR"/Sovereign/Transcript/KoreanNumberFormatter.swift
   "$APP_DIR"/Sovereign/Transcript/EditorCuts.swift
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift

@@ -28,6 +28,7 @@ let package = Package(
                 "Transcript/TranscriptFollowModel.swift",
                 "Transcript/TranslationCoalescer.swift",
                 "Transcript/TranslationShedPolicy.swift",
+                "Transcript/InterimDedupe.swift",
                 "Transcript/KoreanNumberFormatter.swift",
                 "Transcript/Exporters.swift",
                 "Transcript/WordMerger.swift",

@@ -115,15 +115,9 @@ struct ContentView: View {
     /// P0: read from the display snapshot (refreshed at ≤30 fps together with
     /// displayLines) — scanning `transcript.lines` here subscribed this whole body
     /// to every word/token write and was one root of the live-session stall.
+    /// P2: cached in the store per display revision (see TranscriptStore.flaggedWords).
     private var flaggedWords: [(line: UUID, text: String)] {
-        var out: [(UUID, String)] = []
-        for l in session.transcript.displayLines {
-            for w in l.words where w.conf < Theme.confThreshold {
-                let t = w.text.trimmingCharacters(in: .whitespaces)
-                if !t.isEmpty { out.append((l.id, t)) }
-            }
-        }
-        return out
+        session.transcript.flaggedWords(threshold: Theme.confThreshold)
     }
 
     var body: some View {
