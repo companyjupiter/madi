@@ -1275,7 +1275,7 @@ final class SessionController: EngineProcessDelegate {
         // translate with it (one turn per target instead of one per fragment).
         let stable = Array(lines.prefix(min(upTo, lines.count)))
         let inputs = stable.map { TranslationCoalescer.Input(id: $0.id, speaker: $0.speaker, text: $0.text, start: $0.start, end: $0.end) }
-        for run in TranslationCoalescer.runs(inputs) {
+        for run in TranslationCoalescer.runs(inputs, deferTrailing: !includingLast) {
             if run.members.isEmpty, let line = stable.first(where: { $0.id == run.anchor }) {
                 translateLine(line)
             } else {

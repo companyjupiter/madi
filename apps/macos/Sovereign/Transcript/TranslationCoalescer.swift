@@ -44,9 +44,19 @@ struct TranslationCoalescer {
     /// Group stable lines into translation runs. A fragment joins the following
     /// line when it has the same speaker and starts within `maxGap` seconds of the
     /// fragment's end; a trailing fragment with no successor stays its own run.
-    static func runs(_ lines: [Input], maxGap: Double = 3.0) -> [Run] {
+    /// `deferTrailing`: fragments at the END of the stable set are held back (no
+    /// run emitted) so they can fold into the line that follows once it
+    /// stabilizes; a fragment that is followed by a speaker change or a gap is
+    /// emitted alone. Pass false at finalize to flush everything.
+    /// Joined source cap: DNA turns get long-input repetition past ~200 chars and
+    /// the T5 example slot is capped there too. Pending fragments that would push
+    /// the run past this are flushed alone first.
+    static let maxJoinedChars = 220
+
+    static func runs(_ lines: [Input], maxGap: Double = 3.0, deferTrailing: Bool = false) -> [Run] {
         var out: [Run] = []
         var pending: [Input] = []   // fragments waiting for an anchor
+        func pendingChars() -> Int { pending.reduce(0) { $0 + $1.text.count + 1 } }
         func flush(anchor: Input?) {
             if let a = anchor {
                 let parts = pending.map(\.text) + [a.text]
@@ -59,13 +69,14 @@ struct TranslationCoalescer {
         for line in lines {
             let joinable = pending.last.map { $0.speaker == line.speaker && line.start - $0.end <= maxGap } ?? true
             if !joinable { flush(anchor: nil) }
+            if pendingChars() + line.text.count > Self.maxJoinedChars { flush(anchor: nil) }
             if isFragment(line.text) {
                 pending.append(line)
             } else {
                 flush(anchor: line)
             }
         }
-        flush(anchor: nil)
+        if !deferTrailing { flush(anchor: nil) }
         return out
     }
 }

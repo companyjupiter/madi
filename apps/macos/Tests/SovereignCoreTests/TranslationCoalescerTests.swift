@@ -39,12 +39,29 @@ final class TranslationCoalescerTests: XCTestCase {
         XCTAssertTrue(runs.allSatisfy { $0.members.isEmpty })
     }
 
-    func testTrailingFragmentWaitsAsItsOwnRun() {
+    func testJoinedTextIsCappedSoLongLinesDoNotAbsorbFragments() {
+        let frag = line("So", 0, 0.2)
+        let long = line(String(repeating: "these companies keep raising capital ", count: 7) + "again.", 0.4, 6)
+        let runs = TranslationCoalescer.runs([frag, long])
+        XCTAssertEqual(runs.count, 2, "a fragment does not fold into a line that would exceed the joined cap")
+        XCTAssertEqual(runs[0].anchor, frag.id); XCTAssertEqual(runs[1].members, [])
+    }
+
+    func testTrailingFragmentFlushesAloneOrIsDeferred() {
         let a = line("It's kind of like C.", 0, 1)
         let b = line("It's", 1.2, 1.4)
         let runs = TranslationCoalescer.runs([a, b])
         XCTAssertEqual(runs.count, 2)
         XCTAssertEqual(runs[1].anchor, b.id)
         XCTAssertEqual(runs[1].text, "It's")
+        // live: the trailing fragment waits for the next stable line
+        let deferred = TranslationCoalescer.runs([a, b], deferTrailing: true)
+        XCTAssertEqual(deferred.map(\.anchor), [a.id])
+        // ... and folds into it once it arrives
+        let c = line("very low level.", 1.5, 2.5)
+        let later = TranslationCoalescer.runs([a, b, c], deferTrailing: true)
+        XCTAssertEqual(later.count, 2)
+        XCTAssertEqual(later[1].anchor, c.id); XCTAssertEqual(later[1].members, [b.id])
+        XCTAssertEqual(later[1].text, "It's very low level.")
     }
 }
