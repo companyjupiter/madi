@@ -31,6 +31,14 @@ final class TranslateEngine {
     var priorityLang: String?
     /// Queued + in-flight turn count, fired whenever it changes (D20 status).
     var onQueueChange: ((Int) -> Void)?
+    /// P1: queued + in-flight DISTINCT LINE count — the honest "N줄 대기". With K
+    /// targets the turn count overstates the backlog K×.
+    var onLineDepthChange: ((Int) -> Void)?
+    /// P1: with this many committed turns already queued, a committed line is
+    /// translated into the priority language ONLY; the other targets are handed
+    /// to onDrop (they backfill at stop). 0 = off.
+    var shedSecondaryTargetsAt = 6
+
 
     private let broker = DNAEngineBroker.shared
     private let clientID = UUID()
@@ -162,6 +170,13 @@ final class TranslateEngine {
         guard !oneLine.isEmpty else { return false }
         // priority language is appended LAST → popLast() serves it FIRST
         var ordered = targets
+        if kind == .committed {
+            let backlog = pending.turns.filter { $0.kind == .committed }.count
+            let decision = TranslationShedPolicy.committedTargets(requested: ordered, priority: priorityLang,
+                                                 committedBacklog: backlog, threshold: shedSecondaryTargetsAt)
+            for lang in decision.shed { onDrop?(id, lang, oneLine) }
+            ordered = decision.send
+        }
         if let p = priorityLang, let i = ordered.firstIndex(of: p) {
             ordered.remove(at: i); ordered.append(p)
         }
@@ -208,6 +223,9 @@ final class TranslateEngine {
         // turns (rail/reconcile) wait instead of damming the caption stream.
         broker.reportCaptionPressure(depth)
         onQueueChange?(depth)
+        var ids = Set(pending.turns.map(\.id))
+        if let t = inflightTurn { ids.insert(t.id) }
+        onLineDepthChange?(ids.count)
     }
 
     /// Write the NEXT turn (newest pending) iff the engine is free. One turn in
