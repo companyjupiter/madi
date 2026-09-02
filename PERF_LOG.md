@@ -1,3 +1,17 @@
+## P2 — 라이브 0.3.5 재계측에서 드러난 3건: 줄 수 비례 메인 스레드 비용·예시 번역 에코·실시간 텍스트 중복 (2026-09-03)
+
+P1 재계측(위 표) 37분 세션의 메인 스레드 샘플과 화면 관찰에서 나온 항목. PR #275.
+
+| # | 원인(코드) | 수정 | 계측 |
+|---|---|---|---|
+| C1 | `TranscriptStore.rebuildLive`: 단어마다 `lines = frozen + tail`(전 줄 복사) + `applyOverlays`(전 줄 joinedText 해시·번역 오버레이) + `applyOverlapSpeakers`(전 줄) + `merger.displayWords`(전 단어 복사) | 동결 줄 = `lines[0..<frozenCount]` 자체(별도 base 배열 없음). 변경은 이미 `lines[i]`에 제자리로 착지하므로 재빌드는 꼬리만 `replaceSubrange`, 오버레이는 스플라이스 지점부터; `displayWords(from:)` | 헤드리스 벤치(`TranscriptStorePerfTests`, 501줄에서 마지막 200단어): **3.718 → 0.585 ms/단어(−84 %)**, 전체 재계산과 동일성 검증 |
+| C2 | `SessionController.translateStableLines`가 단어마다 전 줄 텍스트 해시 + 코알레서 전 줄 실행(라이브 18 %) | 마지막 32줄 창만(끝내기는 전체) — 커밋 cac6511(#274에 포함) | 라이브 재계측 대기 |
+| C3 | `ContentView.flaggedWords`가 30 fps 스냅샷마다 전 단어 순회 + 단어당 UserDefaults 읽기(`Theme.confThreshold`, 18 %) | 스토어에 표시 리비전·임계값 키 캐시(`flaggedWords(threshold:)`) | 라이브 재계측 대기 |
+| C4 | T5 예시 쌍이 진짜 번역이면 4B가 **예시 번역을 먼저(또는 대신) 재생** — "Yeah.=>是的。" 뒤 "是的。因为你被放到了29号位…", 이전 문단 전체 한국어, "only."에 이전 줄 중국어 전문 | `TranslationOutputPolicy.stripExampleEcho`(정규화 비교·원문 위치 절단), 스트리밍은 예시 접두인 동안 보류(`mayBeExampleEcho`), 전체 에코는 소스 대비 비현실적 길이일 때만 폐기→repair 재시도(`exampleTarget`를 턴에 보관) | 라이브 사례 5건 단위 테스트(`TranslationExampleEchoTests`) |
+| C5 | 회색 실시간 텍스트 중복 제거가 **정확한 접미/접두 일치**만 — 경계 단어 재디코드("…way and" vs "way. A lot"), 여러 커밋 줄에 걸친 창("Where's your ring? … No, I'm gonna")이면 문장 전체가 두 번 | `InterimDedupe`: 최장 공통 연속 블록 정렬(≥3토큰, 꼬리 끝 근처일 때만) + 잔여에 기존 정확 규칙 | 라이브 사례 6건 단위 테스트(`InterimDedupeTests`), 중간 반복 3-gram 오탐 방지 테스트 |
+
+게이트: swift test 589/589, 앱 빌드(0.3.6 로컬 DMG). 라이브 재계측 = 0.3.6 같은 영상에서 10분 구간별 앱 CPU가 평탄한지(37→57 % 성장 해소), 예시 에코·회색 중복 0회.
+
 ## P1 — 번역 백로그·프리뷰 기아·줄 정체성 (2026-09-03)
 
 P0(#273) 다음 순위. 라이브 관찰(2타깃·빠른 화자)에서 대기 줄이 5→20(70초)까지 자라고, 회색 실시간 텍스트는 세션 내내 안 보였으며,
@@ -11,7 +25,23 @@ P0(#273) 다음 순위. 라이브 관찰(2타깃·빠른 화자)에서 대기 �
 | P1 | 프리뷰 허용 = `segmentsInFlight==0 && !dnaBusy` → 번역 큐가 비지 않으면 영영 기아 | `dnaBusy`여도 2 s(백로그 >6이면 4 s)마다 1회 허용, 1 s 타이머로 재평가; 정지 시 stability.log에 `stt n/p50/p95/max previews/min` 기록 | 라이브 계측 |
 | L1 | 보류 단어 재디코드가 새 UUID → 첫 단어 id로 키잉된 줄 id·P15 원장·번역이 경계마다 유실 | `Word(id:)` 승계(WordMerger) | 테스트 1건 |
 
-게이트: swift test 579/579, 앱 빌드. **라이브 재계측(0.3.5, 같은 영상)에서 대기 줄 최대치·줄당 번역 지연·프리뷰/분·STT p95를 P0 전과 비교.**
+게이트: swift test 579/579, 앱 빌드. **머지 #274 (2026-09-03).**
+
+라이브 재계측(0.3.5, 같은 영상 EN→中·한 2타깃, 37분 완주 vs 0.3.2는 13:28 정지, `bench/wer_runs/prof/samples4.csv` vs `samples2.csv`):
+
+| 지표 | 0.3.2 (21분, 정지 포함) | 0.3.5 (37분) |
+|---|---:|---:|
+| 정지 | 13:28 메인 스레드 포화 | 없음 — 끝까지 팔로우·회색 실시간 텍스트·번역 도착 |
+| 번역 대기 | 5→20줄(70 s) | 꼬리 1~3줄 이내 착지, 백로그 ≥6이면 한국어 셰딩(배너 상시) → 정지 후 채움 |
+| 앱 CPU 평균/최대 | 43.7 % / 96.5 % | 49.5 % / 97.2 % — **10분 구간별 37→45→57→56 %: 줄 수에 비례 성장(→ P2)** |
+| 앱 RSS 평균 | 205 MB | 191 MB (156→208 MB) |
+| 번역 엔진 CPU / RSS | 22.0 % / 5428 MB | 19.1 % / 3732 MB |
+| GPU device 평균 | 91.7 % | 82.5 % |
+| 메인 스레드(3 s `sample`) | 1896/1896 레이아웃 | 8분: 유휴 46 %, sizeThatFits 86 · 33분: 유휴 16 %, AG update 790, CA commit 477, `engine(didEmit:)` 534(=`translateStableLines` 376 + `ingest` 151), `ContentView.body` 218(=`flaggedWords` 187, `confThreshold` 176) |
+
+STT p95·프리뷰/분(`@final stt`)은 정지 시 stability.log에 기록 — 사용자 세션 정지 후 확인. 새로 드러난 회귀 = **P2**:
+T5 예시 번역 에코(5회 관찰), 회색 실시간 텍스트 중복(6회), 줄 수 비례 메인 스레드 비용.
+
 
 ## P0 — 라이브 세션 정지(메인 스레드 레이아웃 포화) + 팔로우/새 전사 버그 (2026-09-03)
 
