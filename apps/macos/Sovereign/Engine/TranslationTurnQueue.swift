@@ -192,7 +192,12 @@ enum TranslationOutputPolicy {
     /// stored example pair is clean too.
     static func stripPromptMarkerEcho(_ raw: String) -> String {
         var text = raw
-        let markers = ["Now", "now", "现在", "現在", "이제", "지금", "현재", "今", "いま", "Text", "텍스트", "文本"]
+        // P2 (live 0.3.5): a one-letter source ("a") came back as "目标中文：" — the
+        // model labelled the reply with the target language. Label echoes end in
+        // a colon, so the list is safe to extend with the target-language names.
+        let markers = ["Now", "now", "现在", "現在", "이제", "지금", "현재", "今", "いま", "Text", "텍스트", "文本",
+                       "Translation", "translation", "Translated", "翻译", "翻譯", "翻訳", "번역", "目标中文", "目标语言", "目標語言",
+                       "Chinese", "Korean", "Japanese", "English", "中文", "한국어", "日本語", "英语", "英語", "영어", "中国語", "韓国語"]
         var changed = true
         while changed {
             changed = false

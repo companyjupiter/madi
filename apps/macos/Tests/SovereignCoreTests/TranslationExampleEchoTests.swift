@@ -36,6 +36,16 @@ final class TranslationExampleEchoTests: XCTestCase {
         XCTAssertEqual(strip("是的", ex: "是的。因为", src: "Yes."), "是的")
     }
 
+    func testTargetLanguageLabelEchoIsStripped() {
+        // 21:28 live — "a" → "目标中文：" (label only) and label + reply variants.
+        XCTAssertEqual(TranslationOutputPolicy.clean("目标中文：一个"), "一个")
+        XCTAssertEqual(TranslationOutputPolicy.clean("번역: 하나"), "하나")
+        XCTAssertEqual(TranslationOutputPolicy.clean("Korean: 하나"), "하나")
+        XCTAssertEqual(TranslationOutputPolicy.clean("目标中文："), "")
+        // A real sentence that merely starts with a language name keeps its text.
+        XCTAssertEqual(TranslationOutputPolicy.clean("Korean food is great."), "Korean food is great.")
+    }
+
     func testStreamingHoldWhileStillPrefixOfExample() {
         XCTAssertTrue(TranslationOutputPolicy.mayBeExampleEcho("是", exampleTarget: "是的。因为"))
         XCTAssertTrue(TranslationOutputPolicy.mayBeExampleEcho("是的。因", exampleTarget: "是的。因为"))
