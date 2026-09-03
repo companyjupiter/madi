@@ -2691,6 +2691,32 @@ pub fn main() !void {
             // sink low. Measured (test-other worst/best, bench/logprob_probe.py):
             // best mean −0.07, worst mean −0.44, but <−1.0 fires on 0/30 normal utts
             // and only the 1 catastrophic over-generation → a precise, FP-free net.
+            // Predicates run on TEXT tokens only: the ts-mode pass interleaves
+            // <|t|> tokens that would break period runs and inflate 4-gram
+            // diversity, masking a text loop.
+            var loop_txt: [MAX_TOK]u32 = undefined;
+            var loop_idx: [MAX_TOK]u32 = undefined; // generated index of each text token
+            var n_loop: usize = 0;
+            for (0..n_text) |i| {
+                const tk = out_tokens[PL + i];
+                if (tk < EOT) { loop_txt[n_loop] = tk; loop_idx[n_loop] = @intCast(i); n_loop += 1; }
+            }
+            // P3: sentence-length period ×2 — truncate at the end of the first copy
+            // unless the cross-attention says the second copy is real speech.
+            if (envF("LOOP_P2", 1) > 0) {
+                if (tokenPeriod2(loop_txt[0..n_loop])) |p2| {
+                    const nf: usize = @max(@min((pass_got + 319) / 320, @as(usize, ENC_SEQ)), 8);
+                    const adv = loopAdvances(d_ca.ptr, PL, loop_idx[0..n_loop], p2, nf);
+                    if (!adv.genuine) {
+                        const keep: u32 = loop_idx[p2.start + p2.period];
+                        try out.print("[loop-p2] chunk {d}: period {d} x2 at {d} — truncated {d} → {d} tokens (shift {d} span {d}/{d} fr)\n", .{ cchunk + 1, p2.period, p2.start, n_text, keep, adv.shift, adv.span1, adv.span2 });
+                        n_text = keep;
+                        n_loop = p2.start + p2.period;
+                    } else {
+                        try out.print("[loop-p2] chunk {d}: period {d} x2 at {d} — kept, second copy advances (shift {d} span {d}/{d} fr)\n", .{ cchunk + 1, p2.period, p2.start, adv.shift, adv.span1, adv.span2 });
+                    }
+                }
+            }
             var pass_lp: f64 = 0; var pass_nlp: u32 = 0;
             for (0..n_text) |i| { const c = d_conf[PL + i]; if (c > 0) { pass_lp += @log(@as(f64, c)); pass_nlp += 1; } }
             const pass_avg_lp: f64 = if (pass_nlp > 0) pass_lp / @as(f64, @floatFromInt(pass_nlp)) else 0;
@@ -2698,15 +2724,7 @@ pub fn main() !void {
             // (tokenDiversityCollapse — the NRNG ban makes a stuck decode vary
             // each period, which defeats exact-match runs; 2026-07-13 폭파) OR a
             // degenerate decode (avg_logprob below LOGPROB_RESCUE, default −1.0 —
-            // Whisper's threshold). Predicates run on TEXT tokens only: the
-            // ts-mode pass interleaves <|t|> tokens that would break period runs
-            // and inflate 4-gram diversity, masking a text loop.
-            var loop_txt: [MAX_TOK]u32 = undefined;
-            var n_loop: usize = 0;
-            for (0..n_text) |i| {
-                const tk = out_tokens[PL + i];
-                if (tk < EOT) { loop_txt[n_loop] = tk; n_loop += 1; }
-            }
+            // Whisper's threshold).
             const loopy = tokenCollapse(loop_txt[0..n_loop]) or tokenDiversityCollapse(loop_txt[0..n_loop]);
             if (!ts_mode and (loopy or pass_avg_lp < envF("LOGPROB_RESCUE", -1.0))) {
                 ts_mode = true; // discard this pass, re-decode in ts mode
@@ -3666,6 +3684,75 @@ fn tokenDiversityCollapse(toks: []const u32) bool {
     }
     const ratio = @as(f32, @floatFromInt(distinct)) / @as(f32, @floatFromInt(total));
     return ratio < envF("LOOP_DIV_TAU", 0.35);
+}
+
+// P3 (2026-09-03, live 0.3.5 13:35): a sentence-length period repeated exactly
+// TWICE ("…hip hop and why are those" ×2 + a partial tail) reached the committed
+// transcript. Every guard above is tuned to ≥3 occurrences (tokenCollapse p≥9
+// wants run ≥ 2p, diversity 0.54 > 0.35), whisper.cpp's last-32-token entropy
+// gate misses it too (2.74 > 2.4); only OpenAI's gzip ratio (2.62 > 2.4) would
+// fire. A text-only 2× rule would also cut a genuinely repeated sentence (jfk3
+// repeats a sentence 3× for real), so the second copy is asked to prove it
+// ADVANCED in the audio: the raw cross-attention argmax frames of a genuine
+// repeat's second copy sit later than the first copy's and spread over time
+// like it; a stuck decode re-attends the first copy's frames or parks on the
+// window tail. Loops are truncated at the end of the first copy (a re-decode
+// reproduces the same loop; empty tail beats committed garbage). LOOP_P2=0 off.
+const Period2 = struct { start: usize, period: usize };
+fn tokenPeriod2(toks: []const u32) ?Period2 {
+    var p: usize = 9;
+    while (p <= 48) : (p += 1) {
+        if (toks.len < 2 * p) break;
+        var run: usize = 0;
+        for (p..toks.len) |i| {
+            if (toks[i] == toks[i - p]) {
+                run += 1;
+                if (run >= p) return .{ .start = i + 1 - 2 * p, .period = p };
+            } else run = 0;
+        }
+    }
+    return null;
+}
+
+/// Encoder frame the raw cross-attention (6 alignment heads summed) of decode
+/// position `row` peaks at — the TS_DIAG convention (row = the step that emitted
+/// the token, i.e. seed_len-1+generated index).
+fn attnArgmaxFrame(ca: [*]const f32, row: usize, nf: usize) usize {
+    var bj: usize = 0;
+    var bv: f32 = -1e30;
+    for (0..nf) |j| {
+        var v: f32 = 0;
+        for (0..6) |h| v += ca[(h * MAX_TOK + row) * ENC_SEQ + j];
+        if (v > bv) { bv = v; bj = j; }
+    }
+    return bj;
+}
+
+const LoopAdvance = struct { genuine: bool, shift: i64, span1: usize, span2: usize };
+/// Does the second copy of a 2× period advance through the audio like real
+/// speech? Medians/quantiles of the per-token attention argmax frames: genuine ⇔
+/// the second copy's median is ≥ half the first copy's spread later (and ≥ 10
+/// frames = 200 ms), and the second copy spreads over ≥ 40 % of the first's.
+fn loopAdvances(ca: [*]const f32, seed_len: u32, idx: []const u32, p2: Period2, nf: usize) LoopAdvance {
+    var f1: [48]usize = undefined;
+    var f2: [48]usize = undefined;
+    const p = p2.period;
+    for (0..p) |k| {
+        f1[k] = attnArgmaxFrame(ca, seed_len - 1 + idx[p2.start + k], nf);
+        f2[k] = attnArgmaxFrame(ca, seed_len - 1 + idx[p2.start + p + k], nf);
+    }
+    std.mem.sort(usize, f1[0..p], {}, std.sort.asc(usize));
+    std.mem.sort(usize, f2[0..p], {}, std.sort.asc(usize));
+    const Q = struct {
+        fn at(a: []const usize, num: usize, den: usize) usize { return a[@min(a.len - 1, a.len * num / den)]; }
+    };
+    const med1 = Q.at(f1[0..p], 1, 2);
+    const med2 = Q.at(f2[0..p], 1, 2);
+    const span1 = Q.at(f1[0..p], 4, 5) - Q.at(f1[0..p], 1, 5);
+    const span2 = Q.at(f2[0..p], 4, 5) - Q.at(f2[0..p], 1, 5);
+    const shift: i64 = @as(i64, @intCast(med2)) - @as(i64, @intCast(med1));
+    const genuine = shift >= 10 and shift * 2 >= @as(i64, @intCast(span1)) and span2 * 5 >= span1 * 2;
+    return .{ .genuine = genuine, .shift = shift, .span1 = span1, .span2 = span2 };
 }
 
 // 1 ms-hop energy envelope: mean |x| over a ±2 ms window (whisper.cpp
