@@ -1,3 +1,46 @@
+## P3 — 0.3.5 세션 B(37분 관찰) 후속: STT 2회 반복 루프 가드 + 앱 "문맥 길이 vs CPU" 감사 (2026-09-03)
+
+### P3-STT — 문장 길이 주기 ×2 반복이 확정 텍스트로 커밋 (엔진, 머지 대상)
+라이브 13:35 "…hip hop and why are those" 20단어 주기 ×2 + 꼬리가 회색이 아닌 **확정** 줄로 들어왔다. 기존 가드 6종
+(단일토큰 ×3, NRNG 창 16, tokenCollapse p≤8 / p 9..48 run≥2p, 4-gram 다양성 0.35, logprob −1.0)은 전부 "3회 이상"
+기준이라 2회 복사(다양성 0.54)를 통과시키고, whisper.cpp 엔트로피 게이트(2.74>2.4)도 놓친다. OpenAI gzip CR(2.62>2.4)만 잡는다.
+텍스트만 보는 2회 규칙은 jfk3(진짜 3회 반복)를 자른다 → 두 번째 복사가 **오디오에서 전진했는지**를 원시 크로스어텐션 argmax
+프레임(정렬 헤드 6개 합)으로 판정: 중앙값 이동 ≥ 첫 복사 스프레드의 ½(≥10프레임) 그리고 두 번째 스프레드 ≥ 첫 스프레드의 40 %면
+진짜, 아니면 첫 복사 끝에서 절단(재디코드는 같은 루프를 재생). `tokenPeriod2`/`loopAdvances`/`attnArgmaxFrame`, `LOOP_P2=0` 끔.
+
+| 계측 (`bench/wer_runs/p3_run.py` + `p3/chain.sh`, 기준 vs 새 엔진) | 기준 | 새 엔진 |
+|---|---:|---:|
+| LibriSpeech test-other 300 WER | 6.09 % | 6.09 % (가설 변경 0/300) |
+| FLEURS-ko 382 CER | 5.62 % | 5.63 % (1발화 띄어쓰기 1칸, 가드 이벤트 0) |
+| jfk / jfk3 | — | 출력 동일; jfk3 진짜 3회 반복은 주기 26으로 검출됐지만 **유지**(shift 537 fr, span 355/373) |
+| 유도 케이스 AUDIO_CTX=640 ko1_t01 | "…되었습니다." ×2 커밋(가드 0건) | 한 문장으로 절단(shift 0, span 104/114) |
+| 유도 케이스 AUDIO_CTX=512 ko1 t00/t01 | ×N 루프 → ts 재디코드(rescue 2) | 첫 복사에서 절단(443→21/25 토큰), 최종 텍스트 동일, GPU 패스 1회 절약 |
+
+앱 쪽 `WordMerger.isRunawayRepeat`(p≤6단어, 5회 이상)는 그대로 — 엔진 절단이 1차, 장주기 앱 방어선(C)은 텍스트만 봐서 jfk3류를
+자르므로 보류. 회귀 픽스처 후보: LibriSpeech test-other `1688-142285-0087`(s3 hyp 모드에서 2회 복사, rescue 0). quark atom:
+`sovereign_metal_whisper file__transcribe.zig/fn__tokenPeriod2`.
+
+### P3-APP — "문맥이 길어질수록 CPU 증가" 감사 (워크플로 32 에이전트, 반증 12건, 보고서 `bench/wer_runs/prof/wf3_context_growth_report.md`)
+0.3.5 세션 A 메인 스레드 샘플 12.5→33분(줄 ~135→~355): 성장분은 전부 `engine(didEmit:)` 142→534(=`translateStableLines` 89→376,
+`ingest` 51→151, `Line` 복사/`joinedText` 재조립) + `flaggedWords` 116→187(UserDefaults 단어당 읽기) = 33분 메인 스레드 35 %.
+**P2(#275)가 이 항목을 전부 덮는다**(윈도우·tail-only·캐시 → 잔여 3~4 % 추정). 나머지 41 %는 줄 수와 무관한 **고정 바닥**
+= 루트 `ContentView.body`가 프레임 단위로 재실행(30 Hz displayLines + 12.5 Hz streamingTranslation + speakerNumbers 단어당 대입)
+× 창 전체 diff/layout. 세션 B(화자 1명, 줄 느리게 증가)는 24분까지 CPU 31→41 %, 유휴 54~68 %로 같은 결론.
+
+| # | 잔여 원인 | 보정 지분 | 설계 요지 |
+|---|---|---:|---|
+| P3-1 | 루트 body가 `displayLines`/`livePartial`/`streamingTranslation`/`translateQueueDepth`/`speakerNumbers`를 직접 읽음 + 매 패스 새 클로저 7개로 `TranscriptView` 재실행 | 고정 41 % 중 직접 귀속 16 % | TranscriptPane 추출, `displayIsEmpty`/`displaySpeakerIDs` 플래그, 액션 참조 동일성, 등가 가드(`streamingTranslation`, `speakerNumbers`), dead prop 제거 |
+| P3-2 | 내용 모드(기본) `blocks`가 body마다 전 줄 재조립 O(N), 블록마다 `blockTranslations` O(N), RowHost 없음 | 투영 5~11 %(미계측 — 0.3.5 샘플은 전부 상세 모드) | 저장형 `Line.text`, 스토어가 splice 이후 블록만 재계산해 `displayBlocks` 발행, 블록 RowHost |
+| P3-3 | `EnergyArcView` 캔버스가 루트 패스마다 재그리기(동적 색 resolve가 지배) | 2.6 % | Snapshot Equatable + `.equatable()`, 색 1회 resolve, 미터 분리 |
+| P3-4 | tail 줄당 willSet 6~7회 + `speakerNumbers.assignAll` 단어마다 | <1 %(+루트 패스 유발) | 로컬 배열에 오버레이 적용 후 `replaceSubrange` 1회 |
+| P3-5 | 32줄 창 내부 상수(joinedText 재조립·Line 복사·hash) | 1.7 % | 저장형 text + 더티 집합(마지막 줄 지위 상실/텍스트 변경 시만) |
+| P3-6 | `Theme.confThreshold` UserDefaults 호출당 읽기(TranscriptView 잠복) | ~0(리뷰 모드에서 재출현) | body 진입 시 1회 읽어 전달 |
+| P3-7 | tail `refreshTranslationOverlay` 해시+filter 3회 | <0.5 % | P3-2/P3-4에 흡수 |
+
+반증(요지): 인터림 번역 토큰당 무효화(80 ms 게이트+등가 가드, 샘플 0), 타이프라이터 24 ms 틱 O(N)(RowHost로 마지막 행만),
+LoadingDots 루프, SPKOV 전 줄 재투영(희소, 0.11 ms), displayLines COW 복사(0.07 %), 스트리밍 결과 O(N) id 스캔(0.15 %).
+0.3.6 합격 기준: 10분 버킷 앱 CPU 평탄(±5 %p), 33분 샘플 `didEmit` ≤90·`flaggedWords` ≤5·유휴 ≥35 %; 상세+내용 모드 각 1샘플.
+
 ## P2 — 라이브 0.3.5 재계측에서 드러난 3건: 줄 수 비례 메인 스레드 비용·예시 번역 에코·실시간 텍스트 중복 (2026-09-03)
 
 P1 재계측(위 표) 37분 세션의 메인 스레드 샘플과 화면 관찰에서 나온 항목. PR #275.
