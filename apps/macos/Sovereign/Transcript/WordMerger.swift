@@ -27,8 +27,13 @@ struct WordMerger {
 
     /// Words for display: committed + held + current segment preview (filtered),
     /// so the live view shows fresh words immediately, not one segment late.
-    var displayWords: [Word] {
-        var out = committed
+    var displayWords: [Word] { displayWords(from: 0) }
+
+    /// P2: the same view from a committed-prefix offset — the live rebuild only
+    /// regroups words past the frozen prefix, so it must not copy every
+    /// committed word of the session per event.
+    func displayWords(from: Int) -> [Word] {
+        var out = Array(committed[min(from, committed.count)...])
         if let h = held { out.append(h) }
         out.append(contentsOf: segBuffer.filter { $0.t0 >= emitted - eps })
         return out

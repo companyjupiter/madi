@@ -31,6 +31,9 @@ struct TranslationTurn: Equatable {
     /// the tail, instead of re-decoding text the viewer is already looking at.
     /// Interim turns only; nil = free decode (committed turns, retries).
     var forced: String? = nil
+    /// T5/P2: the example TARGET this turn's prompt carried, so the output
+    /// sanitizer can strip a replayed copy of it (see stripExampleEcho).
+    var exampleTarget: String? = nil
 }
 
 /// T5 (2026-09-02): the per-turn prompt body. The instruction head is the cached
@@ -189,7 +192,12 @@ enum TranslationOutputPolicy {
     /// stored example pair is clean too.
     static func stripPromptMarkerEcho(_ raw: String) -> String {
         var text = raw
-        let markers = ["Now", "now", "现在", "現在", "이제", "지금", "현재", "今", "いま", "Text", "텍스트", "文本"]
+        // P2 (live 0.3.5): a one-letter source ("a") came back as "目标中文：" — the
+        // model labelled the reply with the target language. Label echoes end in
+        // a colon, so the list is safe to extend with the target-language names.
+        let markers = ["Now", "now", "现在", "現在", "이제", "지금", "현재", "今", "いま", "Text", "텍스트", "文本",
+                       "Translation", "translation", "Translated", "翻译", "翻譯", "翻訳", "번역", "目标中文", "目标语言", "目標語言",
+                       "Chinese", "Korean", "Japanese", "English", "中文", "한국어", "日本語", "英语", "英語", "영어", "中国語", "韓国語"]
         var changed = true
         while changed {
             changed = false
@@ -215,6 +223,56 @@ enum TranslationOutputPolicy {
         }
         return text
     }
+
+    /// P2 (live 0.3.5, 2026-09-03): with a real pair in the T5 example slot the
+    /// 4B sometimes REPLAYS the example translation before — or instead of — the
+    /// requested one: "Yeah. => 是的。" then "是的。因为你被放到了29号位，对吧?", a whole
+    /// earlier Korean paragraph ahead of "…알지, 아침 3시에 화장실 갈 때 이 약을 복용해.",
+    /// and for "only." the previous line's long Chinese translation verbatim.
+    /// Strip a leading copy of the example target (normalized: case, spacing and
+    /// punctuation ignored; the cut is made in the raw text). A whole-output echo
+    /// is dropped only when it is implausibly long for the source — "Yes." →
+    /// "是的。" after "Yeah. => 是的。" is a legitimate repeat and is kept.
+    static func stripExampleEcho(_ text: String, exampleTarget: String?, source: String) -> String {
+        guard let ex = exampleTarget else { return text }
+        let exKeys = echoKeys(ex)
+        guard exKeys.count >= 2 else { return text }
+        var pos = 0
+        var idx = text.startIndex
+        while pos < exKeys.count, idx < text.endIndex {
+            if let k = echoKey(text[idx]) {
+                if k != exKeys[pos] { return text }     // diverged: not an echo
+                pos += 1
+            }
+            idx = text.index(after: idx)
+        }
+        guard pos == exKeys.count else { return text }  // output shorter than the example
+        // Drop the separator the model put between the replay and the real reply
+        // (leading side only — the reply's own terminal punctuation stays).
+        let seam = CharacterSet(charactersIn: " \t\n.。,，;；:：!?！？…-—")
+        let rest = String(text[idx...].drop(while: { $0.unicodeScalars.allSatisfy(seam.contains) }))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !rest.isEmpty { return rest }
+        // Whole output == example target. Keep it unless it cannot be a translation
+        // of this source (far longer than the source could yield).
+        let srcKeys = echoKeys(source).count
+        return exKeys.count > 3 * srcKeys + 6 ? "" : text
+    }
+
+    /// True while `partial` is still a (normalized) prefix of the example target
+    /// — the stream may be replaying the example, so hold it off screen.
+    static func mayBeExampleEcho(_ partial: String, exampleTarget: String?) -> Bool {
+        guard let ex = exampleTarget else { return false }
+        let p = echoKeys(partial), e = echoKeys(ex)
+        guard !p.isEmpty, e.count >= 2, p.count < e.count else { return false }
+        return Array(e.prefix(p.count)) == p
+    }
+
+    private static func echoKey(_ c: Character) -> Character? {
+        guard c.isLetter || c.isNumber else { return nil }
+        return Character(c.lowercased())
+    }
+    private static func echoKeys(_ s: String) -> [Character] { s.compactMap(echoKey) }
 
     static func shouldRetry(_ output: String, source: String, target: String) -> Bool {
         let cleaned = clean(output)

@@ -1,3 +1,118 @@
+## P4 — 0.3.6 라이브 검증(한국어 40분) + 새로 드러난 3건 (2026-09-03)
+
+유튜브 한국어 1인 진행 영상, KO→EN·日 2타깃, 40분. 계측 `bench/wer_runs/prof/samples6.csv`·`mt6/`(2분 간격 스택 21개).
+
+### P2/P3 검증 — 전부 확인됨
+| 메인 스레드 심볼(누적 47,586 샘플) | 0.3.5 @33분 | 0.3.6 @40분 |
+|---|---:|---:|
+| 유휴 | 15 % | **57.4 %** |
+| `engine(didEmit:)` | 25.9 % | **0.2 %** |
+| ㄴ `translateStableLines` | 18.3 % | 0.1 % |
+| ㄴ `TranscriptStore.ingest` | 7.3 % | 0.0 % |
+| `ContentView.body` | 10.7 % | 1.8 % |
+| ㄴ `flaggedWords` | 9.1 % | **0** |
+
+앱 CPU 5분 버킷 30.1 → 32.5 → 40.8 → 38.2 → 46.4 → 36.2 → 44.9 → 31.0 % — **줄 수 비례 성장 사라짐**(0.3.5는 37→45→57 단조 증가). RSS 184→218 MB.
+T5 예시 에코·회색 텍스트 중복·STT 2회 반복 루프 = 40분간 **0회 관찰**(0.3.5 37분에 각각 5·6·1회).
+
+### 새로 드러난 3건
+| # | 증상(라이브) | 원인 | 조치 |
+|---|---|---|---|
+| P4-1 | **실시간 요약이 00:01:24 이후 28분간 갱신 0회** | `SessionController.tickLiveSummary`/`tickLiveRail`이 `translateQueueDepth == 0 && translateBacklog == 0`일 때만 실행. 빠른 화자 2타깃에서 큐는 영영 0이 안 됨 → "한가할 때만" = "영영 안 함" | `BackgroundLaneAdmission`: 유휴 fast path + **90 s 기아 밸브**(브로커 `backgroundAgingSeconds`와 동일). 브로커 우선순위는 그대로라 *언제 큐에 넣는지*만 바뀌고 *어떤 순서로 서빙하는지*는 불변. 스킵 틱·기아 승인 수를 stability.log에 기록 |
+| P4-2 | **커밋된 줄이 무한히 자람** — 250자 넘는 줄이 1분 전 내용의 번역을 달고 있음 | `groupLoop`의 분리 규칙이 1.5 s 침묵·화자 변경·문장부호뿐. 한국어 Whisper는 문장 중간 구두점을 내지 않고 진행자는 1.5 s를 안 쉼. `translateStableLines`는 마지막 줄을 빼고 디스패치하므로 자라는 꼬리 줄은 **자라는 동안 절대 번역되지 않고**, 새 단어마다 리비전이 바뀌어 이미 온 번역도 stale | 길이/시간 상한. 사용자 저장 전사록 8세션 952줄 실측: p50 5단어/2 s, p95 20/11 s, p99 41/36 s, **최악 1753단어·567 s가 한 줄**. 28단어 또는 14 s 상한 = 실제 줄의 2.6 %/2.1 %만 분리. 16단어 이후엔 쉼표를 경계로 선호. 판정은 P15 원장을 거쳐 **한 번만 결정되고 재생** |
+| P4-3 | **1인 영상에서 화자 10명**(28분 시점 4·1·2·6·3번이 27/24/23/14/11 %로 균등 분할), 거의 모든 줄이 "화자분리중…" | 에이전트 조사(보고서 아래) — ① `transcribe.zig:948`이 recluster의 id 발행을 `max_k`가 아닌 리터럴 32로 제한(온라인 출생 경로 `:772`는 `max_k` 준수) ② 앱 표시번호는 append-only이고 엔진에 "id 개명" 이벤트가 없음 ③ margin이 낮게 유지돼 "화자분리중"이 안 풀림 | 아래 실측 참조. **엔진 수정은 보류**, 앱 쪽 파급만 차단(P4-4) |
+| P4-4 | 화자 churn이 번역 처리량을 깎음 | `TranslationCoalescer.runs`가 조각 접기를 화자 동일성으로 판단 → churn마다 조각이 독자 턴을 소비. 관측 07:20~07:25 패턴에서 2타깃 기준 **10턴 vs 안정 라벨 6턴** | 미결정 라벨(`SpeakerID.isDeciding`)은 run을 쪼개지 않게. 확정 라벨은 그대로 분리하고 `maxGap`·`maxJoinedChars`가 계속 경계를 지킴 |
+
+### P4-3 화자 실측 (`bench/diar_panel_eval.py`, VoxConverse + ko4, live_stream)
+| 케이스 | 참조 화자 | 기준 엔진 | D1(recluster id를 `max_k`로 제한) | DIAR_SIM 0.30 | 0.35 | 0.50 | 0.55 |
+|---|---:|---|---|---|---|---|---|
+| xypdm (1인, 417 s — **관측과 같은 형태**) | 1 | 5명 / DER 6.49 | 5명 / 6.49 | 4명 / 6.34 | 4명 / 6.34 | 5명 / 6.49 | 6명 / 7.01 |
+| ufpel (10인, 401 s — 위험 케이스) | 10 | 9명 / 11.29 | **8명** / 11.29 (relabel DER 10.92→11.56) | 7명 / 12.67 | 7명 / 11.85 | 9명 / 11.75 | 9명 / 11.75 |
+| ko4 | 4 | 1명 / 6.47 | 1명 / 6.47 | 변화 없음 | 변화 없음 | 변화 없음 | 변화 없음 |
+
+**두 레버 모두 반증.** D1은 계약(≤`DIAR_MAXK`)을 실제로 지키게 만들지만(ufpel 9→8) **관측된 1인 과분할을 전혀 못 고치고**(xypdm 5명 그대로), 참조 화자가 상한을 넘는 파일에서 relabel DER를 0.64 pt 악화시킨다 → **미머지**, 패치 보관 `bench/runs/p4/d1_recluster_cap.patch`. `DIAR_SIM` 하향은 xypdm을 5→4로 줄이는 대신 ufpel DER를 11.29→11.85/12.67로 악화 → **상수 하나로는 안 됨**.
+**후보 A 반증·후보 B 부분 채택 (09-03 착수)**: 설계 `engine/metal/DIAR_OVERSPLIT_DESIGN.md`.
+- **A(잠정 centroid를 배정에서도 격리) 반증**: xypdm 5명 그대로, ufpel DER 11.29→12.67. 추적으로 원인 판명 —
+  xypdm의 **온라인 출생은 id 0·1 두 개뿐**이고 유령 4개는 전부 `liveRecluster` write-back이 찍은 것이라 출생 경로를
+  손대는 방향 자체가 빗나갔다. 패치 보관 `bench/runs/p4/provA_two_tier_scan.patch`.
+- **원인 확정**: `DIAR_K_TRACE` 로 본 auto-K 이력은 2,1,2,2,6,6,4,4 → **m=136 이후 13회 연속 K=1**(최고 실루엣 0.148,
+  `DIAR_SIL_TAU` 0.35 한참 아래). 재클러스터는 정답을 알고 있었고, livefix 의 broad 되펼침(`:2094`)이 창 7개(2.1 %)·
+  3개(0.9 %)짜리 유령을 라벨 후보로 되살렸다. 설계의 "min_sep 붕괴일 때만 차단"은 실측 붕괴 사유가 실루엣이라 발동하지 않는다.
+- **B(되펼침 후보에 점유율 하한 3 %) 채택**: 커밋 7d77166. 1차 구현은 하한을 active 목록에도 적용해 ufpel 진짜 소수
+  화자를 지워 DER +1.38 → **하한은 fallback 목록만 게이팅**하도록 수정(재클러스터의 결정은 점유율로 재심하지 않는다).
+
+| 케이스 | 참조 | 화자 수(라이브/최종) | DER(라이브/최종) | 오라벨 노출 |
+|---|---:|---|---|---|
+| xypdm 1인 | 1 | 5→5 / **3→1** | 6.49→6.47 / **6.34→5.51** | **4.61 %→1.19 %** |
+| ufpel 10인 | 10 | 9→9 / 7→7 | 11.29→11.29 / 10.92→10.92 | 13.40→13.40 |
+| ko2 / ko4 | 2·4 | 불변 | 불변 | — |
+
+**미해결**: 녹음 중 보이는 화자 수(xypdm 5명)는 온라인 per-window 경로에서 나오므로 B가 건드리지 못한다. 설계의 합격선
+(화자 ≤2, overcount ≤1)은 미달 — 부분 채택이며 회귀는 0. 점유율만으로 유령과 진짜 소수 화자를 가를 수 없다는 것도 실측됨
+(xypdm 유령 2.1 %·0.9 % vs ufpel 진짜 화자 1.7 %~3.3 %, 구간 중첩) — 다음 레버는 점유율 임계가 아니어야 한다.
+
+남은 후보(미착수, 위험 순): ① 신규 centroid를 provisional로 두고 독립 근거(≥3창·≥3 s) 확보 전엔 다른 창을 claim 못 하게(`transcribe.zig:771-786`) ② auto-K가 K를 접었을 때 라벨링의 broad 폴백이 되펼치지 않게(`:2094-2097`, 패널 under-split 회귀 위험 최대) ③ recluster 후 centroid 병합 패스 + `SPKMERGE` 이벤트로 앱 표시번호까지 접기.
+게이트: `bench/diar_panel_eval.py --audio … --ref … --mode auto --live` + `bench/live_ux_gate.py --require-win`(`speaker_overcount_peak` 한계 0.00 이미 내장).
+
+게이트: swift test 602/602, 앱 빌드. 잔여 = 0.3.7 라이브에서 요약 갱신 주기·최장 줄 길이·화자 수 재확인.
+
+## P3 — 0.3.5 세션 B(37분 관찰) 후속: STT 2회 반복 루프 가드 + 앱 "문맥 길이 vs CPU" 감사 (2026-09-03)
+
+### P3-STT — 문장 길이 주기 ×2 반복이 확정 텍스트로 커밋 (엔진, 머지 대상)
+라이브 13:35 "…hip hop and why are those" 20단어 주기 ×2 + 꼬리가 회색이 아닌 **확정** 줄로 들어왔다. 기존 가드 6종
+(단일토큰 ×3, NRNG 창 16, tokenCollapse p≤8 / p 9..48 run≥2p, 4-gram 다양성 0.35, logprob −1.0)은 전부 "3회 이상"
+기준이라 2회 복사(다양성 0.54)를 통과시키고, whisper.cpp 엔트로피 게이트(2.74>2.4)도 놓친다. OpenAI gzip CR(2.62>2.4)만 잡는다.
+텍스트만 보는 2회 규칙은 jfk3(진짜 3회 반복)를 자른다 → 두 번째 복사가 **오디오에서 전진했는지**를 원시 크로스어텐션 argmax
+프레임(정렬 헤드 6개 합)으로 판정: 중앙값 이동 ≥ 첫 복사 스프레드의 ½(≥10프레임) 그리고 두 번째 스프레드 ≥ 첫 스프레드의 40 %면
+진짜, 아니면 첫 복사 끝에서 절단(재디코드는 같은 루프를 재생). `tokenPeriod2`/`loopAdvances`/`attnArgmaxFrame`, `LOOP_P2=0` 끔.
+
+| 계측 (`bench/wer_runs/p3_run.py` + `p3/chain.sh`, 기준 vs 새 엔진) | 기준 | 새 엔진 |
+|---|---:|---:|
+| LibriSpeech test-other 300 WER | 6.09 % | 6.09 % (가설 변경 0/300) |
+| FLEURS-ko 382 CER | 5.62 % | 5.63 % (1발화 띄어쓰기 1칸, 가드 이벤트 0) |
+| jfk / jfk3 | — | 출력 동일; jfk3 진짜 3회 반복은 주기 26으로 검출됐지만 **유지**(shift 537 fr, span 355/373) |
+| 유도 케이스 AUDIO_CTX=640 ko1_t01 | "…되었습니다." ×2 커밋(가드 0건) | 한 문장으로 절단(shift 0, span 104/114) |
+| 유도 케이스 AUDIO_CTX=512 ko1 t00/t01 | ×N 루프 → ts 재디코드(rescue 2) | 첫 복사에서 절단(443→21/25 토큰), 최종 텍스트 동일, GPU 패스 1회 절약 |
+
+앱 쪽 `WordMerger.isRunawayRepeat`(p≤6단어, 5회 이상)는 그대로 — 엔진 절단이 1차, 장주기 앱 방어선(C)은 텍스트만 봐서 jfk3류를
+자르므로 보류. 회귀 픽스처 후보: LibriSpeech test-other `1688-142285-0087`(s3 hyp 모드에서 2회 복사, rescue 0). quark atom:
+`sovereign_metal_whisper file__transcribe.zig/fn__tokenPeriod2`.
+
+### P3-APP — "문맥이 길어질수록 CPU 증가" 감사 (워크플로 32 에이전트, 반증 12건, 보고서 `bench/wer_runs/prof/wf3_context_growth_report.md`)
+0.3.5 세션 A 메인 스레드 샘플 12.5→33분(줄 ~135→~355): 성장분은 전부 `engine(didEmit:)` 142→534(=`translateStableLines` 89→376,
+`ingest` 51→151, `Line` 복사/`joinedText` 재조립) + `flaggedWords` 116→187(UserDefaults 단어당 읽기) = 33분 메인 스레드 35 %.
+**P2(#275)가 이 항목을 전부 덮는다**(윈도우·tail-only·캐시 → 잔여 3~4 % 추정). 나머지 41 %는 줄 수와 무관한 **고정 바닥**
+= 루트 `ContentView.body`가 프레임 단위로 재실행(30 Hz displayLines + 12.5 Hz streamingTranslation + speakerNumbers 단어당 대입)
+× 창 전체 diff/layout. 세션 B(화자 1명, 줄 느리게 증가)는 24분까지 CPU 31→41 %, 유휴 54~68 %로 같은 결론.
+
+| # | 잔여 원인 | 보정 지분 | 설계 요지 |
+|---|---|---:|---|
+| P3-1 | 루트 body가 `displayLines`/`livePartial`/`streamingTranslation`/`translateQueueDepth`/`speakerNumbers`를 직접 읽음 + 매 패스 새 클로저 7개로 `TranscriptView` 재실행 | 고정 41 % 중 직접 귀속 16 % | TranscriptPane 추출, `displayIsEmpty`/`displaySpeakerIDs` 플래그, 액션 참조 동일성, 등가 가드(`streamingTranslation`, `speakerNumbers`), dead prop 제거 |
+| P3-2 | 내용 모드(기본) `blocks`가 body마다 전 줄 재조립 O(N), 블록마다 `blockTranslations` O(N), RowHost 없음 | 투영 5~11 %(미계측 — 0.3.5 샘플은 전부 상세 모드) | 저장형 `Line.text`, 스토어가 splice 이후 블록만 재계산해 `displayBlocks` 발행, 블록 RowHost |
+| P3-3 | `EnergyArcView` 캔버스가 루트 패스마다 재그리기(동적 색 resolve가 지배) | 2.6 % | Snapshot Equatable + `.equatable()`, 색 1회 resolve, 미터 분리 |
+| P3-4 | tail 줄당 willSet 6~7회 + `speakerNumbers.assignAll` 단어마다 | <1 %(+루트 패스 유발) | 로컬 배열에 오버레이 적용 후 `replaceSubrange` 1회 |
+| P3-5 | 32줄 창 내부 상수(joinedText 재조립·Line 복사·hash) | 1.7 % | 저장형 text + 더티 집합(마지막 줄 지위 상실/텍스트 변경 시만) |
+| P3-6 | `Theme.confThreshold` UserDefaults 호출당 읽기(TranscriptView 잠복) | ~0(리뷰 모드에서 재출현) | body 진입 시 1회 읽어 전달 |
+| P3-7 | tail `refreshTranslationOverlay` 해시+filter 3회 | <0.5 % | P3-2/P3-4에 흡수 |
+
+반증(요지): 인터림 번역 토큰당 무효화(80 ms 게이트+등가 가드, 샘플 0), 타이프라이터 24 ms 틱 O(N)(RowHost로 마지막 행만),
+LoadingDots 루프, SPKOV 전 줄 재투영(희소, 0.11 ms), displayLines COW 복사(0.07 %), 스트리밍 결과 O(N) id 스캔(0.15 %).
+0.3.6 합격 기준: 10분 버킷 앱 CPU 평탄(±5 %p), 33분 샘플 `didEmit` ≤90·`flaggedWords` ≤5·유휴 ≥35 %; 상세+내용 모드 각 1샘플.
+
+## P2 — 라이브 0.3.5 재계측에서 드러난 3건: 줄 수 비례 메인 스레드 비용·예시 번역 에코·실시간 텍스트 중복 (2026-09-03)
+
+P1 재계측(위 표) 37분 세션의 메인 스레드 샘플과 화면 관찰에서 나온 항목. PR #275.
+
+| # | 원인(코드) | 수정 | 계측 |
+|---|---|---|---|
+| C1 | `TranscriptStore.rebuildLive`: 단어마다 `lines = frozen + tail`(전 줄 복사) + `applyOverlays`(전 줄 joinedText 해시·번역 오버레이) + `applyOverlapSpeakers`(전 줄) + `merger.displayWords`(전 단어 복사) | 동결 줄 = `lines[0..<frozenCount]` 자체(별도 base 배열 없음). 변경은 이미 `lines[i]`에 제자리로 착지하므로 재빌드는 꼬리만 `replaceSubrange`, 오버레이는 스플라이스 지점부터; `displayWords(from:)` | 헤드리스 벤치(`TranscriptStorePerfTests`, 501줄에서 마지막 200단어): **3.718 → 0.585 ms/단어(−84 %)**, 전체 재계산과 동일성 검증 |
+| C2 | `SessionController.translateStableLines`가 단어마다 전 줄 텍스트 해시 + 코알레서 전 줄 실행(라이브 18 %) | 마지막 32줄 창만(끝내기는 전체) — 커밋 cac6511(#274에 포함) | 라이브 재계측 대기 |
+| C3 | `ContentView.flaggedWords`가 30 fps 스냅샷마다 전 단어 순회 + 단어당 UserDefaults 읽기(`Theme.confThreshold`, 18 %) | 스토어에 표시 리비전·임계값 키 캐시(`flaggedWords(threshold:)`) | 라이브 재계측 대기 |
+| C4 | T5 예시 쌍이 진짜 번역이면 4B가 **예시 번역을 먼저(또는 대신) 재생** — "Yeah.=>是的。" 뒤 "是的。因为你被放到了29号位…", 이전 문단 전체 한국어, "only."에 이전 줄 중국어 전문 | `TranslationOutputPolicy.stripExampleEcho`(정규화 비교·원문 위치 절단), 스트리밍은 예시 접두인 동안 보류(`mayBeExampleEcho`), 전체 에코는 소스 대비 비현실적 길이일 때만 폐기→repair 재시도(`exampleTarget`를 턴에 보관) | 라이브 사례 5건 단위 테스트(`TranslationExampleEchoTests`) |
+| C5 | 회색 실시간 텍스트 중복 제거가 **정확한 접미/접두 일치**만 — 경계 단어 재디코드("…way and" vs "way. A lot"), 여러 커밋 줄에 걸친 창("Where's your ring? … No, I'm gonna")이면 문장 전체가 두 번 | `InterimDedupe`: 최장 공통 연속 블록 정렬(≥3토큰, 꼬리 끝 근처일 때만) + 잔여에 기존 정확 규칙 | 라이브 사례 6건 단위 테스트(`InterimDedupeTests`), 중간 반복 3-gram 오탐 방지 테스트 |
+
+게이트: swift test 589/589, 앱 빌드(0.3.6 로컬 DMG). 라이브 재계측 = 0.3.6 같은 영상에서 10분 구간별 앱 CPU가 평탄한지(37→57 % 성장 해소), 예시 에코·회색 중복 0회.
+
 ## P1 — 번역 백로그·프리뷰 기아·줄 정체성 (2026-09-03)
 
 P0(#273) 다음 순위. 라이브 관찰(2타깃·빠른 화자)에서 대기 줄이 5→20(70초)까지 자라고, 회색 실시간 텍스트는 세션 내내 안 보였으며,
@@ -11,7 +126,23 @@ P0(#273) 다음 순위. 라이브 관찰(2타깃·빠른 화자)에서 대기 �
 | P1 | 프리뷰 허용 = `segmentsInFlight==0 && !dnaBusy` → 번역 큐가 비지 않으면 영영 기아 | `dnaBusy`여도 2 s(백로그 >6이면 4 s)마다 1회 허용, 1 s 타이머로 재평가; 정지 시 stability.log에 `stt n/p50/p95/max previews/min` 기록 | 라이브 계측 |
 | L1 | 보류 단어 재디코드가 새 UUID → 첫 단어 id로 키잉된 줄 id·P15 원장·번역이 경계마다 유실 | `Word(id:)` 승계(WordMerger) | 테스트 1건 |
 
-게이트: swift test 579/579, 앱 빌드. **라이브 재계측(0.3.5, 같은 영상)에서 대기 줄 최대치·줄당 번역 지연·프리뷰/분·STT p95를 P0 전과 비교.**
+게이트: swift test 579/579, 앱 빌드. **머지 #274 (2026-09-03).**
+
+라이브 재계측(0.3.5, 같은 영상 EN→中·한 2타깃, 37분 완주 vs 0.3.2는 13:28 정지, `bench/wer_runs/prof/samples4.csv` vs `samples2.csv`):
+
+| 지표 | 0.3.2 (21분, 정지 포함) | 0.3.5 (37분) |
+|---|---:|---:|
+| 정지 | 13:28 메인 스레드 포화 | 없음 — 끝까지 팔로우·회색 실시간 텍스트·번역 도착 |
+| 번역 대기 | 5→20줄(70 s) | 꼬리 1~3줄 이내 착지, 백로그 ≥6이면 한국어 셰딩(배너 상시) → 정지 후 채움 |
+| 앱 CPU 평균/최대 | 43.7 % / 96.5 % | 49.5 % / 97.2 % — **10분 구간별 37→45→57→56 %: 줄 수에 비례 성장(→ P2)** |
+| 앱 RSS 평균 | 205 MB | 191 MB (156→208 MB) |
+| 번역 엔진 CPU / RSS | 22.0 % / 5428 MB | 19.1 % / 3732 MB |
+| GPU device 평균 | 91.7 % | 82.5 % |
+| 메인 스레드(3 s `sample`) | 1896/1896 레이아웃 | 8분: 유휴 46 %, sizeThatFits 86 · 33분: 유휴 16 %, AG update 790, CA commit 477, `engine(didEmit:)` 534(=`translateStableLines` 376 + `ingest` 151), `ContentView.body` 218(=`flaggedWords` 187, `confThreshold` 176) |
+
+STT p95·프리뷰/분(`@final stt`)은 정지 시 stability.log에 기록 — 사용자 세션 정지 후 확인. 새로 드러난 회귀 = **P2**:
+T5 예시 번역 에코(5회 관찰), 회색 실시간 텍스트 중복(6회), 줄 수 비례 메인 스레드 비용.
+
 
 ## P0 — 라이브 세션 정지(메인 스레드 레이아웃 포화) + 팔로우/새 전사 버그 (2026-09-03)
 
