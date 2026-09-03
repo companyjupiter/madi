@@ -16,6 +16,11 @@ struct TranslationCoalescer {
         let text: String
         let start: Double
         let end: Double
+        /// P4 (2026-09-03): the clustering has not settled on this line's speaker
+        /// yet (the acoustic margin is below SpeakerID.settledMargin — the same
+        /// state the UI renders as "화자분리중…"). A label nobody believes must
+        /// not be used to make a decision: see `runs`.
+        var undecided: Bool = false
     }
     struct Run: Equatable {
         /// The line that receives the translation (last line of the run).
@@ -53,6 +58,18 @@ struct TranslationCoalescer {
     /// the run past this are flushed alone first.
     static let maxJoinedChars = 220
 
+    /// Two lines may share a run when the speaker label agrees — or when either
+    /// label is still undecided. P4: live 0.3.6 ran a single presenter as 10
+    /// churning ids, and every churn between two fragments forced them apart
+    /// into their own DNA turns (measured on the observed 07:20–07:25 pattern:
+    /// 10 turns instead of 6 for two targets). The gap and joined-length limits
+    /// still bound what a run may absorb, so the worst case of joining across a
+    /// real but unsettled speaker change is one short sentence of context.
+    static func sameVoice(_ a: Input, _ b: Input) -> Bool {
+        if a.undecided || b.undecided { return true }
+        return a.speaker == b.speaker
+    }
+
     static func runs(_ lines: [Input], maxGap: Double = 3.0, deferTrailing: Bool = false) -> [Run] {
         var out: [Run] = []
         var pending: [Input] = []   // fragments waiting for an anchor
@@ -67,7 +84,7 @@ struct TranslationCoalescer {
             pending.removeAll()
         }
         for line in lines {
-            let joinable = pending.last.map { $0.speaker == line.speaker && line.start - $0.end <= maxGap } ?? true
+            let joinable = pending.last.map { Self.sameVoice($0, line) && line.start - $0.end <= maxGap } ?? true
             if !joinable { flush(anchor: nil) }
             if pendingChars() + line.text.count > Self.maxJoinedChars { flush(anchor: nil) }
             if isFragment(line.text) {

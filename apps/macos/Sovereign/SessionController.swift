@@ -1316,7 +1316,15 @@ final class SessionController: EngineProcessDelegate {
         // P1: fragment lines fold into the next stable line of the same speaker and
         // translate with it (one turn per target instead of one per fragment).
         let stable = Array(lines[min(from, lines.count)..<min(upTo, lines.count)])
-        let inputs = stable.map { TranslationCoalescer.Input(id: $0.id, speaker: $0.speaker, text: $0.text, start: $0.start, end: $0.end) }
+        // P4: pass the "still deciding" flag so a churning diarization cannot
+        // split fragments off into their own turns (TranslationCoalescer.sameVoice).
+        let newestEnd = lines.last?.end ?? 0
+        let inputs = stable.map {
+            TranslationCoalescer.Input(id: $0.id, speaker: $0.speaker, text: $0.text,
+                                       start: $0.start, end: $0.end,
+                                       undecided: SpeakerID.isDeciding(margin: $0.speakerMargin,
+                                                                      age: max(0, newestEnd - $0.end)))
+        }
         for run in TranslationCoalescer.runs(inputs, deferTrailing: !includingLast) {
             if run.members.isEmpty, let line = stable.first(where: { $0.id == run.anchor }) {
                 translateLine(line)
