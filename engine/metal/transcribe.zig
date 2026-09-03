@@ -1575,13 +1575,19 @@ pub fn main() !void {
                     // a panel to K<3, fall back to robust online-birthed ids.
                     const final_min_win = envU("DIAR_FINAL_MIN_WIN", 3);
                     const final_min_active = envU("DIAR_FINAL_MIN_ACTIVE", 3);
+                    // P4-B: same share floor as the mid-session livefix path.
+                    const final_total = live_emb.items.len / diar.EMB;
+                    const final_share_win: u32 = @intFromFloat(@floor(
+                        envF("DIAR_LIVEFIX_MIN_SHARE", 0.03) * @as(f32, @floatFromInt(final_total))));
                     const final_ids = try alloc.alloc(usize, cents.items.len); defer alloc.free(final_ids);
                     const broad_ids = try alloc.alloc(usize, cents.items.len); defer alloc.free(broad_ids);
                     var nc: usize = 0;
                     var nbroad: usize = 0;
                     for (cents.items, 0..) |*c, sidx| {
                         if (sidx >= n_anchor and c.count < final_min_win) continue;
-                        broad_ids[nbroad] = sidx; nbroad += 1;
+                        if (sidx < n_anchor or c.count >= final_share_win) {
+                            broad_ids[nbroad] = sidx; nbroad += 1;
+                        }
                         if (sidx < final_active.len and final_active[sidx]) { final_ids[nc] = sidx; nc += 1; }
                     }
                     if (diar_k == 0 and n_anchor == 0 and nc < final_min_active and nbroad >= final_min_active) {
@@ -2058,6 +2064,21 @@ pub fn main() !void {
                                 if (!std.mem.eql(u8, std.posix.getenv("DIAR_LIVEFIX") orelse "1", "0")) {
                                     const livefix_min_win = envU("DIAR_LIVEFIX_MIN_WIN", 3);
                                     const livefix_min_active = envU("DIAR_LIVEFIX_MIN_ACTIVE", 3);
+                                    // P4-B (2026-09-03): a label candidate must own a
+                                    // meaningful SHARE of the session, not just 3 windows.
+                                    // The broad fallback below exists so a panel that
+                                    // auto-K under-splits still has ids to label with; with
+                                    // an absolute floor alone it also resurrects slivers.
+                                    // Measured on VoxConverse xypdm (1 real speaker, 417 s):
+                                    // auto-K said K=1 on the last 13 consecutive reclusters
+                                    // (best silhouette 0.148, far under DIAR_SIL_TAU 0.35),
+                                    // yet ids holding 7/327 and 3/327 windows (2.1 %, 0.9 %)
+                                    // cleared the count floor, so the fallback re-expanded to
+                                    // 3 candidates and the user saw 5 speakers. A real
+                                    // speaker in a panel holds far more than this floor.
+                                    const livefix_min_share = envF("DIAR_LIVEFIX_MIN_SHARE", 0.03);
+                                    const livefix_share_win: u32 = @intFromFloat(@floor(
+                                        livefix_min_share * @as(f32, @floatFromInt(acc_total))));
                                     const livefix_ids = try alloc.alloc(usize, cents.items.len); defer alloc.free(livefix_ids);
                                     const livefix_broad_ids = try alloc.alloc(usize, cents.items.len); defer alloc.free(livefix_broad_ids);
                                     var ncl: usize = 0;
@@ -2088,7 +2109,12 @@ pub fn main() !void {
                                             });
                                         }
                                         if (sidx >= n_anchor and c.count < livefix_min_win) continue;
-                                        livefix_broad_ids[nbroad_livefix] = sidx; nbroad_livefix += 1;
+                                        // The share floor gates the FALLBACK candidates only.
+                                        // The active list is the recluster's own decision and is
+                                        // never second-guessed by an occupancy rule.
+                                        if (sidx < n_anchor or c.count >= livefix_share_win) {
+                                            livefix_broad_ids[nbroad_livefix] = sidx; nbroad_livefix += 1;
+                                        }
                                         if (sidx < livefix_active.len and livefix_active[sidx]) { livefix_ids[ncl] = sidx; ncl += 1; }
                                     }
                                     if (diar_k == 0 and n_anchor == 0 and ncl < livefix_min_active and nbroad_livefix >= livefix_min_active) {
