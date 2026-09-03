@@ -320,6 +320,24 @@ final class TranscriptStore {
     /// Start a new line when the inter-word gap exceeds this (readability —
     /// without it a monologue renders as one giant line).
     private let lineBreakGap = 1.5
+    // P4 (2026-09-03): the gap and the sentence-ender were the ONLY break rules,
+    // and a fast monologue supplies neither — Korean Whisper output routinely
+    // carries no mid-utterance punctuation, and a presenter rarely pauses 1.5 s.
+    // The line then grows without bound, and because `translateStableLines`
+    // dispatches everything EXCEPT the last line, a growing tail line is never
+    // translated while it grows; each new word also changes its revision, so any
+    // translation that did land is永久 stale. Live 0.3.6 (KO→EN·日) showed a
+    // committed line past 250 characters still carrying a translation of text
+    // from a minute earlier. Measured over 952 lines of the user's own saved
+    // transcripts (~/Documents/Madi 회의록, 8 sessions): p50 5 words / 2 s,
+    // p95 20 words / 11 s, p99 41 words / 36 s, worst 1753 words and 567 s —
+    // ONE line for a 9-minute stretch of a lecture. A hard cap at 28 words or
+    // 14 s therefore splits 2.6 % / 2.1 % of real lines while bounding the
+    // pathological case. Preferred boundary inside the window: a comma, which
+    // 40 % of the long lines offer.
+    private static let maxLineWords = 28
+    private static let maxLineSeconds = 14.0
+    private static let softLineWords = 16
     // P15 — decided-once boundary ledger. A boundary between two adjacent words
     // is evaluated exactly ONCE, the first time the pair meets at the growth
     // head, and the decision is replayed on every later rebuild. Mid-session
@@ -853,6 +871,21 @@ final class TranscriptStore {
         guard let t = text?.trimmingCharacters(in: .whitespaces), let ch = t.last else { return false }
         return sentenceEnders.contains(ch)
     }
+    private static let clauseEnders: Set<Character> = [",", "，", "、", ";", "；", ":", "："]
+    private static func endsClause(_ text: String?) -> Bool {
+        guard let t = text?.trimmingCharacters(in: .whitespaces), let ch = t.last else { return false }
+        return clauseEnders.contains(ch)
+    }
+
+    /// P4: has this line grown past what one translation unit should carry?
+    /// Pure so the thresholds are testable without a store (see
+    /// TranscriptLineCapTests). `words` = the line so far, `span` = seconds from
+    /// its first word to the incoming one, `tailEndsClause` = the last word
+    /// carries a comma, which is the boundary we prefer once the line is long.
+    static func lineIsFull(words: Int, span: Double, tailEndsClause: Bool) -> Bool {
+        if words >= maxLineWords || span >= maxLineSeconds { return true }
+        return words >= softLineWords && tailEndsClause
+    }
 
     private func groupLoop(words: [Word], lookup: SpeakerLabelLookup) -> [Line] {
         var out: [Line] = []
@@ -881,7 +914,14 @@ final class TranscriptStore {
                 let brokenBefore = tail.map { sentenceBreaks.contains($0.id) } ?? false
                 cont = out.last.map { last in
                     last.speaker == sp && w.t0 - last.end < lineBreakGap &&
-                    !brokenBefore && !Self.endsSentence(last.words.last?.text)
+                    !brokenBefore && !Self.endsSentence(last.words.last?.text) &&
+                    // P4: length/duration cap — the rule that bounds a monologue
+                    // when neither punctuation nor a pause ever arrives. Recorded
+                    // in the P15 ledger like every other verdict, so the boundary
+                    // is decided once and replayed (no re-split under the reader).
+                    !Self.lineIsFull(words: last.words.count,
+                                     span: w.t1 - last.start,
+                                     tailEndsClause: Self.endsClause(last.words.last?.text))
                 } ?? false
                 if !finalized, let t = tail {       // record the first-adjacency verdict
                     breakDecided.insert(t.id)

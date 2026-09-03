@@ -200,6 +200,7 @@ final class SessionController: EngineProcessDelegate {
         liveRailTimer?.invalidate(); liveRailTimer = nil
         guard Self.liveRailCapable, liveRailEnabled else { return }
         liveRailItems = []; liveRailLastCount = 0; liveRailBusy = false; liveRailBusyTicks = 0
+        liveRailProgressAt = Date(); liveRailStarvedAdmits = 0
         liveRailTimer = Timer.scheduledTimer(withTimeInterval: 18, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tickLiveRail() }
         }
@@ -209,9 +210,15 @@ final class SessionController: EngineProcessDelegate {
     /// no pass is in flight (so the DNA3 GPU spike stays brief + non-overlapping).
     private func tickLiveRail() {
         guard phase == .recording, liveRailEnabled, Self.liveRailCapable else { return }
-        // P11: rail is periodic background analysis — never queue it while the
-        // caption lane has a backlog (the next 18s tick retries).
-        guard translateQueueDepth == 0, translateBacklog == 0 else { return }
+        // P11: rail is periodic background analysis — it yields to the caption
+        // lane. P4: but "yield" must not mean "never" — a caption lane that is
+        // busy for the whole session starved this lane exactly like the summary
+        // pane. Same valve, same broker ordering (rail sits below both captions).
+        let railIdle = Date().timeIntervalSince(liveRailProgressAt)
+        guard BackgroundLaneAdmission.admits(queueDepth: translateQueueDepth,
+                                             backlog: translateBacklog,
+                                             secondsSinceProgress: railIdle) else { return }
+        if translateQueueDepth > 0 || translateBacklog > 0 { liveRailStarvedAdmits += 1 }
         if liveRailBusy {
             // No reply after ~2 ticks (≈36s) ⇒ the engine stalled/died — unwedge.
             liveRailBusyTicks += 1
@@ -222,6 +229,7 @@ final class SessionController: EngineProcessDelegate {
         liveRailLastCount = transcript.lines.count
         guard let s = ensureSummaryEngine() else { return }
         liveRailBusy = true; liveRailBusyTicks = 0
+        liveRailProgressAt = Date()
         s.extractActions(lines: attributedLines)
     }
 
@@ -248,6 +256,8 @@ final class SessionController: EngineProcessDelegate {
         liveSummaryText = nil; liveSummaryUpdatedAt = nil
         liveSummaryLastCount = 0; liveSummaryWindowStart = 0
         liveSummaryBusy = false; liveSummaryBusyTicks = 0
+        liveSummaryProgressAt = Date()          // P4: starvation clock starts here
+        liveSummaryStarvedAdmits = 0; liveSummarySkippedTicks = 0
         liveSummaryTimer = Timer.scheduledTimer(withTimeInterval: LiveSummary.tickSeconds, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tickLiveSummary() }
         }
@@ -260,7 +270,17 @@ final class SessionController: EngineProcessDelegate {
     /// transcript text never re-enters the live loop.
     private func tickLiveSummary() {
         guard phase == .recording, liveSummaryEnabled, Self.liveRailCapable else { return }
-        guard translateQueueDepth == 0, translateBacklog == 0 else { return }
+        // P4: idle fast path + starvation valve. A permanently-busy caption lane
+        // used to freeze this pane for the whole session (live 0.3.6 KO→EN·日:
+        // no update between 00:01:24 and 00:10:23). See BackgroundLaneAdmission.
+        let summaryIdle = Date().timeIntervalSince(liveSummaryProgressAt)
+        guard BackgroundLaneAdmission.admits(queueDepth: translateQueueDepth,
+                                             backlog: translateBacklog,
+                                             secondsSinceProgress: summaryIdle) else {
+            liveSummarySkippedTicks += 1
+            return
+        }
+        if translateQueueDepth > 0 || translateBacklog > 0 { liveSummaryStarvedAdmits += 1 }
         if liveSummaryBusy {
             // Unwedge after ~4 ticks (≈120 s) — past the broker's 90 s aging
             // valve. But a long wait is usually a QUEUE (e.g. dozens of serial
@@ -292,6 +312,7 @@ final class SessionController: EngineProcessDelegate {
         liveSummaryWindowStart = liveSummaryLastCount
         liveSummaryLastCount = total
         liveSummaryBusy = true; liveSummaryBusyTicks = 0
+        liveSummaryProgressAt = Date()          // submitted — restart the starvation clock
         s.liveSummarize(carry: liveSummaryText, lines: newLines, template: summaryTemplate)
     }
 
@@ -623,13 +644,24 @@ final class SessionController: EngineProcessDelegate {
     }
     private var previewAgingSeconds: Double { translateQueueDepth <= 6 ? 2 : 4 }
 
+    /// P4: last time each background lane made progress (started, submitted, or
+    /// landed a result) — the starvation clock BackgroundLaneAdmission reads.
+    private var liveSummaryProgressAt = Date()
+    private var liveRailProgressAt = Date()
+    /// Ticks the summary lane skipped for caption backlog, and admissions the
+    /// starvation valve granted (both lanes) — reported in the stability log.
+    private var liveSummarySkippedTicks = 0
+    private var liveSummaryStarvedAdmits = 0
+    private var liveRailStarvedAdmits = 0
+
     /// STT/preview telemetry appended to the stability summary at stop.
     private func sttStatsTag() -> String {
         let s = sttTurnarounds.sorted()
         func pct(_ p: Double) -> Double { s.isEmpty ? 0 : s[min(s.count - 1, Int(Double(s.count - 1) * p))] }
         let minutes = max(1.0 / 60.0, (previewLaneStartedAt.map { Date().timeIntervalSince($0) } ?? 0) / 60)
-        return String(format: "stt n=%d p50=%.2fs p95=%.2fs max=%.2fs previews=%d/min=%.1f",
-                      s.count, pct(0.5), pct(0.95), s.last ?? 0, previewAdmits, Double(previewAdmits) / minutes)
+        return String(format: "stt n=%d p50=%.2fs p95=%.2fs max=%.2fs previews=%d/min=%.1f | bg summarySkipped=%d summaryStarvedAdmits=%d railStarvedAdmits=%d",
+                      s.count, pct(0.5), pct(0.95), s.last ?? 0, previewAdmits, Double(previewAdmits) / minutes,
+                      liveSummarySkippedTicks, liveSummaryStarvedAdmits, liveRailStarvedAdmits)
     }
 
     /// Live translation TARGETS — a set of English language NAMES
@@ -763,6 +795,7 @@ final class SessionController: EngineProcessDelegate {
                     // Accumulate newly-extracted rail items (dedup by content id) so
                     // decisions persist as the recent-window extraction slides forward.
                     self.liveRailBusy = false; self.liveRailBusyTicks = 0
+                    self.liveRailProgressAt = Date()
                     if let text {
                         var seen = Set(self.liveRailItems.map(\.id))
                         var added = false
@@ -778,6 +811,7 @@ final class SessionController: EngineProcessDelegate {
                     // Empty/nil ⇒ keep the previous summary — a blank pane and a
                     // poisoned carry are both worse than a stale one.
                     self.liveSummaryBusy = false; self.liveSummaryBusyTicks = 0
+                    self.liveSummaryProgressAt = Date()
                     if let text, !text.isEmpty {
                         self.liveSummaryText = text
                         self.liveSummaryUpdatedAt = Date()
