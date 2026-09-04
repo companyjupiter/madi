@@ -219,6 +219,11 @@ enum TranslationOutputPolicy {
                 text = String(t.dropFirst(2)); changed = true; continue
             }
             if t.hasSuffix("=>") { text = String(t.dropLast(2)); changed = true; continue }
+            // P5 (live 0.3.7): the arrow also surfaces MID-sentence — "우리가 세계와
+            // 함께 많은 종교적 그리고 우리가 어떻게 ->". Only a whitespace-delimited
+            // arrow is removed, so "a->b" in real text survives.
+            let stripped = Self.stripInlineArrows(t)
+            if stripped != t { text = stripped; changed = true; continue }
             text = t
         }
         return text
@@ -266,6 +271,18 @@ enum TranslationOutputPolicy {
         let p = echoKeys(partial), e = echoKeys(ex)
         guard !p.isEmpty, e.count >= 2, p.count < e.count else { return false }
         return Array(e.prefix(p.count)) == p
+    }
+
+    /// Remove standalone "=>" / "->" / "→" tokens (whitespace-delimited) and
+    /// collapse the whitespace they leave behind.
+    static func stripInlineArrows(_ text: String) -> String {
+        let arrows: Set<String> = ["=>", "->", "→", "=>.", "->."]
+        let parts = text.split(separator: " ", omittingEmptySubsequences: false)
+        guard parts.contains(where: { arrows.contains(String($0)) }) else { return text }
+        return parts.filter { !arrows.contains(String($0)) }
+            .joined(separator: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespaces)
     }
 
     private static func echoKey(_ c: Character) -> Character? {

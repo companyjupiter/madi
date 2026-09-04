@@ -567,14 +567,17 @@ fn evWord(t0: f32, t1: f32, text: []const u8, conf: f32, spk: i32) void {
     w.writeByte('}') catch return;
     evLine(fbs.getWritten());
 }
-fn evSeg(idx: u32, t0: f32, t1: f32, text: []const u8, tok_s: f32, enc_ms: f32, dec_ms: f32, passes: u32, dropped: bool, avg_lp: f32, fallback: []const u8) void {
+fn evSeg(idx: u32, t0: f32, t1: f32, text: []const u8, tok_s: f32, enc_ms: f32, dec_ms: f32, passes: u32, dropped: bool, avg_lp: f32, fallback: []const u8, seg_lang: u32, lang_margin: f32) void {
     if (g_ev == null) return;
     var b: [8192]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&b);
     const w = fbs.writer();
     // avg_logprob + fallback now real (fallback: none/collapse/logprob); temp
     // stays reserved (only a stochastic temperature sweep would set it — deferred)
-    w.print("{{\"t\":\"seg\",\"idx\":{d},\"t0\":{d:.2},\"t1\":{d:.2},\"dropped\":{},\"avg_logprob\":{d:.3},\"fallback\":\"{s}\",\"temp\":0.0,\"tok_s\":{d:.1},\"enc_ms\":{d:.0},\"dec_ms\":{d:.0},\"passes\":{d},\"text\":", .{ idx, t0, t1, dropped, avg_lp, fallback, tok_s, enc_ms, dec_ms, passes }) catch return;
+    // P5 (2026-09-04): seg_lang/lang_margin are recorded because a live session
+    // produced 33 % German text from English audio and nothing in the event
+    // stream could say which language token each segment actually decoded with.
+    w.print("{{\"t\":\"seg\",\"idx\":{d},\"t0\":{d:.2},\"t1\":{d:.2},\"dropped\":{},\"avg_logprob\":{d:.3},\"fallback\":\"{s}\",\"temp\":0.0,\"lang\":{d},\"lang_margin\":{d:.3},\"tok_s\":{d:.1},\"enc_ms\":{d:.0},\"dec_ms\":{d:.0},\"passes\":{d},\"text\":", .{ idx, t0, t1, dropped, avg_lp, fallback, seg_lang, lang_margin, tok_s, enc_ms, dec_ms, passes }) catch return;
     evStr(w, std.mem.trim(u8, text, " \n")) catch return;
     // bias_hits: which biasing terms actually surfaced in this segment's text
     if (g_bias_words.items.len > 0) {
@@ -1400,6 +1403,10 @@ pub fn main() !void {
     // language token for the SEED: env WHISPER_LANG_ID overrides; else 0 = auto.
     // Detected ONCE (on the first speech segment) and reused for the rest of the
     // session — in stream mode this also kills per-segment language flapping.
+    // P5: how many times the auto-detector has probed without locking (see the
+    // LANG_LOCK_MARGIN gate) — bounds "stay open" so a permanently ambiguous
+    // source still commits to a language.
+    var lang_probes: u32 = 0;
     var lang_tok: u32 = blk: {
         if (std.posix.getenv("WHISPER_LANG_ID")) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
         break :blk 0;
@@ -2424,6 +2431,7 @@ pub fn main() !void {
         // this segment's seed language may differ from the session lock — a KO
         // staff line and the JA patient's reply each decode with their own token.
         var seg_lang: u32 = lang_tok;
+        var lang_margin: f32 = 0;
         if (!preview_job and (lang_tok == 0 or g_lang_ncands > 0)) {
             d_pos[0] = 0;
             try mtl.beginCommandBuffer();
@@ -2446,24 +2454,59 @@ pub fn main() !void {
                 // The detected session language then joins the whitelist below.
                 var bl: u32 = 50259;
                 var bv: f32 = d_logits[50259];
+                var second: f32 = -1e30;
                 var lt: u32 = 50259;
-                while (lt <= 50358) : (lt += 1) { if (d_logits[lt] > bv) { bv = d_logits[lt]; bl = lt; } }
-                lang_tok = bl;
+                while (lt <= 50358) : (lt += 1) {
+                    if (d_logits[lt] > bv) { second = bv; bv = d_logits[lt]; bl = lt; }
+                    else if (lt != bl and d_logits[lt] > second) second = d_logits[lt];
+                }
+                // P5: the lock used to be unconditional on segment 0. One
+                // ambiguous opening segment (music bed, applause, a title card)
+                // therefore decided the WHOLE session, and because the
+                // per-segment re-probe below only searches {lock} ∪ candidates,
+                // a wrong lock could never be corrected — the true language is
+                // not in the search set. Require the winner to clear the runner-up
+                // by LANG_LOCK_MARGIN; below that, decode this segment with the
+                // best guess but leave lang_tok unlocked so the next segment
+                // decides again. lang_probes bounds that to LANG_LOCK_TRIES.
+                lang_margin = bv - second;
                 seg_lang = bl;
-                try out.print("[lang] detected token {d} (en=50259 ko=50264)\n", .{lang_tok});
+                lang_probes += 1;
+                if (lang_margin >= envF("LANG_LOCK_MARGIN", 1.0) or
+                    lang_probes >= envU("LANG_LOCK_TRIES", 4))
+                {
+                    lang_tok = bl;
+                    try out.print("[lang] locked token {d} margin {d:.2} after {d} probe(s) (en=50259 ko=50264)\n", .{ lang_tok, lang_margin, lang_probes });
+                } else {
+                    try out.print("[lang] probe {d} token {d} margin {d:.2} — below lock margin, staying open\n", .{ lang_probes, bl, lang_margin });
+                }
             } else {
                 // Per-segment re-probe (T12): argmax over the whitelist ∪ the
                 // SESSION language — the session lock/first-detect must always be
                 // able to win, or a source language outside the target-derived
                 // whitelist gets relabeled every segment.
-                var bl: u32 = lang_tok;
-                var bv: f32 = d_logits[lang_tok];
+                // P5: English joins the search unconditionally. It is the language
+                // the whitelist most often omits (the whitelist is derived from
+                // TRANSLATE TARGETS, so an EN source with {KO,JA} targets has no
+                // way back), and it is Whisper's strongest prior — leaving it out
+                // is what let an English documentary decode as anything else.
+                const held: f32 = d_logits[lang_tok];
+                var chall_tok: u32 = lang_tok;
+                var chall: f32 = -1e30;
                 for (g_lang_cands[0..g_lang_ncands]) |c| {
-                    if (d_logits[c] > bv) { bv = d_logits[c]; bl = c; }
+                    if (c != lang_tok and d_logits[c] > chall) { chall = d_logits[c]; chall_tok = c; }
                 }
-                seg_lang = bl;
+                if (50259 != lang_tok and d_logits[50259] > chall) { chall = d_logits[50259]; chall_tok = 50259; }
+                // P5: a switch must WIN by a margin, not by a hair. A per-segment
+                // argmax flips on music, laughter and silence, and every flip
+                // decodes real speech with the wrong language token — the
+                // observable damage (hallucinated text, avg_logprob collapse) is
+                // far worse than staying one segment too long on the session
+                // language.
+                lang_margin = chall - held;
+                seg_lang = if (chall_tok != lang_tok and lang_margin >= envF("LANG_SWITCH_MARGIN", 1.0)) chall_tok else lang_tok;
                 if (seg_lang != lang_tok) {
-                    try out.print("[lang] seg token {d}\n", .{seg_lang});
+                    try out.print("[lang] seg token {d} (margin {d:.2})\n", .{ seg_lang, lang_margin });
                 }
             }
         }
@@ -2832,7 +2875,7 @@ pub fn main() !void {
         const dec_ms = @as(f64, @floatFromInt(dec_gpu_ns)) / 1e6; // word-DTW/BPE moved inside the loop; keep tok/s comparable
         try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms | passes {d}]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_tok_total, dec_ms, @as(f64, @floatFromInt(n_tok_total)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6, total_passes });
         const avg_lp: f32 = if (n_lp > 0) @floatCast(sum_lp / @as(f64, @floatFromInt(n_lp))) else 0;
-        evSeg(@intCast(cchunk), t_off, t_off + @as(f32, @floatFromInt(cgot)) / 16000.0, chunk_text.items, @as(f32, @floatFromInt(n_tok_total)) / @as(f32, @floatCast(dec_ms / 1000.0)), @floatCast(enc_ms), @floatCast(dec_ms), total_passes, dropped, avg_lp, fb_reason);
+        evSeg(@intCast(cchunk), t_off, t_off + @as(f32, @floatFromInt(cgot)) / 16000.0, chunk_text.items, @as(f32, @floatFromInt(n_tok_total)) / @as(f32, @floatCast(dec_ms / 1000.0)), @floatCast(enc_ms), @floatCast(dec_ms), total_passes, dropped, avg_lp, fb_reason, seg_lang, lang_margin);
         if (dropped) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (low-energy — hallucination guard, rms {d:.3})\n", .{ cchunk + 1, n_chunks, t_off, seg_rms2 });
         } else {
@@ -3726,14 +3769,23 @@ fn tokenDiversityCollapse(toks: []const u32) bool {
 // reproduces the same loop; empty tail beats committed garbage). LOOP_P2=0 off.
 const Period2 = struct { start: usize, period: usize };
 fn tokenPeriod2(toks: []const u32) ?Period2 {
-    var p: usize = 9;
+    // P5 (2026-09-04): the two loop detectors left a gap and a live session fell
+    // straight into it — "how do we train good models" ×3 (period ≈7 tokens)
+    // reached the committed transcript. tokenCollapse wants run ≥ max(16, 4p),
+    // i.e. FIVE occurrences at p=7, and this function started at p=9. Short
+    // periods now qualify at three occurrences (run ≥ 2p): two is common in real
+    // speech ("no no", "very very"), three is not. Long periods keep the
+    // two-occurrence rule — a whole sentence said twice verbatim is already
+    // unusual, and loopAdvances still has to agree before anything is cut.
+    var p: usize = 4;
     while (p <= 48) : (p += 1) {
-        if (toks.len < 2 * p) break;
+        const need: usize = if (p >= 9) p else 2 * p;   // extra periods required
+        if (toks.len < p + need) break;
         var run: usize = 0;
         for (p..toks.len) |i| {
             if (toks[i] == toks[i - p]) {
                 run += 1;
-                if (run >= p) return .{ .start = i + 1 - 2 * p, .period = p };
+                if (run >= need) return .{ .start = i + 1 - p - need, .period = p };
             } else run = 0;
         }
     }

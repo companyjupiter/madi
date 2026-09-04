@@ -54,3 +54,18 @@ final class TranslationExampleEchoTests: XCTestCase {
         XCTAssertFalse(TranslationOutputPolicy.mayBeExampleEcho("是的", exampleTarget: nil))
     }
 }
+
+/// P5 (live 0.3.7): the prompt arrow leaked into the MIDDLE of translations.
+extension TranslationExampleEchoTests {
+    func testInlineArrowIsStripped() {
+        XCTAssertEqual(TranslationOutputPolicy.clean("우리가 세계와 함께 그리고 우리가 어떻게 ->"),
+                       "우리가 세계와 함께 그리고 우리가 어떻게")
+        XCTAssertEqual(TranslationOutputPolicy.clean("앞부분 => 뒷부분"), "앞부분 뒷부분")
+        XCTAssertEqual(TranslationOutputPolicy.clean("A → B 입니다"), "A B 입니다")
+    }
+
+    func testArrowInsideAWordSurvives() {
+        XCTAssertEqual(TranslationOutputPolicy.clean("a->b 형태로 씁니다"), "a->b 형태로 씁니다")
+        XCTAssertEqual(TranslationOutputPolicy.clean("화살표가 없는 문장"), "화살표가 없는 문장")
+    }
+}
