@@ -30,6 +30,7 @@ let package = Package(
                 "Transcript/TranslationShedPolicy.swift",
                 "Transcript/InterimDedupe.swift",
                 "Transcript/BackgroundLaneAdmission.swift",
+                "Transcript/LiveFeatureWiring.swift",
                 "Transcript/KoreanNumberFormatter.swift",
                 "Transcript/Exporters.swift",
                 "Transcript/WordMerger.swift",

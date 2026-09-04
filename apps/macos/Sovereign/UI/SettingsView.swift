@@ -97,6 +97,10 @@ struct SettingsView: View {
                             "Waits this long after the last spoken line stops changing before translating it. Shorter shows captions sooner but may translate an unfinished sentence. Committed (next-line-started) lines translate immediately regardless."))
                     .font(.caption).foregroundStyle(.secondary)
             }
+            // P6: unwired pending a redesign — a settings section for a feature
+            // that cannot run reads as a broken toggle. The stored preference is
+            // left alone so re-wiring restores whatever the user had chosen.
+            if LiveFeatureWiring.liveSummary {
             Section(uiLang("실시간 요약", "Live summary")) {
                 Toggle(uiLang("녹음 중 실시간 요약 탭", "Live summary tab while recording"), isOn: $session.liveSummaryEnabled)
                     .disabled(!SessionController.liveRailCapable || !AssetManifest.translateAvailable)
@@ -109,6 +113,7 @@ struct SettingsView: View {
                      : uiLang("대화가 어느 정도 쌓이면 우측에 핵심 요약 탭이 열리고 30초 간격으로 갱신됩니다. 실시간 전사·번역이 우선이라, 자막 작업이 밀려 있으면 갱신을 건너뜁니다.",
                               "Once enough has been said, a core-summary tab opens on the right and refreshes about every 30 s. Live transcription/translation always comes first — updates are skipped while caption work is pending."))
                     .font(.caption).foregroundStyle(.secondary)
+            }
             }
             Section(uiLang("AI 교정 (세션 종료 후)", "AI correction (after session)")) {
                 Toggle(uiLang("화자·언어 자동 교정", "Auto-correct speakers & language"), isOn: $session.aiReconcileEnabled)

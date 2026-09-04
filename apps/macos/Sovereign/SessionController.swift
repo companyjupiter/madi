@@ -252,6 +252,7 @@ final class SessionController: EngineProcessDelegate {
     /// boundary), the only model the live prompt was probed healthy on.
     private func startLiveSummary() {
         liveSummaryTimer?.invalidate(); liveSummaryTimer = nil
+        guard LiveFeatureWiring.liveSummary else { return }
         guard Self.liveRailCapable, liveSummaryEnabled else { return }
         liveSummaryText = nil; liveSummaryUpdatedAt = nil
         liveSummaryLastCount = 0; liveSummaryWindowStart = 0
@@ -1196,6 +1197,7 @@ final class SessionController: EngineProcessDelegate {
             }
             return
         }
+        guard LiveFeatureWiring.interimTranslation else { return }
         let targets = routedTargets(for: sentence)
         guard !targets.isEmpty else { return }
         let id = UUID()
@@ -1255,6 +1257,7 @@ final class SessionController: EngineProcessDelegate {
                 TranslationStabilityMetrics.shared.interimTurnsSkipped += 1
                 return
             }
+            guard LiveFeatureWiring.interimTranslation else { return }
             let targets = self.routedTargets(for: source)
             guard !targets.isEmpty else { return }
             let id = UUID()
@@ -1518,7 +1521,7 @@ final class SessionController: EngineProcessDelegate {
     /// The right-side pane opens with the first landed summary ("양이 모이면
     /// 열리면서") and lives only through the recording.
     var liveSummaryPaneVisible: Bool {
-        liveSummaryText != nil && liveSummaryEnabled
+        LiveFeatureWiring.liveSummary && liveSummaryText != nil && liveSummaryEnabled
     }
 
     /// Host-facing live coach / teleprompter toggle (agenda coverage + unanswered
@@ -2098,7 +2101,8 @@ final class SessionController: EngineProcessDelegate {
         // the 4B mid-recording — model load competing with Whisper decode. Same
         // dead time, same resident broker; a no-op when translation already
         // warmed it or the gate/model rules the feature out.
-        if translateTargets.isEmpty, Self.liveRailCapable, liveSummaryEnabled {
+        if translateTargets.isEmpty, Self.liveRailCapable,
+           liveSummaryEnabled, LiveFeatureWiring.liveSummary {
             _ = ensureSummaryEngine()
         }
         // Prefill from the live calendar event. ContentView observes calendar.event.id
