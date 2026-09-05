@@ -110,10 +110,15 @@ enum EngineProtocol {
             if line.hasPrefix("[perf] chunk ") {
                 if let k = Int(line.dropFirst("[perf] chunk ".count).prefix(while: \.isNumber)) { return .progressChunk(k) }
             }
-            // "[lang] detected token 50264 (en=50259 ko=50264)" — auto-detect lock
-            if line.hasPrefix("[lang] detected token "),
-               let tok = Int(line.dropFirst("[lang] detected token ".count).prefix(while: \.isNumber)) {
-                return .languageDetected(tok)
+            // "[lang] detected token 50264 (…)" (pre-0.3.8) / "[lang] locked token 50259
+            // margin 2.60 after 1 probe(s) (…)" (0.3.8+) — the auto-detect lock. P6: the
+            // 0.3.8 engine changed the wording and this parser did not follow, so
+            // .languageDetected never fired and the preview lane never started
+            // (a captured 0.3.9 session shows 48 SEG commands and 0 PREVIEW).
+            for prefix in ["[lang] locked token ", "[lang] detected token "] where line.hasPrefix(prefix) {
+                if let tok = Int(line.dropFirst(prefix.count).prefix(while: \.isNumber)) {
+                    return .languageDetected(tok)
+                }
             }
 
             if line.hasPrefix("=== WORD TIMESTAMPS") {

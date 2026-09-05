@@ -159,6 +159,8 @@ final class SessionController: EngineProcessDelegate {
     /// P1 preview time-slice + STT telemetry.
     private var lastPreviewAdmitAt: Date = .distantPast
     private var previewAdmits = 0
+    /// P6: the engine's own diagnostic lines, folded into counters for the log.
+    private var engineDiag = EngineDiagnostics()
     private var previewLaneStartedAt: Date? = nil
     private var previewAgingTimer: Timer? = nil
     private var sttTurnarounds: [Double] = []
@@ -660,9 +662,9 @@ final class SessionController: EngineProcessDelegate {
         let s = sttTurnarounds.sorted()
         func pct(_ p: Double) -> Double { s.isEmpty ? 0 : s[min(s.count - 1, Int(Double(s.count - 1) * p))] }
         let minutes = max(1.0 / 60.0, (previewLaneStartedAt.map { Date().timeIntervalSince($0) } ?? 0) / 60)
-        return String(format: "stt n=%d p50=%.2fs p95=%.2fs max=%.2fs previews=%d/min=%.1f | bg summarySkipped=%d summaryStarvedAdmits=%d railStarvedAdmits=%d",
+        return String(format: "stt n=%d p50=%.2fs p95=%.2fs max=%.2fs previews=%d/min=%.1f | bg summarySkipped=%d summaryStarvedAdmits=%d railStarvedAdmits=%d | %@",
                       s.count, pct(0.5), pct(0.95), s.last ?? 0, previewAdmits, Double(previewAdmits) / minutes,
-                      liveSummarySkippedTicks, liveSummaryStarvedAdmits, liveRailStarvedAdmits)
+                      liveSummarySkippedTicks, liveSummaryStarvedAdmits, liveRailStarvedAdmits, engineDiag.tag)
     }
 
     /// Live translation TARGETS — a set of English language NAMES
@@ -1962,7 +1964,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0
+        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0; engineDiag = EngineDiagnostics()
         interimCache.clear()
         clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
@@ -2078,7 +2080,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0
+        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0; engineDiag = EngineDiagnostics()
         interimCache.clear()
         backlogKeys.removeAll(); translateBacklog = 0
         backfillPendingKeys.removeAll(); backfillRemaining = 0
@@ -2116,6 +2118,7 @@ final class SessionController: EngineProcessDelegate {
 
         let e = EngineProcess(config: makeConfig())
         e.delegate = self
+        e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }
         engine = e
 
         capture.inputDeviceID = inputDeviceID  // bind chosen mic before start
@@ -2213,7 +2216,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
         lastAutoSaved = nil
-        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0
+        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0; engineDiag = EngineDiagnostics()
         interimCache.clear()
         clearSummary()
         fileName = url.lastPathComponent
@@ -2243,6 +2246,7 @@ final class SessionController: EngineProcessDelegate {
         cfg.fileURL = wav                  // native FILE mode (fast batched + offline diar)
         let e = EngineProcess(config: cfg)
         e.delegate = self
+        e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }
         engine = e
         do { try e.start() }
         catch { phase = .error("전사 엔진을 시작하지 못했어요: \(error.localizedDescription)") }
@@ -2641,6 +2645,7 @@ final class SessionController: EngineProcessDelegate {
         transcript.markDiarNamespaceBroken()   // 새 엔진 화자 id는 0부터 — FLUSH 라벨 대체 금지 (app-state-6)
         let e = EngineProcess(config: makeConfig())
         e.delegate = self
+        e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }
         engine = e
         do { try e.start() } catch { phase = .error("엔진 재시작 실패: \(error.localizedDescription)"); return }
         for i in segQueue.indices { segQueue[i].fedAt = Date() }

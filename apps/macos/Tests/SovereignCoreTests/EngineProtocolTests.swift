@@ -85,3 +85,14 @@ final class EngineProtocolTests: XCTestCase {
                        .word(t0: 1.0, t1: 1.4, text: "committed", conf: 1.0))
     }
 }
+
+/// P6: the 0.3.8 engine renamed the lock line; the parser must accept both, or the
+/// preview lane never starts (0.3.9 capture: 48 SEG commands, 0 PREVIEW).
+extension EngineProtocolTests {
+    func testLanguageLockLineBothWordings() {
+        let d = EngineProtocol.Decoder()
+        XCTAssertEqual(d.decode(line: "[lang] detected token 50264 (en=50259 ko=50264)"), .languageDetected(50264))
+        XCTAssertEqual(d.decode(line: "[lang] locked token 50259 margin 2.60 after 1 probe(s) (en=50259 ko=50264)"), .languageDetected(50259))
+        XCTAssertEqual(d.decode(line: "[lang] probe 1 token 50259 margin 0.40 — below lock margin, staying open"), .other("[lang] probe 1 token 50259 margin 0.40 — below lock margin, staying open"))
+    }
+}

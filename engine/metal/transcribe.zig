@@ -1662,6 +1662,11 @@ pub fn main() !void {
             }
             if (std.mem.startsWith(u8, trimmed, "PREVIEW ")) {
                 preview_job = true;
+                // P6: a PREVIEW without %%FP must not inherit the previous window's
+                // forced prefix — the app sends a bare PREVIEW exactly when the agreed
+                // prefix was reset, and the stale tokens teacher-forced the old text
+                // (in a German session, German) into the fresh window.
+                preview_forced = &.{};
                 var pv = std.mem.trim(u8, trimmed["PREVIEW ".len..], " \t\r");
                 // S2 (2026-09-02): `PREVIEW <wav> %%FP <agreed source text>` — the app's
                 // LocalAgreement gate has already frozen this prefix of the open window's
@@ -2434,6 +2439,10 @@ pub fn main() !void {
         var lang_margin: f32 = 0;
         if (!preview_job and (lang_tok == 0 or g_lang_ncands > 0)) {
             d_pos[0] = 0;
+            // P6: the probe reads whatever the previous pass left in slot 0 — with a
+            // glossary prompt that is <|startofprev|>, not <|startoftranscript|>, so
+            // the language logits were computed on the wrong token. Seed it.
+            d_tokens[0] = SEED[0];
             try mtl.beginCommandBuffer();
             try embLookup(f_emb, d_x, tok_emb.qs, tok_emb.scales, &d_tokens[0]);
             try residual(Kd, d_x, dec_pe, D); // pos-0 positional embedding
@@ -2574,7 +2583,16 @@ pub fn main() !void {
             var PL: u32 = 0;
             // term-biasing prefix: <|startofprev|> + prompt tokens, seeded before
             // the SOT (KV-filled, never predicted) so they bias generation.
-            if (g_prompt.len > 0 and g_prompt.len + 8 < MAX_TOK) {
+            // P6 (2026-09-05): the bias prompt is applied ONLY for languages it was
+            // measured on. S4 won on FLEURS-ko with Korean terms. On an English
+            // session the same mechanism — a bare word list as "previous text" —
+            // pushed the decoder off the language entirely: a captured live stream
+            // replayed byte-for-byte reproduced 21 % German segments and 7 rescues
+            // with PROMPT="opensource istio lambda", and 0 % / 0 with no prompt;
+            // every non-empty variant tried (single words, a full sentence) still
+            // cost 3–6 rescues per 19 segments. PROMPT_LANGS (default 50264=ko)
+            // names the languages that may carry it.
+            if (g_prompt.len > 0 and g_prompt.len + 8 < MAX_TOK and promptAllowed(seg_lang)) {
                 d_tokens[PL] = STARTOFPREV; PL += 1;
                 for (g_prompt) |t| { d_tokens[PL] = t; PL += 1; }
             }
@@ -3753,6 +3771,20 @@ fn tokenDiversityCollapse(toks: []const u32) bool {
     }
     const ratio = @as(f32, @floatFromInt(distinct)) / @as(f32, @floatFromInt(total));
     return ratio < envF("LOOP_DIV_TAU", 0.35);
+}
+
+/// P6: languages the glossary bias prompt may be seeded for (env PROMPT_LANGS,
+/// comma-separated whisper language token ids; default Korean only).
+fn promptAllowed(seg_lang: u32) bool {
+    const spec = std.posix.getenv("PROMPT_LANGS") orelse "50264";
+    var it = std.mem.splitScalar(u8, spec, ',');
+    while (it.next()) |tok| {
+        const t = std.mem.trim(u8, tok, " ");
+        if (t.len == 0) continue;
+        if (std.mem.eql(u8, t, "*")) return true;
+        if ((std.fmt.parseInt(u32, t, 10) catch 0) == seg_lang) return true;
+    }
+    return false;
 }
 
 // P3 (2026-09-03, live 0.3.5 13:35): a sentence-length period repeated exactly

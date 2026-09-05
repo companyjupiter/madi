@@ -28,6 +28,9 @@ final class EngineProcess {
     private let process = Process()
     private let stdinPipe = Pipe()
     private let stdoutPipe = Pipe()
+    /// P6: every stdout line the protocol does not parse ("[lang] …", "[rescue] …",
+    /// "[loop-p2] …", "[prompt] …", "[warn] …"). Main-actor.
+    var onDiagnosticLine: ((String) -> Void)?
     private let decoder = EngineProtocol.Decoder()
     private let ioQueue = DispatchQueue(label: "sovereign.engine.io")
     private var lineBuffer = Data()
@@ -264,7 +267,10 @@ final class EngineProcess {
         switch event {
         case .ready:     delegate?.engineDidBecomeReady()
         case .flushEnd:  delegate?.engineDidFlush()
-        case .other:     break // diagnostics only
+        case .other(let line):
+            // P6: diagnostics are no longer dropped — SessionController folds them
+            // into EngineDiagnostics for the stability log.
+            onDiagnosticLine?(line)
         default:         delegate?.engine(didEmit: event)
         }
     }

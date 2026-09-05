@@ -31,6 +31,7 @@ let package = Package(
                 "Transcript/InterimDedupe.swift",
                 "Transcript/BackgroundLaneAdmission.swift",
                 "Transcript/LiveFeatureWiring.swift",
+                "Transcript/EngineDiagnostics.swift",
                 "Transcript/KoreanNumberFormatter.swift",
                 "Transcript/Exporters.swift",
                 "Transcript/WordMerger.swift",
