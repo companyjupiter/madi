@@ -30,4 +30,20 @@ fi
 if [ "${SKIP_STAPLE:-0}" != "1" ]; then
   xcrun stapler staple "$OUT" || true
 fi
+
+# Leave nothing mounted. Stapling and the structure check both attach the image,
+# and each build then left another "Madi N" volume behind — five of them after a
+# week of releases. Detach every volume backed by THIS dmg (matched on the
+# resolved image path, so a co-worker's Madi.dmg is never touched).
+detach_own_mounts() {
+  local dmg; dmg="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
+  hdiutil info 2>/dev/null | awk -v want="$dmg" '
+    /^image-path/ { mine = ($3 == want); next }
+    mine && $0 ~ /\/Volumes\// { i = index($0, "/Volumes/"); print substr($0, i) }
+  ' | while IFS= read -r vol; do
+    [ -n "$vol" ] || continue
+    hdiutil detach "$vol" -quiet 2>/dev/null || hdiutil detach "$vol" -force -quiet 2>/dev/null || true
+  done
+}
+detach_own_mounts
 echo "✅ DMG → $OUT"
