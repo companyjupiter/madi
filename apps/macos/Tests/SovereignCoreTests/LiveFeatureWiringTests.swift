@@ -15,3 +15,10 @@ final class LiveFeatureWiringTests: XCTestCase {
                        "the rolling summary pane is unwired pending a redesign")
     }
 }
+
+extension LiveFeatureWiringTests {
+    /// P6: the tail line is translated only after the transcription preview clears.
+    func testTailTranslationWaitsForPreview() {
+        XCTAssertTrue(LiveFeatureWiring.tailTranslationWaitsForPreview)
+    }
+}

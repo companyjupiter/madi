@@ -1464,6 +1464,12 @@ final class SessionController: EngineProcessDelegate {
                   let (id, h) = snapshot,
                   let line = self.transcript.lines.last, line.id == id,
                   self.lineHash(line.text) == h else { return }
+            // P6: a live preview still attached to this line means the line is
+            // not finished — its next words would invalidate the translation.
+            // Re-arm and try again once the preview clears (pause / window close).
+            if LiveFeatureWiring.tailTranslationWaitsForPreview, !self.livePartial.isEmpty {
+                self.scheduleTailTranslate(); return
+            }
             self.translateLine(line)
         }
     }

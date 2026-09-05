@@ -37,4 +37,17 @@ enum LiveFeatureWiring {
     /// The post-session summary is untouched: it runs on the finished transcript
     /// with the machine to itself, which is where a summary belongs today.
     static let liveSummary = false
+
+    /// Translate the live tail line only once the transcription preview has
+    /// gone quiet — i.e. the line is really finished, not merely unchanged for
+    /// two seconds while the speaker breathes.
+    ///
+    /// ON. With interim translation off, the tail-timeout path was the last
+    /// place a translation could land on text that was still moving: the caret
+    /// typed a translation under a line whose gray continuation was still
+    /// growing, and the next words then invalidated it (panel revisions). The
+    /// 28-word cap already closes a monologue's lines on its own, so waiting for
+    /// the preview to clear costs nothing on continuous speech and removes the
+    /// one remaining "translation of unfinished text" the user could see.
+    static let tailTranslationWaitsForPreview = true
 }
