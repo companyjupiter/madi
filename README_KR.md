@@ -334,6 +334,17 @@ B ≈ 14–33이 라이브 캡션 대역입니다. **footprint**는 GPU 가중�
 `channels/stable/latest.json`을 읽습니다. 릴리스 절차와 git 태그 규칙은
 [docs/RELEASE.md](docs/RELEASE.md)에 있습니다.
 
+게시된 버전(S3 `releases/index.json`): 아래 0.1.0 → 0.1.5 다음으로 **0.1.6**(2026-07-31, Sparkle
+자동 업데이트), **0.1.7**(2026-08-05, 번역 표시 안정성 — NE 실측 기반 안정 접두 정책), **0.1.8**
+(2026-08-10, 문장 핸드오프 무소거화 + 안정성 원장 파일), **0.1.9**(2026-08-11, 표면 교정 리바인드),
+**0.2.0**(2026-08-30, 한 번 판정하는 경계 원장 — 세션 중 재클러스터가 라이브 행을 무너뜨리지 않음),
+**0.3.0**(2026-08-31, 요약 템플릿 + 실시간 요약 탭), **0.3.1**(2026-09-02, 엔진 헤드룸 배치: 시드
+프리필·프리뷰/인터림 강제 접두·문맥 예시), **0.3.7**(2026-09-03, 라이브 프로파일링 P0–P4: 메인
+스레드 포화·번역 백로그·줄 수 비례 CPU·STT 루프 가드) — 현재 `stable`. 0.3.8 → 0.3.19는 로컬 검증
+빌드(ad-hoc 서명, PERF_LOG 라운드당 하나: 언어 게이트 P5/P6, 메모리 M1–M3, 줄 합침 L1/L2, 번역
+상한 T7–T9, 디버그 모드 D1, 화자 번호 지연 S1, 턴 묶음 U1, 이음매 화면 규칙 X1/X2/X4); 게시는
+별도 결정이다.
+
 | 버전 | 게시일 | 태그 | 주요 내용 |
 |---|---|---|---|
 | **0.1.5** | 2026-07-26 | `v0.1.5` | 화자 번호 안정화 — 클러스터러가 재번호를 매겨도 주화자는 *Speaker 1*을 유지. 라벨 미결정 중에는 `화자분리중…` 표시, 300초 후 잠정 번호로 확정 (#229). DNA3 번역 엔진 0.1.5: footprint −40%, B=14 prefill −54%. 번역 티어 메모리 상수 교정 (#228). 턴별 DNA 워치독 + 엔진 재시작 (#227). 사이드 패널 재설계 (#220), 입력 선택기 드롭업 수정 (#217). |
@@ -365,6 +376,74 @@ B ≈ 14–33이 라이브 캡션 대역입니다. **footprint**는 GPU 가중�
 - `engine/metal/PERF_LOG.md` — 최적화 시계열 전체 기록
 - `engine/metal/bench/` — DER 벤치마크 하네스 + 화자분리 연구 문서
 - `engine/metal/PORT.md` — CUDA/PTX → Metal 포팅 노트
+
+## 10. 자산 목록 — 무엇이 있고, 어디에 있고, 어떻게 검증됐나
+
+아래는 모두 이 저장소(번역 엔진은 자매 저장소 `sovereignLLM`)에 실재하며, **측정으로
+확인된 것만 남긴** 결과다 — 이 프로젝트의 규칙. 반증된 레버도 같은 원장에 기록한다.
+행마다 정본 문서를 적었고, 행과 정본이 다르면 정본이 맞다.
+
+### 런타임 엔진 (`Madi.app`에 동봉)
+
+| 자산 | 무엇 | 위치 | 검증 |
+|---|---|---|---|
+| **Sovereign Whisper** `transcribe` | Whisper large-v3-turbo Q8, 순수 Zig + Metal. 파일 모드와 상주 **STREAM** 모드(5 s 창 + 오버랩, 단어 타임스탬프, `PREVIEW` 레인, `%%FP` 강제 접두, `EVENTS_FILE` JSONL 계약) | `engine/metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig`, `kernels/` | LibriSpeech WER 2.17 / 4.19 %, FLEURS-ko CER 4.05 %, jfk 디코드 ~402 tok/s, 최대 RSS 1.05 GB — [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
+| **화자분리** | WeSpeaker ResNet34 임베딩 + 온라인 클러스터링(주기적 재클러스터 `DIAR_RECLUSTER`), 겹침 검출(pyannote seg-3.0), Silero VAD 게이트, 화자 수 고정 + 미확인 버킷, ON/OFF 토글 | `diar_resnet.zig`, `online_diar.zig`, `osd_pyannote.zig` | VoxConverse dev DER 9.67 %; 라이브 DER/UX 게이트는 `engine/metal/bench/` — [`docs/DIAR_EVAL.md`](docs/DIAR_EVAL.md) |
+| **DNA3.0-4B / 2B 번역 엔진** | 온디바이스 LLM(번역·요약·Q&A·제목)용 GGUF Q4_K_M 러너. 턴 REPL: `%%TRN`(턴 + 예시 쌍), `%%PFX`(접두 슬롯), ` %%FP `(강제 접두), ` %%MAX n`(턴당 상한); 임베딩 창만 남기는 가중치 매핑 해제(4B RSS 5.4 → 2.5 GB) | `sovereignLLM/apps/metal-dna3-{4b,2b}-q4km/main.zig`(정본 `PERF_MATRIX.md`) | 프리필 B=14 69.8 ms / 디코드 64.7 tok/s(4B); Whisper 포함 8/16 GB 티어 메모리 예산 ≈ 4.05 GB — PERF_LOG M1 |
+| DNA3.0-9B 티어(24 GB+) | 엔진 측 완료(턴 프로토콜 6/6, mmap 해제, 컨텍스트 8192 +233 MB). 앱 배선과 GGUF 호스팅은 **2026-09-07부로 보류** | `sovereignLLM/apps/metal-dna3-9b-q4km/` | — |
+
+출시된 엔진 레버(각각 PERF_LOG에 측정치가 있다): 글로서리 시드의 디코더 시퀀스 프리필(S1,
+−155 ms/패스) · 프리뷰 강제 접두(S2, 프리뷰 디코드 −38 %) · 인터림 강제 접두(T1, −23 %) ·
+직전 (원문 ⇒ 번역) 쌍을 프롬프트 예시로(T5) · 글로서리 → 디코더 바이어싱, 측정된 언어에만
+(S4, P6) · 폭주 환각 대비 partial 동결(`PARTIAL_MAX_TOK`) · 배치 인코더(`ENC_BATCH`),
+F16 인코더 캐시, `AUDIO_CTX=auto`(첫 텍스트 ~1.8 s) · 누수 없는 프리뷰 레인(M2 +23 MB/분,
+M3 +2.3 MB/분 수정; 회귀용 `LEAK_CHECK` DebugAllocator 빌드).
+반증·기록된 것: 이전 텍스트 조건화(S3), 디코드 점유율 레버(S5), int8 프리필, 엔진 측
+화자 id 상한(D1), 타사 파인튜닝 가중치 드롭인, 가중치 매핑 madvise. 엔진 센트로이드 병합은
+아직 후보.
+
+### macOS 앱 (`apps/macos/Sovereign`, SwiftUI; 헤드리스 코어는 `Package.swift`)
+
+| 자산 | 하는 일 | 정본 |
+|---|---|---|
+| 라이브 파이프라인: `WordMerger` → `TranscriptStore` → `TranscriptView` | 오버랩 중복 제거 + 꼬리 단어 보류를 **화면도 같은 이음매 규칙으로**(X1), 이음매 중복·창 꼬리 그루터기 가드(L2, X2); **한 번 판정하는 경계 원장**(P15)은 확정 단어 사이만 기록, 라벨 교정 뒤 같은 화자 이웃 줄 합침(L1), 한 단어 턴 머리는 다음 화자로(X4); 행 = 문장, 상세 보기는 같은 화자의 연속 행을 턴으로 묶음(U1) | [`PERF_LOG.md`](PERF_LOG.md) P15 · L1 · L2 · X1 |
+| 화자 표시 | id 발화 10 s 이상일 때만 번호, 그 전엔 `화자분리중…`(S1); 재클러스터에도 안정된 번호; 성문 자동 이름; 정지 시 AI 화자/언어 교정 | PERF_LOG S1 · [`docs/DIAR_EVAL.md`](docs/DIAR_EVAL.md) |
+| 번역 레인: `TranslateEngine`, `TranslationTurnQueue`, `DNAEngineBroker` | 확정 줄 우선 큐, 조각 줄 병합, 2순위 언어 shed + 정지 시 채움, stale 유지 표시, 폭주 상한(T7: 엔진 `%%MAX` + 앱 절단 + 예시 오염 가드), 개정판의 공통 접두를 자르지 않는 에코 제거기(T8), 패널로 토큰 스트리밍 없음(T9), 턴당 워치독 종료 + 재기동 | [`docs/LIVE_TRANSLATE.md`](docs/LIVE_TRANSLATE.md) · [`docs/TRANSLATE_DISPLAY_STABILITY.md`](docs/TRANSLATE_DISPLAY_STABILITY.md)(NE < 0.2 안정 접두 정책; 라이브 패널 NE 0.24–0.27) |
+| 회의 인텔리전스 | 요약 템플릿(회의/강의/인터뷰, 스파인 1), 롤링 실시간 요약(구현됨, 현재 배선 해제), Q&A, 제목, 액션 아이템 | [`docs/MEETING_INTELLIGENCE.md`](docs/MEETING_INTELLIGENCE.md) · [`docs/SUMMARY_TEMPLATES.md`](docs/SUMMARY_TEMPLATES.md) · [`docs/LIVE_SUMMARY.md`](docs/LIVE_SUMMARY.md) |
+| 캡처 | 마이크(장치 선택), ScreenCaptureKit **시스템 오디오**(Teams / Zoom / YouTube), 둘 다; 캡처 준비에 걸린 카운트다운; 무음 경고 | [`docs/SYSTEM_AUDIO.md`](docs/SYSTEM_AUDIO.md) · [`apps/macos/VERIFY_CAPTURE.md`](apps/macos/VERIFY_CAPTURE.md) |
+| 디버그 모드(D1) | 설정 → 진단 또는 `MADI_DEBUG=1`: 세션당 번들 하나 `~/Library/Application Support/Madi/debug/<stamp>/` — 엔진 바이트 그대로(`env.txt`, `stdin.log`, `wav/`, `stdout.log`, 이벤트 사본), `store.jsonl`(boundary / merge / join / ledger-flip / spk), `translate.jsonl`(turn / result / shed / wedge / relaunch), `watchdog.jsonl`, `mem.jsonl`, `session.json` | [`docs/DEBUG_MODE.md`](docs/DEBUG_MODE.md) |
+| 제품 표면 | KO / EN / JA UI, 4개 국어 매뉴얼(`docs/manual/`), 받아쓰기, 편집기·리더 기능, `.md` / `.srt` / JSON 내보내기, 첫 실행 모델 온보딩(SHA-256 검증), S3 채널 Sparkle 자동 업데이트, 베타 만료 래치, Figma 디자인 토큰 동기화 | [`apps/macos/DESIGN.md`](apps/macos/DESIGN.md) · [`docs/EDITOR_FEATURES.md`](docs/EDITOR_FEATURES.md) · [`design/README.md`](design/README.md) |
+
+### 측정·검증 도구
+
+| 도구 | 용도 | 실행 |
+|---|---|---|
+| `swift test`(SovereignCore) | 머저·스토어 원장·번역 큐·shed·폭주·stale 유지·번호·디버그 로그 위의 헤드리스 테스트 649건 | `cd apps/macos && swift test` |
+| 캡처 재생 게이트 | 세션의 `stdout.log`를 실제 Decoder → TranscriptStore로 바이트 그대로 재생해 행 수 / 미설명 끊김 / 이음매 중복 행 / 중복 단어 / 겹침 행 / 턴 머리 행 / 번호를 레버 off/on별로 출력 | `MADI_CAPTURE_STDOUT=<bundle>/stdout.log swift test --filter CaptureFragmentationGateTests` |
+| 이벤트 게이트 | 엔진 `EVENTS_FILE` JSONL로 같은 측정(`MADI_EVENTS_JSONL=…`); X1 같은 화면 상태 결함은 못 본다 | 같은 테스트 클래스 |
+| `bench/live_capture/` | `tee_transcribe.py`가 실제 앱 → 엔진 스트림을 기록, `replay_capture.py` / `replay_faithful.py`가 오프라인 재생(디버그 번들에도 동작) | [`engine/metal/bench/live_capture/README.md`](engine/metal/bench/live_capture/README.md) |
+| `longwatch.sh` | 10 s 수집기: 프로세스별 CPU / RSS / 스레드, GPU 사용률, 압축기, 5분마다 메인 스레드 `sample`; PERF_LOG의 모든 라이브 CPU·메모리 수치의 출처 | `engine/metal/bench/wer_runs/prof/longwatch.sh`(`LW_OUT`, `LW_MT`) |
+| `t1_harness.py` | 기록된 턴으로 번역 엔진을 턴 프로토콜대로 구동(번들의 `translate.jsonl`이 그대로 입력) | `engine/metal/bench/wer_runs/t1_harness.py`(`ENGINE`, `MODEL`) |
+| 품질 벤치 | `wer_bench.py`(LibriSpeech / FLEURS, 공식 정규화 + jiwer), DER 하네스(AMI, VoxConverse), `ko_diar_gate.py`, `live_ux_gate.py`, `preview_lane_gate.py`, VAD 캠페인, 엔진 A/B([`docs/ENGINE_EVAL.md`](docs/ENGINE_EVAL.md): FLEURS-ko CER Qwen3-ASR-1.7B 4.60 % vs Whisper turbo 5.63 %, 8 GB 티어에는 미채택) | `engine/metal/bench/`([README](engine/metal/bench/README.md)) |
+| 누수 변형 빌드 | DebugAllocator(`LEAK_CHECK`, ReleaseSafe/Debug)로 빌드한 `transcribe`가 종료 시 누수를 보고; 장기 실행 점검용 합성 프리뷰/seg 스트림 | `engine/metal/build.sh transcribe.zig`, PERF_LOG M2/M3 |
+| Quark 트리 | 엔진·앱의 심볼 단위 토폴로지(AI 탐색·커밋 후 신선도): `sovereign_metal_whisper`, `sovereign_whisper_app`, `sovereign_metal_dna3_{2b,4b,9b}` | `~/antigravity/quark/q.sh regen configs/<cfg>.mjs` |
+| 원장 | [`PERF_LOG.md`](PERF_LOG.md) — 날짜 붙은 42개 항목(2026-07-05 → 2026-09-07), 수치·채택·반증; [`engine/metal/PERF_LOG.md`](engine/metal/PERF_LOG.md) — 엔진 이력; [`docs/BACKLOG.md`](docs/BACKLOG.md) — 고려만 한 것 | — |
+
+### 릴리스 파이프라인
+
+`apps/macos/scripts/madi_release.sh build|upload|publish <version>` 하나가 진입점(`skills/madi-release`
+스킬이 이걸 구동): `make_app.sh`(명시적 소스 목록) → `verify_release_bundle.sh` → DMG → Developer ID
+서명 + 공증 + 스테이플(인증서가 있을 때; 없으면 ad-hoc) → 불변 S3 업로드 → 채널 게시. 업데이터는
+CloudFront로 `channels/<channel>/latest.json`과 `appcast.xml`을 읽고 크기 + SHA-256 + URL을 검증하며,
+`releases/index.json`이 게시 버전의 정본이다. 스모크 체크리스트와 태그 규칙은
+[`docs/RELEASE.md`](docs/RELEASE.md).
+
+### 부속 유틸리티
+
+`tools/`(이벤트 계약 위의 자막·회의록·SRT 방송 — [`docs/EVENTS.md`](docs/EVENTS.md)), `web/`(이벤트
+대시보드 + 브리지 서버, 픽스처), `design/`(Figma ↔ 앱 토큰 동기화).
+
+---
 
 ## 라이선스 / 출처
 추론 코드는 본 프로젝트의 독자 구현입니다. 다섯 가지 서드파티 모델을 재사용하며,

@@ -11,6 +11,7 @@ Python/PyTorch/onnxruntime at runtime**. Korean guide: [README_KR.md](README_KR.
 > **~402 tok/s** (jfk) / **~485–496 tok/s** steady, diarization **9.67% DER** on
 > VoxConverse dev (beats pyannote 3.1 SOTA ~11.2%).
 > Full status: [`engine/metal/STATUS.md`](engine/metal/STATUS.md).
+> Everything the project has built so far, with where it lives and how it was measured: [Assets](#assets--what-exists-where-it-lives-how-it-is-verified).
 
 ## The primary flow: a local-first macOS app
 
@@ -245,11 +246,96 @@ Session budget (translate + whisper), which is what decides the 8 GB tier:
 
 Transcription did not change in that cycle; those rows are the baseline, not a result.
 
+## Assets — what exists, where it lives, how it is verified
+
+Everything below is in this repository (or in the sibling `sovereignLLM` repo for the
+translate engines) and was **kept only after a measurement** — the rule of the project.
+Refuted levers are recorded in the same ledgers as the wins. Canon documents are named
+per row; when a row and a canon disagree, the canon wins.
+
+### Runtime engines (shipped in `Madi.app`)
+
+| asset | what it is | where | verified by |
+|---|---|---|---|
+| **Sovereign Whisper** `transcribe` | Whisper large-v3-turbo, Q8, pure Zig + Metal; file mode and resident **STREAM** mode (5 s windows + overlap, word timestamps, `PREVIEW` lane, `%%FP` forced prefix, `EVENTS_FILE` JSONL contract) | `engine/metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig`, `kernels/` | LibriSpeech 2.17 / 4.19 % WER, FLEURS-ko 4.05 % CER, jfk decode ~402 tok/s, peak RSS 1.05 GB — [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
+| **Speaker diarization** | WeSpeaker ResNet34 embeddings + online clustering with periodic re-cluster (`DIAR_RECLUSTER`), overlap detection (pyannote seg-3.0), Silero VAD gate, fixed-K + Unknown bucket, ON/OFF toggle | `diar_resnet.zig`, `online_diar.zig`, `osd_pyannote.zig` | 9.67 % DER VoxConverse dev; live DER/UX gates in `engine/metal/bench/` — [`docs/DIAR_EVAL.md`](docs/DIAR_EVAL.md) |
+| **DNA3.0-4B / 2B translate engines** | GGUF Q4_K_M runners for the on-device LLM (translation, summary, Q&A, titles). Turn REPL: `%%TRN` (turn + example pair), `%%PFX` (registered prefix slots), ` %%FP ` (forced prefix), ` %%MAX n` (per-turn cap); embedding-window-only weight mapping (RSS 5.4 → 2.5 GB, 4B) | `sovereignLLM/apps/metal-dna3-{4b,2b}-q4km/main.zig` (canon `PERF_MATRIX.md` there) | prefill B=14 69.8 ms / decode 64.7 tok/s (4B); memory budget for the 8/16 GB tiers ≈ 4.05 GB with Whisper — PERF_LOG M1 |
+| DNA3.0-9B tier (24 GB+) | Engine side complete (turn protocol 6/6, mmap release, 8192 context +233 MB); app wiring and GGUF hosting **on hold since 2026-09-07** | `sovereignLLM/apps/metal-dna3-9b-q4km/` | — |
+
+Engine levers that ship (each has a PERF_LOG entry with the measurement): decoder
+sequence prefill of the glossary seed (S1, −155 ms/pass) · preview forced prefix (S2,
+preview decode −38 %) · interim forced prefix (T1, −23 %) · previous (source ⇒
+translation) pair as the prompt example (T5) · glossary → decoder bias, gated to the
+languages it was measured on (S4, P6) · partial-freeze against run-on hallucinations
+(`PARTIAL_MAX_TOK`) · batched encoder (`ENC_BATCH`), F16 encoder cache, `AUDIO_CTX=auto`
+(first text ~1.8 s) · leak-free preview lane (M2 +23 MB/min and M3 +2.3 MB/min fixed;
+`LEAK_CHECK` DebugAllocator build for regressions).
+Refuted and recorded: previous-text conditioning (S3), decode-occupancy levers (S5),
+int8 prefill, engine-side speaker-id cap (D1), fine-tuned third-party weights as a
+drop-in, madvise on the weight mapping, an engine centroid merge is still a candidate.
+
+### macOS app (`apps/macos/Sovereign`, SwiftUI; headless core in `Package.swift`)
+
+| asset | what it does | canon |
+|---|---|---|
+| Live pipeline: `WordMerger` → `TranscriptStore` → `TranscriptView` | Overlap dedup + held-word holdback with the **view applying the same seam rules** (X1), seam-duplicate and window-tail-stub guards (L2, X2); **decided-once boundary ledger** (P15) recorded only between settled words, same-speaker neighbour joins after a label fix (L1), one-word turn heads adopt the next speaker (X4); rows = sentences, detailed view groups a speaker's consecutive rows into turns (U1) | [`PERF_LOG.md`](PERF_LOG.md) P15 · L1 · L2 · X1 |
+| Speaker display | Numbers only after 10 s of speech per id, `화자분리중…` before (S1); stable numbering across re-clusters; voiceprint auto-naming; AI speaker/language reconcile at stop | PERF_LOG S1 · [`docs/DIAR_EVAL.md`](docs/DIAR_EVAL.md) |
+| Translation lane: `TranslateEngine`, `TranslationTurnQueue`, `DNAEngineBroker` | Committed-first priority queue, fragment coalescing, secondary-target shedding with stop-time backfill, stale-keep display, runaway bound (T7: engine `%%MAX` + app truncation + example-poisoning guard), echo stripper that never cuts a revision's shared prefix (T8), no token streaming to the panel (T9), per-turn watchdog with terminate + relaunch | [`docs/LIVE_TRANSLATE.md`](docs/LIVE_TRANSLATE.md) · [`docs/TRANSLATE_DISPLAY_STABILITY.md`](docs/TRANSLATE_DISPLAY_STABILITY.md) (NE < 0.2 stable-prefix policy; live panel NE 0.24–0.27) |
+| Meeting intelligence | Summary templates (meeting / lecture / interview, one spine), rolling live summary (built, currently unwired), Q&A, titles, action items | [`docs/MEETING_INTELLIGENCE.md`](docs/MEETING_INTELLIGENCE.md) · [`docs/SUMMARY_TEMPLATES.md`](docs/SUMMARY_TEMPLATES.md) · [`docs/LIVE_SUMMARY.md`](docs/LIVE_SUMMARY.md) |
+| Capture | Mic (device picker), **system audio** via ScreenCaptureKit (Teams / Zoom / YouTube), both; countdown gated on capture readiness; silence warning | [`docs/SYSTEM_AUDIO.md`](docs/SYSTEM_AUDIO.md) · [`apps/macos/VERIFY_CAPTURE.md`](apps/macos/VERIFY_CAPTURE.md) |
+| Debug mode (D1) | Settings → 진단, or `MADI_DEBUG=1`: one bundle per session under `~/Library/Application Support/Madi/debug/<stamp>/` — exact engine bytes (`env.txt`, `stdin.log`, `wav/`, `stdout.log`, events copy), `store.jsonl` (boundary / merge / join / ledger-flip / spk), `translate.jsonl` (turn / result / shed / wedge / relaunch), `watchdog.jsonl`, `mem.jsonl`, `session.json` | [`docs/DEBUG_MODE.md`](docs/DEBUG_MODE.md) |
+| Product surfaces | KO / EN / JA UI, 4-language manual (`docs/manual/`), dictation, editor & reader features, `.md` / `.srt` / JSON export, first-run model onboarding (SHA-256 verified), Sparkle self-update from the S3 channel, beta expiry latch, design tokens synced from Figma | [`apps/macos/DESIGN.md`](apps/macos/DESIGN.md) · [`docs/EDITOR_FEATURES.md`](docs/EDITOR_FEATURES.md) · [`design/README.md`](design/README.md) |
+
+### Measurement and verification tooling
+
+| tool | purpose | run |
+|---|---|---|
+| `swift test` (SovereignCore) | 649 headless tests over the merger, store ledger, translation queue, shedding, runaway, stale-keep, numbering, debug log | `cd apps/macos && swift test` |
+| Capture replay gate | Replays a session's `stdout.log` byte-for-byte through the real Decoder → TranscriptStore and prints lines / unexplained breaks / seam-dup rows / dup words / overlap rows / turn-head rows / numbering, with each lever off and on | `MADI_CAPTURE_STDOUT=<bundle>/stdout.log swift test --filter CaptureFragmentationGateTests` |
+| Events gate | Same over the engine's `EVENTS_FILE` JSONL (`MADI_EVENTS_JSONL=…`); note it cannot see view-state defects such as X1 | same test class |
+| `bench/live_capture/` | `tee_transcribe.py` records the real app → engine stream; `replay_capture.py` / `replay_faithful.py` replay it offline (works on a debug bundle) | [`engine/metal/bench/live_capture/README.md`](engine/metal/bench/live_capture/README.md) |
+| `longwatch.sh` | 10 s collector: CPU / RSS / threads per process, GPU utilisation, compressor, plus a main-thread `sample` every 5 min; the source of every live CPU/memory number in PERF_LOG | `engine/metal/bench/wer_runs/prof/longwatch.sh` (`LW_OUT`, `LW_MT`) |
+| `t1_harness.py` | Drives a translate engine through the turn protocol from recorded turns (a bundle's `translate.jsonl` is a valid input) | `engine/metal/bench/wer_runs/t1_harness.py` (`ENGINE`, `MODEL`) |
+| Quality benches | `wer_bench.py` (LibriSpeech / FLEURS, official normaliser + jiwer), DER harness (AMI, VoxConverse), `ko_diar_gate.py`, `live_ux_gate.py`, `preview_lane_gate.py`, VAD campaigns, engine A/B ([`docs/ENGINE_EVAL.md`](docs/ENGINE_EVAL.md): Qwen3-ASR-1.7B 4.60 % vs Whisper turbo 5.63 % CER on FLEURS-ko, not adopted on the 8 GB tier) | `engine/metal/bench/` ([README](engine/metal/bench/README.md)) |
+| Leak variant | `transcribe` built with the DebugAllocator (`LEAK_CHECK`, ReleaseSafe/Debug) reports leaks at exit; synthetic preview/seg streams for long-run checks | `engine/metal/build.sh transcribe.zig`, see PERF_LOG M2/M3 |
+| Quark trees | Symbol-level topology of the engine and the app for AI navigation and post-commit freshness (`sovereign_metal_whisper`, `sovereign_whisper_app`, `sovereign_metal_dna3_{2b,4b,9b}`) | `~/antigravity/quark/q.sh regen configs/<cfg>.mjs` |
+| Ledgers | [`PERF_LOG.md`](PERF_LOG.md) — 42 dated entries (2026-07-05 → 2026-09-07) with the numbers, wins and refutations; [`engine/metal/PERF_LOG.md`](engine/metal/PERF_LOG.md) — engine history; [`docs/BACKLOG.md`](docs/BACKLOG.md) — considered, not started | — |
+
+### Release pipeline
+
+`apps/macos/scripts/madi_release.sh build|upload|publish <version>` is the single entry
+(the `skills/madi-release` skill drives it): `make_app.sh` (explicit source list) →
+`verify_release_bundle.sh` → DMG → Developer ID sign + notarize + staple when the
+identity is present (ad-hoc otherwise) → immutable S3 upload → channel publish. The
+updater reads `channels/<channel>/latest.json` and `appcast.xml` through CloudFront and
+verifies size + SHA-256 + URL; `releases/index.json` is the published-version canon.
+[`docs/RELEASE.md`](docs/RELEASE.md) holds the smoke checklist and the tag rule.
+
+### Companion utilities
+
+`tools/` (captions, minutes, SRT broadcast over the events contract —
+[`docs/EVENTS.md`](docs/EVENTS.md)), `web/` (events dashboard + bridge server, fixtures),
+`design/` (Figma ↔ app token sync).
+
 ## Version history
 
 Released builds are published to the S3 `stable` channel and served through
 CloudFront; the in-app updater reads `channels/stable/latest.json`. Release
 mechanics and the git-tag rule are in [docs/RELEASE.md](docs/RELEASE.md).
+
+Published versions (S3 `releases/index.json`): 0.1.0 → 0.1.5 below, then **0.1.6**
+(2026-07-31, Sparkle self-update), **0.1.7** (2026-08-05, translation display stability:
+NE-measured stable-prefix policy), **0.1.8** (2026-08-10, sentence hand-off without
+erasure + stability ledger file), **0.1.9** (2026-08-11, surface-correction rebind),
+**0.2.0** (2026-08-30, decided-once boundary ledger — mid-session re-clusters no longer
+collapse live rows), **0.3.0** (2026-08-31, summary templates + live summary tab),
+**0.3.1** (2026-09-02, engine headroom batch: seed prefill, forced-prefix preview and
+interim, context example), **0.3.7** (2026-09-03, live profiling rounds P0–P4: main-thread
+saturation, translation backlog, line-count-proportional CPU, STT loop guard) — the
+current `stable`. 0.3.8 → 0.3.19 are local verification builds (ad-hoc signed, one
+per PERF_LOG round: language gate P5/P6, memory M1–M3, line joins L1/L2, translation
+bounds T7–T9, debug mode D1, deferred speaker numbers S1, turn grouping U1, seam view
+rules X1/X2/X4); publishing them is a separate decision.
 
 | version | published | tag | highlights |
 |---|---|---|---|
@@ -261,16 +347,18 @@ mechanics and the git-tag rule are in [docs/RELEASE.md](docs/RELEASE.md).
 | **0.1.0** | 2026-07-19 | `v0.1.0` | First official stable release. Diarization on/off toggle (#216), S3 release channel. |
 
 ## Project layout
-- `apps/macos/` — the native macOS app (SwiftUI). Pure-logic core is covered by `swift test` (`cd apps/macos && swift test`); packaging scripts live in `apps/macos/scripts/`.
+- `apps/macos/` — the native macOS app (SwiftUI). `Sovereign/{Audio,Engine,Transcript,UI,Model,Dictation,AppInfo}`;
+  the pure-logic core is the `SovereignCore` target of `Package.swift`, covered by `swift test` (`Tests/SovereignCoreTests`);
+  packaging and release scripts in `scripts/`; product design in `DESIGN.md`.
 - `engine/metal/transcribe.zig` — full pipeline (mel → conv → encoder → decoder → BPE, timestamps, diarization) + resident STREAM mode for live use.
-- `engine/metal/encoder.zig`, `decoder.zig`, `mel.zig`, `diar_resnet.zig` — modules.
+- `engine/metal/encoder.zig`, `decoder.zig`, `mel.zig`, `diar_resnet.zig`, `online_diar.zig`, `osd_pyannote.zig` — modules.
 - `engine/metal/live_transcribe.sh` — near-real-time meeting runner (mic capture, overlap, resident pipeline, colour/`.md`/`.srt`).
 - `engine/metal/merge_seg.awk` — merges word timestamps with speaker labels (overlap dedup, speaker carry-over).
-- `engine/metal/online_diar.zig`, `diar_embed_wav.zig` — standalone diar tools (used by the `--no-resident` fallback).
 - `engine/metal/kernels/*.metal` — Metal kernels. `engine/metal/metal_backend.{m,h}` — ObjC bridge.
-- `engine/metal/bench/` — DER benchmark harness + diarization study docs. `engine/metal/testdata/` — live-pipeline regression fixture.
-- Docs: `engine/metal/STATUS.md` (current state), `engine/metal/PERF_LOG.md` (history),
-  `engine/metal/PORT.md` (CUDA→Metal port notes), `engine/metal/bench/*.md`.
+- `engine/metal/bench/` — WER/CER and DER harnesses, live UX gates, VAD campaigns, `live_capture/` replay, `wer_runs/prof/` collectors and harnesses. `engine/metal/testdata/` — live-pipeline regression fixture.
+- `docs/` — canon documents (listed in the asset tables above); `docs/manual/` — the 4-language user manual.
+- `tools/`, `web/`, `design/`, `skills/` — companion utilities, events dashboard, Figma token sync, the release skill.
+- Ledgers: `PERF_LOG.md` (app + engine rounds since 2026-07), `engine/metal/STATUS.md` (current engine state), `engine/metal/PERF_LOG.md` (engine history), `engine/metal/PORT.md` (CUDA→Metal port notes).
 
 ## License / provenance
 Inference code is original work of this project. It reuses five third-party models,
