@@ -665,6 +665,13 @@ final class SessionController: EngineProcessDelegate {
         return String(format: "stt n=%d p50=%.2fs p95=%.2fs max=%.2fs previews=%d/min=%.1f | bg summarySkipped=%d summaryStarvedAdmits=%d railStarvedAdmits=%d | %@",
                       s.count, pct(0.5), pct(0.95), s.last ?? 0, previewAdmits, Double(previewAdmits) / minutes,
                       liveSummarySkippedTicks, liveSummaryStarvedAdmits, liveRailStarvedAdmits, engineDiag.tag)
+            // L1 (2026-09-06): live row structure — how many rows the session
+            // ended with and how many same-speaker boundaries were re-decided
+            // (joined) after a label fix. The autosave is a user setting and the
+            // accessibility tree does not expose row text, so this line is the
+            // only durable record of the LIVE structure once finalize regroups it.
+            + String(format: " | rows=%d joins=%d spkfixRebuilds=%d",
+                     transcript.lines.count, transcript.sameSpeakerJoins, transcript.speakerFixRebuilds)
     }
 
     /// Live translation TARGETS — a set of English language NAMES
