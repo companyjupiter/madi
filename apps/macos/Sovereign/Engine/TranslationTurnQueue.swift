@@ -157,6 +157,36 @@ struct TranslationTurnQueue {
 /// identifies replies that are observably in the wrong script so the engine can
 /// regenerate them with a source→target-specific prompt.
 enum TranslationOutputPolicy {
+    // T7 (2026-09-06): runaway generation. Live 0.3.15 showed a 9-word line
+    // ("I was actually more into reading and arts.") translated into a
+    // ~500-token cycling list of school subjects: the engine decodes greedily
+    // with no repetition penalty and the app passed a flat 512-token cap, so a
+    // slide into list mode ran to the cap, was painted live, and — because a
+    // committed translation becomes the next turn's example — poisoned the next
+    // turn. Two bounds, both proportional to the SOURCE: a per-turn token cap
+    // sent to the engine (%%MAX) and a character limit on the reply.
+    /// Tokens the engine may generate for this source (DNA3 tokenizer: KO/JA/ZH
+    /// ≈ 1.3 chars per token, EN ≈ 4). 1.5 × source chars + 24 leaves a
+    /// 28-word English line ~250 tokens; the floor covers one-word replies.
+    static func tokenCap(source: String) -> Int {
+        min(512, max(48, Int(Double(source.count) * 1.5) + 24))
+    }
+    /// Reply characters beyond which the turn is a runaway, not a translation.
+    static func runawayLimit(source: String) -> Int {
+        max(80, source.count * 3)
+    }
+    /// Cut a runaway reply at its last sentence end inside the limit (or hard
+    /// at the limit) so the row shows the part that was still a translation.
+    static func truncateRunaway(_ text: String, limit: Int) -> String {
+        guard text.count > limit else { return text }
+        let head = String(text.prefix(limit))
+        let enders: Set<Character> = [".", "?", "!", "。", "？", "！"]
+        if let cut = head.lastIndex(where: { enders.contains($0) }), head.distance(from: head.startIndex, to: cut) >= 8 {
+            return String(head[...cut]).trimmingCharacters(in: .whitespaces)
+        }
+        return head.trimmingCharacters(in: .whitespaces)
+    }
+
     static func clean(_ raw: String) -> String {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 

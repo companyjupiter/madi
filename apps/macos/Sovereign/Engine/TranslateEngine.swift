@@ -113,6 +113,8 @@ final class TranslateEngine {
     /// T5: the last committed (source, translation) per target language — the
     /// discourse context the next turn's example carries. Session-scoped.
     private var lastPair: [String: TranslatePrompt.Example] = [:]
+    /// T7: replies cut for exceeding the runaway limit (telemetry: @final tag).
+    private(set) var runawayTruncations = 0
 
     /// Retry prompt deliberately changes both the instruction and token layout.
     /// The 2B model responds more reliably when the source language is explicit;
@@ -253,6 +255,11 @@ final class TranslateEngine {
         } else {
             wirePrompt = next.prompt
         }
+        // T7: per-turn token cap sized from the source (see TranslationOutputPolicy).
+        // Same engine generation as %%FP support; the marker precedes %%FP.
+        if broker.supportsForcedPrefix {
+            wirePrompt += " %%MAX \(TranslationOutputPolicy.tokenCap(source: next.source))"
+        }
         // T1: forced assistant prefix — the engine prefills it and echoes it as
         // the reply head, so the streamed reply still reads as the full text.
         if let forced = next.forced, broker.supportsForcedPrefix {
@@ -286,6 +293,8 @@ final class TranslateEngine {
         cleaned = TranslationOutputPolicy.stripExampleEcho(cleaned, exampleTarget: turn.exampleTarget, source: turn.source)
         guard !cleaned.isEmpty else { return }
         if TranslationOutputPolicy.shouldRetry(cleaned, source: turn.source, target: turn.lang) { return }
+        // T7: stop painting a runaway live; completeTurn truncates it.
+        if cleaned.count > TranslationOutputPolicy.runawayLimit(source: turn.source) { return }
         onPartial?(turn.id, turn.lang, cleaned, turn.source)
     }
 
@@ -318,14 +327,21 @@ final class TranslateEngine {
             if turn.retries == 0 { onResult?(turn.id, turn.lang, "", turn.source) }
             return   // retry pending, or report a completed suppressed echo
         }
+        // T7: a reply far longer than its source is a runaway (list/loop), not a
+        // translation. Keep the part that still is one, and never let it become
+        // the next turn's example — that is how one runaway poisoned the next.
+        let limit = TranslationOutputPolicy.runawayLimit(source: turn.source)
+        let runaway = cleaned.count > limit
+        let final = runaway ? TranslationOutputPolicy.truncateRunaway(cleaned, limit: limit) : cleaned
+        if runaway { runawayTruncations += 1 }
         // T5: a committed line's translation becomes the next turn's example for
         // this language (interim previews are disposable and never become context).
-        if turn.kind == .committed, !cleaned.isEmpty {
-            lastPair[turn.lang] = TranslatePrompt.Example(source: turn.source, target: cleaned)
+        if turn.kind == .committed, !final.isEmpty, !runaway {
+            lastPair[turn.lang] = TranslatePrompt.Example(source: turn.source, target: final)
         }
         // Empty is a terminal result too: request-generation and backfill
         // barriers must drain even when the model returns no usable text.
-        onResult?(turn.id, turn.lang, cleaned, turn.source)
+        onResult?(turn.id, turn.lang, final, turn.source)
     }
 
     private static func norm(_ x: String) -> String {
