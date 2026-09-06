@@ -108,7 +108,15 @@ inline fn q4r(w: f32, blk_max: f32) f32 {
     const s = blk_max / g_qmax;
     return std.math.clamp(@round(w / s), -g_qmax, g_qmax) * s;
 }
-const alloc = std.heap.page_allocator;
+// M2b (2026-09-06): leak-check build. ReleaseSafe builds route every allocation
+// through the debug allocator and print unfreed allocations WITH stack traces
+// when the job loop ends (stdin closed / FLUSH). Production ReleaseFast builds
+// are untouched: page_allocator, zero overhead. Use `bash build.sh transcribe.zig`
+// for production and the leak variant below for diagnosis:
+//   zig build-obj -O ReleaseSafe … → out/transcribe_leak ; LEAK run: feed a stream, close stdin.
+const LEAK_CHECK = @import("builtin").mode == .ReleaseSafe or @import("builtin").mode == .Debug;
+var g_gpa = std.heap.DebugAllocator(.{ .stack_trace_frames = 12 }){};
+const alloc = if (LEAK_CHECK) g_gpa.allocator() else std.heap.page_allocator;
 
 // FNV-1a over raw bytes / a Q8 weight (qs+scales) — for the WHASH bit-identity
 // proof (Q8-file load == F16-quantize at the weight level).
@@ -2394,6 +2402,7 @@ pub fn main() !void {
             try out.print("[batchdec] B={d}: {d} tok {d:.0}ms ({d:.0} tok/s, incl cross-KV+seed)\n", .{ B, bb_total, sh_ms, @as(f64, @floatFromInt(bb_total)) / (sh_ms / 1000.0) });
             for (0..B) |b| {
                 const txt = bpeDecode(bpe_path, bb_tokens[b * MAX_TOK + PLb .. b * MAX_TOK + PLb + bb_ntext[b]]) catch "";
+                defer if (txt.len > 0) alloc.free(txt); // M3
                 try out.print("[batchdec] slot {d} ({d}tok): {s}\n", .{ b, bb_ntext[b], txt[0..@min(txt.len, 70)] });
             }
         }
@@ -2772,6 +2781,9 @@ pub fn main() !void {
                         partial_frozen = true;
                     } else {
                         const ptext = bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]) catch "";
+                        // M3: this was never freed — one page_allocator page per
+                        // «partial» emission, the residual ~2 MB/min of live growth.
+                        defer if (ptext.len > 0) alloc.free(ptext);
                         evPartial(t_off + pass_off, ptext);
                         if (stream) try out.print("\u{00AB}partial {d:.2}\u{00BB} {s}\n", .{ t_off + pass_off, std.mem.trim(u8, ptext, " \n") });
                     }
@@ -2994,6 +3006,10 @@ pub fn main() !void {
                 f.close();
             }
         }
+    }
+    if (LEAK_CHECK) {
+        std.debug.print("[leak-check] job loop ended — reporting unfreed allocations\n", .{});
+        _ = g_gpa.detectLeaks();
     }
 }
 
@@ -4415,5 +4431,8 @@ fn bpeDecode(path: []const u8, ids: []const u32) ![]u8 {
         if (id >= 50257) continue; // strip EOT/specials/timestamp tokens
         if (id < toks.len) try buf.appendSlice(toks[id]);
     }
-    return buf.items;
+    // M3 (2026-09-06): return an exact-size OWNED slice. `buf.items` was a view of
+    // a larger capacity buffer: alloc.free(items) is an invalid free (the debug
+    // allocator panics on it; page_allocator silently unmapped the wrong length).
+    return buf.toOwnedSlice();
 }

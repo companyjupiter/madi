@@ -1,3 +1,24 @@
+## M3 — transcribe 잔여 누수: «partial» 출력마다 디코드 텍스트 버퍼 미해제 (2026-09-06, 0.3.12 라이브 → 0.3.13)
+
+0.3.12 라이브 22분: transcribe RSS 282 → 329 MB(**분당 2.3 MB, 선형**). M2로 10분의 1이 됐지만 남았다. 눈으로 짝을 맞추는 대신 **누수 검출 할당기 빌드**를 만들었다: `LEAK_CHECK = mode == ReleaseSafe or Debug`일 때 `alloc`이 `std.heap.DebugAllocator`(스택 12프레임)로 바뀌고, job 루프가 끝나면 `detectLeaks()`가 살아 있는 할당을 스택과 함께 찍는다. 배포 빌드(ReleaseFast)는 page_allocator 그대로.
+
+첫 실행은 첫 job에서 **"Invalid free"** 패닉 — `transcribe.zig` `alloc.free(text)`의 `text`가 `bpeDecode`의 `buf.items`(용량 버퍼의 일부 뷰)였다. 디버그 할당기는 슬롯 시작이 아닌 포인터라 거부했고, page_allocator는 길이만 보고 조용히 넘겼다. 같은 함수의 다른 호출 2곳은 아예 free가 없었다: «partial» 출력(`ptext`, 디코드 배치마다 1회 → job당 여러 번)과 BATCHDEC 로그(`txt`). 잔여 누수 = **partial마다 page_allocator 한 페이지(16 KB)**.
+
+수정: `bpeDecode`가 `toOwnedSlice()`로 정확한 크기의 소유 슬라이스를 돌려주고, `ptext`/`txt`를 `defer free`.
+
+| 검증 | 결과 |
+|---|---|
+| 누수 검출 빌드, 프리뷰 0 → 60 job 뒤 살아 있는 할당 | 29 → **30**(1회성 버퍼 1개, job당 0.02) |
+| 프리뷰 300회 RSS(프로덕션 빌드) | 272 → **273 MB**(M2 직후 278 → 288, M2 전 +0.14 MB/회) |
+| `%%FP` 프리뷰 100회 | 272 → 272 MB |
+| 같은 8 job 프리뷰 텍스트 | M2 전 기준과 동일 |
+| P6 캡처 재생 게이트 | 독일어 0 %, `[prompt]` 1, rescue 0 |
+
+### 0.3.12 라이브 22분 최종(`@final`)
+stt n=283, p50 0.64 s / p95 1.21 s, 프리뷰 956회(분당 42.2), interimTurns 0. 패널 NE **0.24**(0.3.11 0.27, 0.3.10 0.43). 번역 지연 p50 0.85 s / p95 3.93 s(n=588; 0.3.11은 1.23 / 7.26). rescue 6(collapse 1, logprob 5), loop-p2 10/4, 독일어 0. 4B RSS 3,347 MB 22분 평탄(0.3.10 5,395). 화자 표시 번호 11분에 6.
+
+교훈: **page_allocator는 잘못된 free를 숨긴다**(부분 슬라이스 free = 조용한 no-op 또는 잘못된 길이 unmap). 라이브 상주 프로세스의 메모리 추세는 항상 수집기로 보고, 선형 증가가 보이면 합성 스트림 + 누수 검출 빌드로 30분 안에 지점을 찍을 수 있다.
+
 ## M2 — transcribe 메모리 누수: `%%FP` 프리뷰마다 BPE 어휘 재적재 (2026-09-06, 0.3.11 라이브 → 0.3.12)
 
 0.3.11 라이브(영어 인터뷰, 시스템오디오)에서 transcribe RSS가 **271 → 625 MB / 35분**(초반 ≈23 MB/분)으로 선형 증가. 0.3.10 세션은 40분 내내 262~286 MB 평탄이었으므로 세션 의존 현상. `vmmap` 45초 차분: 증가분은 전부 `VM_ALLOCATE`(Zig page_allocator), 크기별로는 **1,360 KB 영역이 분당 +17개**.
