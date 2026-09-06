@@ -250,6 +250,57 @@ struct TranscriptView: View {
     }
     private var multiSpeaker: Bool { Set(lines.map { $0.speaker }).count > 1 }
 
+    // ── U1: speaker turns for the detailed view ─────────────────────────────
+    /// Consecutive same-speaker rows closer than this read as one turn.
+    private static let turnGap = 2.5
+    private static let turnRowGap: CGFloat = 12
+    private struct Turn: Identifiable { let id: String; let lines: [Line] }
+    private var turns: [Turn] {
+        var out: [Turn] = []
+        var cur: [Line] = []
+        for l in lines {
+            if let p = cur.last, p.speaker == l.speaker, l.start - p.end < Self.turnGap {
+                cur.append(l)
+            } else {
+                if let f = cur.first { out.append(Turn(id: "turn-" + f.id.uuidString, lines: cur)) }
+                cur = [l]
+            }
+        }
+        if let f = cur.first { out.append(Turn(id: "turn-" + f.id.uuidString, lines: cur)) }
+        return out
+    }
+    /// P0: a row's body (AttributedString build + CoreText layout) re-ran for
+    /// EVERY line on every 30 fps snapshot; ~100 rows × 3 text rows saturated
+    /// the main thread. The host compares a value key and skips unchanged rows.
+    private func turnRow(_ line: Line, header: Bool) -> some View {
+        RowHost(key: rowKey(line, header: header)) {
+            row(line, header: header)
+                .padding(.trailing, header ? 0 : 56)
+                .overlay(alignment: .topTrailing) { if !header { rowActions(line) } }
+        }
+        .equatable()
+        .id(line.id)
+        .transaction { $0.animation = nil }
+    }
+    /// Copy/edit for a continuation row (the header row carries them inline).
+    private func rowActions(_ line: Line) -> some View {
+        HStack(spacing: 16) {
+            Button { copyLine(line) } label: {
+                SVGIcon(name: "squares", size: 16, tint: Theme.Colors.textSecondary)
+            }
+            .buttonStyle(.plain)
+            .help(uiLang("이 문장 복사", "Copy this line"))
+            if canEdit(line) {
+                Button { beginEdit(line) } label: {
+                    SVGIcon(name: "pen", size: 16, tint: Theme.Colors.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .help(uiLang("이 문장 편집", "Edit this line"))
+            }
+        }
+        .opacity(0.7)
+    }
+
     /// Scroll id for a content-mode block — a String so it can't collide with the
     /// UUID scroll ids the detailed rows use (see the mode branch in body).
     private func blockScrollID(_ id: UUID) -> String { "block-\(id.uuidString)" }
@@ -346,16 +397,15 @@ struct TranscriptView: View {
                                     .transaction { $0.animation = nil }
                             }
                         } else {
-                            ForEach(lines) { line in
-                                // P0: a row's body (AttributedString build + CoreText
-                                // layout) re-ran for EVERY line on every 30 fps
-                                // snapshot; ~100 rows × 3 text rows saturated the
-                                // main thread. The host compares a value key and
-                                // skips unchanged rows.
-                                RowHost(key: rowKey(line)) { row(line) }
-                                    .equatable()
-                                    .id(line.id)
-                                    .transaction { $0.animation = nil }
+                            // U1: rows grouped into speaker turns — header once,
+                            // sentences stacked tightly; blockGap only between turns.
+                            ForEach(turns) { turn in
+                                VStack(alignment: .leading, spacing: Self.turnRowGap) {
+                                    ForEach(turn.lines) { line in
+                                        turnRow(line, header: line.id == turn.lines.first?.id)
+                                    }
+                                }
+                                .transaction { $0.animation = nil }
                             }
                         }
                         // The live hypothesis renders INLINE as a gray continuation
@@ -703,6 +753,7 @@ struct TranscriptView: View {
     private struct RowKey: Equatable {
         let line: Line
         let name: String
+        let header: Bool
         let isLast: Bool
         let locked: Bool
         let fontSize: CGFloat
@@ -721,9 +772,9 @@ struct TranscriptView: View {
         let interimSuffix: String
         let lang: UILanguage
     }
-    private func rowKey(_ line: Line) -> RowKey {
+    private func rowKey(_ line: Line, header: Bool = true) -> RowKey {
         let isLast = line.id == lines.last?.id
-        return RowKey(line: line, name: rowName(line), isLast: isLast, locked: line.id == lockedLineID,
+        return RowKey(line: line, name: rowName(line), header: header, isLast: isLast, locked: line.id == lockedLineID,
                       fontSize: fontSize, editing: editingLine == line.id,
                       editingTranslation: editingTranslationLine == line.id ? editingTranslationLang : nil,
                       reviewHighlight: reviewHighlight(line), reviewPopover: currentReviewRef?.lineID == line.id,
@@ -740,12 +791,17 @@ struct TranscriptView: View {
         var body: some View { content() }
     }
 
-    private func row(_ line: Line) -> some View {
+    private func row(_ line: Line, header: Bool = true) -> some View {
         VStack(alignment: .leading, spacing: 9) {   // Figma 188:663 header→body gap
             // Figma 258:1118 header: dot 6 · name 14 bold · timecode 12 medium
             // (hh:mm:ss) on the left; squares(copy) + pen(edit) 16pt, gap 16, on
             // the right.
-            HStack(spacing: 6) {
+            // U1 (2026-09-07): only the first row of a speaker TURN shows it —
+            // consecutive same-speaker rows within `turnGap` read as one
+            // paragraph (the rows stay sentences underneath: one translation
+            // each, edits and the boundary ledger untouched). Continuation rows
+            // get their copy/edit actions as a trailing overlay (see turnRow).
+            if header { HStack(spacing: 6) {
                 Circle().fill(Theme.Colors.speaker(line.speaker))
                     .frame(width: 6, height: 6)
                 // click the speaker chip to give them a name (applies to all
@@ -799,6 +855,7 @@ struct TranscriptView: View {
                         .help(uiLang("이 문장 편집", "Edit this line"))
                     }
                 }
+            }
             }
             if editingLine == line.id {
                 // TextField(axis: .vertical) silently ignores .lineSpacing() on macOS
@@ -974,7 +1031,8 @@ struct TranscriptView: View {
     // display number, not the engine id: the id is renumbered by recluster/SPKFIX
     // mid-session, which is what used to turn Speaker 1 into Speaker 8.
     private func name(_ id: Int) -> String {
-        SpeakerID.display(id, names: names, fallback: "Speaker \(speakerNumbers.number(id) ?? id + 1)")
+        SpeakerID.display(id, names: names, fallback: speakerNumbers.number(id).map { "Speaker \($0)" }
+                          ?? uiLang("화자분리중…", "Separating speakers…", "話者分離中…"))
     }
 
     /// The newest audio position in this transcript — the clock a row's age is
@@ -990,7 +1048,8 @@ struct TranscriptView: View {
         SpeakerID.display(line.speaker,
                           names: names,
                           number: speakerNumbers.number(line.speaker) ?? line.speaker + 1,
-                          margin: diarizing ? line.speakerMargin : 1.0,
+                          // S1: no number yet (under minSecondsToNumber) reads as deciding too
+                          margin: (diarizing || speakerNumbers.number(line.speaker) == nil) ? min(line.speakerMargin, 0) : 1.0,
                           age: latestEnd - line.end,
                           diarizing: uiLang("화자분리중…", "Separating speakers…", "話者分離中…"),
                           fallback: { "Speaker \($0)" })

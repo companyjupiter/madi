@@ -22,10 +22,14 @@ final class CaptureFragmentationGateTests: XCTestCase {
         /// Adjacent committed WORDS with the same normalized text within 1 s —
         /// the merger let a window-seam re-decode through as a second word.
         var duplicateWords = 0
+        /// Highest display number minted (S1: transient ids should not spend one).
+        var maxDisplayNumber = 0
+        var distinctSpeakerIDs = 0
         var row: String {
             "lines \(lines)  same-spk pairs \(sameSpeakerPairs)  unexplained breaks \(unexplainedBreaks)"
             + "  words/line p50 \(p50) p90 \(p90)  ≤5-word lines \(shortLines)  joins \(joins)"
             + "  seam-dup rows \(seamDuplicateRows)  dup words \(duplicateWords)"
+            + "  ids \(distinctSpeakerIDs) maxNumber \(maxDisplayNumber)"
         }
     }
 
@@ -76,6 +80,9 @@ final class CaptureFragmentationGateTests: XCTestCase {
                 }
             }
         }
+        let ids = Set(s.lines.map(\.speaker))
+        m.distinctSpeakerIDs = ids.count
+        m.maxDisplayNumber = s.speakerNumbers.numbers.values.max() ?? 0   // ever minted, not just ids still on rows
         let wcs = s.lines.map(\.words.count).sorted()
         if !wcs.isEmpty { m.p50 = wcs[wcs.count / 2]; m.p90 = wcs[min(wcs.count - 1, Int(0.9 * Double(wcs.count)))] }
         m.shortLines = wcs.filter { $0 <= 5 }.count
@@ -144,6 +151,16 @@ final class CaptureFragmentationGateTests: XCTestCase {
         print("CAPTURE-GATE join=off live : \(off.live.row)")
         print("CAPTURE-GATE join=on  live : \(on.live.row)")
         print("CAPTURE-GATE finalize      : \(on.final.row)")
+        // S1: display numbers minted with immediate numbering vs the 3 s floor.
+        let savedFloor = SpeakerDisplayNumber.minSecondsToNumber
+        var floors: [String] = []
+        for floor in [0.0, 3.0, 6.0, 10.0, 15.0] {
+            SpeakerDisplayNumber.minSecondsToNumber = floor
+            let r = replay(raw, join: true)
+            floors.append("\(Int(floor))s→\(r.live.maxDisplayNumber)")
+        }
+        SpeakerDisplayNumber.minSecondsToNumber = savedFloor
+        print("CAPTURE-GATE numbering (floor→max number minted, ids on rows at end \(on.live.distinctSpeakerIDs)): " + floors.joined(separator: "  "))
         XCTAssertLessThanOrEqual(on.live.unexplainedBreaks, off.live.unexplainedBreaks)
         XCTAssertEqual(on.final.lines, off.final.lines, "finalize structure must not depend on the live join")
     }

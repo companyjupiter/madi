@@ -1111,6 +1111,7 @@ final class SessionController: EngineProcessDelegate {
                           self.currentInterimSentence == source else { return }
                     self.updateInterimTranslation(lang: lang, text: text, source: source)
                 } else if self.transcript.lines.contains(where: { $0.id == id }) {
+                    guard LiveFeatureWiring.translationStreaming else { return }   // land once, complete
                     self.streamingTranslation = TranslationRef(id: id, lang: lang)  // A7 caret
                     if self.transcript.setTranslation(id, lang: lang, text,
                                                       sourceRevision: self.revisionFor(id: id, source: source)) {

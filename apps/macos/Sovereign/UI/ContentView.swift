@@ -2056,7 +2056,7 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(Theme.Colors.speakerGradient(entry.speaker))
                         .frame(width: max(4, avail * CGFloat(entry.fraction)))
-                        .help("\(SpeakerID.display(entry.speaker, names: session.speakerNames, fallback: "Speaker \(session.transcript.speakerNumbers.number(entry.speaker) ?? entry.speaker + 1)")) · \(Int((entry.fraction * 100).rounded()))%")
+                        .help("\(SpeakerID.display(entry.speaker, names: session.speakerNames, fallback: session.transcript.speakerNumbers.number(entry.speaker).map { "Speaker \($0)" } ?? uiLang("화자분리중…", "Separating speakers…", "話者分離中…"))) · \(Int((entry.fraction * 100).rounded()))%")
                 }
             }
             .animation(.snappy(duration: 0.35), value: shares.map(\.seconds).reduce(0, +))
@@ -2072,7 +2072,7 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     HStack(spacing: 6) {
                         Circle().fill(Theme.Colors.speaker(entry.speaker)).frame(width: 6, height: 6)
-                        Text(SpeakerID.display(entry.speaker, names: session.speakerNames, fallback: "Speaker \(session.transcript.speakerNumbers.number(entry.speaker) ?? entry.speaker + 1)"))
+                        Text(SpeakerID.display(entry.speaker, names: session.speakerNames, fallback: session.transcript.speakerNumbers.number(entry.speaker).map { "Speaker \($0)" } ?? uiLang("화자분리중…", "Separating speakers…", "話者分離中…")))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Theme.Colors.textPrimary)
                             .lineLimit(1)

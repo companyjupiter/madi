@@ -16,6 +16,17 @@
 import Foundation
 
 struct SpeakerDisplayNumber: Equatable {
+    /// S1 (2026-09-07): an id earns a number only once it has this much speech.
+    /// Live, the recluster mints transient ids for a window or two (a 3-second
+    /// "Speaker 10" in the panel) that a later SPKFIX folds away — but the
+    /// number was already spent, and the session climbed to Speaker 11 with
+    /// six real speakers. Until an id has ≥ this many seconds on its lines it
+    /// reads as still deciding; finalize numbers whatever is left.
+    /// Measured on the 0.3.9 live capture (4 ids left on rows at the end):
+    /// floor 0 s minted up to Speaker 9, 3 s → 7, 6 s → 6, 10 s → 4, 15 s → 4.
+    /// 10 s is the first floor at which only people who actually speak get a
+    /// number; a real newcomer reads "화자분리중…" for their first ~2 sentences.
+    nonisolated(unsafe) static var minSecondsToNumber = 10.0   // var only so the capture gate can sweep it
     /// id → display number (1-based). Append-only within a session.
     private(set) var numbers: [Int: Int] = [:]
     private var next = 1

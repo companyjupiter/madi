@@ -60,4 +60,14 @@ enum LiveFeatureWiring {
     /// a same-speaker sentence cut in two. `static var` (not `let`) only so the
     /// capture gate can measure the same replay with the join off.
     nonisolated(unsafe) static var joinSameSpeakerNeighbors = true
+
+    /// Paint a committed line's translation token by token while the 4B is
+    /// still generating (the "typewriter"), or only once the turn completes.
+    ///
+    /// OFF (2026-09-07, user decision after the 0.3.16 session): the streamed
+    /// text is a preview of the translation, and a preview of a translation is
+    /// not something the reader can use — it changes under them, and a runaway
+    /// (T7) was painted live before it could be cut. The row shows its dots
+    /// until the reply is complete and sanitized, then lands once.
+    static let translationStreaming = false
 }

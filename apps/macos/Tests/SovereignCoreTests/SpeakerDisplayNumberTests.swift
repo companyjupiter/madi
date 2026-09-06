@@ -134,14 +134,17 @@ final class SpeakerDisplayNumberTests: XCTestCase {
 // these drive real engine events through TranscriptStore.
 @MainActor
 final class SpeakerDisplayNumberStoreTests: XCTestCase {
+    // These tests are about ORDER; the S1 speech floor is covered separately.
+    override func setUp() { SpeakerDisplayNumber.minSecondsToNumber = 3.0 }
+    override func tearDown() { SpeakerDisplayNumber.minSecondsToNumber = 10.0 }
 
     /// Sparse, out-of-order engine ids still number 1, 2, 3 in transcript order.
     func testStoreNumbersInTranscriptOrderNotIDOrder() {
         let s = TranscriptStore()
         s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 7, dur: 1.5)))
-        s.ingest(.word(t0: 0.1, t1: 0.4, text: "먼저", conf: 1))
+        s.ingest(.word(t0: 0.1, t1: 3.4, text: "먼저", conf: 1))
         s.ingest(.speaker(SpeakerLabel(time: 4.0, id: 2, dur: 1.5)))
-        s.ingest(.word(t0: 4.1, t1: 4.4, text: "다음", conf: 1))
+        s.ingest(.word(t0: 4.1, t1: 7.4, text: "다음", conf: 1))
         XCTAssertEqual(s.speakerNumbers.number(7), 1, "id 7 spoke first → Speaker 1")
         XCTAssertEqual(s.speakerNumbers.number(2), 2, "lower id, later turn → Speaker 2")
     }
@@ -151,11 +154,11 @@ final class SpeakerDisplayNumberStoreTests: XCTestCase {
     func testMainSpeakerKeepsNumberOneAsSpeakersAccumulate() {
         let s = TranscriptStore()
         s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 0, dur: 1.5)))
-        s.ingest(.word(t0: 0.1, t1: 0.4, text: "주화자", conf: 1))
+        s.ingest(.word(t0: 0.1, t1: 3.4, text: "주화자", conf: 1))
         var t = 4.0
         for id in [3, 5, 6, 9, 12] {
             s.ingest(.speaker(SpeakerLabel(time: t, id: id, dur: 1.5)))
-            s.ingest(.word(t0: t + 0.1, t1: t + 0.4, text: "말", conf: 1))
+            s.ingest(.word(t0: t + 0.1, t1: t + 3.4, text: "말", conf: 1))
             t += 4.0
         }
         XCTAssertEqual(s.speakerNumbers.number(0), 1, "Speaker 1 must not drift as the count grows")
@@ -167,9 +170,9 @@ final class SpeakerDisplayNumberStoreTests: XCTestCase {
     func testMergeThroughTheStoreKeepsTheLowerNumber() {
         let s = TranscriptStore()
         s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 4, dur: 1.5)))
-        s.ingest(.word(t0: 0.1, t1: 0.4, text: "가", conf: 1))
+        s.ingest(.word(t0: 0.1, t1: 3.4, text: "가", conf: 1))
         s.ingest(.speaker(SpeakerLabel(time: 4.0, id: 1, dur: 1.5)))
-        s.ingest(.word(t0: 4.1, t1: 4.4, text: "나", conf: 1))
+        s.ingest(.word(t0: 4.1, t1: 7.4, text: "나", conf: 1))
         XCTAssertEqual(s.speakerNumbers.number(4), 1)
         XCTAssertEqual(s.speakerNumbers.number(1), 2)
         // They turn out to be the same person; the clusterer folds 4 into 1.

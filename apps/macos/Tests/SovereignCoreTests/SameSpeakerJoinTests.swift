@@ -104,4 +104,22 @@ final class SameSpeakerJoinTests: XCTestCase {
         XCTAssertEqual(s.lines.count, 2)
         XCTAssertEqual(s.sameSpeakerJoins, 0)
     }
+
+    /// S1: a transient id with under 3 s of speech spends no display number.
+    func testTransientSpeakerIDGetsNoNumberUntilItHasSpeech() {
+        SpeakerDisplayNumber.minSecondsToNumber = 3.0
+        defer { SpeakerDisplayNumber.minSecondsToNumber = 10.0 }
+        let s = TranscriptStore()
+        s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 4.0, margin: 0.9)))
+        s.ingest(.speaker(SpeakerLabel(time: 4.0, id: 7, dur: 1.0, margin: 0.9)))   // one short window
+        s.ingest(.speaker(SpeakerLabel(time: 5.0, id: 1, dur: 4.0, margin: 0.9)))
+        for (i, t) in ["we", "were", "at", "the", "park.", "yes", "and", "then", "we"].enumerated() {
+            let t0 = Double(i) + 0.1
+            s.ingest(.word(t0: t0, t1: t0 + 0.8, text: t, conf: 1))
+        }
+        XCTAssertEqual(s.speakerNumbers.number(1), 1)
+        XCTAssertNil(s.speakerNumbers.number(7), "0.8 s of speech: still deciding, no number spent")
+        s.finalize()
+        XCTAssertEqual(s.speakerNumbers.number(7), 2, "finalize numbers what is left, in order")
+    }
 }

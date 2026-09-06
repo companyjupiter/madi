@@ -873,9 +873,22 @@ final class TranscriptStore {
     func markDiarNamespaceBroken() { diarNamespaceBroken = true }
 
     /// Called on <<FLUSH_END>>: produce the corrected, overlap-annotated transcript.
+    /// S1: ids with enough speech on their lines to deserve a display number,
+    /// in first-appearance order (so the first speaker heard stays number 1).
+    private func numberableSpeakers() -> [Int] {
+        var seconds: [Int: Double] = [:]
+        var order: [Int] = []
+        for l in lines {
+            if seconds[l.speaker] == nil { order.append(l.speaker) }
+            seconds[l.speaker, default: 0] += max(0, l.end - l.start)
+        }
+        return order.filter { (seconds[$0] ?? 0) >= SpeakerDisplayNumber.minSecondsToNumber }
+    }
+
     func finalize() {
         DebugLog.shared?.emit("store", "finalize", ["linesBefore": lines.count, "joins": sameSpeakerJoins,
                                                     "spkfixRebuilds": speakerFixRebuilds])
+        speakerNumbers.assignAll(lines.map(\.speaker))   // S1: everyone left gets a number in the saved file
         finalized = true
         // The one-shot full regroup below supersedes the live frozen prefix —
         // thaw so SPKFIX boundaries can reshape the whole transcript once.
@@ -927,7 +940,7 @@ final class TranscriptStore {
         // Mint display numbers in transcript (time) order, after the overlays have
         // resolved each line's final speaker. First speaker heard = number 1, and
         // it stays 1: assignAll only ever adds ids it has not numbered before.
-        speakerNumbers.assignAll(tail.map(\.speaker))
+        speakerNumbers.assignAll(numberableSpeakers())   // S1: ≥ minSecondsToNumber of speech
         joinNewlyFrozen(promoted: promoted)   // L1
         scheduleRender()
     }

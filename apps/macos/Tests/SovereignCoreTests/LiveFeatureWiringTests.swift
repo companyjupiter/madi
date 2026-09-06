@@ -21,4 +21,9 @@ extension LiveFeatureWiringTests {
     func testTailTranslationWaitsForPreview() {
         XCTAssertTrue(LiveFeatureWiring.tailTranslationWaitsForPreview)
     }
+
+    func testTranslationStreamingIsOff() {
+        XCTAssertFalse(LiveFeatureWiring.translationStreaming,
+                       "a committed line's translation lands once, complete — no typewriter preview")
+    }
 }
