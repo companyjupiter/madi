@@ -245,4 +245,18 @@ final class TranslatePromptTests: XCTestCase {
         XCTAssertNil(TranslatePrompt.usableExample(TranslatePrompt.Example(source: "a\nb", target: "c"), for: "y"))
         XCTAssertNotNil(TranslatePrompt.usableExample(TranslatePrompt.Example(source: "이전 문장", target: "Previous"), for: "다음 문장"))
     }
+
+    /// T8: a grown revision of the same line must not be its own example — the
+    /// echo stripper would remove the shared translation prefix ("Dario.").
+    func testUsableExampleRejectsAnEarlierRevisionOfTheSameLine() {
+        let earlier = TranslatePrompt.Example(
+            source: "From the start, Anthropic pitched itself as the ultimate safety-conscious AI",
+            target: "처음부터 Anthropic은 최상의 안전 의식을 가진 AI로 자신을 제시했습니다.")
+        let grown = earlier.source + " Dario"
+        XCTAssertNil(TranslatePrompt.usableExample(earlier, for: grown))
+        XCTAssertNil(TranslatePrompt.usableExample(TranslatePrompt.Example(source: grown, target: "x"), for: earlier.source),
+                     "…and the other direction (a row that lost its tail)")
+        XCTAssertNotNil(TranslatePrompt.usableExample(earlier, for: "Dario studied neuroscience."),
+                        "an unrelated previous line stays a usable example")
+    }
 }

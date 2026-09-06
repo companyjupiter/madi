@@ -64,12 +64,25 @@ enum TranslatePrompt {
     /// enough to keep the prefill in the fixed-cost regime, and it is not the very
     /// sentence being translated (a repeat phrase would otherwise be its own
     /// example and invite echo).
+    ///
+    /// T8 (2026-09-06, live 0.3.16): nor a shorter/longer revision of the same
+    /// line. A row that grows after it was translated (a same-speaker join, a
+    /// late word) is re-translated with its OWN earlier pair as the example, and
+    /// the correct new translation then legitimately starts with the old one —
+    /// which the P2 echo stripper reads as a replay of the example and removes:
+    /// "…safety-conscious AI Dario" came out as "Dario." in both languages. When
+    /// one source is a prefix of the other, the anchor is the safer example.
     static func usableExample(_ ex: Example?, for text: String, maxChars: Int = 200) -> Example? {
         guard let ex, !ex.source.isEmpty, !ex.target.isEmpty,
               ex.source.count <= maxChars, ex.target.count <= maxChars,
               !ex.source.contains("\n"), !ex.target.contains("\n"),
               ex.source != text else { return nil }
+        let a = normalizedForRevision(ex.source), b = normalizedForRevision(text)
+        if a.hasPrefix(b) || b.hasPrefix(a) { return nil }
         return ex
+    }
+    private static func normalizedForRevision(_ s: String) -> String {
+        s.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 }
 
