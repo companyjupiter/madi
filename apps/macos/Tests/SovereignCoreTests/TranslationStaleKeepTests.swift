@@ -243,14 +243,23 @@ final class CosmeticRebindTests: XCTestCase {
 @MainActor
 final class SpeakerFixStructureStabilityTests: XCTestCase {
 
-    /// Build a 4-line tail: two speakers alternating, short turns.
-    private func seed(_ s: TranscriptStore) {
+    /// Build a 4-line tail: two speakers alternating, short turns. Each turn
+    /// ends a sentence by default — L1 (2026-09-06) joins UNFINISHED
+    /// same-speaker neighbours live, so the "structure survives a label merge"
+    /// contract below is about finished rows; `finished: false` seeds the
+    /// mid-sentence shape L1 is for.
+    private func seed(_ s: TranscriptStore, finished: Bool = true) {
         s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 2.0, margin: 0.3)))
         s.ingest(.speaker(SpeakerLabel(time: 2.0, id: 2, dur: 2.0, margin: 0.3)))
         s.ingest(.speaker(SpeakerLabel(time: 4.0, id: 1, dur: 2.0, margin: 0.3)))
         s.ingest(.speaker(SpeakerLabel(time: 6.0, id: 2, dur: 2.0, margin: 0.3)))
-        for (i, t) in ["안녕하세요", "반갑습니다", "오늘", "회의를", "시작하죠", "네", "좋습니다", "바로"].enumerated() {
-            let t0 = Double(i)   // 1 word/second → 2 words per label window
+        let words = finished
+            ? ["안녕하세요", "반갑습니다.", "오늘", "회의를.", "시작하죠", "네.", "좋습니다", "바로."]
+            : ["안녕하세요", "반갑습니다", "오늘", "회의를", "시작하죠", "네", "좋습니다", "바로"]
+        for (i, t) in words.enumerated() {
+            // 1 word/second, offset 0.1 s so no word starts exactly on a label
+            // edge (a word AT the edge belongs to the earlier window → 2 words per window).
+            let t0 = Double(i) + 0.1
             s.ingest(.word(t0: t0, t1: t0 + 0.8, text: t, conf: 1))
         }
     }
@@ -289,21 +298,23 @@ final class SpeakerFixStructureStabilityTests: XCTestCase {
                        "same id + same text → translation stays VALID, not stale")
     }
 
-    func testFinalizeStillPerformsTheRealMerge() async throws {
+    func testLiveJoinMatchesFinalizeForUnfinishedRows() async throws {
+        // L1 (2026-09-06): mid-sentence rows that a label merge makes the same
+        // speaker join LIVE now — the same structure the one-shot finalize
+        // regroup produces, so the live view and the saved file agree.
         let s = TranscriptStore()
-        seed(s)
+        seed(s, finished: false)
+        let before = s.lines.count
+        XCTAssertGreaterThanOrEqual(before, 3)
         s.ingest(.speakerFix(SpeakerLabel(time: 2.0, id: 1, dur: 2.0, margin: 0.9)))
         s.ingest(.speakerFix(SpeakerLabel(time: 6.0, id: 1, dur: 2.0, margin: 0.9)))
         try await Task.sleep(nanoseconds: 120_000_000)
+        XCTAssertLessThan(s.lines.count, before, "unfinished same-speaker rows joined live")
+        XCTAssertEqual(Set(s.lines.map(\.speaker)), [1])
         let liveCount = s.lines.count
-        XCTAssertGreaterThanOrEqual(liveCount, 3, "live keeps the structure calm")
-        // The one-shot finalize regroup bypasses the ledger: same-speaker
-        // adjacent lines DO merge in the final artifact.
         s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 8.0, margin: 0.9)))
         s.finalize()
-        XCTAssertLessThan(s.lines.count, liveCount,
-                          "finalize merges what live only relabeled")
-        XCTAssertEqual(Set(s.lines.map(\.speaker)), [1])
+        XCTAssertEqual(s.lines.count, liveCount, "finalize finds nothing left to merge")
     }
 
     func testNewSpeakerStillOpensNewLineAtHead() {

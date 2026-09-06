@@ -567,12 +567,14 @@ final class TranscriptStore {
         // never renames the speaker the user has been watching as Speaker 1.
         speakerNumbers.merge(from: from, into: target)
         applySpeakerOverlays()
+        joinSameSpeakerNeighbors()   // L1
     }
 
     /// Re-attribute one line to a different speaker (mislabel fix).
     func relabelSpeaker(lineID: UUID, to speaker: Int) {
         speakerOverrides[lineID] = speaker
         applySpeakerOverlays()
+        joinSameSpeakerNeighbors()   // L1
     }
 
     var hasSpeakerCorrections: Bool { !speakerMerges.isEmpty || !speakerOverrides.isEmpty }
@@ -733,11 +735,126 @@ final class TranscriptStore {
         spkFixRebuildScheduled = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 50_000_000)
+            guard spkFixRebuildScheduled else { return }   // a test flushed it already
             spkFixRebuildScheduled = false
-            speakerFixRebuilds += 1
-            liveLabelLookupCache = nil
-            reassignFrozenSpeakers()
-            rebuildFromCurrentLabels()
+            performSpeakerFixRebuild()
+        }
+    }
+    private func performSpeakerFixRebuild() {
+        speakerFixRebuilds += 1
+        liveLabelLookupCache = nil
+        reassignFrozenSpeakers()
+        rebuildFromCurrentLabels()
+        joinSameSpeakerNeighbors()
+    }
+    /// Tests and offline replays: run a pending coalesced SPKFIX rebuild now
+    /// instead of waiting the 50 ms.
+    func flushPendingSpeakerFixRebuild() {
+        guard spkFixRebuildScheduled else { return }
+        spkFixRebuildScheduled = false
+        performSpeakerFixRebuild()
+    }
+
+    // ── L1 (2026-09-06): join same-speaker neighbours the label churn split ──
+    //
+    // A boundary is decided ONCE at first adjacency (P15). At that moment the
+    // newer window often carries a PROVISIONAL speaker id that the recluster
+    // corrects ~24 s later with SPKFIX: measured on the 0.3.9 live capture, 23
+    // of 110 initial speaker turns (21 %) were reverted to the previous speaker.
+    // Each of those left a permanent line break in the middle of a sentence —
+    // "It was during the pandemic, so the story goes," / "and a bunch of early
+    // employees …" as separate rows of the same Speaker 1 — and a translation
+    // of each fragment. The finalize regroup merged them, so the saved file was
+    // fine and only the live view fragmented.
+    //
+    // This re-decides exactly those boundaries: when two ADJACENT lines come to
+    // share a speaker (SPKFIX, an LLM relabel/merge, or a line freezing next to
+    // an already-eligible neighbour) and the first line is unfinished — no
+    // sentence-ending punctuation, gap under lineBreakGap, caps not hit — the
+    // pair joins. Frozen pairs join in place (their words are fixed); tail pairs
+    // get their ledger entry cleared so the ordinary regroup joins them. Nothing
+    // else about P15 changes: finished lines keep their identity, and a boundary
+    // that stays a real speaker turn is never touched. Joined text changes the
+    // first line's revision, so its translation shows as stale until it is
+    // re-translated once for the whole sentence — one 4B turn instead of the two
+    // fragment turns it replaces.
+    //
+    // Deferring the first verdict while the label is provisional was measured
+    // and rejected: 44 of the 87 REAL turns in the same capture also began with
+    // an unsettled margin (< 0.35), so "provisional → continue" would have
+    // delayed half of all real speaker changes.
+    /// Boundaries re-decided so far — frozen joins plus tail ledger flips
+    /// (telemetry, tests, the capture gate).
+    @ObservationIgnored private(set) var sameSpeakerJoins = 0
+
+    private func canJoin(_ a: Line, _ b: Line) -> Bool {
+        guard LiveFeatureWiring.joinSameSpeakerNeighbors else { return false }
+        guard a.speaker == b.speaker, a.speaker != SpeakerID.unknown,
+              !a.isEdited, !b.isEdited,
+              let tail = a.words.last, let head = b.words.first, let bLast = b.words.last
+        else { return false }
+        if Self.endsSentence(tail.text) || sentenceBreaks.contains(tail.id) { return false }
+        if head.t0 - tail.t1 >= lineBreakGap { return false }
+        if Self.lineIsFull(words: a.words.count, span: bLast.t1 - a.start,
+                           tailEndsClause: Self.endsClause(tail.text)) { return false }
+        if a.words.count + b.words.count > Self.maxLineWords { return false }
+        if bLast.t1 - a.start > Self.maxLineSeconds { return false }
+        // The joined row must be one the per-word rule would also have grown:
+        // a clause-ender past the soft cap INSIDE `b` is where the finalize
+        // regroup would cut, so joining across it would only be re-split later.
+        for (k, w) in b.words.dropLast().enumerated()
+        where a.words.count + k + 1 >= Self.softLineWords && Self.endsClause(w.text) { return false }
+        return true
+    }
+
+    /// Join frozen line `i+1` into frozen line `i`. The survivor keeps its id
+    /// (= its first word's id, what translations and edits are keyed by).
+    private func joinFrozen(at i: Int) {
+        let b = lines[i + 1]
+        var a = lines[i]
+        if let boundary = a.words.last?.id { breakAfter.remove(boundary); breakDecided.remove(boundary) }
+        a.words.append(contentsOf: b.words)
+        a.end = max(a.end, b.end)
+        a.speakerMargin = min(a.speakerMargin, b.speakerMargin)
+        for sp in b.overlapSpeakers where !a.overlapSpeakers.contains(sp) { a.overlapSpeakers.append(sp) }
+        lines[i] = a
+        lines.remove(at: i + 1)
+        if i + 1 < frozenCount { frozenCount -= 1 }
+        translationsByLine[b.id] = nil; suppressedByLine[b.id] = nil
+        editsByLine[b.id] = nil; speakerOverrides[b.id] = nil
+        refreshTranslationOverlay(a.id, lineIndex: i)   // survivor's records → stale (kept)
+        sameSpeakerJoins += 1
+        scheduleRender()
+    }
+
+    /// Scan every adjacent pair: frozen pairs join in place, tail pairs get
+    /// their ledger verdict cleared and the tail is regrouped once.
+    func joinSameSpeakerNeighbors() {
+        guard !finalized, LiveFeatureWiring.joinSameSpeakerNeighbors else { return }
+        var flipped = false
+        var i = 0
+        while i + 1 < lines.count {
+            if i + 1 < frozenCount {
+                if canJoin(lines[i], lines[i + 1]) { joinFrozen(at: i); continue }
+            } else if i >= frozenCount, canJoin(lines[i], lines[i + 1]), let t = lines[i].words.last,
+                      breakAfter.contains(t.id) {
+                breakAfter.remove(t.id); breakDecided.remove(t.id)   // re-decide with today's labels
+                sameSpeakerJoins += 1
+                flipped = true
+            }
+            i += 1
+        }
+        if flipped { rebuildLive() }
+    }
+
+    /// A line just froze next to its frozen predecessor: if the pair qualifies
+    /// (the SPKFIX that made them the same speaker may have landed while the
+    /// newer line was still in the tail), join now.
+    private func joinNewlyFrozen(promoted: Int) {
+        guard promoted > 0, LiveFeatureWiring.joinSameSpeakerNeighbors else { return }
+        var k = max(1, frozenCount - promoted)
+        while k < frozenCount {
+            if canJoin(lines[k - 1], lines[k]) { joinFrozen(at: k - 1) } else { k += 1 }
         }
     }
 
@@ -803,6 +920,7 @@ final class TranscriptStore {
         // resolved each line's final speaker. First speaker heard = number 1, and
         // it stays 1: assignAll only ever adds ids it has not numbered before.
         speakerNumbers.assignAll(tail.map(\.speaker))
+        joinNewlyFrozen(promoted: promoted)   // L1
         scheduleRender()
     }
 

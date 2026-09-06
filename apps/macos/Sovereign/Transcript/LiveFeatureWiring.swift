@@ -50,4 +50,14 @@ enum LiveFeatureWiring {
     /// the preview to clear costs nothing on continuous speech and removes the
     /// one remaining "translation of unfinished text" the user could see.
     static let tailTranslationWaitsForPreview = true
+
+    /// L1 (2026-09-06): when two adjacent lines come to share a speaker after
+    /// the fact (SPKFIX / AI relabel) and the first one is mid-sentence, join
+    /// them live instead of leaving the fragment rows until finalize.
+    ///
+    /// ON. Measured on the 0.3.9 live capture: 21 % of the speaker turns the
+    /// live view opened a new row for were reverted by the recluster, each one
+    /// a same-speaker sentence cut in two. `static var` (not `let`) only so the
+    /// capture gate can measure the same replay with the join off.
+    nonisolated(unsafe) static var joinSameSpeakerNeighbors = true
 }

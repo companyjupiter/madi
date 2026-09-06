@@ -1639,6 +1639,7 @@ final class SessionController: EngineProcessDelegate {
         // + the final save all land in ONE file; reset() clears lastAutoSaved so
         // the next session gets a fresh name).
         if let existing = lastAutoSaved {
+            try? FileManager.default.createDirectory(at: existing.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? Exporters.markdown(transcript.lines, names: speakerNames)
                 .write(to: existing, atomically: true, encoding: .utf8)
             return
@@ -1649,6 +1650,11 @@ final class SessionController: EngineProcessDelegate {
         } else {
             base = (fileName as NSString).deletingPathExtension
         }
+        // The save folder can disappear under us (moved, renamed, iCloud
+        // eviction) and write(to:) then fails silently in the catch below —
+        // observed 2026-09-06: three live sessions produced no autosave at all
+        // because ~/Documents/Madi no longer existed. Recreate it every time.
+        try? FileManager.default.createDirectory(at: autoSaveFolder, withIntermediateDirectories: true)
         var url = autoSaveFolder.appendingPathComponent(base).appendingPathExtension("md")
         var n = 2
         while FileManager.default.fileExists(atPath: url.path) {
