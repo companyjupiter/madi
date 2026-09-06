@@ -73,9 +73,59 @@ struct WordMerger {
         }
 
         guard !incoming.isEmpty else { return }
+        // L2 (2026-09-06): seam re-decode duplicate. The overlap re-decodes the
+        // previous window's last word with DRIFTED timestamps — "that." [4.6–4.9]
+        // comes back as "that." [4.95–5.2] — so it passes the watermark and the
+        // held-word replacement (which needs t0 ≤ held.t1 + eps) and commits as a
+        // second word; live it then opened its own row ("…center of that." /
+        // "that.", "Is it still 50 years?" ×2). Measured on the 0.3.14 live
+        // events: 18 adjacent identical words in 10 minutes, 8 of them rows.
+        // At the seam only — the first incoming word against the last committed
+        // one — same text (case/punctuation-insensitive) starting within
+        // `seamDuplicateGap` of the previous word's end is the same audio, not a
+        // stutter (a stutter is decoded inside ONE window and never sits exactly
+        // on the seam). Drop it and advance the watermark past it.
+        // The window may also open with the re-decode AND a stub copy of it
+        // ("you? You …" — the second 20 ms long), so the first TWO words are
+        // checked, each against the word that will precede it.
+        if let last = committed.last, Self.isSeamDuplicate(incoming[0], after: last) {
+            seamDuplicatesDropped += 1
+            emitted = max(emitted, incoming[0].t1)
+            incoming.removeFirst()
+        }
+        // …and a stub copy right after the re-decode ("you? You", the copy 20 ms
+        // long). Only a copy that could not be a spoken word — shorter than
+        // `stubMaxDuration` or overlapping the word before it — is dropped; a
+        // real backchannel repeat ("네 네 네", each 0.3 s, abutting) stays.
+        if incoming.count >= 2, Self.isSeamDuplicate(incoming[1], after: incoming[0]),
+           incoming[1].t1 - incoming[1].t0 < Self.stubMaxDuration || incoming[1].t0 < incoming[0].t1 - 0.05 {
+            seamDuplicatesDropped += 1
+            incoming.remove(at: 1)
+        }
+        guard !incoming.isEmpty else { return }
         if !final { held = incoming.removeLast() }
         for w in incoming { commit(w) }
         if final, let h = held { commit(h); held = nil }
+    }
+    static let seamDuplicateGap = 0.6
+    static let stubMaxDuration = 0.12
+    private(set) var seamDuplicatesDropped = 0
+    private(set) var sameInstantDuplicatesDropped = 0
+    private static func seamKey(_ w: Word) -> String {
+        w.text.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+    private static func isSeamDuplicate(_ w: Word, after prev: Word) -> Bool {
+        let k = seamKey(w)
+        return !k.isEmpty && k == seamKey(prev) && w.t0 - prev.t1 < seamDuplicateGap
+    }
+    /// Two words cannot occupy the same instant: an identical word whose start
+    /// sits within 0.1 s of the previous word's start is the decoder emitting
+    /// the same token twice ("and" ×5 with identical spans, "What" twice),
+    /// not speech. Dropped at commit, any position.
+    private func isSameInstantDuplicate(_ w: Word) -> Bool {
+        guard let last = committed.last else { return false }
+        let k = Self.seamKey(w)
+        return !k.isEmpty && k == Self.seamKey(last) && abs(w.t0 - last.t0) < 0.1
     }
 
     /// Degenerate-repeat guard. The engine resets decode state per chunk, so the
@@ -114,6 +164,7 @@ struct WordMerger {
     private mutating func commit(_ w: Word) {
         // advance the watermark even when dropped, so the overlap dedup stays
         // consistent and later segments don't re-introduce the same repeat.
+        if isSameInstantDuplicate(w) { sameInstantDuplicatesDropped += 1; emitted = max(emitted, w.t1); return }
         if isRunawayRepeat(adding: w) { emitted = max(emitted, w.t1); return }
         committed.append(w)
         emitted = max(emitted, w.t1)
