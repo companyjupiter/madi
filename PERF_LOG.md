@@ -920,3 +920,28 @@ transcribe.zig:812 주석의 가정("labels **stay put**")이 SPKFIX에서 거�
 주의(설계 트레이드): 라이브 중 병합/재분할 정보는 화자 라벨로만 반영되고 구조는 finalize까지
 유지 — 같은 화자의 연속 말풍선 2개로 보이는 건 정상이며, P10-3("live line count must be
 monotonic")과 동일 철학. 라이브 실측(실기기)은 보류 중.
+
+## X1·X2·X4 — 같은 화자 문장 끊김의 진짜 원인: held 단어와 재디코드가 화면에 함께 있는 5초 (2026-09-07, 0.3.18 라이브 첫 디버그 번들 → 0.3.19)
+
+**질문.** L1·L2·S1·U1을 넣고도 0.3.18에서 같은 화자의 말이 창 경계마다 문장으로 끊기고("…called a concept. | Constitution intended to…"), "better. / better." 한 단어 행과 "thoughts thoughts" 중복이 남는 이유는?
+
+**증거(번들 `20260907-013932`, 25분, 화자 5~6명 영어 인터뷰, 중·한 번역).** `store.jsonl` boundary 이벤트 553개 끊김 중 **124개(22 %)가 다음 단어가 앞 단어 끝보다 먼저 시작**(gap<0)하는 이음매 서명이었고, 같은 서명의 중복 단어(cont=true, 같은 텍스트) 70개. 원인 경로: `WordMerger.displayWords`가 committed + **held** + segBuffer(현재 창 단어)를 그대로 이어붙인다 → 창 꼬리 저신뢰 마침표("implications." conf 0.24, "did." "AI.")와 다음 창의 재디코드("implications", "didn't")가 ~5초 동안 나란히 표시된다 → `groupLoop`가 그 사이 경계를 판정해 P15 원장에 held id로 기록한다 → 5초 뒤 `merge()`가 held를 재디코드로 교체하며 id를 물려준다(P1) → 마침표는 사라졌는데 끊김은 남는다. 같은 창구에서 첫 번역이 "thoughts thoughts" 텍스트로 나가고 5초 뒤 재번역된다(805턴 중 259턴이 재번역, 큐 최대 131). 이벤트 파일 재생(L2 게이트)에는 이 결함이 없다 — 화면 상태는 stdout 재생 + store boundary(gap<0)로만 보인다.
+
+**수정(e25490e).** ① `displayWords`가 merge 규칙을 가상 적용: 재디코드가 held를 덮으면(t0 ≤ held.t1+0.05) 화면에서도 교체(id 승계), 첫 단어 이음매 중복 제거; 재디코드 없이 잔여 단어만 온 창은 held를 잃지 않고 유지. ② X2: 꼬리 그루터기(<60 ms·conf<0.35, "…with AI." 다음 "the"가 0.16 s 뒤)는 말이 0.3 s 안에 이어지면 교체. ③ 원장 기록은 **settled(커밋된) 단어 사이**만(`LiveFeatureWiring.settledLedger`); 편집된 행은 결코 흡수·성장 없음. ④ X4: 한 단어 행 + 0.3 s 안 다른 화자 + 마침표 없음 = 턴 머리로 흡수하고 화자 승계(`turnHeadAdoption`; 화자 전환 끊김 93건 중 30건이 한 단어 행 — 두 단어 행은 "It was"처럼 실제 짧은 턴이라 제외). ⑤ held로 끝나는 행의 번역은 프리뷰가 이어지는 동안 보류(꼬리 경로가 풀어줌). ⑥ 번들: translate.jsonl에 shed/wedge/relaunch 이벤트.
+
+**측정(같은 번들 stdout 재생, `CaptureFragmentationGateTests`, 라이브 행, join=on).**
+
+| | 행 | 미설명 끊김 | ≤5단어 행 | 이음매 중복 행 | 중복 단어 | joins | 겹침 행 | 턴 머리 행 |
+|---|---|---|---|---|---|---|---|---|
+| 0.3.18 (715f760) | 418 | 38 | 110 | 7 | 14 | 39 | – | – |
+| 0.3.19 | 388 | **2** | 81 | 2 | 9 | 25 | 0 | 3 |
+| 0.3.19 X1 원장 게이트 off | 386 | 2 | 79 | 2 | 9 | 28 | 0 | 2 |
+| 0.3.19 X4 off | 389 | 2 | 82 | 2 | 9 | 40 | 0 | 4 |
+
+finalize: 미설명 끊김 30 → 0, 행 454 → 411. 번호 매김 불변(10 s 바닥 → 최대 6). 승부는 ①(displayWords)이 가져간다 — 원장 게이트·X4는 잔여 안전망(X4 off면 L1 flip이 나중에 같은 일을 함: joins 40). swift test 649 통과. 라이브 확인 대상: 창 경계 한 단어 행 0, 번역 재실행 비율(259/805 → ?), "화자분리중…" 턴 머리.
+
+**라이브 수치(0.3.18, 24분 수집기).** `@final stt n=312 p50=0.79s p95=1.43s max=2.00s previews=29.6/min | rows=454 joins=39 spkfixRebuilds=41 runaway=0 hangs=0`. 앱 CPU 평균 43.4 % 최대 98.2 %(5분 구간 37/39/52/45/44 % — 0.3.5 기준 43.7 %와 동급), footprint 29→236(중앙)→285 MB(평탄), RSS 최대 642 MB(정지 후). transcribe RSS 280 MB 평탄, 4B RSS 3.39 GB. **성능 수치는 01:46부터 다른 Claude 세션의 DNA3-9B 하네스(`/tmp/dna3test`, GPU 100 %)에 오염됨**: transcribe 디코드 450 → 107 tok/s, 인코더 175 → 413 ms, 번역 글자당 20 → 45 ms, 큐 평균 4.5 → 한국어(2순위) shed. 구조 결함 분석은 로그 기반이라 유효. 미해결: 정지 직후 40 s 동안 두 번째 `translate-engine` 프로세스(2900 % CPU, RSS 25–44 MB)가 잠시 보였다 — 다음 번들의 wedge/relaunch 이벤트로 판정.
+
+**남은 백로그.** 라벨 창 중간 화자 전환(긴 앞 행, margin 0~0.2) 41건은 후보 C(엔진 센트로이드 병합) 영역; 두 대상 언어 × 행당 1턴이 4B 처리량의 상한(GPU 미오염 시 util 50 %) — 세 번째 언어 추가 전에 배치 프롬프트 검토; 통계 패널이 저장 안 된 세션을 "0분·10단어"로 표시(자동저장 off).
+
+DMG: `build/local-release/0.3.19/madi-0.3.19-arm64.dmg` SHA-256 `ae268d4fedbc5232eb223f6e12197ab6b702f368e8b915a6f556953f21b75837` (38 MB, ad-hoc 서명).
