@@ -12,6 +12,7 @@
 | 줄 파편화(L1) | 2 | **경계 판정 이유**(화자 잠정값·간격·문장부호·상한·원장 재생) | `store.jsonl` boundary/join/ledger-flip |
 | 접합부 중복(L2) | 2 | 병합기의 창별 결정(held·교체·제거 규칙) | `store.jsonl` merge |
 | 번역 폭주·에코 절단(T7·T8) | 2 | 턴별 **프롬프트(예시 쌍)·원응답·정제 규칙**·상한·큐 깊이 | `translate.jsonl` |
+  - 2026-09-07~: `shed`(why=secondary|cap, backlog, source) · `wedge`(budget, pid, pending, restarts) · `relaunch`(restart, spawned, orphans, pid) — 번역 큐가 줄을 버리거나 브로커가 엔진을 죽이고 다시 띄운 순간. 0.3.18 정지 직후 보인 2900 % CPU 두 번째 엔진 프로세스는 이 이벤트로 판정한다.
 | 엔진 재시작(W2) | 1 | 그 순간의 세그먼트 큐·마지막 활동 | `watchdog.jsonl` |
 | 화자 번호 상승 | 3 | SPK/SPKFIX 흐름 + 앱의 번호 배정·합침 | `stdout.log` + `store.jsonl` |
 
