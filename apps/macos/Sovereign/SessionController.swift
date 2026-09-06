@@ -670,9 +670,9 @@ final class SessionController: EngineProcessDelegate {
             // (joined) after a label fix. The autosave is a user setting and the
             // accessibility tree does not expose row text, so this line is the
             // only durable record of the LIVE structure once finalize regroups it.
-            + String(format: " | rows=%d joins=%d spkfixRebuilds=%d runaway=%d",
+            + String(format: " | rows=%d joins=%d spkfixRebuilds=%d runaway=%d hangs=%d",
                      transcript.lines.count, transcript.sameSpeakerJoins, transcript.speakerFixRebuilds,
-                     translate?.runawayTruncations ?? 0)
+                     translate?.runawayTruncations ?? 0, hangRecoveries)
     }
 
     /// Live translation TARGETS — a set of English language NAMES

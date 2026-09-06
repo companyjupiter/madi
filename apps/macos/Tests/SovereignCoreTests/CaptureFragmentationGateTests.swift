@@ -54,7 +54,12 @@ final class CaptureFragmentationGateTests: XCTestCase {
             let bt = Self.norm(b.text)
             guard !bt.isEmpty else { continue }
             let tail = Self.norm(a.words.suffix(b.words.count).map(\.text).joined(separator: " "))
-            if bt == tail, (b.start - a.end) < 2.0 { m.seamDuplicateRows += 1 }
+            if bt == tail, (b.start - a.end) < 2.0 {
+                m.seamDuplicateRows += 1
+                if ProcessInfo.processInfo.environment["MADI_GATE_VERBOSE"] != nil, let al = a.words.last, let bf = b.words.first {
+                    print(String(format: "  SEAMROW …%@ [%.2f-%.2f] | %@ [%.2f-%.2f] spk %d/%d", al.text, al.t0, al.t1, b.text, bf.t0, bf.t1, a.speaker, b.speaker))
+                }
+            }
         }
         let allWords = s.lines.flatMap(\.words)
         let lineStarts = Set(s.lines.compactMap { $0.words.first?.id })
