@@ -1677,8 +1677,14 @@ pub fn main() !void {
                     const ftxt = std.mem.trim(u8, pv[fp + 6 ..], " \t\r");
                     pv = std.mem.trim(u8, pv[0..fp], " \t\r");
                     if (ftxt.len > 0) {
-                        const spaced = std.fmt.allocPrint(alloc, " {s}", .{ftxt}) catch ftxt;
-                        preview_forced = bpeEncode(bpe_path, spaced) catch &.{};
+                        // M2: the spaced copy is scratch for the encode — free it
+                        // (it was one page-allocator page leaked per %%FP preview).
+                        if (std.fmt.allocPrint(alloc, " {s}", .{ftxt})) |spaced| {
+                            defer alloc.free(spaced);
+                            preview_forced = bpeEncode(bpe_path, spaced) catch &.{};
+                        } else |_| {
+                            preview_forced = bpeEncode(bpe_path, ftxt) catch &.{};
+                        }
                     }
                 }
                 cur_path = pv;
@@ -4181,15 +4187,30 @@ fn loadBpe(path: []const u8) ![][]const u8 {
 // straight longest-prefix match against the vocab — Korean included. Not a true
 // merge-rank BPE, but term-biasing prompts are forgiving: the goal is to seed
 // the jargon's tokens into context, and a near-tokenization biases just as well.
+// M2 (2026-09-06, live 0.3.11): the text→token map is built ONCE per process.
+// It used to be rebuilt on every call — loadBpe re-read the whole vocabulary and
+// the StringHashMap was never freed — and the live runner calls this for every
+// PREVIEW job that carries a %%FP forced prefix (≈30/min): 0.69 MB leaked per
+// call, transcribe RSS +23 MB/min, measured with a synthetic preview stream.
+// The path is fixed for the process lifetime, so caching by first call is exact.
+var g_bpe_map: ?std.StringHashMap(u32) = null;
+var g_bpe_maxlen: usize = 1;
+
 fn bpeEncode(path: []const u8, text: []const u8) ![]u32 {
-    const toks = try loadBpe(path);
-    var map = std.StringHashMap(u32).init(alloc);
-    var maxlen: usize = 1;
-    for (toks, 0..) |tk, i| {
-        if (i >= 50257 or tk.len == 0) continue; // text tokens only (skip specials)
-        try map.put(tk, @intCast(i));
-        if (tk.len > maxlen) maxlen = tk.len;
+    if (g_bpe_map == null) {
+        const toks = try loadBpe(path);
+        var map = std.StringHashMap(u32).init(alloc);
+        var maxlen: usize = 1;
+        for (toks, 0..) |tk, i| {
+            if (i >= 50257 or tk.len == 0) continue; // text tokens only (skip specials)
+            try map.put(tk, @intCast(i));
+            if (tk.len > maxlen) maxlen = tk.len;
+        }
+        g_bpe_map = map;
+        g_bpe_maxlen = maxlen;
     }
+    const map = &g_bpe_map.?;
+    const maxlen = g_bpe_maxlen;
     var out = std.ArrayList(u32).init(alloc);
     var i: usize = 0;
     while (i < text.len) {
