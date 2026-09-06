@@ -60,6 +60,15 @@ enum LiveFeatureWiring {
     /// a same-speaker sentence cut in two. `static var` (not `let`) only so the
     /// capture gate can measure the same replay with the join off.
     nonisolated(unsafe) static var joinSameSpeakerNeighbors = true
+    /// X1 (2026-09-07): the P15 boundary ledger records a verdict only between
+    /// two SETTLED words (past the merger's holdback). Off = every first
+    /// adjacency is recorded, including the held word against its own
+    /// re-decode — the 0.3.18 "same speaker split at every window edge".
+    nonisolated(unsafe) static var settledLedger = true
+    /// X4 (2026-09-07): a one-word row followed within 0.3 s by another speaker
+    /// mid-sentence adopts that speaker (label-window edge). Off = the row
+    /// stays a one-word turn under the previous label.
+    nonisolated(unsafe) static var turnHeadAdoption = true
 
     /// Paint a committed line's translation token by token while the 4B is
     /// still generating (the "typewriter"), or only once the turn completes.

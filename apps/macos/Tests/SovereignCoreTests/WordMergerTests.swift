@@ -173,4 +173,95 @@ final class WordMergerTests: XCTestCase {
         XCTAssertEqual(m.committed.map { $0.text }, ["And", "then"])
         XCTAssertEqual(m.sameInstantDuplicatesDropped + m.seamDuplicatesDropped, 2)
     }
+
+    // ── X1/X2 (2026-09-07, 0.3.18 live bundle) ──────────────────────────────
+
+    /// X1: what the view shows between segment boundaries must equal what the
+    /// merge will commit — the held word and its overlap re-decode are never
+    /// both displayed ("thoughts thoughts", "race race escalates, escalates,").
+    func testDisplayWordsMirrorTheSeamMerge() {
+        var m = WordMerger()
+        m.add(w(211.0, 211.2, "cosmic"))
+        m.add(w(211.25, 211.6, "thoughts"))       // trailing → held
+        m.segmentBreak()
+        m.add(w(210.9, 211.2, "cosmic"))          // overlap re-decode, before the watermark → filtered
+        m.add(w(211.27, 211.66, "thoughts"))      // re-decode of the held word
+        m.add(w(211.7, 212.0, "into"))
+        let shown = m.displayWords.map(\.text)
+        XCTAssertEqual(shown, ["cosmic", "thoughts", "into"], "held word replaced in the view, not doubled")
+        m.segmentBreak(); m.finish()
+        XCTAssertEqual(m.committed.map(\.text), shown, "the view and the merge agree")
+    }
+
+    /// X1: the re-decode shown in place of the held word carries the held
+    /// word's id, exactly as merge() will assign it (line ids, ledger keys).
+    func testDisplayRedecodeCarriesHeldIdentity() {
+        var m = WordMerger()
+        m.add(w(0.0, 0.4, "profound"))
+        m.add(w(0.5, 0.9, "implications."))
+        m.segmentBreak()
+        let heldID = m.displayWords.last!.id
+        m.add(w(0.52, 1.0, "implications"))
+        m.add(w(1.1, 1.3, "as"))
+        XCTAssertEqual(m.displayWords.map(\.text), ["profound", "implications", "as"])
+        XCTAssertEqual(m.displayWords[1].id, heldID)
+        m.finish()
+        XCTAssertEqual(m.committed[1].id, heldID)
+    }
+
+    /// X1: a seam re-decode of the last COMMITTED word (drifted timestamps) is
+    /// dropped from the view as merge() drops it.
+    func testDisplayDropsSeamDuplicateOfCommittedWord() {
+        var m = WordMerger()
+        m.add(w(4.0, 4.4, "of"))
+        m.add(w(4.6, 4.9, "that."))
+        m.segmentBreak()                          // "that." held
+        m.add(w(5.0, 5.3, "Whatever"))            // covers nothing: held "that." commits below
+        m.segmentBreak()                          // "Whatever" held, "that." committed
+        m.add(w(5.02, 5.31, "Whatever"))          // re-decode of the held word → replaces
+        m.add(w(5.4, 5.8, "Anthropic"))
+        XCTAssertEqual(m.displayWords.map(\.text), ["of", "that.", "Whatever", "Anthropic"])
+        m.finish()
+        XCTAssertEqual(m.committed.map(\.text), ["of", "that.", "Whatever", "Anthropic"])
+    }
+
+    /// X2: a window-tail stub ("AI." 40 ms, conf 0.24) followed by continuing
+    /// speech is the decoder closing the audio edge, not a word — dropped.
+    func testTailStubDroppedWhenSpeechContinues() {
+        var m = WordMerger()
+        m.add(w(280.7, 281.2, "company"))
+        m.add(w(281.22, 281.44, "with"))
+        m.add(Word(t0: 281.44, t1: 281.48, text: "AI.", conf: 0.24))   // held
+        m.segmentBreak()
+        m.add(w(281.22, 281.52, "with"))          // overlap re-decode, t0 < watermark → filtered
+        m.add(w(281.64, 281.89, "the"))           // 0.16 s after the stub: speech continues
+        m.add(w(281.9, 282.35, "most"))
+        XCTAssertEqual(m.displayWords.map(\.text), ["company", "with", "the", "most"])
+        m.finish()
+        XCTAssertEqual(m.committed.map(\.text), ["company", "with", "the", "most"])
+    }
+
+    /// X2: the same stub before a real pause is kept — nothing re-decodes it.
+    func testTailStubKeptBeforeAPause() {
+        var m = WordMerger()
+        m.add(w(195.8, 196.36, "don't"))
+        m.add(Word(t0: 196.4, t1: 196.48, text: "release.", conf: 0.21))
+        m.segmentBreak()
+        m.add(w(199.5, 199.9, "Anthropic"))       // 3 s later: a new turn
+        m.finish()
+        XCTAssertEqual(m.committed.map(\.text), ["don't", "release.", "Anthropic"])
+    }
+
+    /// A segment made only of pre-held strays must not lose the held word.
+    func testStrayOnlySegmentKeepsHeldWord() {
+        var m = WordMerger()
+        m.add(w(0.0, 0.4, "A"))
+        m.add(w(0.5, 0.9, "B"))                   // held
+        m.segmentBreak()
+        m.add(w(0.0, 0.45, "A"))                  // t0 ≤ held.t1 + eps, but ends before held starts
+        m.segmentBreak()
+        m.add(w(1.0, 1.4, "C"))
+        m.finish()
+        XCTAssertEqual(m.committed.map(\.text), ["A", "B", "C"])
+    }
 }

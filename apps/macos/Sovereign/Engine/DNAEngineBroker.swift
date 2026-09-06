@@ -306,6 +306,9 @@ final class DNAEngineBroker {
         watchdog = nil
         NSLog("DNA engine: turn timed out after %.1fs with no [perf] generation — restarting engine (client %@)",
               budget, request.client.uuidString)
+        DebugLog.shared?.emit("translate", "wedge", ["budget": budget, "client": request.client.uuidString,
+                                                     "pid": Int(process?.processIdentifier ?? 0),
+                                                     "pending": pending.count, "restarts": wedgeRestarts])
         guard let p = process else { return }   // already reset; nothing to kill
         restartAfterTermination = true
         guard p.isRunning else { return }       // dying already — the handler will land
@@ -385,7 +388,11 @@ final class DNAEngineBroker {
             } else {
                 wedgeRestarts += 1
                 NSLog("DNA engine: relaunching after wedge (%d/%d)", wedgeRestarts, Self.maxWedgeRestarts)
-                if !launch(engine: engine, model: model) {
+                let spawned = launch(engine: engine, model: model)
+                DebugLog.shared?.emit("translate", "relaunch", ["restart": wedgeRestarts, "spawned": spawned,
+                                                                "orphans": orphans.count,
+                                                                "pid": Int(process?.processIdentifier ?? 0)])
+                if !spawned {
                     NSLog("DNA engine: relaunch failed to spawn %@", engine.path)
                 }
             }

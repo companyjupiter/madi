@@ -14,10 +14,12 @@ final class SameSpeakerJoinTests: XCTestCase {
     private func seed(_ s: TranscriptStore, words: [String], secondID: Int = 2, margin: Double = 0.05) {
         s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 2.0, margin: 0.9)))
         s.ingest(.speaker(SpeakerLabel(time: 2.0, id: secondID, dur: 2.0, margin: margin)))
+        s.ingest(.wordSectionBegin)
         for (i, t) in words.enumerated() {
             let t0 = Double(i) + 0.1   // off the label edge: 2 words per window
             s.ingest(.word(t0: t0, t1: t0 + 0.8, text: t, conf: 1))
         }
+        s.ingest(.wordSectionBegin)   // X1: commit the words — live verdicts are recorded once settled
     }
 
     func testFixJoinsUnfinishedSameSpeakerTailLines() {
@@ -62,10 +64,12 @@ final class SameSpeakerJoinTests: XCTestCase {
         s.ingest(.speaker(SpeakerLabel(time: 0.0, id: 1, dur: 2.0, margin: 0.9)))
         s.ingest(.speaker(SpeakerLabel(time: 2.0, id: 2, dur: 2.0, margin: 0.05)))
         s.ingest(.speaker(SpeakerLabel(time: 4.0, id: 3, dur: 8.0, margin: 0.9)))
+        s.ingest(.wordSectionBegin)
         for (i, t) in words.enumerated() {
             let t0 = Double(i) + 0.1
             s.ingest(.word(t0: t0, t1: t0 + 0.8, text: t, conf: 1))
         }
+        s.ingest(.wordSectionBegin)
         XCTAssertGreaterThanOrEqual(s.lines.count, 3, "\(s.lines.map(\.text))")
         XCTAssertEqual(s.lines[0].text, "It was")
         XCTAssertEqual(s.lines[1].text, "during the")

@@ -44,7 +44,10 @@ extension SessionController {
             "liveFeatureWiring": ["interimTranslation": LiveFeatureWiring.interimTranslation,
                                   "liveSummary": LiveFeatureWiring.liveSummary,
                                   "tailTranslationWaitsForPreview": LiveFeatureWiring.tailTranslationWaitsForPreview,
-                                  "joinSameSpeakerNeighbors": LiveFeatureWiring.joinSameSpeakerNeighbors],
+                                  "joinSameSpeakerNeighbors": LiveFeatureWiring.joinSameSpeakerNeighbors,
+                                  "settledLedger": LiveFeatureWiring.settledLedger,
+                                  "turnHeadAdoption": LiveFeatureWiring.turnHeadAdoption,
+                                  "translationStreaming": LiveFeatureWiring.translationStreaming],
         ]
         if let data = try? JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]),
            let text = String(data: data, encoding: .utf8) {

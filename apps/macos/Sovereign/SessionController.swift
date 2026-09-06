@@ -1304,7 +1304,17 @@ final class SessionController: EngineProcessDelegate {
     private func translateStableLines(includingLast: Bool = false) {
         guard !translateTargets.isEmpty else { return }
         var lines = transcript.lines
-        let upTo = includingLast ? lines.count : max(0, lines.count - 1)
+        var upTo = includingLast ? lines.count : max(0, lines.count - 1)
+        // X1 (2026-09-07): a line that ENDS with the merger's held word is one
+        // re-decode away from its text (the window-edge word is replaced at the
+        // next segment boundary — "implications." → "implications"); while the
+        // preview shows speech continuing, wait for that instead of translating
+        // a text that will be revised (0.3.18 live: 37 of 110 rows translated
+        // twice). A pause (preview cleared) releases it — see scheduleTailTranslate.
+        if !includingLast, !livePartial.isEmpty, let held = transcript.heldWordID,
+           let i = lines.prefix(upTo).lastIndex(where: { $0.words.last?.id == held }) {
+            upTo = i
+        }
         // P2 (2026-09-03): per word event only the last `stableScanWindow` lines
         // are visited. Live 0.3.5 at ~400 lines spent 18% of the main thread in
         // this function — hashing every line's joined text and re-running the
@@ -1479,6 +1489,9 @@ final class SessionController: EngineProcessDelegate {
             if LiveFeatureWiring.tailTranslationWaitsForPreview, !self.livePartial.isEmpty {
                 self.scheduleTailTranslate(); return
             }
+            // X1: the preview is clear, so a held-ending line deferred by
+            // translateStableLines is released together with the tail.
+            self.translateStableLines()
             self.translateLine(line)
         }
     }

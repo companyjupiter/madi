@@ -176,7 +176,11 @@ final class TranslateEngine {
             let backlog = pending.turns.filter { $0.kind == .committed }.count
             let decision = TranslationShedPolicy.committedTargets(requested: ordered, priority: priorityLang,
                                                  committedBacklog: backlog, threshold: shedSecondaryTargetsAt)
-            for lang in decision.shed { onDrop?(id, lang, oneLine) }
+            for lang in decision.shed {
+                DebugLog.shared?.emit("translate", "shed", ["id": id.uuidString, "lang": lang, "why": "secondary",
+                                                            "backlog": backlog, "source": oneLine])
+                onDrop?(id, lang, oneLine)
+            }
             ordered = decision.send
         }
         if let p = priorityLang, let i = ordered.firstIndex(of: p) {
@@ -212,6 +216,8 @@ final class TranslateEngine {
         // exactly what a live caption no longer needs. Dropped lines → onDrop.
         if maxPending > 0 {
             for shed in pending.shedOldest(to: maxPending) {
+                DebugLog.shared?.emit("translate", "shed", ["id": shed.id.uuidString, "lang": shed.lang, "why": "cap",
+                                                            "backlog": pending.count, "source": shed.source])
                 onDrop?(shed.id, shed.lang, shed.source)
             }
         }

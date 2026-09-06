@@ -25,11 +25,18 @@ final class CaptureFragmentationGateTests: XCTestCase {
         /// Highest display number minted (S1: transient ids should not spend one).
         var maxDisplayNumber = 0
         var distinctSpeakerIDs = 0
+        /// X1: a row whose first word starts BEFORE the previous row's last word
+        /// ends — the held word and its re-decode shown side by side.
+        var overlapRows = 0
+        /// X4: a 1–2 word row followed within 0.3 s by another speaker, no
+        /// sentence end — the next turn's head under the previous label.
+        var turnHeadRows = 0
         var row: String {
             "lines \(lines)  same-spk pairs \(sameSpeakerPairs)  unexplained breaks \(unexplainedBreaks)"
             + "  words/line p50 \(p50) p90 \(p90)  ≤5-word lines \(shortLines)  joins \(joins)"
             + "  seam-dup rows \(seamDuplicateRows)  dup words \(duplicateWords)"
             + "  ids \(distinctSpeakerIDs) maxNumber \(maxDisplayNumber)"
+            + "  overlap rows \(overlapRows)  turn-head rows \(turnHeadRows)"
         }
     }
 
@@ -43,6 +50,13 @@ final class CaptureFragmentationGateTests: XCTestCase {
 
     private func measure(_ s: TranscriptStore) -> Metrics {
         var m = Metrics(); m.lines = s.lines.count; m.joins = s.sameSpeakerJoins
+        for (a, b) in zip(s.lines, s.lines.dropFirst()) {
+            guard let at = a.words.last, let bh = b.words.first else { continue }
+            if bh.t0 < at.t1 - 0.05 { m.overlapRows += 1 }
+            let tail = at.text.trimmingCharacters(in: .whitespaces)
+            if a.speaker != b.speaker, a.words.count <= 2, bh.t0 - at.t1 < 0.3,
+               !(tail.last.map { Self.sentence.contains($0) } ?? false) { m.turnHeadRows += 1 }
+        }
         for (a, b) in zip(s.lines, s.lines.dropFirst()) where a.speaker == b.speaker {
             m.sameSpeakerPairs += 1
             let t = a.text.trimmingCharacters(in: .whitespaces)
@@ -151,6 +165,15 @@ final class CaptureFragmentationGateTests: XCTestCase {
         print("CAPTURE-GATE join=off live : \(off.live.row)")
         print("CAPTURE-GATE join=on  live : \(on.live.row)")
         print("CAPTURE-GATE finalize      : \(on.final.row)")
+        // X1/X4 (2026-09-07): each lever off, the other on — live rows.
+        LiveFeatureWiring.settledLedger = false
+        let x1off = replay(raw, join: true)
+        LiveFeatureWiring.settledLedger = true
+        LiveFeatureWiring.turnHeadAdoption = false
+        let x4off = replay(raw, join: true)
+        LiveFeatureWiring.turnHeadAdoption = true
+        print("CAPTURE-GATE X1 off   live : \(x1off.live.row)")
+        print("CAPTURE-GATE X4 off   live : \(x4off.live.row)")
         // S1: display numbers minted with immediate numbering vs the 3 s floor.
         let savedFloor = SpeakerDisplayNumber.minSecondsToNumber
         var floors: [String] = []

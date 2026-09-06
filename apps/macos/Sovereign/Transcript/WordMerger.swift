@@ -34,10 +34,55 @@ struct WordMerger {
     /// committed word of the session per event.
     func displayWords(from: Int) -> [Word] {
         var out = Array(committed[min(from, committed.count)...])
-        if let h = held { out.append(h) }
-        out.append(contentsOf: segBuffer.filter { $0.t0 >= emitted - eps })
+        var live = segBuffer.filter { $0.t0 >= emitted - eps }
+        // X1 (2026-09-07): the view applies the SAME seam rules merge() will —
+        // virtually. Before this, the held word AND the current segment's
+        // re-decode of it were both shown for the ~5 s until the next segment
+        // boundary ("thoughts thoughts", "race race escalates, escalates,"),
+        // the store decided a line boundary BETWEEN them (the held word is the
+        // window-edge decode — "implications." conf 0.24 — so it usually
+        // carries a hallucinated period) and recorded that verdict in the P15
+        // ledger under the held word's id, which the re-decode then inherited:
+        // the break outlived the period. 0.3.18 live: 35 of 136 breaks (26 %)
+        // had this signature (next word starting before the previous ended),
+        // 31 doubled words, 37 of 110 rows translated twice.
+        if let h = held {
+            if Self.replacesHeld(h, incoming: live, eps: eps) {
+                live.removeAll { $0.t1 <= h.t0 + eps }
+                if live.isEmpty { out.append(h) }
+                else { live[0] = Word(id: h.id, t0: live[0].t0, t1: live[0].t1, text: live[0].text, conf: live[0].conf) }
+            } else {
+                out.append(h)
+            }
+        }
+        if let last = out.last, let f = live.first, Self.isSeamDuplicate(f, after: last) { live.removeFirst() }
+        out.append(contentsOf: live)
         return out
     }
+
+    /// Does the new segment's first word take the held word's place? Yes when
+    /// it covers it (t0 ≤ held.t1 + eps: the overlap re-decoded the same audio
+    /// with right context) — and, X2 (2026-09-07), when the held word is a
+    /// window-tail STUB and speech simply continues: the decoder closes the
+    /// audio edge with a token that is not a word ("…company with AI." — 40 ms,
+    /// conf 0.24, the next window's "the" starting 0.16 s later). A stub before
+    /// a real pause is kept: nothing re-decodes it, so it may be speech.
+    static let tailStubMaxDuration = 0.06
+    static let tailStubMaxConf = 0.35
+    static let stubContinuation = 0.3
+    static func isTailStub(_ w: Word) -> Bool {
+        w.t1 - w.t0 < tailStubMaxDuration && w.conf < tailStubMaxConf
+    }
+    static func replacesHeld(_ h: Word, incoming: [Word], eps: Double) -> Bool {
+        guard let f = incoming.first else { return false }
+        if f.t0 <= h.t1 + eps { return true }
+        return isTailStub(h) && f.t0 - h.t1 < stubContinuation
+    }
+
+    /// The held word's id (nil = none): a line ending with it is still one
+    /// re-decode away from its final text (SessionController defers its
+    /// translation while the preview is live).
+    var heldWordID: UUID? { held?.id }
 
     mutating func add(_ w: Word) { segBuffer.append(w) }
 
@@ -69,10 +114,13 @@ struct WordMerger {
             // The new segment re-decoded the held word's region with full right
             // context — prefer its version. Only keep the held word if the new
             // segment starts clearly AFTER it (no re-decode coverage).
-            let replaced = incoming.first.map { $0.t0 <= h.t1 + eps } ?? false
+            let replaced = Self.replacesHeld(h, incoming: incoming, eps: eps)
             if !replaced { commit(h) }
             else {
                 incoming.removeAll { $0.t1 <= h.t0 + eps } // drop pre-held strays
+                // Only strays came: nothing re-decoded the held word — keep
+                // holding it (it used to vanish here).
+                if incoming.isEmpty { held = h; return }
                 // P1 (2026-09-03): the re-decode REPLACES the held word, so it
                 // inherits the held word's identity. Line ids, the P15 boundary
                 // ledger and per-line translations are keyed by the first word's

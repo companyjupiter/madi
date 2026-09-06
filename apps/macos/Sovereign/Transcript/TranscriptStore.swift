@@ -919,7 +919,10 @@ final class TranscriptStore {
             frozenCount = 0; frozenWordCount = 0
         }
         let tailWords = merger.displayWords(from: frozenWordCount)
-        let tail = group(words: tailWords, lookup: liveLabelLookup())
+        // X1: only the committed prefix of the tail is SETTLED; the held word
+        // and the current segment's words are still one re-decode away.
+        let tail = group(words: tailWords, lookup: liveLabelLookup(),
+                         settled: merger.committed.count - frozenWordCount)
         // Promote settled tail lines. Conditions: fully older than the freeze
         // watermark; their words already in the merger's committed region (past
         // the holdback churn); and never the last line (it stays live).
@@ -997,10 +1000,13 @@ final class TranscriptStore {
         return group(words: words, lookup: SpeakerLabelLookup(labels))
     }
 
-    private func group(words: [Word], lookup: SpeakerLabelLookup) -> [Line] {
+    private func group(words: [Word], lookup: SpeakerLabelLookup, settled: Int = .max) -> [Line] {
         guard !words.isEmpty else { return [] }
-        return groupLoop(words: words, lookup: lookup)
+        return groupLoop(words: words, lookup: lookup, settled: settled)
     }
+
+    /// The merger's held word, if any (see WordMerger.heldWordID).
+    var heldWordID: UUID? { merger.heldWordID }
 
     /// A word's trailing char ends a sentence → the next word starts a new line.
     /// Guards against a lone-period false break (e.g. "3.5" ends mid-token, not
@@ -1011,6 +1017,10 @@ final class TranscriptStore {
         return sentenceEnders.contains(ch)
     }
     private static let clauseEnders: Set<Character> = [",", "，", "、", ";", "；", ":", "："]
+    /// X4: a one-word row followed within `turnHeadMaxGap` by another speaker
+    /// mid-sentence is the next turn's head (see groupLoop).
+    static let turnHeadMaxWords = 1
+    static let turnHeadMaxGap = 0.3
     private static func endsClause(_ text: String?) -> Bool {
         guard let t = text?.trimmingCharacters(in: .whitespaces), let ch = t.last else { return false }
         return clauseEnders.contains(ch)
@@ -1026,8 +1036,19 @@ final class TranscriptStore {
         return words >= softLineWords && tailEndsClause
     }
 
-    private func groupLoop(words: [Word], lookup: SpeakerLabelLookup) -> [Line] {
+    private func groupLoop(words: [Word], lookup: SpeakerLabelLookup, settled: Int) -> [Line] {
         var out: [Line] = []
+        // X1 (2026-09-07): a boundary verdict is RECORDED only between two
+        // settled words. The held word and the current segment's words change
+        // text at the next segment boundary (the overlap re-decode replaces the
+        // window-edge word, usually dropping its hallucinated period), and the
+        // re-decode inherits the held word's id (P1) — so a verdict decided
+        // against them outlived the text it was decided on. Unsettled
+        // boundaries are still shown (decided fresh on every rebuild, like the
+        // preview they are) and recorded once their words commit.
+        let settledIDs: Set<UUID>? = LiveFeatureWiring.settledLedger && settled < words.count
+            ? Set(words.prefix(max(0, settled)).map(\.id)) : nil
+        func isSettled(_ w: Word) -> Bool { settledIDs?.contains(w.id) ?? true }
         for w in words.sorted(by: { $0.t0 < $1.t0 }) {
             let label = lookup.at(w.t0)
             let sp = label.speaker
@@ -1047,12 +1068,29 @@ final class TranscriptStore {
             // they only change which speaker a line displays.
             let tail = out.last?.words.last
             let cont: Bool
-            if !finalized, let t = tail, breakDecided.contains(t.id) {
+            if let last = out.last, editsByLine[last.id] != nil || editsByLine[w.id] != nil {
+                // A row the user rewrote is theirs: never grown, never absorbed
+                // (an unsettled tail is regrouped fresh each rebuild — X1).
+                cont = false
+            } else if !finalized, let t = tail, breakDecided.contains(t.id) {
                 cont = !breakAfter.contains(t.id)   // replay the recorded decision
             } else {
                 let brokenBefore = tail.map { sentenceBreaks.contains($0.id) } ?? false
                 cont = out.last.map { last in
-                    last.speaker == sp && w.t0 - last.end < lineBreakGap &&
+                    let sameSpeaker = last.speaker == sp
+                    // X4 (2026-09-07): label-window edge. A word takes the label
+                    // window covering its ONSET, so the first word or two of a
+                    // new turn — onset still inside the previous speaker's
+                    // window — opened a 1–2 word row under the wrong speaker
+                    // ("I | use Claude Code", "No | one.", "Welcome | to").
+                    // 0.3.18 live, 20 min: 30 of 93 speaker-change breaks left
+                    // a one-word row (6 a two-word row — those read as short
+                    // turns, "It was", and stay); 19 had no pause and no
+                    // sentence end. A one-word row is the turn's HEAD: it
+                    // adopts the new speaker below.
+                    let turnHead = LiveFeatureWiring.turnHeadAdoption && !sameSpeaker &&
+                        last.words.count <= Self.turnHeadMaxWords && w.t0 - last.end < Self.turnHeadMaxGap
+                    return (sameSpeaker && w.t0 - last.end < lineBreakGap || turnHead) &&
                     !brokenBefore && !Self.endsSentence(last.words.last?.text) &&
                     // P4: length/duration cap — the rule that bounds a monologue
                     // when neither punctuation nor a pause ever arrives. Recorded
@@ -1062,7 +1100,7 @@ final class TranscriptStore {
                                      span: w.t1 - last.start,
                                      tailEndsClause: Self.endsClause(last.words.last?.text))
                 } ?? false
-                if !finalized, let t = tail {       // record the first-adjacency verdict
+                if !finalized, let t = tail, isSettled(t), isSettled(w) {   // record the first-adjacency verdict
                     breakDecided.insert(t.id)
                     if !cont { breakAfter.insert(t.id) }
                     if let dbg = DebugLog.shared, let last = out.last {
@@ -1076,13 +1114,20 @@ final class TranscriptStore {
                 }
             }
             if var last = out.last, cont {
+                // X4: a continued one-word row under another speaker is that
+                // turn's head — replayed from the ledger the same way, so the
+                // row's speaker is stable across rebuilds.
+                if LiveFeatureWiring.turnHeadAdoption, last.speaker != sp, last.words.count <= Self.turnHeadMaxWords {
+                    last.speaker = sp; last.speakerMargin = m
+                }
                 last.end = max(last.end, w.t1)
                 last.words.append(w)
                 last.speakerMargin = min(last.speakerMargin, m)
                 out[out.count - 1] = last
             } else {
-                // Remember punctuation-driven breaks (also honoured at finalize).
-                if let t = tail, Self.endsSentence(t.text) { sentenceBreaks.insert(t.id) }
+                // Remember punctuation-driven breaks (also honoured at finalize) —
+                // settled punctuation only (X1): a window-edge period is provisional.
+                if let t = tail, Self.endsSentence(t.text), isSettled(t), isSettled(w) { sentenceBreaks.insert(t.id) }
                 // id = first word's id → stable across rebuilds (see Line.id note)
                 var line = Line(id: w.id, speaker: sp, start: w.t0, end: w.t1, words: [w])
                 line.speakerMargin = m
