@@ -1,3 +1,19 @@
+## D1 — 디버그 모드: 세션당 번들 하나로 한 번에 고치기 (2026-09-06, 0.3.17)
+
+정본 `docs/DEBUG_MODE.md`. 2026-09-03~06 결함 9건이 세션을 하나씩 먹은 이유는 매번 없는 정보가 달랐기 때문(엔진이 받은 바이트·경계 판정 이유·번역 턴 프롬프트/원응답·재시작 순간의 큐·메모리 시계열). 설정 → 진단 "디버그 캡처"(또는 `MADI_DEBUG=1`)를 켜면 `~/Library/Application Support/Madi/debug/<stamp>/`에:
+
+| 파일 | 내용 |
+|---|---|
+| `env.txt` `engine.cmd` `stdin.log` `wav/` `stdout.log` | tee 심과 같은 포맷(엔진 정확 재생: `replay_capture.py <bundle>` 그대로 동작), 프리뷰 WAV는 400 MB 상한 뒤 `COPYSKIP` |
+| `engine.events.<초>s.jsonl` | 엔진 EVENTS_FILE 사본(재시작마다 1개) |
+| `store.jsonl` | `boundary`(첫 인접 판정 + 이유 필드) · `join` · `ledger-flip` · `spk`/`spkfix` · `merge`(창별 held/교체/제거) · `finalize` |
+| `translate.jsonl` | `turn`(원문·예시·wire 프롬프트·상한·큐) · `result`(raw·sanitized·cleaned·echoStripped·runaway·retry·ms) |
+| `watchdog.jsonl` | `w1-gap` · `w2-restart`(큐·마지막 활동 경과) · `engine-exit` · `engine-terminate` |
+| `mem.jsonl` | 10 s마다 앱 footprint/RSS(task_info) + 번들 내 프로세스 RSS/CPU(`ps`) |
+| `session.json` | 버전·빌드·칩·RAM·OS·설정(번역 대상·글로서리·화자·diar·프리뷰·배선 플래그)·모델 경로; `session.jsonl`에 `@final` 태그 |
+
+꺼져 있으면 `DebugLog.shared == nil` 검사뿐. 켜면 직렬 큐의 파일 I/O만. 번들에는 세션 오디오·전문이 들어가므로 로컬 전용. 테스트 2건(JSONL 기록·off 모드). 634 통과.
+
 ## T8 — 합쳐진 줄의 재번역이 "Dario."로 잘림: 같은 줄 이전 판이 예시가 되면 에코 제거기가 접두를 자름 (2026-09-06, 0.3.16 라이브)
 
 0.3.16 라이브 6분: "From the start, Anthropic pitched itself as the ultimate safety-conscious AI Dario"의 번역이 중·한 모두 "Dario."뿐. 오프라인 재현: 같은 줄 이전 판을 예시로 줘도 4B는 전체 문장("…AI Dario로 자신을 제시했습니다.")을 냄 → 모델이 아니라 앱. 줄이 번역된 뒤 합침(L1)으로 자라면 재번역 턴의 T5 예시가 **같은 줄의 이전 (원문 ⇒ 번역) 쌍**이 되고, 올바른 새 번역은 옛 번역으로 시작하므로 P2 예시 에코 제거기가 그 접두를 "예시 재생"으로 보고 잘라냈다.

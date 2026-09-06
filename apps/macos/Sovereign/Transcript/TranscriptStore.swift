@@ -689,6 +689,7 @@ final class TranscriptStore {
             rebuildLive()
         case .speaker(let l):
             spk.append(l)
+            DebugLog.shared?.emit("store", "spk", ["time": l.time, "id": l.id, "margin": l.margin, "dur": l.dur])
             liveLabelLookupCache = nil
             rebuildLive()
         case .speakerFix(let l):
@@ -697,6 +698,7 @@ final class TranscriptStore {
             // screen now) and buffer for finalize. At finalize the last write
             // per window wins (see dedupe there).
             spkFix.append(l)
+            DebugLog.shared?.emit("store", "spkfix", ["time": l.time, "id": l.id, "margin": l.margin, "dur": l.dur])
             // 근접 매칭만: containment는 3s 오버랩으로 시간이 겹치는 이웃 창의
             // 라벨까지 뒤집는다 (역검증 watchdog-conc-7)
             var touched = false
@@ -824,6 +826,8 @@ final class TranscriptStore {
         editsByLine[b.id] = nil; speakerOverrides[b.id] = nil
         refreshTranslationOverlay(a.id, lineIndex: i)   // survivor's records → stale (kept)
         sameSpeakerJoins += 1
+        DebugLog.shared?.emit("store", "join", ["frozen": true, "speaker": a.speaker,
+                                                "survivor": a.text, "joined": b.text, "start": a.start])
         scheduleRender()
     }
 
@@ -841,6 +845,8 @@ final class TranscriptStore {
                 breakAfter.remove(t.id); breakDecided.remove(t.id)   // re-decide with today's labels
                 sameSpeakerJoins += 1
                 flipped = true
+                DebugLog.shared?.emit("store", "ledger-flip", ["speaker": lines[i].speaker,
+                                                               "prev": lines[i].text, "next": lines[i + 1].text])
             }
             i += 1
         }
@@ -868,6 +874,8 @@ final class TranscriptStore {
 
     /// Called on <<FLUSH_END>>: produce the corrected, overlap-annotated transcript.
     func finalize() {
+        DebugLog.shared?.emit("store", "finalize", ["linesBefore": lines.count, "joins": sameSpeakerJoins,
+                                                    "spkfixRebuilds": speakerFixRebuilds])
         finalized = true
         // The one-shot full regroup below supersedes the live frozen prefix —
         // thaw so SPKFIX boundaries can reshape the whole transcript once.
@@ -1044,6 +1052,14 @@ final class TranscriptStore {
                 if !finalized, let t = tail {       // record the first-adjacency verdict
                     breakDecided.insert(t.id)
                     if !cont { breakAfter.insert(t.id) }
+                    if let dbg = DebugLog.shared, let last = out.last {
+                        dbg.emit("store", "boundary", [
+                            "cont": cont, "prev": t.text, "next": w.text,
+                            "prevSpk": last.speaker, "nextSpk": sp, "nextMargin": m,
+                            "gap": w.t0 - last.end, "prevEndsSentence": Self.endsSentence(t.text),
+                            "brokenBefore": brokenBefore, "prevWords": last.words.count,
+                            "t0": w.t0])
+                    }
                 }
             }
             if var last = out.last, cont {

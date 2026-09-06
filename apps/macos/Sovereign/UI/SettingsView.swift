@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage("appearance") private var appearance = Appearance.system
     // VAD/confidence threshold — same key Theme.confThreshold reads (Theme.confKey).
     @AppStorage("vadConfThreshold") private var vadThreshold = 0.55
+    @AppStorage("debugCapture") private var debugCapture = false
     // UI language (한국어/English) — read by localized views via the same key.
     @AppStorage("uiLanguage") private var uiLang = UILanguage.ko
 
@@ -259,6 +260,13 @@ struct SettingsView: View {
                         Button(uiLang("변경…", "Change…")) { chooseAutoSaveFolder() }
                     }
                 }
+            }
+            Section(uiLang("진단", "Diagnostics")) {
+                Toggle(uiLang("디버그 캡처 (세션 번들 기록)", "Debug capture (session bundle)"), isOn: $debugCapture)
+                Text(uiLang("켜면 다음 세션부터 엔진 입출력·오디오 조각·경계 판정·번역 턴·메모리 추세를 App Support/Madi/debug/<세션>/ 에 기록합니다. 세션 오디오와 전문이 포함되니 로컬에서만 쓰세요.",
+                            "When on, the next session records engine I/O, audio segments, boundary decisions, translation turns and a memory trace under App Support/Madi/debug/<session>/. Contains session audio and text — keep it local."))
+                    .font(.caption).foregroundStyle(.secondary)
+                Button(uiLang("번들 폴더 열기", "Open bundle folder")) { SessionController.revealDebugBundles() }
             }
             Section(uiLang("음성 인식", "Speech recognition")) {
                 slider(uiLang("저신뢰 표시 기준 (VAD)", "Low-confidence threshold (VAD)"), $vadThreshold, 0.35...0.9, "%.2f")

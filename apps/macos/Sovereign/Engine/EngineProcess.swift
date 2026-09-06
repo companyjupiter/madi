@@ -150,10 +150,37 @@ final class EngineProcess {
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
+            DebugLog.shared?.append(chunk, to: "stdout.log")   // debug bundle: bytes as received
             self?.ioQueue.async { self?.ingest(chunk) }
         }
 
+        if let dbg = DebugLog.shared {
+            // Debug bundle (docs/DEBUG_MODE.md): the exact engine invocation —
+            // same files the tee shim produced, so replay_capture.py works on it.
+            dbg.write(env.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "\n") + "\n", to: "env.txt")
+            dbg.write("\(process.executableURL?.path ?? "") \((process.arguments ?? []).joined(separator: " "))\n", to: "engine.cmd")
+        }
         try process.run()
+    }
+
+    // ── debug bundle: stdin log with WAV snapshots (feed order) ──────────────
+    private var debugFeedIndex = 0
+    private var debugWavBytes: Int64 = 0
+    private static let debugWavCap: Int64 = 400 << 20
+    private func debugLogStdin(_ line: String, wav: URL?, preview: Bool) {
+        guard let dbg = DebugLog.shared else { return }
+        var snap = ""
+        if let wav {
+            let size = (try? FileManager.default.attributesOfItem(atPath: wav.path)[.size] as? Int64) ?? 0
+            if preview, debugWavBytes + size > Self.debugWavCap {
+                snap = "COPYSKIP"
+            } else {
+                snap = String(format: "%05d-%@", debugFeedIndex, wav.lastPathComponent)
+                if dbg.copyIn(wav, as: "wav/" + snap) != nil { debugWavBytes += size } else { snap = "COPYFAIL" }
+            }
+        }
+        dbg.appendLine(String(format: "%9.3f\t%@\t%@", dbg.elapsed, snap, line), to: "stdin.log")
+        debugFeedIndex += 1
     }
 
     /// Feed one segment job. `offset` = global start seconds, `wav` = closed segment file.
@@ -162,6 +189,7 @@ final class EngineProcess {
             NSLog("blocked engine wav outside allowed stream roots: \(wav.path)")
             return
         }
+        debugLogStdin(String(format: "%.3f %@", offset, wav.path), wav: wav, preview: false)
         write(String(format: "%.3f %@\n", offset, wav.path))
     }
 
@@ -181,14 +209,16 @@ final class EngineProcess {
         let one = forced.replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if supportsPreviewForcedPrefix, !one.isEmpty, !one.contains("%%FP") {
+            debugLogStdin("PREVIEW \(wav.path) %%FP \(one)", wav: wav, preview: true)
             write("PREVIEW \(wav.path) %%FP \(one)\n")
         } else {
+            debugLogStdin("PREVIEW \(wav.path)", wav: wav, preview: true)
             write("PREVIEW \(wav.path)\n")
         }
     }
 
     /// Finalize: triggers SPKFIX/SPKOV relabel then <<FLUSH_END>>.
-    func flush() { write("FLUSH\n") }
+    func flush() { debugLogStdin("FLUSH", wav: nil, preview: false); write("FLUSH\n") }
 
     func stop() {
         flush()
@@ -199,6 +229,11 @@ final class EngineProcess {
     func terminate() {
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
         if process.isRunning { process.terminate() }
+        if let dbg = DebugLog.shared {
+            let stamp = Int(dbg.elapsed)
+            dbg.copyIn(eventsURL, as: "engine.events.\(stamp)s.jsonl")   // one per engine incarnation (W2 restarts)
+            dbg.emit("watchdog", "engine-terminate", ["elapsed": dbg.elapsed, "pid": Int(process.processIdentifier)])
+        }
         try? FileManager.default.removeItem(at: eventsURL)
     }
 

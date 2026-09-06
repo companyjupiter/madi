@@ -48,8 +48,21 @@ struct WordMerger {
     mutating func finish() { merge(final: true) }
 
     private mutating func merge(final: Bool) {
+        let rawCount = segBuffer.count
         var incoming = segBuffer.filter { $0.t0 >= emitted - eps }
         segBuffer = []
+        let heldBefore = held?.text
+        let seamBefore = seamDuplicatesDropped, instantBefore = sameInstantDuplicatesDropped
+        let committedBefore = committed.count
+        defer {
+            DebugLog.shared?.emit("store", "merge", [
+                "final": final, "raw": rawCount, "pastWatermark": incoming.count + (held == nil ? 0 : 0),
+                "held": heldBefore ?? "", "heldAfter": held?.text ?? "",
+                "committed": committed.count - committedBefore,
+                "seamDropped": seamDuplicatesDropped - seamBefore,
+                "sameInstantDropped": sameInstantDuplicatesDropped - instantBefore,
+                "emitted": emitted])
+        }
 
         if let h = held {
             held = nil

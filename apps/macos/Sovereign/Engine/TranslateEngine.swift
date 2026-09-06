@@ -269,6 +269,14 @@ final class TranslateEngine {
         }
         let priority: DNAEngineBroker.Priority = next.kind == .committed
             ? .committedCaption : .interimCaption
+        if let dbg = DebugLog.shared {
+            dbg.emit("translate", "turn", [
+                "id": next.id.uuidString, "lang": next.lang, "kind": "\(next.kind)",
+                "source": next.source, "exampleTarget": next.exampleTarget ?? "",
+                "body": next.body ?? next.prompt, "wire": wirePrompt,
+                "retries": next.retries, "queue": pending.count, "forced": next.forced ?? ""])
+            turnStartedAt[next.id] = Date()
+        }
         broker.submit(client: clientID, prompt: wirePrompt, priority: priority,
             onPartial: { [weak self] text in
                 guard let self else { return }
@@ -298,6 +306,8 @@ final class TranslateEngine {
         onPartial?(turn.id, turn.lang, cleaned, turn.source)
     }
 
+    private var turnStartedAt: [UUID: Date] = [:]
+
     private func completeTurn(_ text: String) {
         guard let turn = inflightTurn else { return }
         inflightTurn = nil
@@ -305,6 +315,15 @@ final class TranslateEngine {
         let sanitized = TranslationOutputPolicy.clean(text)
         let cleaned = TranslationOutputPolicy.stripExampleEcho(
             sanitized, exampleTarget: turn.exampleTarget, source: turn.source)
+        let debugMs = turnStartedAt.removeValue(forKey: turn.id).map { Int(Date().timeIntervalSince($0) * 1000) } ?? -1
+        defer {
+            DebugLog.shared?.emit("translate", "result", [
+                "id": turn.id.uuidString, "lang": turn.lang, "source": turn.source,
+                "raw": String(text.prefix(4000)), "sanitized": sanitized, "cleaned": cleaned,
+                "echoStripped": sanitized != cleaned, "ms": debugMs,
+                "retry": TranslationOutputPolicy.shouldRetry(text, source: turn.source, target: turn.lang),
+                "runaway": cleaned.count > TranslationOutputPolicy.runawayLimit(source: turn.source)])
+        }
         // P2: the whole reply was a replay of the example → objective failure,
         // same path as a source echo (retry once with the example-free prompt).
         let exampleEchoOnly = cleaned.isEmpty && !sanitized.isEmpty

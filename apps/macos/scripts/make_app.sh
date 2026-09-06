@@ -48,6 +48,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Engine/EngineProtocol.swift
   "$APP_DIR"/Sovereign/Engine/EngineEvents.swift
   "$APP_DIR"/Sovereign/Engine/EngineProcess.swift
+  "$APP_DIR"/Sovereign/SessionController+Debug.swift
   "$APP_DIR"/Sovereign/Engine/PreviewEngine.swift
   "$APP_DIR"/Sovereign/Engine/DNAEngineBroker.swift
   "$APP_DIR"/Sovereign/Engine/DNATurnBudget.swift
@@ -81,6 +82,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/BackgroundLaneAdmission.swift
   "$APP_DIR"/Sovereign/Transcript/LiveFeatureWiring.swift
   "$APP_DIR"/Sovereign/Transcript/EngineDiagnostics.swift
+  "$APP_DIR"/Sovereign/Transcript/DebugLog.swift
   "$APP_DIR"/Sovereign/Transcript/KoreanNumberFormatter.swift
   "$APP_DIR"/Sovereign/Transcript/EditorCuts.swift
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift

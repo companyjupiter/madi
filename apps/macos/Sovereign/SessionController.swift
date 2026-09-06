@@ -1770,6 +1770,7 @@ final class SessionController: EngineProcessDelegate {
     }
 
     private var engine: EngineProcess?
+    var debugMemTask: Task<Void, Never>? = nil   // debug bundle memory sampler
     private let capture = AudioCapture()
 
     private var isError: Bool { if case .error = phase { return true }; return false }
@@ -1804,7 +1805,7 @@ final class SessionController: EngineProcessDelegate {
         translateTargets.count == 2 && translateTargets.contains("Korean")
     }
 
-    private func makeConfig() -> EngineProcess.Config {
+    func makeConfig() -> EngineProcess.Config {   // internal: SessionController+Debug reads it for the manifest
         EngineProcess.Config(
             binaryURL: Bundle.main.bundleURL
                 .appendingPathComponent("Contents/MacOS/transcribe"),
@@ -2095,6 +2096,7 @@ final class SessionController: EngineProcessDelegate {
         capture.abort()
         audioPermissionIssue = nil
         transcript.reset()
+        debugSessionStart()   // debug bundle (docs/DEBUG_MODE.md)
         speakerNames = [:]
         userEditedLines.removeAll()
         autoRecognizedSpeakers.removeAll()
@@ -2424,6 +2426,7 @@ final class SessionController: EngineProcessDelegate {
                         engine?.feed(offset: job.offset, wav: job.url)
                     } else {
                         coverageGaps.append(job.offset)
+                        debugWatchdog("w1-gap", ["offset": job.offset, "retried": job.retried, "queue": segQueue.count])
                     }
                 }
             }
@@ -2457,6 +2460,7 @@ final class SessionController: EngineProcessDelegate {
     func engineDidFlush() { finalizeOnce() }
 
     func engine(didTerminate code: Int32) {
+        debugWatchdog("engine-exit", ["code": Int(code), "phase": "\(phase)"])
         // file mode exits 0 on its own after <<FLUSH_END>>; finalize if a late
         // exit beats the FLUSH_END line (finalizeOnce is idempotent).
         if code == 0 { finalizeOnce(); return }
@@ -2544,7 +2548,9 @@ final class SessionController: EngineProcessDelegate {
         // P6: print the ledger NOW (a ⌘Q inside the 10s window swallowed two
         // real sessions' numbers), and again after the stop-time backfill has
         // had time to drain. NE < 0.2 is the target band.
-        TranslationStabilityMetrics.shared.flushSummary("@final " + sttStatsTag())
+        let finalTag = "@final " + sttStatsTag()
+        TranslationStabilityMetrics.shared.flushSummary(finalTag)
+        debugSessionEnd(tag: finalTag)
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(10))
             TranslationStabilityMetrics.shared.flushSummary("@settled")
@@ -2660,6 +2666,9 @@ final class SessionController: EngineProcessDelegate {
         let lastProgress = max(oldest.fedAt, lastEngineActivityAt)
         guard Date().timeIntervalSince(lastProgress) > 45 else { return }
         hangRecoveries += 1
+        debugWatchdog("w2-restart", ["queue": segQueue.count, "oldestFedAgo": Date().timeIntervalSince(oldest.fedAt),
+                                     "lastActivityAgo": Date().timeIntervalSince(lastEngineActivityAt),
+                                     "recoveries": hangRecoveries, "phase": "\(phase)"])
         engine?.delegate = nil   // 구엔진의 didTerminate(SIGTERM)가 세션을 error로 죽이지 않게 (watchdog-conc-1)
         engine?.terminate()
         transcript.markDiarNamespaceBroken()   // 새 엔진 화자 id는 0부터 — FLUSH 라벨 대체 금지 (app-state-6)
