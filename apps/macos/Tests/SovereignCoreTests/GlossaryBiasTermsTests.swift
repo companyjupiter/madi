@@ -72,4 +72,24 @@ final class GlossaryBiasTermsTests: XCTestCase {
     func testEmptyGlossaryIsEmpty() {
         XCTAssertTrue(PersonalVocabulary.biasTerms(glossary(minHits: 1, [])).isEmpty)
     }
+
+    // ── P6-2 (2026-09-07): only the measured script reaches the prompt ──────
+
+    /// The user's DevOps corrections are Latin-script; in a Korean session they
+    /// turned a quiet lecture into German. They never enter the prompt.
+    func testLatinScriptTermsNeverBias() {
+        let g = glossary(minHits: 1, [("이스티오", "istio", 9), ("람다", "lambda", 9), ("오픈소스", "opensource", 9)])
+        XCTAssertTrue(PersonalVocabulary.biasTerms(g).isEmpty, "unmeasured script → no PROMPT at all")
+    }
+
+    func testHangulTermsStillBias() {
+        let g = glossary(minHits: 1, [("쿠버네티스", "쿠버네티스", 3), ("마이그레이션", "마이그레이션", 2), ("k8s", "K8s", 9)])
+        XCTAssertEqual(PersonalVocabulary.biasTerms(g), ["쿠버네티스", "마이그레이션"], "Hangul kept in hit order; mixed-script K8s dropped")
+    }
+
+    func testScriptRuleAllowsDigitsAndJamo() {
+        XCTAssertTrue(PersonalVocabulary.isBiasScript("소버린2"))
+        XCTAssertTrue(PersonalVocabulary.isBiasScript("ㅋㅋㅋ"))
+        XCTAssertFalse(PersonalVocabulary.isBiasScript("123"), "no letters at all is not a term")
+    }
 }

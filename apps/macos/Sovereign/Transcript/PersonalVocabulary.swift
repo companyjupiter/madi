@@ -66,7 +66,7 @@ enum PersonalVocabulary {
     static func biasTerms(_ glossary: Glossary) -> [String] {
         guard glossary.enabled else { return [] }
         let confirmed = glossary.entries.values
-            .filter { $0.hits >= glossary.minHits && $0.right.count >= minLen }
+            .filter { $0.hits >= glossary.minHits && $0.right.count >= minLen && isBiasScript($0.right) }
             // strongest rules first; `right` breaks ties so the list is deterministic
             .sorted { ($0.hits, $1.right) > ($1.hits, $0.right) }
         var seen = Set<String>(), out: [String] = [], chars = 0
@@ -80,6 +80,27 @@ enum PersonalVocabulary {
             if out.count >= maxBiasTerms { break }
         }
         return out
+    }
+
+    /// P6-2 (2026-09-07): a bias term must be in the script the prompt was
+    /// MEASURED with. S4 measured Hangul glossaries on Korean speech; the engine
+    /// applies `PROMPT` to Korean segments only (`PROMPT_LANGS`, P6). A Latin-
+    /// script term inside that Korean prompt ("opensource istio lambda" — the
+    /// user's DevOps corrections) primed the decoder into German/English on a
+    /// quiet Korean lecture: 0.3.19 live 41 % German segments; the same captured
+    /// stream replayed with the prompt empty → 0 %, +26 dB louder audio with the
+    /// prompt kept → 35 %. Offline P6 had already seen 11 % with a mixed prompt.
+    /// Letters must all be Hangul (syllables or jamo); digits and marks are fine.
+    static func isBiasScript(_ term: String) -> Bool {
+        var letters = 0
+        for u in term.unicodeScalars where u.properties.isAlphabetic {
+            letters += 1
+            switch u.value {
+            case 0xAC00...0xD7A3, 0x1100...0x11FF, 0x3130...0x318F, 0xA960...0xA97F, 0xD7B0...0xD7FF: continue
+            default: return false
+            }
+        }
+        return letters > 0
     }
 
     /// Lowercase + punctuation trim, then remove only a known Korean particle.
