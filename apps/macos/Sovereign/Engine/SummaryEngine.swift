@@ -26,10 +26,28 @@ final class SummaryEngine {
     private let broker = DNAEngineBroker.shared
     private let clientID = UUID()
 
-    // map-reduce for long meetings: the engine context is ~1024 tokens and silently
-    // truncates past it, so a long transcript is split into char-budgeted chunks,
-    // each condensed ("fold"), then folded again until one fits → final format.
+    // map-reduce for meetings too long to send at once: the transcript is split into
+    // char-budgeted chunks, each condensed ("fold"), then folded again until one fits
+    // → final format. The fold is LOSSY at every budget — the condense step throws away
+    // most of the transcript no matter how big the chunks are (measured 2026-09-07 on a
+    // 13,693-char session: the final prompt saw 2 % of it at 800 chars, 20 % at 4,000,
+    // 8 % at 8,000) — so anything that fits at all goes one-shot instead (oneShotBytes).
     private let chunkChars = 800
+
+    /// Largest transcript, in UTF-8 bytes, that goes to the final prompt whole.
+    ///
+    /// Budget in BYTES, not characters: the tokenizer runs ~4.3 bytes/token in Korean and
+    /// ~4.6 in English (measured), while chars/token differs 2.6x between them (1.8 vs
+    /// 4.6). A character budget silently means something different per language.
+    ///
+    /// Two hard ceilings in the engine, both verified against the shipped binary:
+    ///   - context 8192 tokens (`resolveMaxSeq` default; the broker passes SOV_NSTEPS but
+    ///     never SOV_MAX_SEQ), minus the 512-token generation reserve;
+    ///   - the stdin line buffer, 4*seq_len = 32,768 bytes, past which the engine SKIPS
+    ///     the whole line.
+    /// 24,000 B is ~5,600 tokens at the denser (Korean) rate: with the prompt wrapper and
+    /// the 512-token reserve that is ~6,300 of 8192, and ~24 KB of the 32 KB line buffer.
+    static let oneShotBytes = 24_000
     private var foldFinalTag = "summary"           // "summary" | "speakers"
     private var foldRemaining = 0
     private var foldAcc: [String] = []
@@ -148,6 +166,14 @@ final class SummaryEngine {
         guard !full.isEmpty else { onResult?(finalTag, nil); return }
         foldFinalTag = finalTag
         foldRound = 0
+        // Whole transcript fits → skip the fold entirely. Folding what already fits pays
+        // the condense step's loss (and its N extra engine calls) for nothing: on the
+        // 13,693-char probe the folded summary named 3 of 10 salient entities and no
+        // action items in 44 calls / 175 s, the one-shot 7 of 10 in 1 call / 11 s.
+        if full.utf8.count <= Self.oneShotBytes {
+            enqueue(finalTag, finalPrompt(finalTag, full))
+            return
+        }
         runFoldRound(splitToBudget(lines))   // round 0 inputs = transcript chunks
     }
 

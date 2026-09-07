@@ -1667,6 +1667,8 @@ struct ContentView: View {
             if micRowVisible {
                 micRow
                     .padding(.horizontal, 16).padding(.top, 16)
+                micLevelRow
+                    .padding(.horizontal, 16).padding(.top, 6)
             }
 
             Rectangle().fill(Theme.Colors.surfaceSunken).frame(height: 1)
@@ -1753,6 +1755,26 @@ struct ContentView: View {
         switch session.phase {
         case .recording, .paused: return true
         default: return false
+        }
+    }
+
+    /// Input level in dBFS under the mic row (2026-09-07). A far-field or
+    /// low-gain mic (−41 dBFS on the 0.3.19/0.3.20 Korean sessions vs −15 dBFS
+    /// for system audio) is the difference between a clean transcript and a
+    /// low-confidence one; the energy strip cannot show absolute level, this
+    /// can. `meterLevel` is 3 × RMS with a peak hold, so dB = 20·log10(meter/3).
+    private var micLevelRow: some View {
+        let meter = max(Double(session.meterLevel) / 3.0, 1e-5)
+        let db = 20.0 * log10(meter)
+        let hint: String = db < -35 ? uiLang("작음 · 마이크를 가까이", "low · move closer", "小さい · マイクを近づけて")
+            : db < -22 ? uiLang("보통", "ok", "普通") : uiLang("좋음", "good", "良好")
+        return HStack(spacing: 8) {
+            Text(uiLang("입력 레벨", "Input level", "入力レベル"))
+                .font(.system(size: 11)).foregroundStyle(Theme.Colors.textSecondary)
+            Spacer(minLength: 8)
+            Text(String(format: "%.0f dB · %@", db, hint))
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(db < -35 ? Theme.Colors.lowConf : Theme.Colors.textSecondary)
         }
     }
 

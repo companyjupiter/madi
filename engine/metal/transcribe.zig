@@ -59,6 +59,13 @@ var g_qmax: f32 = 7.0; // clamp level: 4bit→7, 5bit→15, 6bit→31 (env QBITS
 // file path keeps ENC_SEQ — its slot stride is fixed).
 var g_actx_auto: bool = false;
 var g_actx_fixed: u32 = 0;
+// ACTX_QUIET_PEAK (2026-09-07): under AUDIO_CTX=auto a QUIET window (raw peak
+// below this, before AGC) is encoded with the FULL 1500-row context instead of
+// the fitted one. Far-field Korean at −41 dBFS (peak 0.06), 0.3.20 live stream
+// replayed: fitted context → 43 rescues, 16 loop guards, 55 % of words below
+// conf 0.55; full context → 13 / 2 / 43 %. Loud input (peak ≥ threshold) keeps
+// the fitted context and its latency. 0 disables.
+var g_actx_quiet_peak: f32 = 0.10;
 // DEC_INT4 — in-memory int4 decode weights (see repackQ4 / gemv_q4 kernels).
 // 1 = decoder-block GEMVs only (~92 MB/tok → ½; logit head stays Q8 — Q4 noise
 //     on the tied head can flip argmax, see keep_head note at tok_emb load).
@@ -75,9 +82,10 @@ var g_dec_int4: u8 = 0;
 // Unset → legacy single-lock behavior, bit-exact.
 var g_lang_cands: [4]u32 = undefined;
 var g_lang_ncands: usize = 0;
-fn audioCtx(got_samples: usize) u32 {
+fn audioCtx(got_samples: usize, raw_peak: f32) u32 {
     if (g_actx_fixed > 0) return @max(192, @min(ENC_SEQ, (g_actx_fixed + 63) / 64 * 64));
     if (!g_actx_auto) return ENC_SEQ;
+    if (g_actx_quiet_peak > 0 and raw_peak < g_actx_quiet_peak) return ENC_SEQ; // quiet input: full context
     const frames: u32 = @intCast(@min((got_samples + 319) / 320, ENC_SEQ));
     // Post-speech margin: audio that ends RIGHT at a speech boundary (VAD-cut
     // live segments, TTS fixtures) needs silent tail context or the decode
@@ -979,6 +987,7 @@ pub fn main() !void {
             g_actx_fixed = std.fmt.parseInt(u32, ac, 10) catch 0;
         }
     }
+    g_actx_quiet_peak = envF("ACTX_QUIET_PEAK", 0.10);
     if (std.posix.getenv("DEC_INT4")) |v| g_dec_int4 = std.fmt.parseInt(u8, v, 10) catch 0;
     if (std.posix.getenv("LANG_CANDIDATES")) |lc| { // T12 per-segment language whitelist
         var lit = std.mem.splitScalar(u8, lc, ',');
@@ -1759,6 +1768,7 @@ pub fn main() !void {
             var nb: u32 = 0;
             var slot_toff: [8]f32 = undefined;
             var slot_rms: [8]f32 = undefined;
+            var slot_rawpk: [8]f32 = undefined; // raw peak before AGC (audioCtx quiet rule)
             var slot_chunk: [8]usize = undefined;
             var slot_conv: [8]f64 = undefined;
             var slot_got: [8]usize = undefined;
@@ -1790,12 +1800,13 @@ pub fn main() !void {
             const AGC_ACTIVATE: f32 = 0.30;
             const AGC_TARGET: f32 = 0.90;
             const AGC_GAIN_MAX: f32 = 40.0;
+            var raw_pk: f32 = 0;
+            for (samples[0..got]) |x| {
+                const a = @abs(x);
+                if (a > raw_pk) raw_pk = a;
+            }
             if (agc_on) {
-                var pk: f32 = 0;
-                for (samples[0..got]) |x| {
-                    const a = @abs(x);
-                    if (a > pk) pk = a;
-                }
+                const pk = raw_pk;
                 if (pk > 1e-6 and pk < AGC_ACTIVATE) {
                     const g = @min(AGC_GAIN_MAX, AGC_TARGET / pk);
                     for (samples[0..got]) |*x| x.* *= g;
@@ -2290,6 +2301,7 @@ pub fn main() !void {
         slot_got[nb] = got;
         slot_toff[nb] = t_off;
         slot_rms[nb] = seg_rms;
+        slot_rawpk[nb] = raw_pk;
         slot_chunk[nb] = chunk;
         nb += 1;
         if (got < mel.CHUNK_SAMPLES) { reached_end = true; chunk += 1; break :gather; }
@@ -2300,7 +2312,9 @@ pub fn main() !void {
         // ── Phase B: ONE batched encoder forward (weights + dequant amortized ×nb)
         // Single-slot windows (stream mode is always nb=1) shrink to the audio's
         // own rows under AUDIO_CTX; batched slots keep the fixed ENC_SEQ stride.
-        var actx: u32 = if (nb == 1) audioCtx(slot_got[0]) else ENC_SEQ;
+        var actx: u32 = if (nb == 1) audioCtx(slot_got[0], slot_rawpk[0]) else ENC_SEQ;
+        if (nb == 1 and g_actx_auto and g_actx_quiet_peak > 0 and slot_rawpk[0] < g_actx_quiet_peak)
+            try out.print("[actx] quiet input (peak {d:.3}) → full context\n", .{slot_rawpk[0]});
         var et = try std.time.Timer.start();
         try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex, out_f16, enc_out, escr, nb, actx);
         const enc_ns_t = et.read();
@@ -2419,7 +2433,7 @@ pub fn main() !void {
         // the ckc/cvc buffers stay allocated at ENC_SEQ so only counts change.
         // Reset per slot: a rescue re-encode in the PREVIOUS slot may have
         // shrunk actx to its seek window — this slot's KV must match its own.
-        actx = if (nb == 1) audioCtx(cgot) else ENC_SEQ;
+        actx = if (nb == 1) audioCtx(cgot, slot_rawpk[slot]) else ENC_SEQ;
         var ckvt = try std.time.Timer.start();
         for (0..dec.NL) |l| {
             try mtl.beginCommandBuffer();
@@ -2886,7 +2900,7 @@ pub fn main() !void {
             try mtl.sync();
             // seek window is always a single-slot encode → it can shrink to the
             // remaining audio under AUDIO_CTX (rem < the original chunk).
-            actx = audioCtx(rem);
+            actx = audioCtx(rem, slot_rawpk[slot]);
             try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex + slot * @as(usize, ENC_SEQ) * D, eo16, enc_out + slot * @as(usize, ENC_SEQ) * D, escr, 1, actx);
             for (0..dec.NL) |l| {
                 try mtl.beginCommandBuffer();

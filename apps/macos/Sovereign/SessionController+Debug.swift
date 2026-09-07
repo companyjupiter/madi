@@ -70,10 +70,11 @@ extension SessionController {
         dbg.emit("session", "final", ["tag": tag, "rows": transcript.lines.count])
         debugMemSample()
         debugMemTask?.cancel(); debugMemTask = nil
-        Task { @MainActor in
+        Task { @MainActor [dbg] in
             try? await Task.sleep(for: .seconds(12))
-            DebugLog.shared?.emit("session", "close", [:])
-            DebugLog.stop()
+            guard DebugLog.shared === dbg else { return }   // a new session already owns the sink
+            dbg.emit("session", "close", [:])
+            DebugLog.stop(dbg)
         }
     }
 

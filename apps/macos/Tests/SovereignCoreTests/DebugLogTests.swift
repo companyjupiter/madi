@@ -36,4 +36,18 @@ final class DebugLogTests: XCTestCase {
         store.ingest(.word(t0: 0, t1: 0.3, text: "hello", conf: 1))
         XCTAssertNil(DebugLog.shared)
     }
+
+    /// A delayed close from the previous session must not detach the bundle
+    /// the next session opened (0.3.20: restart within 12 s → 2 s bundle).
+    func testStopOnlyDetachesTheBundleItWasGiven() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("madi-debuglog-\(UUID().uuidString)")
+        let first = try XCTUnwrap(DebugLog.start(root: root, now: Date(timeIntervalSince1970: 1_000_000)))
+        let second = try XCTUnwrap(DebugLog.start(root: root, now: Date(timeIntervalSince1970: 1_000_060)))
+        XCTAssertTrue(DebugLog.shared === second)
+        DebugLog.stop(first)                     // stale close from the previous session
+        XCTAssertTrue(DebugLog.shared === second, "the new session keeps its sink")
+        DebugLog.stop(second)
+        XCTAssertNil(DebugLog.shared)
+        try? FileManager.default.removeItem(at: root)
+    }
 }

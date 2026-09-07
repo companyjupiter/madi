@@ -29,9 +29,12 @@ final class DebugLog: @unchecked Sendable {
         return log
     }
 
-    /// Flush and detach the shared sink (the files stay).
-    static func stop() {
-        guard let log = shared else { return }
+    /// Flush and detach the shared sink (the files stay). Pass the bundle you
+    /// opened to stop ONLY that one: a delayed close (the 12 s stop-time
+    /// backfill window) must not close the NEXT session's bundle — 0.3.20 live,
+    /// a restart 9 s after stop left the new session with a 2 s bundle.
+    static func stop(_ only: DebugLog? = nil) {
+        guard let log = shared, only == nil || only === log else { return }
         shared = nil
         log.queue.sync {
             for h in log.handles.values { try? h.close() }
