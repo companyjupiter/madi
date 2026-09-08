@@ -14,18 +14,38 @@ import Foundation
 import AVFoundation
 
 enum AudioDecode {
+    /// Korean reason for the import error banner; nil = generic "unsupported or damaged".
+    static func reason(_ error: Error) -> String? {
+        let e = error as NSError
+        guard e.domain == "AudioDecode" else { return nil }
+        switch e.code {
+        case 3: return "파일이 \(maxInputBytes >> 30) GB를 넘습니다"
+        case 5: return "길이가 \(maxDecodedSeconds / 3600)시간을 넘습니다"
+        case 6: return "오디오 트랙이 없습니다"
+        case 7, 8, 9: return "오디오 트랙을 macOS가 디코드하지 못합니다"
+        default: return nil
+        }
+    }
     static let maxInputBytes: Int64 = 2 * 1024 * 1024 * 1024
-    // 4 h, not 2 h: the product targets ~2 h meetings, which routinely overrun
-    // (2:00:05 etc.). 4 h keeps comfortable headroom while still bounding decode
-    // (4 h @ 16 kHz = 230 M samples ≈ 460 MB PCM); the 2 GiB input cap is the real
-    // decompression-bomb guard.
-    static let maxDecodedSeconds = 4 * 60 * 60
+    // 12 h (2026-09-09; was 4 h while the app held every sample in memory).
+    // The decode now streams to the temp WAV, so the bound is the ENGINE's:
+    // file mode reads the whole WAV into RAM (readFileAlloc, 2 GiB cap) —
+    // 12 h of 16 kHz PCM16 is 1.38 GB, tolerable beside the 1.3 GB model on a
+    // 16 GB machine; 18 h would hit the 2 GiB read cap. Longer masters need the
+    // engine to mmap the WAV (backlog).
+    static let maxDecodedSeconds = 12 * 60 * 60
     private static let maxDecodedSamples = maxDecodedSeconds * Int(WavWriter.sampleRate)
 
+    /// `videoContainer`: the byte cap is a decompression-bomb guard for AUDIO
+    /// files, where bytes ≈ audio. In a video container the bytes are the
+    /// picture (a 14.5-minute YouTube master is 6.9 GB) and the audio track is
+    /// streamed by AVAssetReader, never loaded whole — so only the duration cap
+    /// applies there (2026-09-09: "지원하지 않는 형식" on neodi-neori.mp4).
     static func validateImportBounds(inputBytes: Int64?,
                                      sourceFrames: AVAudioFramePosition,
-                                     sampleRate: Double) throws {
-        if let inputBytes, inputBytes > maxInputBytes {
+                                     sampleRate: Double,
+                                     videoContainer: Bool = false) throws {
+        if !videoContainer, let inputBytes, inputBytes > maxInputBytes {
             throw NSError(domain: "AudioDecode", code: 3,
                           userInfo: [NSLocalizedDescriptionKey: "file too large"])
         }
@@ -44,41 +64,52 @@ enum AudioDecode {
     /// Audio-only files go through AVAudioFile; anything it rejects (video
     /// containers) falls back to the AVAssetReader audio-track path.
     static func toWav16k(_ src: URL) throws -> URL {
+        let dst = FileManager.default.temporaryDirectory.appendingPathComponent("sovereign-decode.wav")
+        let out = try WavWriter.Streaming(url: dst)
         if let file = try? AVAudioFile(forReading: src) {
-            return try writeSamples(decodeAudioFile(file, src: src))
+            try decodeAudioFile(file, src: src, into: out)
+        } else {
+            try decodeAssetAudioTrack(src, into: out)
         }
-        return try writeSamples(decodeAssetAudioTrack(src))
+        try out.finish()
+        guard out.samples > 0 else {
+            throw NSError(domain: "AudioDecode", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "no audio decoded"])
+        }
+        return dst
     }
 
     /// Audio-only path (m4a/mp3/aac/flac/wav…).
-    private static func decodeAudioFile(_ file: AVAudioFile, src: URL) throws -> [Int16] {
+    private static func decodeAudioFile(_ file: AVAudioFile, src: URL, into out: WavWriter.Streaming) throws {
         let attrs = try? FileManager.default.attributesOfItem(atPath: src.path)
+        // AVAudioFile happily opens an mp4/mov that carries AAC — this path is
+        // not "audio-only files" but "containers AVAudioFile can read", so the
+        // byte cap must still be decided by what the bytes ARE.
+        let hasVideo = !AVURLAsset(url: src).tracks(withMediaType: .video).isEmpty
         try validateImportBounds(
             inputBytes: attrs?[.size] as? Int64,
             sourceFrames: file.length,
-            sampleRate: file.processingFormat.sampleRate
+            sampleRate: file.processingFormat.sampleRate,
+            videoContainer: hasVideo
         )
         guard let rs = Resampler(from: file.processingFormat) else {
             throw NSError(domain: "AudioDecode", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "resampler init failed"])
         }
-        var samples: [Int16] = []
-        samples.reserveCapacity(min(Int(file.length), maxDecodedSamples))
         while file.framePosition < file.length {
             guard let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 8192) else { break }
             try file.read(into: buf)
             if buf.frameLength == 0 { break }
-            samples.append(contentsOf: rs.convert(buf))
-            try checkLength(samples.count)
+            try out.append(rs.convert(buf))
+            try checkLength(out.samples)
         }
-        samples.append(contentsOf: rs.drain())       // flush converter tail
-        try checkLength(samples.count)
-        return samples
+        try out.append(rs.drain())       // flush converter tail
+        try checkLength(out.samples)
     }
 
     /// Video-container path (mp4/mov/m4v…): pull the first audio track's LPCM via
     /// AVAssetReader (interleaved Float32 at native rate), then the same Resampler.
-    private static func decodeAssetAudioTrack(_ src: URL) throws -> [Int16] {
+    private static func decodeAssetAudioTrack(_ src: URL, into out: WavWriter.Streaming) throws {
         let attrs = try? FileManager.default.attributesOfItem(atPath: src.path)
         let asset = AVURLAsset(url: src)
         guard let track = asset.tracks(withMediaType: .audio).first else {
@@ -93,7 +124,8 @@ enum AudioDecode {
         try validateImportBounds(
             inputBytes: attrs?[.size] as? Int64,
             sourceFrames: AVAudioFramePosition(CMTimeGetSeconds(asset.duration) * asbd.mSampleRate),
-            sampleRate: asbd.mSampleRate
+            sampleRate: asbd.mSampleRate,
+            videoContainer: true
         )
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
@@ -116,17 +148,16 @@ enum AudioDecode {
         // silently yields SILENCE for stereo input (verified: stereo→0 amplitude).
         var rs: Resampler?
         var pcmFormat: AVAudioFormat?
-        var samples: [Int16] = []
         while reader.status == .reading, let sbuf = output.copyNextSampleBuffer() {
             if pcmFormat == nil, let fd = CMSampleBufferGetFormatDescription(sbuf) {
                 pcmFormat = AVAudioFormat(cmAudioFormatDescription: fd)
                 rs = pcmFormat.flatMap { Resampler(from: $0) }
             }
             if let rs, let fmt = pcmFormat, let pcm = pcmBuffer(from: sbuf, format: fmt) {
-                samples.append(contentsOf: rs.convert(pcm))
+                try out.append(rs.convert(pcm))
             }
             CMSampleBufferInvalidate(sbuf)
-            if samples.count > maxDecodedSamples { reader.cancelReading(); break }
+            if out.samples > maxDecodedSamples { reader.cancelReading(); break }
         }
         if reader.status == .failed {
             throw reader.error ?? NSError(domain: "AudioDecode", code: 9,
@@ -136,9 +167,8 @@ enum AudioDecode {
             throw NSError(domain: "AudioDecode", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "no audio decoded"])
         }
-        samples.append(contentsOf: rs.drain())
-        try checkLength(samples.count)
-        return samples
+        try out.append(rs.drain())
+        try checkLength(out.samples)
     }
 
     /// Copy one LPCM CMSampleBuffer into an AVAudioPCMBuffer of `format` (must match
@@ -159,14 +189,4 @@ enum AudioDecode {
         }
     }
 
-    private static func writeSamples(_ samples: [Int16]) throws -> URL {
-        guard !samples.isEmpty else {
-            throw NSError(domain: "AudioDecode", code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "no audio decoded"])
-        }
-        let dst = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sovereign-decode.wav")
-        try WavWriter.write(samples: samples, to: dst)
-        return dst
-    }
 }

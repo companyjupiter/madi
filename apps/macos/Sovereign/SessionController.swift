@@ -2268,7 +2268,8 @@ final class SessionController: EngineProcessDelegate {
             catch {
                 let name = url.lastPathComponent
                 Task { @MainActor in
-                    self.phase = .error("'\(name)' 을(를) 열 수 없습니다 — 지원하지 않는 형식이거나 손상된 파일입니다.")
+                    let why = AudioDecode.reason(error) ?? "지원하지 않는 형식이거나 손상된 파일입니다"
+                    self.phase = .error("'\(name)' 을(를) 열 수 없습니다 — \(why).")
                 }
                 return
             }

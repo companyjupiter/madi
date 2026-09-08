@@ -34,6 +34,15 @@ struct AudioDecodeLimitTests {
               "rejects over-duration source files")
         check(!accepts(bytes: 10 * 1024 * 1024, frames: 60 * 48_000, rate: 0),
               "rejects invalid sample rates")
+        // video container: bytes are picture, only the duration cap applies
+        check((try? AudioDecode.validateImportBounds(inputBytes: 7 * 1024 * 1024 * 1024, sourceFrames: 872 * 48_000,
+                                                     sampleRate: 48_000, videoContainer: true)) != nil,
+              "accepts a 7 GB video whose audio is 14.5 minutes")
+        check((try? AudioDecode.validateImportBounds(inputBytes: 7 * 1024 * 1024 * 1024,
+                                                     sourceFrames: AVAudioFramePosition((AudioDecode.maxDecodedSeconds + 1) * 48_000),
+                                                     sampleRate: 48_000, videoContainer: true)) == nil,
+              "still rejects an over-duration video")
+        check(AudioDecode.reason(NSError(domain: "AudioDecode", code: 3)) == "파일이 2 GB를 넘습니다", "reason text for the byte cap")
 
         if failures == 0 { print("✅ AudioDecode limits: all checks passed") }
         else { print("❌ \(failures) failure(s)"); exit(1) }
