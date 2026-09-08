@@ -990,3 +990,15 @@ DMG: `build/local-release/0.3.20/madi-0.3.20-arm64.dmg` SHA-256 `957cedf7002612e
 **남은 것.** 조용한 입력에서의 지연 비용(인코더 ~250 → ~570 ms/창)은 라이브 미실측 — 집 환경 실시간 한국어 테스트에서 stt p50/p95 확인. 파일 모드 `VAD_THRESH`가 −40 dBFS 입력을 통째로 버리는 것은 별도 항목(원거리 녹음 파일 전사 시 치명). 마이크 첫 세션의 0 입력(권한 직후)은 미기록.
 
 DMG: `build/local-release/0.3.21/madi-0.3.21-arm64.dmg` SHA-256 `e50c57ef872d91e995d20602dc620a5d1b5895c50db5c47c8a5bd4be818d6f0f` (ad-hoc 서명).
+
+## F1 — 6.9 GB mp4 "지원하지 않는 형식": 영상 컨테이너에 걸린 오디오 바이트 상한 · 디코드 스트리밍 · 12시간 (2026-09-09, 0.3.22)
+
+**증상.** `~/Documents/Youtube/neodi-neori.mp4`(6.9 GB, 14.5분, H.264 High + AAC LC 48 kHz 스테레오)를 앱이 "지원하지 않는 형식이거나 손상된 파일"로 거부. ffprobe로는 정상 파일.
+
+**원인.** `AudioDecode.maxInputBytes` 2 GiB — 오디오 파일용 압축 폭탄 가드 — 가 영상 컨테이너에도 적용됐다(code 3 "file too large"). 영상은 바이트 대부분이 그림이고 오디오 트랙은 AVAssetReader가 스트리밍하므로 이 가드는 무의미. AVAudioFile이 AAC mp4를 직접 열기 때문에 "오디오 전용 경로"에서도 같은 상한을 탔다. 헤드리스 프로브(같은 소스 3파일 + 12줄 main)로 재현·확인.
+
+**수정(6bf50a3).** ① 바이트 상한은 비디오 트랙이 없는 자산에만; 영상은 길이 상한만. ② 디코드가 샘플을 메모리에 모으지 않고 `WavWriter.Streaming`으로 파일에 이어 쓰고 헤더를 마지막에 패치 — 앱 메모리는 길이와 무관(전엔 4 h = 460 MB + Data 복사). ③ 길이 상한 4 → **12시간**: 남은 경계는 엔진 파일 모드가 WAV 전체를 RAM에 읽는 것(`readFileAlloc` 2 GiB; 12 h PCM16 = 1.38 GB, 18 h면 2 GiB에 닿음) — 그 이상은 엔진 mmap이 필요(백로그). ④ 오류 배너가 사유를 말함(2 GB 초과 / 12시간 초과 / 오디오 트랙 없음 / macOS가 디코드 못 함).
+
+**검증.** 같은 파일 → 871.9 s 16 kHz WAV, 0.7 s; 엔진 파일 모드로 끝까지 전사(한국어·화자 2명, "네 방금 소개받은 송주영입니다…"). AudioDecodeLimitTests +3(7 GB·14.5분 영상 통과, 12시간 초과 영상 거부, 사유 문구), 스위트 653.
+
+DMG: `build/local-release/0.3.22/madi-0.3.22-arm64.dmg` SHA-256 `f4fa82f18b266fb622ac1395fd70332be04bf7c69dfb11cb8072b8e699fd5510` (ad-hoc, 미게시).
