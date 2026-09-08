@@ -331,11 +331,13 @@ erasure + stability ledger file), **0.1.9** (2026-08-11, surface-correction rebi
 collapse live rows), **0.3.0** (2026-08-31, summary templates + live summary tab),
 **0.3.1** (2026-09-02, engine headroom batch: seed prefill, forced-prefix preview and
 interim, context example), **0.3.7** (2026-09-03, live profiling rounds P0–P4: main-thread
-saturation, translation backlog, line-count-proportional CPU, STT loop guard) — the
-current `stable`. 0.3.8 → 0.3.19 are local verification builds (ad-hoc signed, one
-per PERF_LOG round: language gate P5/P6, memory M1–M3, line joins L1/L2, translation
-bounds T7–T9, debug mode D1, deferred speaker numbers S1, turn grouping U1, seam view
-rules X1/X2/X4); publishing them is a separate decision.
+saturation, translation backlog, line-count-proportional CPU, STT loop guard), then
+**0.3.21** (2026-09-08, `v0.3.21`, build 742) — the current `stable`: language gate
+P5/P6 and the Hangul-only glossary prompt (P6-2), memory M1–M3, line joins L1/L2,
+translation bounds T7–T9, debug mode D1, deferred speaker numbers S1, turn grouping U1,
+seam view rules X1/X2/X4, full encoder context on quiet input (A1), input level readout.
+0.3.8 → 0.3.20 were the local verification builds of those rounds (ad-hoc signed, one
+per PERF_LOG entry) and were never published.
 
 | version | published | tag | highlights |
 |---|---|---|---|
