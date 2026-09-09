@@ -42,7 +42,8 @@ struct AudioDecodeLimitTests {
                                                      sourceFrames: AVAudioFramePosition((AudioDecode.maxDecodedSeconds + 1) * 48_000),
                                                      sampleRate: 48_000, videoContainer: true)) == nil,
               "still rejects an over-duration video")
-        check(AudioDecode.reason(NSError(domain: "AudioDecode", code: 3)) == "파일이 2 GB를 넘습니다", "reason text for the byte cap")
+        check(AudioDecode.reason(NSError(domain: "AudioDecode", code: 3)) == "파일이 64 GB를 넘습니다", "reason text for the byte cap")
+        check(accepts(bytes: 12 * 1024 * 1024 * 1024, frames: 3600 * 48_000, rate: 48_000), "accepts a 12 GB one-hour audio-only file")
 
         if failures == 0 { print("✅ AudioDecode limits: all checks passed") }
         else { print("❌ \(failures) failure(s)"); exit(1) }

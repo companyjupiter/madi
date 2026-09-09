@@ -26,7 +26,10 @@ enum AudioDecode {
         default: return nil
         }
     }
-    static let maxInputBytes: Int64 = 2 * 1024 * 1024 * 1024
+    /// 64 GiB, effectively unbounded (2026-09-09; was 2 GiB): both decode paths
+    /// stream, so bytes are not memory, and the duration cap is the real guard —
+    /// a 4K60 master is 10+ GB for an hour, a 12 h 48 kHz stereo WAV is 10 GB.
+    static let maxInputBytes: Int64 = 64 * 1024 * 1024 * 1024
     // 12 h (2026-09-09; was 4 h while the app held every sample in memory).
     // The decode now streams to the temp WAV, so the bound is the ENGINE's:
     // file mode reads the whole WAV into RAM (readFileAlloc, 2 GiB cap) —
