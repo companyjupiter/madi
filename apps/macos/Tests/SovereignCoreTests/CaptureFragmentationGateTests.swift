@@ -159,7 +159,9 @@ final class CaptureFragmentationGateTests: XCTestCase {
         guard let path = ProcessInfo.processInfo.environment["MADI_CAPTURE_STDOUT"] else {
             throw XCTSkip("set MADI_CAPTURE_STDOUT to a capture stdout.log")
         }
-        let raw = try String(contentsOfFile: (path as NSString).expandingTildeInPath, encoding: .utf8)
+        // Lossy: a Korean session's «partial» lines carry BPE-split multibyte
+        // fragments that are not valid UTF-8 (the live Decoder sees the same bytes).
+        let raw = String(decoding: try Data(contentsOf: URL(fileURLWithPath: (path as NSString).expandingTildeInPath)), as: UTF8.self)
         let off = replay(raw, join: false)
         let on = replay(raw, join: true)
         print("CAPTURE-GATE join=off live : \(off.live.row)")
