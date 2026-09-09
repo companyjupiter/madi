@@ -1002,3 +1002,6 @@ DMG: `build/local-release/0.3.21/madi-0.3.21-arm64.dmg` SHA-256 `e50c57ef872d91e
 **검증.** 같은 파일 → 871.9 s 16 kHz WAV, 0.7 s; 엔진 파일 모드로 끝까지 전사(한국어·화자 2명, "네 방금 소개받은 송주영입니다…"). AudioDecodeLimitTests +3(7 GB·14.5분 영상 통과, 12시간 초과 영상 거부, 사유 문구), 스위트 653.
 
 DMG: `build/local-release/0.3.22/madi-0.3.22-arm64.dmg` SHA-256 `f4fa82f18b266fb622ac1395fd70332be04bf7c69dfb11cb8072b8e699fd5510` (ad-hoc, 미게시).
+
+### F1 후속 — 바이트 상한 64 GiB (2026-09-09, 0.3.23)
+두 디코드 경로 모두 스트리밍이라 바이트는 메모리가 아니다 — 4K60 마스터는 한 시간에 10 GB를 넘고 12시간 48 kHz 스테레오 WAV는 10 GB. 바이트 상한을 형식 무관 64 GiB(사실상 무제한)로 올리고 길이 상한(12 h)만 가드로 둔다. 검증: 4K60 rawvideo mov 10.5 GB(14 s, AAC) → 14.0 s 오디오 0.1 s에 디코드; AudioDecodeLimitTests 12 GB 오디오 전용 파일 통과. DMG `build/local-release/0.3.23/madi-0.3.23-arm64.dmg` SHA-256 `51fe5b8feaca3e5993934d21b66b24e4e345af7093abe76beee76844e249675c`.
