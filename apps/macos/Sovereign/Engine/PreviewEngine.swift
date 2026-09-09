@@ -10,18 +10,21 @@ final class PreviewEngine {
     /// The just-completed preview of the in-progress window: its words with
     /// window-relative times, and the window's start (session seconds) — so
     /// the caller can drop what the committed transcript already shows.
-    var onWords: ((_ words: [PreviewTrim.TimedWord], _ windowStart: Double) -> Void)?
+    var onWords: ((_ words: [PreviewTrim.TimedWord], _ windowStart: Double, _ forced: String) -> Void)?
 
-    private var submit: ((URL, Double) -> Void)?
+    /// The submit closure returns the forced prefix it sent (S2 `%%FP`), so
+    /// the words that come back can be stripped of exactly that echo.
+    private var submit: ((URL, Double) -> String)?
     private var admitted = true
     private var inFlight = false
     private var latest: (URL, Double)?   // latest-only: supersedes stale pre-ready/busy previews
     private var building: [PreviewTrim.TimedWord] = []   // words of the preview currently streaming in
     private var buildingStart: Double = 0
+    private var buildingForced = ""
 
     /// Auto-language sessions call this only after the committed lane has locked
     /// its language. Selected-language sessions can arm it immediately.
-    func start(submit: @escaping (URL, Double) -> Void) {
+    func start(submit: @escaping (URL, Double) -> String) {
         guard self.submit == nil else { return }
         self.submit = submit
         pump()
@@ -46,7 +49,7 @@ final class PreviewEngine {
         latest = nil
         inFlight = true
         building = []; buildingStart = offset
-        submit(wav, offset)
+        buildingForced = submit(wav, offset)
     }
 
     func stop() {
@@ -66,7 +69,7 @@ final class PreviewEngine {
         case .previewPartial:
             break
         case .previewEnd:
-            if !building.isEmpty { onWords?(building, buildingStart) }
+            if !building.isEmpty { onWords?(building, buildingStart, buildingForced) }
             building = []
             inFlight = false
             pump()

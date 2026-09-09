@@ -94,6 +94,14 @@ struct WordMerger {
         while i > 0, committed[i - 1].t0 >= t { i -= 1 }
         return Array(committed[i...])
     }
+    /// DISPLAYED words starting at or after `t`: committed + held + the current
+    /// segment's words, exactly what the transcript shows in black (PreviewTrim:
+    /// the preview must not repeat any of them).
+    func displayed(since t: Double) -> [Word] {
+        var i = committed.count
+        while i > 0, committed[i - 1].t0 >= t { i -= 1 }
+        return displayWords(from: i).filter { $0.t0 >= t }
+    }
 
     mutating func add(_ w: Word) { segBuffer.append(w) }
 

@@ -2208,18 +2208,17 @@ final class SessionController: EngineProcessDelegate {
         TranslationStabilityMetrics.shared.reset()   // P6: per-session ledger
         registerTerminateFlush()                     // ⌘Q must never eat the numbers
         if livePreviewEnabled {
-            preview.onWords = { [weak self] words, windowStart in
+            preview.onWords = { [weak self] words, _, forced in
                 guard let self else { return }
                 // PreviewTrim (2026-09-10): the preview window opens 1.5 s before
-                // the committed text ends, so its first words repeat the last
-                // committed ones in another spelling ("…별이 파편이 사방" then
-                // "별 파편이 사방으로 …" in gray) at every window boundary.
-                // Show only what lies past the committed watermark.
-                let t = PreviewTrim.visibleTail(words: words, windowStart: windowStart,
-                                                committedEnd: self.transcript.committedEnd,
-                                                heldEnd: self.transcript.heldWord?.t1)
+                // the displayed text ends, so its first words repeated the last
+                // shown ones in another spelling ("…별이 파편이 사방" then
+                // "별 파편이 사방으로 …" in gray) at every window boundary. The
+                // shown words inside the window are the forced prefix, so the
+                // preview echoes them verbatim and only the new tail is shown.
+                let t = PreviewTrim.visibleTail(words: words, forced: forced)
                 guard t.count <= Self.maxLivePartialChars else { return }
-                self.livePartial = t
+                if !t.isEmpty { self.livePartial = t }
             }
             capture.onPreview = { [weak self] url, offset in self?.preview.feed(wav: url, offset: offset) }
             if languageTokenID != nil { startPreviewLane() }
@@ -2466,9 +2465,9 @@ final class SessionController: EngineProcessDelegate {
             // real ~10s window could hold (any language ≪ 512 chars) so a balloon
             // from any future/other emitter never reaches the caption + interim
             // translation. The clean rescue-committed line still lands normally.
-            // PreviewTrim: the closed segment starts 1.5 s inside committed audio —
-            // drop as many leading words as the transcript already committed there.
-            let shown = PreviewTrim.trimByCount(text, dropping: transcript.committedWords(since: t0).count)
+            // PreviewTrim: the closed segment starts 1.5 s inside shown audio —
+            // drop as many leading words as the transcript already shows there.
+            let shown = PreviewTrim.trimByCount(text, dropping: transcript.displayedWords(since: t0).count)
             if !shown.isEmpty, shown.count <= Self.maxLivePartialChars { livePartial = shown }
         default: transcript.ingest(event)
         }
@@ -2513,18 +2512,19 @@ final class SessionController: EngineProcessDelegate {
     private func startPreviewLane() {
         previewLaneStartedAt = Date(); previewAdmits = 0
         preview.start { [weak self] wav, windowStart in
-            guard let self else { return }
+            guard let self else { return "" }
             self.lastPreviewAdmitAt = Date(); self.previewAdmits += 1
             // S2: the P8 gate's AGREED prefix of this window's hypothesis rides
             // along; the engine forces it and decodes only the tail. PreviewTrim:
-            // the committed words inside the window come first — the final
-            // lane's text, so the preview's echo of the overlap region matches
-            // what the transcript shows and the gate's prefix extends it.
-            let inWindow = self.transcript.committedWords(since: windowStart).map(\.text)
-            let forced = PreviewTrim.forcedPrefix(committed: inWindow, gate: self.interimSourceGate.committedText)
-            DebugLog.shared?.emit("preview", "feed", ["windowStart": windowStart, "committedInWindow": inWindow.count,
-                                                      "forcedChars": forced.count, "committedEnd": self.transcript.committedEnd])
+            // the words the transcript already SHOWS inside the window come
+            // first, so the preview's echo of the overlap region is exactly the
+            // black text and the gate's prefix extends it.
+            let shown = self.transcript.displayedWords(since: windowStart).map(\.text)
+            let forced = PreviewTrim.forcedPrefix(committed: shown, gate: self.interimSourceGate.committedText)
+            DebugLog.shared?.emit("preview", "feed", ["windowStart": windowStart, "shownInWindow": shown.count,
+                                                      "forcedChars": forced.count])
             self.engine?.feedPreview(wav: wav, forced: forced)
+            return forced
         }
     }
 

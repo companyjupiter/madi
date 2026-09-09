@@ -11,8 +11,8 @@ import Foundation
 ///  · forcedPrefix — the committed words inside the window are teacher-forced
 ///    (S2 `%%FP`), so the preview's echo of the overlap equals the transcript;
 ///    the interim gate's agreed text rides on top when it extends them.
-///  · visibleTail — preview words whose (window-relative) time ends before the
-///    committed watermark are dropped; a first word equal to the held word too.
+///  · visibleTail — the forced prefix's echo is stripped from the preview text
+///    (by text, not time: forced tokens get fake timestamps).
 ///  · trimByCount — a closed segment's token-level partial has no times: drop
 ///    as many leading words as the transcript committed inside that segment.
 enum PreviewTrim {
@@ -29,16 +29,20 @@ enum PreviewTrim {
         return g.hasPrefix(base) && g.count > base.count ? g : base
     }
 
-    /// `heldEnd`: end time of the merger's held word (nil = none). A preview
-    /// word that STARTS before the committed watermark re-decodes committed
-    /// audio; one that starts inside the held word's span re-decodes the held
-    /// word ("사방" → "사방으로") — the merger will replace it, the view must
-    /// not show both.
-    static func visibleTail(words: [TimedWord], windowStart: Double, committedEnd: Double,
-                            heldEnd: Double?) -> String {
-        let cut = max(committedEnd, heldEnd ?? committedEnd)
-        let tail = words.drop { windowStart + $0.t0 < cut - eps }
-        return join(tail.map(\.text))
+    /// The preview's words minus the forced prefix the app sent for that job.
+    /// Text, not time: the engine assigns teacher-forced tokens fake 20 ms
+    /// timestamps that squeeze the real tail earlier (0.3.18 bundle:
+    /// "no|interest|in|it." at 0.00–0.10 s, then "I was" at 0.66 s for audio
+    /// that sat 1.5 s in), so a time cut would drop new words. The echo is
+    /// verbatim (37/37 in the 0.3.23 bundle); when it is not, the same number
+    /// of words is dropped instead.
+    static func visibleTail(words: [TimedWord], forced: String) -> String {
+        let text = join(words.map(\.text))
+        let f = forced.trimmingCharacters(in: .whitespaces)
+        guard !f.isEmpty else { return text }
+        if text.hasPrefix(f) { return String(text.dropFirst(f.count)).trimmingCharacters(in: .whitespaces) }
+        let k = f.split(separator: " ", omittingEmptySubsequences: true).count
+        return trimByCount(text, dropping: k)
     }
 
     static func trimByCount(_ text: String, dropping k: Int) -> String {

@@ -1012,6 +1012,9 @@ final class TranscriptStore {
     /// Committed watermark and the committed words since `t` (PreviewTrim).
     var committedEnd: Double { merger.committedEnd }
     func committedWords(since t: Double) -> [Word] { merger.committed(since: t) }
+    /// What the transcript shows in black from `t` on — committed, held and the
+    /// current segment's words (PreviewTrim's forced prefix).
+    func displayedWords(since t: Double) -> [Word] { merger.displayed(since: t) }
 
     /// A word's trailing char ends a sentence → the next word starts a new line.
     /// Guards against a lone-period false break (e.g. "3.5" ends mid-token, not
