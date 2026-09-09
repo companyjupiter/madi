@@ -2522,6 +2522,8 @@ final class SessionController: EngineProcessDelegate {
             // what the transcript shows and the gate's prefix extends it.
             let inWindow = self.transcript.committedWords(since: windowStart).map(\.text)
             let forced = PreviewTrim.forcedPrefix(committed: inWindow, gate: self.interimSourceGate.committedText)
+            DebugLog.shared?.emit("preview", "feed", ["windowStart": windowStart, "committedInWindow": inWindow.count,
+                                                      "forcedChars": forced.count, "committedEnd": self.transcript.committedEnd])
             self.engine?.feedPreview(wav: wav, forced: forced)
         }
     }
