@@ -33,6 +33,7 @@ let package = Package(
                 "Transcript/LiveFeatureWiring.swift",
                 "Transcript/EngineDiagnostics.swift",
                 "Transcript/DebugLog.swift",
+                "Transcript/PreviewTrim.swift",
                 "Transcript/KoreanNumberFormatter.swift",
                 "Transcript/Exporters.swift",
                 "Transcript/WordMerger.swift",

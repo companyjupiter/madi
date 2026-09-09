@@ -67,7 +67,7 @@ final class EngineProtocolTests: XCTestCase {
             XCTFail("preview word section must not look committed")
         }
         XCTAssertEqual(d.decode(line: "[0.10s-0.50s] 안녕하세요  «conf 0.91»"),
-                       .previewWord("안녕하세요"))
+                       .previewWord(t0: 0.10, t1: 0.50, text: "안녕하세요"))
         // Even if a future engine accidentally emits session state inside the
         // markers, the decoder must quarantine it from SessionController.
         if case .other = d.decode(line: "SPK 0.00 7 1.50") { } else {

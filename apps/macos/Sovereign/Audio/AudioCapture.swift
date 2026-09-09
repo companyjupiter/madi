@@ -31,7 +31,9 @@ final class AudioCapture {
     /// Streaming preview: the in-progress window written to a wav, emitted every
     /// ~previewSeconds of new audio so a separate engine can decode interim text
     /// before the window closes. nil = previews off.
-    var onPreview: ((URL) -> Void)?
+    /// (wav, window start in session seconds) — the offset lets the app know
+    /// which committed words the preview window already covers (PreviewTrim).
+    var onPreview: ((URL, Double) -> Void)?
     /// 1.5→1.0 s (2026-07-02): AUDIO_CTX=auto cut the preview decode ~2× — the
     /// extra preview turns fit inside the freed GPU budget, interim text −0.5 s.
     var previewSeconds: Double = 1.0
@@ -250,17 +252,17 @@ final class AudioCapture {
             if samplesSincePreview >= interval, segmenter.pendingCount > interval / 2 {
                 samplesSincePreview = 0
                 let pw = segmenter.previewWindow()
-                writePreview(pw.samples)
+                writePreview(pw.samples, offset: pw.offset)
             }
         }
     }
 
     private var previewSlot = 0
-    private func writePreview(_ samples: [Int16]) {
+    private func writePreview(_ samples: [Int16], offset: Double) {
         // rotate a few files so the engine never reads one mid-overwrite
         previewSlot = (previewSlot + 1) % 3
         let url = tempDir.appendingPathComponent("preview-\(previewSlot).wav")
-        do { try WavWriter.write(samples: samples, to: url); onPreview?(url) }
+        do { try WavWriter.write(samples: samples, to: url); onPreview?(url, offset) }
         catch { /* preview is best-effort */ }
     }
 

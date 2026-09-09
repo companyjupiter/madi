@@ -2208,11 +2208,20 @@ final class SessionController: EngineProcessDelegate {
         TranslationStabilityMetrics.shared.reset()   // P6: per-session ledger
         registerTerminateFlush()                     // ⌘Q must never eat the numbers
         if livePreviewEnabled {
-            preview.onText = { [weak self] t in
-                guard let self, t.count <= Self.maxLivePartialChars else { return }
+            preview.onWords = { [weak self] words, windowStart in
+                guard let self else { return }
+                // PreviewTrim (2026-09-10): the preview window opens 1.5 s before
+                // the committed text ends, so its first words repeat the last
+                // committed ones in another spelling ("…별이 파편이 사방" then
+                // "별 파편이 사방으로 …" in gray) at every window boundary.
+                // Show only what lies past the committed watermark.
+                let t = PreviewTrim.visibleTail(words: words, windowStart: windowStart,
+                                                committedEnd: self.transcript.committedEnd,
+                                                heldEnd: self.transcript.heldWord?.t1)
+                guard t.count <= Self.maxLivePartialChars else { return }
                 self.livePartial = t
             }
-            capture.onPreview = { [weak self] url in self?.preview.feed(wav: url) }
+            capture.onPreview = { [weak self] url, offset in self?.preview.feed(wav: url, offset: offset) }
             if languageTokenID != nil { startPreviewLane() }
         } else {
             capture.onPreview = nil
@@ -2448,7 +2457,7 @@ final class SessionController: EngineProcessDelegate {
             wordsSinceSegStart = 0
             segmentsInFlight = segQueue.count
             updatePreviewAdmission()
-        case .partial(_, let text):
+        case .partial(let t0, let text):
             // in-decode hypothesis of the closed segment — better context than
             // the open-window PREVIEW text and converges to the committed line, so
             // it may overwrite; the next preview/commit supersedes it.
@@ -2457,7 +2466,10 @@ final class SessionController: EngineProcessDelegate {
             // real ~10s window could hold (any language ≪ 512 chars) so a balloon
             // from any future/other emitter never reaches the caption + interim
             // translation. The clean rescue-committed line still lands normally.
-            if !text.isEmpty, text.count <= Self.maxLivePartialChars { livePartial = text }
+            // PreviewTrim: the closed segment starts 1.5 s inside committed audio —
+            // drop as many leading words as the transcript already committed there.
+            let shown = PreviewTrim.trimByCount(text, dropping: transcript.committedWords(since: t0).count)
+            if !shown.isEmpty, shown.count <= Self.maxLivePartialChars { livePartial = shown }
         default: transcript.ingest(event)
         }
     }
@@ -2500,12 +2512,17 @@ final class SessionController: EngineProcessDelegate {
 
     private func startPreviewLane() {
         previewLaneStartedAt = Date(); previewAdmits = 0
-        preview.start { [weak self] wav in
+        preview.start { [weak self] wav, windowStart in
             guard let self else { return }
             self.lastPreviewAdmitAt = Date(); self.previewAdmits += 1
             // S2: the P8 gate's AGREED prefix of this window's hypothesis rides
-            // along; the engine forces it and decodes only the tail.
-            self.engine?.feedPreview(wav: wav, forced: self.interimSourceGate.committedText)
+            // along; the engine forces it and decodes only the tail. PreviewTrim:
+            // the committed words inside the window come first — the final
+            // lane's text, so the preview's echo of the overlap region matches
+            // what the transcript shows and the gate's prefix extends it.
+            let inWindow = self.transcript.committedWords(since: windowStart).map(\.text)
+            let forced = PreviewTrim.forcedPrefix(committed: inWindow, gate: self.interimSourceGate.committedText)
+            self.engine?.feedPreview(wav: wav, forced: forced)
         }
     }
 
@@ -2637,7 +2654,11 @@ final class SessionController: EngineProcessDelegate {
         }
         if Self.liveRailCapable, aiReconcileEnabled {
             midReconcileTimer?.invalidate()
-            midReconcileTimer = Timer.scheduledTimer(withTimeInterval: 45, repeats: true) { [weak self] _ in
+            // 45 → 120 s (2026-09-10): each reconcile part is a 4B turn the
+            // caption lane cannot preempt; at 45 s the parts ran nearly back to
+            // back and committed-caption latency went p90 3.7 s / max 14.7 s
+            // (0.3.23 Korean live) against ~1 s without them.
+            midReconcileTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, self.phase == .recording, !self.reconciling else { return }
                     // P11: reconcile spawns one-shot whisper processes AND long

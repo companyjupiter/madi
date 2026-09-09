@@ -116,6 +116,7 @@ final class DNAEngineBroker {
     var supportsForcedPrefix: Bool { capabilities.contains("fp") }
     private var pending: [Request] = []
     private var active: Request?
+    private var activeStartedAt: Double = 0
     private var sequence: UInt64 = 0
     private var enginePath: String?
     private var modelPath: String?
@@ -264,6 +265,14 @@ final class DNAEngineBroker {
         let request = pending.remove(at: index)
         guard clients.contains(request.client) else { pump(); return }
         active = request
+        activeStartedAt = now
+        // D1: every broker turn (captions, live rail, summary, reconcile parts)
+        // — the translate stream only sees TranslateEngine's own turns, so a
+        // caption stalled behind a reconcile part was invisible in the bundle.
+        DebugLog.shared?.emit("broker", "start", ["id": request.id.uuidString, "client": String(request.client.uuidString.prefix(8)),
+                                                  "priority": request.priority, "pending": pending.count,
+                                                  "waitedMs": Int((now - request.enqueuedAt) * 1000),
+                                                  "promptChars": request.text.count])
         reportBusy()
         parser = TranslateStreamParser(preserveNewlines: request.preserveNewlines)
         armWatchdog(for: request)
@@ -350,6 +359,11 @@ final class DNAEngineBroker {
                 guard let request = active, clients.contains(request.client) else { continue }
                 request.onPartial?(text)
             case .turnComplete(let text):
+                if let request = active {
+                    DebugLog.shared?.emit("broker", "done", ["id": request.id.uuidString, "priority": request.priority,
+                                                             "ms": Int((clock() - activeStartedAt) * 1000),
+                                                             "replyChars": text.count, "pending": pending.count])
+                }
                 guard let request = active else { continue }
                 active = nil
                 disarmWatchdog(); wedgeRestarts = 0

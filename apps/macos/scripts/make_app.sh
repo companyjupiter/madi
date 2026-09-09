@@ -83,6 +83,7 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/LiveFeatureWiring.swift
   "$APP_DIR"/Sovereign/Transcript/EngineDiagnostics.swift
   "$APP_DIR"/Sovereign/Transcript/DebugLog.swift
+  "$APP_DIR"/Sovereign/Transcript/PreviewTrim.swift
   "$APP_DIR"/Sovereign/Transcript/KoreanNumberFormatter.swift
   "$APP_DIR"/Sovereign/Transcript/EditorCuts.swift
   "$APP_DIR"/Sovereign/Transcript/Exporters.swift

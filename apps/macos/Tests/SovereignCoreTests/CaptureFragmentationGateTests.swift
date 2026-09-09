@@ -103,7 +103,7 @@ final class CaptureFragmentationGateTests: XCTestCase {
         return m
     }
 
-    private func replay(_ raw: String, join: Bool) -> (live: Metrics, final: Metrics) {
+    private func replay(_ raw: String, join: Bool) -> (live: Metrics, final: Metrics, store: TranscriptStore) {
         LiveFeatureWiring.joinSameSpeakerNeighbors = join
         defer { LiveFeatureWiring.joinSameSpeakerNeighbors = true }
         let s = TranscriptStore()
@@ -121,7 +121,7 @@ final class CaptureFragmentationGateTests: XCTestCase {
         }
         let live = measure(s)
         s.finalize()
-        return (live, measure(s))
+        return (live, measure(s), s)
     }
 
     /// Same metrics from an engine EVENTS_FILE (the app passes one every
@@ -173,6 +173,14 @@ final class CaptureFragmentationGateTests: XCTestCase {
         let x4off = replay(raw, join: true)
         LiveFeatureWiring.turnHeadAdoption = true
         print("CAPTURE-GATE X1 off   live : \(x1off.live.row)")
+        // MADI_GATE_DUMP=<file>: the finalized transcript text, one line per row
+        // (speaker, start, text) — the input for a live-vs-reference CER check.
+        if let dump = ProcessInfo.processInfo.environment["MADI_GATE_DUMP"] {
+            let final = replay(raw, join: true).store
+            let text = final.lines.map { String(format: "%d\t%.2f\t%@", $0.speaker, $0.start, $0.text) }.joined(separator: "\n")
+            try? text.write(toFile: dump, atomically: true, encoding: .utf8)
+            print("CAPTURE-GATE dumped \(final.lines.count) rows → \(dump)")
+        }
         print("CAPTURE-GATE X4 off   live : \(x4off.live.row)")
         // S1: display numbers minted with immediate numbering vs the 3 s floor.
         let savedFloor = SpeakerDisplayNumber.minSecondsToNumber

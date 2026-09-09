@@ -1007,6 +1007,11 @@ final class TranscriptStore {
 
     /// The merger's held word, if any (see WordMerger.heldWordID).
     var heldWordID: UUID? { merger.heldWordID }
+    var heldWordText: String? { merger.heldWordText }
+    var heldWord: Word? { merger.heldWord }
+    /// Committed watermark and the committed words since `t` (PreviewTrim).
+    var committedEnd: Double { merger.committedEnd }
+    func committedWords(since t: Double) -> [Word] { merger.committed(since: t) }
 
     /// A word's trailing char ends a sentence → the next word starts a new line.
     /// Guards against a lone-period false break (e.g. "3.5" ends mid-token, not

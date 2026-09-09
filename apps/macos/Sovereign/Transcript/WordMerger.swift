@@ -83,6 +83,17 @@ struct WordMerger {
     /// re-decode away from its final text (SessionController defers its
     /// translation while the preview is live).
     var heldWordID: UUID? { held?.id }
+    /// Held word text (nil = none) and the committed watermark — what the live
+    /// preview must not repeat (PreviewTrim).
+    var heldWordText: String? { held?.text }
+    var heldWord: Word? { held }
+    var committedEnd: Double { emitted }
+    /// Committed words starting at or after `t` (the tail — a reverse scan).
+    func committed(since t: Double) -> [Word] {
+        var i = committed.count
+        while i > 0, committed[i - 1].t0 >= t { i -= 1 }
+        return Array(committed[i...])
+    }
 
     mutating func add(_ w: Word) { segBuffer.append(w) }
 

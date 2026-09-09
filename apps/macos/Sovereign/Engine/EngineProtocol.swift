@@ -33,7 +33,7 @@ enum EngineEvent: Equatable {
     case partial(t0: Double, text: String) // «partial <t0>» — in-decode hypothesis (PARTIALS=1)
     case segmentEnd                   // <<SEG_END>> — one stream job finished (watchdog heartbeat)
     case previewBegin                 // <<PREVIEW_BEGIN>> — isolate following output from committed state
-    case previewWord(String)          // final word emitted by the throwaway preview lane
+    case previewWord(t0: Double, t1: Double, text: String)   // final word of the throwaway preview lane (window-relative times)
     case previewPartial(String)       // in-decode hypothesis from the throwaway preview lane
     case previewEnd                   // <<PREVIEW_END>> — preview lane is available again
     case other(String)                // unrecognized line (perf/log) — kept for diagnostics
@@ -92,8 +92,8 @@ enum EngineProtocol {
                     return .previewPartial(text)
                 }
                 if inWords, line.hasPrefix("["), let word = EngineProtocol.parseWord(line),
-                   case .word(_, _, let text, _) = word {
-                    return .previewWord(text)
+                   case .word(let t0, let t1, let text, _) = word {
+                    return .previewWord(t0: t0, t1: t1, text: text)
                 }
                 return .other(line)
             }

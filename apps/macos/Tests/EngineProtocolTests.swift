@@ -59,7 +59,7 @@ struct EngineProtocolTests {
 
         check(d.decode(line: "<<PREVIEW_BEGIN>>") == .previewBegin, "preview begin")
         _ = d.decode(line: "=== WORD TIMESTAMPS ===")
-        check(d.decode(line: "[0.1s-0.5s] preview") == .previewWord("preview"),
+        check(d.decode(line: "[0.1s-0.5s] preview") == .previewWord(t0: 0.1, t1: 0.5, text: "preview"),
               "preview word isolated")
         check(d.decode(line: "<<PREVIEW_END>>") == .previewEnd, "preview end")
 
