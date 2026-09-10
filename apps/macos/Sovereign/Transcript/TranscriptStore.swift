@@ -1035,6 +1035,9 @@ final class TranscriptStore {
     static let islandMaxMargin = 0.35
     static let islandMaxGap = 0.3
     @ObservationIgnored private(set) var islandAbsorptions = 0
+    /// W: a weak-label word continues the row only across a gap this short.
+    static let weakLabelMaxGap = 0.3
+    @ObservationIgnored private(set) var weakLabelContinuations = 0
     private static func endsClause(_ text: String?) -> Bool {
         guard let t = text?.trimmingCharacters(in: .whitespaces), let ch = t.last else { return false }
         return clauseEnders.contains(ch)
@@ -1106,6 +1109,12 @@ final class TranscriptStore {
                                                           "text": b.text])
             }
             let tail = out.last?.words.last
+            // W (2026-09-11): a weak label cannot break a sentence. The row's
+            // speaker stays; the word joins it (see LiveFeatureWiring).
+            let weakGlue = LiveFeatureWiring.weakLabelContinuation > 0 && out.last.map { last in
+                last.speaker != sp && m < LiveFeatureWiring.weakLabelContinuation &&
+                w.t0 - last.end < Self.weakLabelMaxGap
+            } ?? false
             let cont: Bool
             if let last = out.last, editsByLine[last.id] != nil || editsByLine[w.id] != nil {
                 // A row the user rewrote is theirs: never grown, never absorbed
@@ -1129,7 +1138,7 @@ final class TranscriptStore {
                     // adopts the new speaker below.
                     let turnHead = LiveFeatureWiring.turnHeadAdoption && !sameSpeaker &&
                         last.words.count <= Self.turnHeadMaxWords && w.t0 - last.end < Self.turnHeadMaxGap
-                    return (sameSpeaker && w.t0 - last.end < lineBreakGap || turnHead) &&
+                    return (sameSpeaker && w.t0 - last.end < lineBreakGap || turnHead || weakGlue) &&
                     !brokenBefore && !Self.endsSentence(last.words.last?.text) &&
                     // P4: length/duration cap — the rule that bounds a monologue
                     // when neither punctuation nor a pause ever arrives. Recorded
@@ -1148,7 +1157,7 @@ final class TranscriptStore {
                             "prevSpk": last.speaker, "nextSpk": sp, "nextMargin": m,
                             "gap": w.t0 - last.end, "prevEndsSentence": Self.endsSentence(t.text),
                             "brokenBefore": brokenBefore, "prevWords": last.words.count,
-                            "t0": w.t0])
+                            "weak": weakGlue && cont, "t0": w.t0])
                     }
                 }
             }
@@ -1156,12 +1165,14 @@ final class TranscriptStore {
                 // X4: a continued one-word row under another speaker is that
                 // turn's head — replayed from the ledger the same way, so the
                 // row's speaker is stable across rebuilds.
-                if LiveFeatureWiring.turnHeadAdoption, last.speaker != sp, last.words.count <= Self.turnHeadMaxWords {
+                // W: a weak-label word never carries a row's speaker with it,
+                // and does not count against the row's own label confidence.
+                if LiveFeatureWiring.turnHeadAdoption, last.speaker != sp, last.words.count <= Self.turnHeadMaxWords, !weakGlue {
                     last.speaker = sp; last.speakerMargin = m
                 }
                 last.end = max(last.end, w.t1)
                 last.words.append(w)
-                last.speakerMargin = min(last.speakerMargin, m)
+                if weakGlue, last.speaker != sp { weakLabelContinuations += 1 } else { last.speakerMargin = min(last.speakerMargin, m) }
                 out[out.count - 1] = last
             } else {
                 // Remember punctuation-driven breaks (also honoured at finalize) —

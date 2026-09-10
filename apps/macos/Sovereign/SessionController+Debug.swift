@@ -47,6 +47,8 @@ extension SessionController {
                                   "joinSameSpeakerNeighbors": LiveFeatureWiring.joinSameSpeakerNeighbors,
                                   "settledLedger": LiveFeatureWiring.settledLedger,
                                   "turnHeadAdoption": LiveFeatureWiring.turnHeadAdoption,
+                                  "speakerIslandAbsorption": LiveFeatureWiring.speakerIslandAbsorption,
+                                  "weakLabelContinuation": LiveFeatureWiring.weakLabelContinuation,
                                   "translationStreaming": LiveFeatureWiring.translationStreaming],
         ]
         if let data = try? JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]),

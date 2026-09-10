@@ -82,6 +82,20 @@ enum LiveFeatureWiring {
         guard let tok = languageTokenID else { return false }
         return tok != 50259
     }
+    /// W (2026-09-11): a weak label cannot break a sentence. At a speaker
+    /// change mid-sentence with no pause, an incoming word whose label margin
+    /// is below this value continues the current row under the row's speaker.
+    /// 0 = off (default). SessionController sets `weakLabelDefault` only for a
+    /// session whose selected language is not English — same gate as X5, so
+    /// English live stays byte-identical. Measured on the 0.3.25 Korean
+    /// capture (46 min): 247 mid-sentence speaker breaks were decided live,
+    /// 208 of them on a margin < 0.2, and 194 of those (93 %) sat on a label
+    /// the diarizer later corrected back to the neighbours' speaker.
+    nonisolated(unsafe) static var weakLabelContinuation = 0.0
+    static let weakLabelDefault = 0.2
+    static func weakLabelContinuation(for languageTokenID: Int?) -> Double {
+        islandAbsorption(for: languageTokenID) ? weakLabelDefault : 0
+    }
 
     /// Paint a committed line's translation token by token while the 4B is
     /// still generating (the "typewriter"), or only once the turn completes.

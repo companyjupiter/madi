@@ -2153,6 +2153,7 @@ final class SessionController: EngineProcessDelegate {
         phase = .engineStarting
 
         LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
+        LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
         let e = EngineProcess(config: makeConfig())
         e.delegate = self
         e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }
@@ -2288,6 +2289,7 @@ final class SessionController: EngineProcessDelegate {
 
     private func runFileEngine(_ wav: URL) {
         LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
+        LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
         guard phase == .processing else { return }   // user may have navigated away
         var cfg = makeConfig()
         cfg.fileURL = wav                  // native FILE mode (fast batched + offline diar)
@@ -2558,8 +2560,14 @@ final class SessionController: EngineProcessDelegate {
         // (the live captions themselves already moved on). backfillRemaining drives
         // the progress HUD; on 8GB the summary engine — which evicts translate —
         // waits for this to drain. (interimCache is still warm → O3 reuse.)
+        // The stop-time flush below queues every remaining line at once, and
+        // the live shed rule (secondary targets dropped past 6 queued turns)
+        // has no deadline to protect any more: 0.3.26 Korean 11 min shed the
+        // Japanese of 25 tail rows at stop and nothing backfilled them (the
+        // idle backfill runs only while recording). No shedding after stop.
+        translate?.maxPending = 0
+        translate?.shedSecondaryTargetsAt = 0
         if let t = translate, !backlogKeys.isEmpty {
-            t.maxPending = 0
             backfillPendingKeys = Set(backlogKeys.filter { key in
                 guard let line = transcript.lines.first(where: { $0.id == key.id }) else { return false }
                 return lineHash(line.text) == key.sourceRevision
@@ -2742,6 +2750,7 @@ final class SessionController: EngineProcessDelegate {
         engine?.terminate()
         transcript.markDiarNamespaceBroken()   // 새 엔진 화자 id는 0부터 — FLUSH 라벨 대체 금지 (app-state-6)
         LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
+        LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
         let e = EngineProcess(config: makeConfig())
         e.delegate = self
         e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }

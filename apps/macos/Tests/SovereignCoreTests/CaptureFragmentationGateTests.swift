@@ -34,12 +34,16 @@ final class CaptureFragmentationGateTests: XCTestCase {
         /// X5: A-B-A — a row of ≤4 words under another speaker between two rows
         /// of one speaker, no sentence end and no pause on either side.
         var islandRows = 0
+        /// W: adjacent rows of different speakers where the first does not end a
+        /// sentence and the gap is < 0.3 s — a sentence cut by a label change.
+        var midSentenceSpeakerBreaks = 0
         var row: String {
             "lines \(lines)  same-spk pairs \(sameSpeakerPairs)  unexplained breaks \(unexplainedBreaks)"
             + "  words/line p50 \(p50) p90 \(p90)  ≤5-word lines \(shortLines)  joins \(joins)"
             + "  seam-dup rows \(seamDuplicateRows)  dup words \(duplicateWords)"
             + "  ids \(distinctSpeakerIDs) maxNumber \(maxDisplayNumber)"
             + "  overlap rows \(overlapRows)  turn-head rows \(turnHeadRows)  islands \(islandRows)"
+            + "  mid-sentence spk breaks \(midSentenceSpeakerBreaks)"
         }
     }
 
@@ -70,6 +74,8 @@ final class CaptureFragmentationGateTests: XCTestCase {
             let tail = at.text.trimmingCharacters(in: .whitespaces)
             if a.speaker != b.speaker, a.words.count <= 2, bh.t0 - at.t1 < 0.3,
                !(tail.last.map { Self.sentence.contains($0) } ?? false) { m.turnHeadRows += 1 }
+            if a.speaker != b.speaker, bh.t0 - at.t1 < 0.3,
+               !(tail.last.map { Self.sentence.contains($0) } ?? false) { m.midSentenceSpeakerBreaks += 1 }
         }
         for (a, b) in zip(s.lines, s.lines.dropFirst()) where a.speaker == b.speaker {
             m.sameSpeakerPairs += 1
@@ -179,6 +185,9 @@ final class CaptureFragmentationGateTests: XCTestCase {
         // X5 is a per-session gate (non-English); MADI_GATE_ISLANDS=1 turns it on for a Korean capture.
         LiveFeatureWiring.speakerIslandAbsorption = ProcessInfo.processInfo.environment["MADI_GATE_ISLANDS"] == "1"
         defer { LiveFeatureWiring.speakerIslandAbsorption = false }
+        // W is the same per-session gate; MADI_GATE_WEAK=<margin> turns it on for a Korean capture.
+        LiveFeatureWiring.weakLabelContinuation = ProcessInfo.processInfo.environment["MADI_GATE_WEAK"].flatMap(Double.init) ?? 0
+        defer { LiveFeatureWiring.weakLabelContinuation = 0 }
         let off = replay(raw, join: false)
         let on = replay(raw, join: true)
         print("CAPTURE-GATE join=off live : \(off.live.row)")
