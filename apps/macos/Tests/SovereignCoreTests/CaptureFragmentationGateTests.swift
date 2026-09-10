@@ -31,12 +31,15 @@ final class CaptureFragmentationGateTests: XCTestCase {
         /// X4: a 1–2 word row followed within 0.3 s by another speaker, no
         /// sentence end — the next turn's head under the previous label.
         var turnHeadRows = 0
+        /// X5: A-B-A — a row of ≤4 words under another speaker between two rows
+        /// of one speaker, no sentence end and no pause on either side.
+        var islandRows = 0
         var row: String {
             "lines \(lines)  same-spk pairs \(sameSpeakerPairs)  unexplained breaks \(unexplainedBreaks)"
             + "  words/line p50 \(p50) p90 \(p90)  ≤5-word lines \(shortLines)  joins \(joins)"
             + "  seam-dup rows \(seamDuplicateRows)  dup words \(duplicateWords)"
             + "  ids \(distinctSpeakerIDs) maxNumber \(maxDisplayNumber)"
-            + "  overlap rows \(overlapRows)  turn-head rows \(turnHeadRows)"
+            + "  overlap rows \(overlapRows)  turn-head rows \(turnHeadRows)  islands \(islandRows)"
         }
     }
 
@@ -50,6 +53,17 @@ final class CaptureFragmentationGateTests: XCTestCase {
 
     private func measure(_ s: TranscriptStore) -> Metrics {
         var m = Metrics(); m.lines = s.lines.count; m.joins = s.sameSpeakerJoins
+        if s.lines.count >= 3 {
+            for i in 1..<(s.lines.count - 1) {
+                let a = s.lines[i - 1], b = s.lines[i], c = s.lines[i + 1]
+                guard a.speaker == c.speaker, b.speaker != a.speaker, b.words.count <= 4,
+                      let at = a.words.last, let bt = b.words.last,
+                      !(at.text.last.map { Self.sentence.contains($0) } ?? false),
+                      !(bt.text.last.map { Self.sentence.contains($0) } ?? false),
+                      b.start - a.end < 0.3, c.start - b.end < 0.3 else { continue }
+                m.islandRows += 1
+            }
+        }
         for (a, b) in zip(s.lines, s.lines.dropFirst()) {
             guard let at = a.words.last, let bh = b.words.first else { continue }
             if bh.t0 < at.t1 - 0.05 { m.overlapRows += 1 }
@@ -162,6 +176,9 @@ final class CaptureFragmentationGateTests: XCTestCase {
         // Lossy: a Korean session's «partial» lines carry BPE-split multibyte
         // fragments that are not valid UTF-8 (the live Decoder sees the same bytes).
         let raw = String(decoding: try Data(contentsOf: URL(fileURLWithPath: (path as NSString).expandingTildeInPath)), as: UTF8.self)
+        // X5 is a per-session gate (non-English); MADI_GATE_ISLANDS=1 turns it on for a Korean capture.
+        LiveFeatureWiring.speakerIslandAbsorption = ProcessInfo.processInfo.environment["MADI_GATE_ISLANDS"] == "1"
+        defer { LiveFeatureWiring.speakerIslandAbsorption = false }
         let off = replay(raw, join: false)
         let on = replay(raw, join: true)
         print("CAPTURE-GATE join=off live : \(off.live.row)")

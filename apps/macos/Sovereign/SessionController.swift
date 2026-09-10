@@ -2152,6 +2152,7 @@ final class SessionController: EngineProcessDelegate {
         startLiveCoach()                             // throttled coach recompute (~1Hz while recording)
         phase = .engineStarting
 
+        LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
         let e = EngineProcess(config: makeConfig())
         e.delegate = self
         e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }
@@ -2286,6 +2287,7 @@ final class SessionController: EngineProcessDelegate {
     }
 
     private func runFileEngine(_ wav: URL) {
+        LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
         guard phase == .processing else { return }   // user may have navigated away
         var cfg = makeConfig()
         cfg.fileURL = wav                  // native FILE mode (fast batched + offline diar)
@@ -2739,6 +2741,7 @@ final class SessionController: EngineProcessDelegate {
         engine?.delegate = nil   // 구엔진의 didTerminate(SIGTERM)가 세션을 error로 죽이지 않게 (watchdog-conc-1)
         engine?.terminate()
         transcript.markDiarNamespaceBroken()   // 새 엔진 화자 id는 0부터 — FLUSH 라벨 대체 금지 (app-state-6)
+        LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
         let e = EngineProcess(config: makeConfig())
         e.delegate = self
         e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }

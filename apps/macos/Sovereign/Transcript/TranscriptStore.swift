@@ -1029,6 +1029,12 @@ final class TranscriptStore {
     /// mid-sentence is the next turn's head (see groupLoop).
     static let turnHeadMaxWords = 1
     static let turnHeadMaxGap = 0.3
+    /// X5: an island row this short, under a label margin below this, with no
+    /// sentence end and no pause on either side, between rows of one speaker.
+    static let islandMaxWords = 4
+    static let islandMaxMargin = 0.35
+    static let islandMaxGap = 0.3
+    @ObservationIgnored private(set) var islandAbsorptions = 0
     private static func endsClause(_ text: String?) -> Bool {
         guard let t = text?.trimmingCharacters(in: .whitespaces), let ch = t.last else { return false }
         return clauseEnders.contains(ch)
@@ -1074,6 +1080,31 @@ final class TranscriptStore {
             // ledger note at breakDecided): EVERY boundary decision is made once
             // and replayed, so label rewrites can't restructure existing lines —
             // they only change which speaker a line displays.
+            // X5 (2026-09-11): speaker island. Row B (out.last) is short, its label
+            // weak, and the incoming word returns to the speaker of the row before
+            // B with no sentence end and no pause on either side — the label in
+            // between was noise ("Speaker 3 | 화자분리중 판단할 수가 없었던 | Speaker 3").
+            // B's words join the row before it; the A0→B verdict flips to cont so
+            // rebuilds replay the merge. English sessions keep the flag off.
+            if LiveFeatureWiring.speakerIslandAbsorption, out.count >= 2,
+               let b = out.last, b.speaker != sp, out[out.count - 2].speaker == sp,
+               b.words.count <= Self.islandMaxWords, b.speakerMargin < Self.islandMaxMargin,
+               editsByLine[b.id] == nil, editsByLine[out[out.count - 2].id] == nil,
+               let a0Tail = out[out.count - 2].words.last, let bTail = b.words.last,
+               !Self.endsSentence(a0Tail.text), !sentenceBreaks.contains(a0Tail.id),
+               !Self.endsSentence(bTail.text), !sentenceBreaks.contains(bTail.id),
+               b.start - out[out.count - 2].end < Self.islandMaxGap, w.t0 - b.end < Self.islandMaxGap {
+                var a0 = out[out.count - 2]
+                a0.words.append(contentsOf: b.words)
+                a0.end = max(a0.end, b.end)
+                out.removeLast()
+                out[out.count - 1] = a0
+                breakAfter.remove(a0Tail.id)            // A0→B replays as cont from now on
+                islandAbsorptions += 1
+                DebugLog.shared?.emit("store", "island", ["speaker": sp, "island": b.speaker,
+                                                          "words": b.words.count, "margin": b.speakerMargin,
+                                                          "text": b.text])
+            }
             let tail = out.last?.words.last
             let cont: Bool
             if let last = out.last, editsByLine[last.id] != nil || editsByLine[w.id] != nil {

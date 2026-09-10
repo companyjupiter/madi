@@ -238,7 +238,8 @@ struct TranscriptView: View {
             // P0: bound a paragraph (max lines / chars) so a long monologue does
             // not become one ever-growing Text that CoreText re-lays out on every
             // 24 ms typewriter tick; only the tail block keeps changing.
-            while j < lines.count && lines[j].speaker == sp
+            while j < lines.count
+                    && (lines[j].speaker == sp || Self.isVisualIsland(lines, at: j, of: sp, numbers: speakerNumbers))
                     && (ids.isEmpty || (ids.count < Self.blockMaxLines && chars < Self.blockMaxChars)) {
                 parts.append(lines[j].text); ids.append(lines[j].id); chars += lines[j].text.count; j += 1
             }
@@ -249,6 +250,17 @@ struct TranscriptView: View {
         return out
     }
     private var multiSpeaker: Bool { Set(lines.map { $0.speaker }).count > 1 }
+
+    /// X5 (content view): a row whose speaker has no display number yet
+    /// ("화자분리중…"), sitting between two rows of `sp`, reads as `sp`'s
+    /// paragraph — no header for a label the store has not even numbered.
+    /// Only when the session enabled island absorption (non-English).
+    static func isVisualIsland(_ lines: [Line], at j: Int, of sp: Int, numbers: SpeakerDisplayNumber) -> Bool {
+        guard LiveFeatureWiring.speakerIslandAbsorption, j > 0, j + 1 < lines.count,
+              lines[j].speaker != sp, numbers.number(lines[j].speaker) == nil,
+              lines[j - 1].speaker == sp, lines[j + 1].speaker == sp else { return false }
+        return true
+    }
 
     // ── U1: speaker turns for the detailed view ─────────────────────────────
     /// Consecutive same-speaker rows closer than this read as one turn.

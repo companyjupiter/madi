@@ -69,6 +69,19 @@ enum LiveFeatureWiring {
     /// mid-sentence adopts that speaker (label-window edge). Off = the row
     /// stays a one-word turn under the previous label.
     nonisolated(unsafe) static var turnHeadAdoption = true
+    /// X5 (2026-09-11): a short row under a weak label, sandwiched mid-sentence
+    /// between rows of the same speaker (A-B-A), is that speaker's — absorbed
+    /// into the row before it (store) and folded into the paragraph (content
+    /// view). OFF by default; SessionController turns it on only for a session
+    /// whose selected language is not English (0.3.25 Korean: 56 islands in
+    /// 46 min, English 0.3.18: 4 in 25 min — English stays byte-identical).
+    nonisolated(unsafe) static var speakerIslandAbsorption = false
+    /// X5 gate: only a session whose selected language is not English
+    /// (auto-detect counts as unknown → off). English live is never touched.
+    static func islandAbsorption(for languageTokenID: Int?) -> Bool {
+        guard let tok = languageTokenID else { return false }
+        return tok != 50259
+    }
 
     /// Paint a committed line's translation token by token while the 4B is
     /// still generating (the "typewriter"), or only once the turn completes.
