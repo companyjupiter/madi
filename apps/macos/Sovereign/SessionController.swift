@@ -2684,7 +2684,36 @@ final class SessionController: EngineProcessDelegate {
     /// are retained, so no audio is lost).
     private var lastEngineActivityAt = Date()
 
+    /// Idle backfill (2026-09-11): a line the live queue shed used to wait for
+    /// stop — one early shed left "번역이 밀렸어요 · 정지 후 채워요" on screen for
+    /// the whole session (0.3.25 Korean, 2 targets, 1 shed at 0:49). When the
+    /// caption lane is quiet the shed lines are re-translated one at a time,
+    /// under the same key contract the stop-time drain uses; the completion
+    /// path removes the key and the banner clears by itself.
+    private func idleBackfillTick() {
+        guard phase == .recording, let t = translate, !backlogKeys.isEmpty,
+              translateQueueDepth == 0, segmentsInFlight == 0 else { return }
+        let live = backlogKeys.filter { key in
+            guard let line = transcript.lines.first(where: { $0.id == key.id }) else { return false }
+            return lineHash(line.text) == key.sourceRevision
+                && routedTargets(for: line.text).contains(key.lang)
+                && line.translations[key.lang] == nil
+        }
+        let stale = backlogKeys.subtracting(live)
+        if !stale.isEmpty {            // the row grew or was joined since the shed: nothing to fill
+            backlogKeys.subtract(stale); translateBacklog = Set(backlogKeys.map(\.id)).count
+        }
+        guard let first = live.min(by: { $0.id.uuidString < $1.id.uuidString }),
+              let line = transcript.lines.first(where: { $0.id == first.id }) else { return }
+        let langs = Set(live.filter { $0.id == first.id }.map(\.lang))
+        translatedHash[line.id] = nil
+        DebugLog.shared?.emit("translate", "backfill", ["id": line.id.uuidString, "langs": langs.sorted(), "remaining": backlogKeys.count])
+        _ = t   // the engine is owned by translateLine
+        translateLine(line, forceTargets: langs)
+    }
+
     private func tickWatchdog() {
+        idleBackfillTick()
         // A8: 정지 직후(.flushing)는 부하가 가장 큰 순간 — 여기서 행이면
         // FLUSH_END가 영영 안 와 세션이 '정리 중'에 갇힌다. 활동 없이 45s면
         // 라이브 라벨로 강제 마감 (역검증 watchdog-conc-5).

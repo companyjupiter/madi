@@ -35,4 +35,16 @@ final class TranslationRunawayTests: XCTestCase {
         XCTAssertLessThanOrEqual(cut.count, 80)
         XCTAssertFalse(cut.isEmpty)
     }
+
+    /// Korean/CJK → a Latin-script target expands ~3.5×; the limit must not cut
+    /// a complete sentence ("봐도 AI가 혁명이라고 치면 증기기관 나왔는데" → 90 chars).
+    func testCJKSourceIntoLatinTargetGetsTheWiderLimit() {
+        let ko = "봐도 AI가 혁명이라고 치면 증기기관 나왔는데"      // 25 chars
+        XCTAssertEqual(TranslationOutputPolicy.runawayLimit(source: ko, target: "English"), 25 * 7)
+        XCTAssertEqual(TranslationOutputPolicy.runawayLimit(source: ko, target: "Chinese"), 80, "compressing direction keeps ×3 (floor 80)")
+        let en = "Even if one considers AI a revolution, it is like the steam engine."
+        XCTAssertEqual(TranslationOutputPolicy.runawayLimit(source: en, target: "Korean"), en.count * 3)
+        XCTAssertEqual(TranslationOutputPolicy.runawayLimit(source: en, target: "English"), en.count * 3, "Latin → Latin stays ×3")
+        XCTAssertEqual(TranslationOutputPolicy.runawayLimit(source: ko), 80, "no target → legacy ×3")
+    }
 }

@@ -141,4 +141,15 @@ final class KoreanNumberLiveSafetyTests: XCTestCase {
             }
         }
     }
+
+    /// guard 4: a counter that runs straight into a verb ending is not a counter.
+    func testGuard4_politeImperativeIsNotATime() {
+        XCTAssertEqual(KoreanNumberFormatter.format("어서 오십시오."), "어서 오십시오.")
+        XCTAssertEqual(KoreanNumberFormatter.format("어서 오십시오. 반갑습니다."), "어서 오십시오. 반갑습니다.")
+        XCTAssertEqual(KoreanNumberFormatter.format("앉으십시오"), "앉으십시오")
+        // real times keep converting: a particle or a space may follow the counter
+        XCTAssertEqual(KoreanNumberFormatter.format("오시에 만나요"), "5시에 만나요")
+        XCTAssertEqual(KoreanNumberFormatter.format("오십분 뒤"), "50분 뒤")
+        XCTAssertEqual(KoreanNumberFormatter.format("다섯시 오분"), "5시 5분")
+    }
 }

@@ -308,7 +308,7 @@ final class TranslateEngine {
         guard !cleaned.isEmpty else { return }
         if TranslationOutputPolicy.shouldRetry(cleaned, source: turn.source, target: turn.lang) { return }
         // T7: stop painting a runaway live; completeTurn truncates it.
-        if cleaned.count > TranslationOutputPolicy.runawayLimit(source: turn.source) { return }
+        if cleaned.count > TranslationOutputPolicy.runawayLimit(source: turn.source, target: turn.lang) { return }
         onPartial?(turn.id, turn.lang, cleaned, turn.source)
     }
 
@@ -328,7 +328,7 @@ final class TranslateEngine {
                 "raw": String(text.prefix(4000)), "sanitized": sanitized, "cleaned": cleaned,
                 "echoStripped": sanitized != cleaned, "ms": debugMs,
                 "retry": TranslationOutputPolicy.shouldRetry(text, source: turn.source, target: turn.lang),
-                "runaway": cleaned.count > TranslationOutputPolicy.runawayLimit(source: turn.source)])
+                "runaway": cleaned.count > TranslationOutputPolicy.runawayLimit(source: turn.source, target: turn.lang)])
         }
         // P2: the whole reply was a replay of the example → objective failure,
         // same path as a source echo (retry once with the example-free prompt).
@@ -355,7 +355,7 @@ final class TranslateEngine {
         // T7: a reply far longer than its source is a runaway (list/loop), not a
         // translation. Keep the part that still is one, and never let it become
         // the next turn's example — that is how one runaway poisoned the next.
-        let limit = TranslationOutputPolicy.runawayLimit(source: turn.source)
+        let limit = TranslationOutputPolicy.runawayLimit(source: turn.source, target: turn.lang)
         let runaway = cleaned.count > limit
         let final = runaway ? TranslationOutputPolicy.truncateRunaway(cleaned, limit: limit) : cleaned
         if runaway { runawayTruncations += 1 }

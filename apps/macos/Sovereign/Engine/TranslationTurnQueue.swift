@@ -185,8 +185,22 @@ enum TranslationOutputPolicy {
         min(512, max(48, Int(Double(source.count) * 1.5) + 24))
     }
     /// Reply characters beyond which the turn is a runaway, not a translation.
-    static func runawayLimit(source: String) -> Int {
-        max(80, source.count * 3)
+    /// ×3 was tuned on EN → 中/한 (a compressing direction); a Hangul/CJK source
+    /// into a Latin-script target expands ~3.5× in characters, so ×3 flagged
+    /// complete sentences as runaways and cut them (0.3.23–0.3.25 Korean → English:
+    /// 29 of 30, 11 of 12, 4 of 4 "runaways" ended with a period). ×7 there.
+    static func runawayLimit(source: String, target: String? = nil) -> Int {
+        max(80, source.count * expansionFactor(source: source, target: target))
+    }
+    static let latinTargets: Set<String> = ["English", "French", "German", "Spanish", "Italian", "Portuguese",
+                                            "Vietnamese", "Indonesian", "Dutch"]
+    static func expansionFactor(source: String, target: String?) -> Int {
+        guard let target, latinTargets.contains(target) else { return 3 }
+        let letters = source.unicodeScalars.filter { $0.properties.isAlphabetic }
+        guard !letters.isEmpty else { return 3 }
+        let cjk = letters.filter { (0xAC00...0xD7A3).contains($0.value) || (0x4E00...0x9FFF).contains($0.value)
+            || (0x3040...0x30FF).contains($0.value) }.count
+        return cjk * 2 > letters.count ? 7 : 3
     }
     /// Cut a runaway reply at its last sentence end inside the limit (or hard
     /// at the limit) so the row shows the part that was still a translation.
