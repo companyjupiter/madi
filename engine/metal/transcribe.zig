@@ -1768,6 +1768,7 @@ pub fn main() !void {
             var nb: u32 = 0;
             var slot_toff: [8]f32 = undefined;
             var slot_rms: [8]f32 = undefined;
+            var slot_speech: [8]f32 = undefined; // Silero speech seconds per slot (F2 coverage rescue)
             var slot_rawpk: [8]f32 = undefined; // raw peak before AGC (audioCtx quiet rule)
             var slot_chunk: [8]usize = undefined;
             var slot_conv: [8]f64 = undefined;
@@ -2301,6 +2302,7 @@ pub fn main() !void {
         slot_got[nb] = got;
         slot_toff[nb] = t_off;
         slot_rms[nb] = seg_rms;
+        slot_speech[nb] = chunk_speech_s;
         slot_rawpk[nb] = raw_pk;
         slot_chunk[nb] = chunk;
         nb += 1;
@@ -2599,7 +2601,12 @@ pub fn main() !void {
         // engine-independent, wcpp ts-greedy says "아키텍츄럴" too). Only when
         // the plain pass COLLAPSES into a periodic repeat loop is the chunk
         // re-decoded in timestamp-token mode (collapse-immune) + seek.
-        var ts_mode = false;
+        var ts_mode = envF("TS_MODE", 0) > 0; // 1 = every chunk decodes with timestamp tokens (coverage experiment)
+        // F2: coverage rescue re-decodes the chunk as two plain half-windows
+        // (the timestamp re-decode recovered 1 of 6 sparse Korean chunks and,
+        // forced on every chunk, collapsed the file to a quarter of its words —
+        // the live path's short windows never lost coverage).
+        var split_mode = false;
         var total_passes: u32 = 0;
         mode: while (true) {
         chunk_text.clearRetainingCapacity();
@@ -2609,6 +2616,39 @@ pub fn main() !void {
         var pass: u32 = 0;
         seek: while (pass < 6) : (pass += 1) {
             total_passes += 1;
+            var split_len: usize = 0; // F2: this pass's window length when splitting (0 = whole remainder)
+            if (split_mode) {
+                const half: usize = cgot / 2;
+                const soff: usize = if (pass == 0) 0 else half;
+                split_len = if (pass == 0) half else cgot - half;
+                seek_fr = @intCast(soff / 320);
+                const sbase = slot_samp[slot * mel.CHUNK_SAMPLES ..];
+                @memcpy(samples[0..split_len], sbase[soff .. soff + split_len]);
+                @memset(samples[split_len..mel.CHUNK_SAMPLES], 0);
+                mel.melSpectrogram(samples, mel_filters, mel_buf);
+                try mtl.beginCommandBuffer();
+                try imIm2col(f_im2col, col1, mel_buf.ptr, mel.N_MELS, mel.N_FRAMES, 1, 1, mel.N_FRAMES);
+                try mtl.matmulF16Batched(col1, c1w, t1, mel.N_FRAMES, D, mel.N_MELS * 3);
+                try geluTranspose(f_geluT, conv1o, t1, c1b, mel.N_FRAMES, D);
+                try imIm2col(f_im2col, col2, conv1o, D, mel.N_FRAMES, 2, 1, ENC_SEQ);
+                try mtl.matmulF16Batched(col2, c2w, t2, ENC_SEQ, D, D * 3);
+                try geluPos(f_geluPos, d_ex + slot * @as(usize, ENC_SEQ) * D, t2, c2b, enc_pe, ENC_SEQ * D, D);
+                try mtl.commitCommandBuffer();
+                try mtl.sync();
+                actx = audioCtx(split_len, slot_rawpk[slot]);
+                try enc.forward(Ke, &elayers, elnp_w, elnp_b, d_ex + slot * @as(usize, ENC_SEQ) * D, eo16, enc_out + slot * @as(usize, ENC_SEQ) * D, escr, 1, actx);
+                for (0..dec.NL) |l| {
+                    try mtl.beginCommandBuffer();
+                    try deqW16(f_deq, cross_wdq, ckw[l], D, D);
+                    try mtl.matmulF16Batched(eo16, cross_wdq, ckc[l], actx, D, D);
+                    try deqW16(f_deq, cross_wdq, cvw[l], D, D);
+                    try mtl.matmulF16Batched(eo16, cross_wdq, cvc[l], actx, D, D);
+                    try biasAdd16(f_bias16, cvc[l], cvb[l], actx * D, D);
+                    try mtl.commitCommandBuffer();
+                    try mtl.sync();
+                }
+                @memset(d_ca, 0);
+            }
             var PL: u32 = 0;
             // term-biasing prefix: <|startofprev|> + prompt tokens, seeded before
             // the SOT (KV-filled, never predicted) so they bias generation.
@@ -2645,7 +2685,7 @@ pub fn main() !void {
                 }
             }
             const max_gen: u32 = MAX_TOK - PL - F - 1;
-            const pass_got: usize = cgot - @min(@as(usize, seek_fr) * 320, cgot); // samples in this window
+            const pass_got: usize = if (split_len > 0) split_len else cgot - @min(@as(usize, seek_fr) * 320, cgot); // samples in this window
             const pass_off: f32 = @as(f32, @floatFromInt(seek_fr)) * 0.02; // window start within the chunk (s)
             // Seed phase: fill KV[0..P-1) without prediction — recorded as ONE
             // command buffer (indirect embed/pos/step; positions restart each
@@ -2845,9 +2885,40 @@ pub fn main() !void {
             // degenerate decode (avg_logprob below LOGPROB_RESCUE, default −1.0 —
             // Whisper's threshold).
             const loopy = tokenCollapse(loop_txt[0..n_loop]) or tokenDiversityCollapse(loop_txt[0..n_loop]);
+            // F2 (2026-09-10): coverage rescue. A plain pass can stop after a few
+            // confident tokens and silently drop most of a 30 s chunk — Korean
+            // talk-show file mode lost 6 of 37 chunks that way (2–24 words for
+            // 30 s of speech, avg_logprob fine so the logprob rescue never
+            // fired). Silero speech seconds vs decoded text tokens: a real
+            // Korean/English chunk yields ~4–6 tokens per speech second; below
+            // COVER_TOK_PER_S (1.5) with ≥ COVER_MIN_SPEECH (8 s) of speech the
+            // pass is treated like a collapse and re-decoded with timestamps.
+            const slot_speech_s = slot_speech[slot];
+            const speech_known = slot_speech_s < 1e8;
+            const sparse = !ts_mode and !split_mode and speech_known and slot_speech_s >= envF("COVER_MIN_SPEECH", 8.0) and
+                @as(f32, @floatFromInt(n_text)) < envF("COVER_TOK_PER_S", 2.0) * slot_speech_s and cgot >= 8 * 16000;
+            if (sparse and !loopy and pass_avg_lp >= envF("LOGPROB_RESCUE", -1.0)) {
+                split_mode = true; // discard this pass, re-decode as two plain half-windows
+                fb_reason = "coverage";
+                try out.print("[rescue] chunk {d}: coverage — {d} text tokens for {d:.1} s of speech; re-decoding as two half-windows\n", .{ cchunk + 1, n_text, slot_speech_s });
+                continue :mode;
+            }
             if (!ts_mode and (loopy or pass_avg_lp < envF("LOGPROB_RESCUE", -1.0))) {
-                ts_mode = true; // discard this pass, re-decode in ts mode
                 fb_reason = if (pass_avg_lp < envF("LOGPROB_RESCUE", -1.0)) "logprob" else "collapse";
+                // F2: a plain chunk that loops or scores low is first re-decoded as
+                // two half-windows (what the live path does for a living); only a
+                // half-window that is still bad goes to the timestamp re-decode —
+                // that path lost 3 of 4 words on Korean when forced (TS_MODE=1).
+                // Measured: English (50259) recovered cleanly through the
+                // timestamp re-decode (0.3.18 file, chunk 45) and the split
+                // introduced a slip there, so English keeps the shipped path.
+                if (!split_mode and cgot >= 8 * 16000 and seg_lang != 50259) {
+                    split_mode = true;
+                    try out.print("[rescue] chunk {d}: {s} — re-decoding as two half-windows\n", .{ cchunk + 1, fb_reason });
+                    continue :mode;
+                }
+                ts_mode = true; // discard this pass, re-decode in ts mode
+                split_mode = false;
                 try out.print("[rescue] chunk {d}: {s} — re-decoding with timestamp tokens\n", .{ cchunk + 1, fb_reason });
                 continue :mode;
             }
@@ -2869,7 +2940,10 @@ pub fn main() !void {
                 host_ns += ht.read();
             }
             if (pass_garbage) break :seek; // garbage timestamps — don't seek into junk
-            if (!ts_mode) break :seek; // plain mode: single pass, no seek
+            if (!ts_mode) { // plain mode: single pass, no seek — except the F2 split's second half
+                if (split_mode and pass == 0) continue :seek;
+                break :seek;
+            }
             // continue from the last closed segment if ≥1 s of voiced audio remains
             var last_fr: u32 = 0; // window-relative frame of the last <|t|>
             var any_text = false;
