@@ -26,6 +26,8 @@ extension SessionController {
         guard Self.debugCaptureEnabled, let dbg = DebugLog.start(root: Self.debugRoot) else { return }
         let cfg = makeConfig()
         let manifest: [String: Any] = [
+            "mode": sourceMediaURL == nil ? "live" : "file",
+            "file": sourceMediaURL?.lastPathComponent ?? "",
             "app": AppVersion.full, "build": AppVersion.build,
             "os": ProcessInfo.processInfo.operatingSystemVersionString,
             "ramGB": Int(ProcessInfo.processInfo.physicalMemory >> 30),

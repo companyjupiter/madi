@@ -37,13 +37,18 @@ final class CaptureFragmentationGateTests: XCTestCase {
         /// W: adjacent rows of different speakers where the first does not end a
         /// sentence and the gap is < 0.3 s — a sentence cut by a label change.
         var midSentenceSpeakerBreaks = 0
+        /// Edited-row cascade: a row whose text is a proper suffix (≥ 2 words) of
+        /// the previous row's text — the rebuild cut an edited row after its
+        /// first word and the formatter re-edited the remainder, once per rebuild.
+        var cascadeRows = 0
+        var editedRows = 0
         var row: String {
             "lines \(lines)  same-spk pairs \(sameSpeakerPairs)  unexplained breaks \(unexplainedBreaks)"
             + "  words/line p50 \(p50) p90 \(p90)  ≤5-word lines \(shortLines)  joins \(joins)"
             + "  seam-dup rows \(seamDuplicateRows)  dup words \(duplicateWords)"
             + "  ids \(distinctSpeakerIDs) maxNumber \(maxDisplayNumber)"
             + "  overlap rows \(overlapRows)  turn-head rows \(turnHeadRows)  islands \(islandRows)"
-            + "  mid-sentence spk breaks \(midSentenceSpeakerBreaks)"
+            + "  mid-sentence spk breaks \(midSentenceSpeakerBreaks)  edited \(editedRows)  cascade rows \(cascadeRows)"
         }
     }
 
@@ -67,6 +72,11 @@ final class CaptureFragmentationGateTests: XCTestCase {
                       b.start - a.end < 0.3, c.start - b.end < 0.3 else { continue }
                 m.islandRows += 1
             }
+        }
+        m.editedRows = s.lines.filter(\.isEdited).count
+        for (a, b) in zip(s.lines, s.lines.dropFirst()) {
+            let bt = b.text.trimmingCharacters(in: .whitespaces)
+            if bt.split(separator: " ").count >= 2, bt.count < a.text.count, a.text.hasSuffix(bt) { m.cascadeRows += 1 }
         }
         for (a, b) in zip(s.lines, s.lines.dropFirst()) {
             guard let at = a.words.last, let bh = b.words.first else { continue }
@@ -128,19 +138,32 @@ final class CaptureFragmentationGateTests: XCTestCase {
         defer { LiveFeatureWiring.joinSameSpeakerNeighbors = true }
         let s = TranscriptStore()
         let dec = EngineProtocol.Decoder()
+        // MADI_GATE_FORMAT=1: the app's text pass (KoreanNumberFormatter → editLine)
+        // on every settled line, as SessionController.applyTextPasses does, after
+        // each section and each relabel rebuild — the path that cascaded in file mode.
+        let formatPass = ProcessInfo.processInfo.environment["MADI_GATE_FORMAT"] == "1"
+        func applyFormat() {
+            guard formatPass else { return }
+            for l in s.lines.dropLast() where !l.isEdited {
+                let f = KoreanNumberFormatter.format(l.text)
+                if f != l.text { _ = s.editLine(l.id, f) }
+            }
+        }
         for line in raw.split(separator: "\n", omittingEmptySubsequences: false) {
             let ev = dec.decode(line: String(line))
             switch ev {
-            case .word, .wordSectionBegin, .speaker, .speakerOverlap, .speakerOverlapReset:
+            case .wordSectionBegin:
+                s.ingest(ev); applyFormat()
+            case .word, .speaker, .speakerOverlap, .speakerOverlapReset:
                 s.ingest(ev)
             case .speakerFix:
                 s.ingest(ev)
-                s.flushPendingSpeakerFixRebuild()
+                s.flushPendingSpeakerFixRebuild(); applyFormat()
             default: break
             }
         }
         let live = measure(s)
-        s.finalize()
+        s.finalize(); applyFormat()
         return (live, measure(s), s)
     }
 

@@ -2269,6 +2269,7 @@ final class SessionController: EngineProcessDelegate {
         sourceMediaURL = url        // arm click-to-play (original timeline matches)
         chunksDone = 0; chunksTotal = 0
         phase = .processing
+        debugSessionStart()   // file sessions get a debug bundle too (the byshu-01 cascade had none to read)
 
         // Decode ANY container (m4a/mp3/aac/flac/wav…) to a normalized 16k PCM WAV
         // off the main actor first — the engine's file reader only accepts PCM WAV.

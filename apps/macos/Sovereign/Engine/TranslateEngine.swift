@@ -201,7 +201,7 @@ final class TranslateEngine {
                 body: TranslatePrompt.body(text: oneLine, example: example, anchor: Self.anchor[target] ?? "Hello"),
                 retries: 1, kind: kind, reserved: claimsReservation,
                 forced: Self.forcedPrefix(forced[target], kind: kind),
-                exampleTarget: example?.target)
+                exampleTarget: example?.target, exampleSource: example?.source)
             let result = pending.enqueue(
                 turn, blockInterim: inflightTurn?.kind == .committed)
             if result.accepted {
@@ -328,15 +328,19 @@ final class TranslateEngine {
                 "raw": String(text.prefix(4000)), "sanitized": sanitized, "cleaned": cleaned,
                 "echoStripped": sanitized != cleaned, "ms": debugMs,
                 "retry": TranslationOutputPolicy.shouldRetry(text, source: turn.source, target: turn.lang),
+                "exampleReplay": TranslationOutputPolicy.isExampleReplay(sanitized, exampleTarget: turn.exampleTarget, source: turn.source, exampleSource: turn.exampleSource),
                 "runaway": cleaned.count > TranslationOutputPolicy.runawayLimit(source: turn.source, target: turn.lang)])
         }
         // P2: the whole reply was a replay of the example → objective failure,
         // same path as a source echo (retry once with the example-free prompt).
         let exampleEchoOnly = cleaned.isEmpty && !sanitized.isEmpty
+        // P2-2: a near copy of the example for an unrelated source is the same failure.
+        let exampleReplay = TranslationOutputPolicy.isExampleReplay(
+            sanitized, exampleTarget: turn.exampleTarget, source: turn.source, exampleSource: turn.exampleSource)
         // Both models can rarely echo; 2B can additionally stay in the source
         // script. Retry only on an objective failure, then suppress rather than
         // present invalid output as a translation.
-        if exampleEchoOnly || TranslationOutputPolicy.shouldRetry(text, source: turn.source, target: turn.lang) {
+        if exampleEchoOnly || exampleReplay || TranslationOutputPolicy.shouldRetry(text, source: turn.source, target: turn.lang) {
             if turn.retries > 0 {
                 let retry = TranslationTurn(
                     id: turn.id, lang: turn.lang, source: turn.source,

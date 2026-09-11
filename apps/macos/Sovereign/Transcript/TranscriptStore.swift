@@ -355,6 +355,13 @@ final class TranscriptStore {
     // seconds later — or a user edit made mid-recording — still lands.
     private var translationsByLine: [UUID: [String: TranslationRecord]] = [:]
     private var editsByLine: [UUID: String] = [:]
+    /// E1 (2026-09-11): the word ids an edited row was rewritten with. A rebuild
+    /// regroups every word from scratch; the edit guard in groupLoop used to
+    /// break after the edited row's FIRST word (the only word whose id it knew),
+    /// so each rebuild cut one word off the row and the number formatter
+    /// re-edited the remainder — a 19-row "제가 한창 포켓몬빵 …/한창 포켓몬빵 …/
+    /// 포켓몬빵 …" cascade in a file transcript. The row keeps exactly these words.
+    private var editedRowWords: [UUID: Set<UUID>] = [:]
     /// P10-3: words after which a sentence break has been taken. Keeps live line
     /// structure monotonic when a re-decode moves the punctuation.
     private var sentenceBreaks: Set<UUID> = []
@@ -502,6 +509,7 @@ final class TranscriptStore {
         if lines[i].text == t { return true }
         let cosmetic = Self.cosmeticallyEqual(lines[i].text, t)
         editsByLine[id] = t
+        editedRowWords[id] = Set(lines[i].words.map(\.id))
         lines[i].editedText = t
         if cosmetic { rebindTranslations(id, lineIndex: i) }
         invalidateTranslations(id, lineIndex: i)
@@ -520,9 +528,12 @@ final class TranscriptStore {
         guard !t.isEmpty else { return false }
         let old = lines[li].words[index]
         let beforeText = lines[li].text
-        lines[li].words[index] = Word(t0: old.t0, t1: old.t1, text: t, conf: 1.0)
+        // Keep the word's id: the merger's committed copy (what a rebuild
+        // regroups) and the row's edited-word set (E1) are both keyed by it.
+        lines[li].words[index] = Word(id: old.id, t0: old.t0, t1: old.t1, text: t, conf: 1.0)
         lines[li].editedText = lines[li].joinedText
         editsByLine[lineID] = lines[li].editedText
+        editedRowWords[lineID] = Set(lines[li].words.map(\.id))
         // (Frozen lines live in `lines` itself — the fix is already in the base.)
         // P14: a review fix that only touches punctuation/case keeps the
         // translation (confirming a word is also a common review action).
@@ -613,7 +624,7 @@ final class TranscriptStore {
         lines.removeAll()
         merger = WordMerger()
         spk.removeAll(); spkFix.removeAll(); spkOv.removeAll()
-        translationsByLine.removeAll(); editsByLine.removeAll()
+        translationsByLine.removeAll(); editsByLine.removeAll(); editedRowWords.removeAll()
         suppressedByLine.removeAll(); sentenceBreaks.removeAll()
         breakDecided.removeAll(); breakAfter.removeAll()
         speakerMerges.removeAll(); speakerOverrides.removeAll()
@@ -824,6 +835,8 @@ final class TranscriptStore {
         if i + 1 < frozenCount { frozenCount -= 1 }
         translationsByLine[b.id] = nil; suppressedByLine[b.id] = nil
         editsByLine[b.id] = nil; speakerOverrides[b.id] = nil
+        editedRowWords[b.id] = nil
+        if editedRowWords[a.id] != nil { editedRowWords[a.id]!.formUnion(b.words.map(\.id)) }
         refreshTranslationOverlay(a.id, lineIndex: i)   // survivor's records → stale (kept)
         sameSpeakerJoins += 1
         DebugLog.shared?.emit("store", "join", ["frozen": true, "speaker": a.speaker,
@@ -1116,7 +1129,11 @@ final class TranscriptStore {
                 w.t0 - last.end < Self.weakLabelMaxGap
             } ?? false
             let cont: Bool
-            if let last = out.last, editsByLine[last.id] != nil || editsByLine[w.id] != nil {
+            if let last = out.last, let owned = editedRowWords[last.id] {
+                // E1: an edited row keeps exactly the words it was rewritten
+                // with — its own words continue it, anything else starts a row.
+                cont = owned.contains(w.id) && editsByLine[w.id] == nil
+            } else if let last = out.last, editsByLine[last.id] != nil || editsByLine[w.id] != nil {
                 // A row the user rewrote is theirs: never grown, never absorbed
                 // (an unsettled tail is regrouped fresh each rebuild — X1).
                 cont = false

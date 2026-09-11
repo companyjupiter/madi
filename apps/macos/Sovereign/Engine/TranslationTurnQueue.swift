@@ -34,6 +34,9 @@ struct TranslationTurn: Equatable {
     /// T5/P2: the example TARGET this turn's prompt carried, so the output
     /// sanitizer can strip a replayed copy of it (see stripExampleEcho).
     var exampleTarget: String? = nil
+    /// P2-2: the example SOURCE, so a whole-output replay of the example can be
+    /// told from a legitimate re-translation of the same sentence.
+    var exampleSource: String? = nil
 }
 
 /// T5 (2026-09-02): the per-turn prompt body. The instruction head is the cached
@@ -347,6 +350,37 @@ enum TranslationOutputPolicy {
         return Character(c.lowercased())
     }
     private static func echoKeys(_ s: String) -> [Character] { s.compactMap(echoKey) }
+
+    /// Character-bigram Dice similarity over the echo keys (letters and digits,
+    /// case-folded) — script-agnostic, 0…1.
+    static func similarity(_ a: String, _ b: String) -> Double {
+        let ka = echoKeys(a), kb = echoKeys(b)
+        guard ka.count >= 2, kb.count >= 2 else { return ka == kb ? 1 : 0 }
+        func grams(_ k: [Character]) -> [String: Int] {
+            var g: [String: Int] = [:]
+            for i in 0..<(k.count - 1) { g[String([k[i], k[i + 1]]), default: 0] += 1 }
+            return g
+        }
+        let ga = grams(ka), gb = grams(kb)
+        var common = 0
+        for (g, n) in ga { common += min(n, gb[g] ?? 0) }
+        return 2.0 * Double(common) / Double((ka.count - 1) + (kb.count - 1))
+    }
+
+    /// P2-2 (2026-09-11): the reply is a replay of the T5 example's TARGET for a
+    /// source that is not that example's sentence. The prefix stripper above
+    /// catches an exact leading copy; this catches the near copies the 4B
+    /// produces for a long, unrelated source — 18 of 1,355 example-carrying
+    /// turns on the 0.3.25 Korean session, 1 on the 0.3.26 file transcript
+    /// (a lyric line's Japanese shown under "엄마가 나를 믿고 …"). A short
+    /// example ("是的。") or a re-translation of the same sentence (an edited
+    /// line whose previous revision is the example) is not a replay.
+    static func isExampleReplay(_ output: String, exampleTarget: String?, source: String, exampleSource: String?) -> Bool {
+        guard let ex = exampleTarget, echoKeys(ex).count >= 12, !echoKeys(output).isEmpty else { return false }
+        guard similarity(output, ex) >= 0.8 else { return false }
+        if let exs = exampleSource, similarity(source, exs) >= 0.5 { return false }
+        return true
+    }
 
     static func shouldRetry(_ output: String, source: String, target: String) -> Bool {
         let cleaned = clean(output)

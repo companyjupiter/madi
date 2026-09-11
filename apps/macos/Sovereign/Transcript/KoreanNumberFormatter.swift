@@ -52,6 +52,10 @@ public enum KoreanNumberFormatter {
     private static let allCounters = "\(hardCounters)|\(softCounters)"
 
     private static let sinoChars = "영공일이삼사오육륙칠팔구십백천만억"
+    /// Hangul syllables that can follow "N시" when N시 is a time (guard 5).
+    private static let timeContinuation: Set<String> = [
+        "에", "까", "부", "반", "쯤", "경", "로", "전", "후", "넘", "정", "간", "마", "대", "께", "도",
+    ]   // not 면/는/나/라/고/니/이 — the endings of 오시-/사시- (오시면, 오시는, 오시라고)
     private static let natTensAlt = "열|스물|스무|서른|마흔|쉰|예순|일흔|여든|아흔"
     private static let natOnesAlt = "한|두|세|네|다섯|여섯|일곱|여덟|아홉"
 
@@ -129,6 +133,15 @@ public enum KoreanNumberFormatter {
             if end < ns.length {
                 let next = ns.substring(with: NSRange(location: end, length: 1))
                 if ["오", "옵", "십", "시"].contains(next) { continue }
+                // guard 5 (2026-09-11): a SINGLE Sino digit before 시 is a time
+                // only when what follows reads as one — end, space, punctuation
+                // or a time particle. "놀러 오시면" (the honorific stem 오시-)
+                // became "놀러 5시면" on a file transcript; 사시면, 일시적,
+                // 구시가지, 사시사철 fail the same way. "오시에/까지/부터/반/쯤"
+                // still convert.
+                if counter == "시", span.count == 1,
+                   let ch = next.unicodeScalars.first, (0xAC00...0xD7A3).contains(ch.value),
+                   !Self.timeContinuation.contains(next) { continue }
             }
             guard !span.isEmpty, let repl = transform(span, counter),
                   let r = Range(m.range, in: out) else { continue }
