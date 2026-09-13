@@ -2432,6 +2432,7 @@ struct ContentView: View {
     private var transcriptWarning: String? {
         if session.micSilent { return uiLang("소리가 감지되지 않아요 — 마이크를 확인해주세요", "No sound detected — check your microphone") }
         var parts: [String] = []
+        if let ended = session.captureEndedReason { parts.append(ended) }
         if !session.coverageGaps.isEmpty { parts.append(uiLang("누락 의심 \(session.coverageGaps.count)구간", "\(session.coverageGaps.count) suspected gaps", "欠落の疑い \(session.coverageGaps.count)区間")) }
         if session.hangRecoveries > 0 { parts.append(uiLang("복구 \(session.hangRecoveries)회", "\(session.hangRecoveries) recoveries", "復旧 \(session.hangRecoveries)回")) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")

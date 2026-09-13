@@ -756,6 +756,10 @@ final class SessionController: EngineProcessDelegate {
     /// Offsets (s) of segments that had speech but produced no words even after a
     /// retry — surfaced as "누락 의심" so the user knows something was missed.
     private(set) var coverageGaps: [Double] = []
+    /// S3 (2026-09-13): why a recording ended on its own — the system-audio
+    /// stream stopped (video closed, display slept). Shown in the warning row
+    /// after the session has been finalized like a normal stop.
+    private(set) var captureEndedReason: String? = nil
     /// Engine hang recoveries this session (W2) — nonzero means the engine was
     /// restarted and pending segments were re-fed (no audio lost).
     private(set) var hangRecoveries = 0
@@ -2011,7 +2015,7 @@ final class SessionController: EngineProcessDelegate {
         interimRequests.removeAll(); activeInterimID = nil
         segmentAudio.removeAll(); decodeRiskRanges.removeAll(); reconcileNote = nil; reconciling = false; languageCorrectionsPending = 0
         reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
-        stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0
+        stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0; captureEndedReason = nil
         phase = .idle
     }
 
@@ -2110,6 +2114,11 @@ final class SessionController: EngineProcessDelegate {
         capture.abort()
         audioPermissionIssue = nil
         transcript.reset()
+        // The language gates (X5/W) are decided here so the debug manifest
+        // records what this session actually runs with (0.3.28's manifest
+        // showed both off for a Korean session: they were set only later).
+        LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
+        LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
         debugSessionStart()   // debug bundle (docs/DEBUG_MODE.md)
         speakerNames = [:]
         userEditedLines.removeAll()
@@ -2164,6 +2173,21 @@ final class SessionController: EngineProcessDelegate {
         capture.onError = { [weak self] msg in
             guard let self else { return }
             guard AudioPermissionPolicy.requires(.systemAudio, for: self.audioSource) else { return }
+            // S3: mid-recording the engine is healthy and the transcript is
+            // worth keeping — end the session the way 정지 does (flush,
+            // finalize, translations, summary) instead of dropping into an
+            // error that skipped all of that. 0.3.28 Korean 49 min: the stream
+            // stopped 5 min after the video ended; the engine was killed, the
+            // transcript never finalized, the 4-min AI 교정 timer kept firing on
+            // the dead session and re-decoded one row as Japanese.
+            if self.phase == .recording || self.phase == .paused {
+                self.captureEndedReason = self.permissionText(
+                    "시스템 오디오 연결이 끊겨 녹음을 마쳤어요", "The system audio connection stopped, so the recording was ended",
+                    "システムオーディオの接続が切れたため録音を終了しました")
+                self.debugWatchdog("capture-error", ["msg": msg, "phase": "\(self.phase)"])
+                self.stop()
+                return
+            }
             self.capture.abort()
             self.terminateTranscriptionEngines()
             if !CGPreflightScreenCaptureAccess() {
@@ -2200,7 +2224,7 @@ final class SessionController: EngineProcessDelegate {
             self.meterLevel = max(lvl, self.meterLevel * release)
         }
         segQueue.removeAll(); segmentsInFlight = 0; wordsSinceSegStart = 0
-        coverageGaps.removeAll(); hangRecoveries = 0
+        coverageGaps.removeAll(); hangRecoveries = 0; captureEndedReason = nil
         startWatchdog()
 
         // Streaming preview reuses the main resident process. Tiny clips must
@@ -2269,6 +2293,8 @@ final class SessionController: EngineProcessDelegate {
         sourceMediaURL = url        // arm click-to-play (original timeline matches)
         chunksDone = 0; chunksTotal = 0
         phase = .processing
+        LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
+        LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
         debugSessionStart()   // file sessions get a debug bundle too (the byshu-01 cascade had none to read)
 
         // Decode ANY container (m4a/mp3/aac/flac/wav…) to a normalized 16k PCM WAV
@@ -2838,8 +2864,16 @@ final class SessionController: EngineProcessDelegate {
             }
         }
         // Phase 2: re-transcribe wrong-language lines from their own audio clips.
+        var languageHeld = 0
         let langFlags: [(id: UUID, lang: String)] = plan.languageFlags.compactMap { c in
             if case let .language(line, lang) = c, line < snapshot.count {
+                // L2 (2026-09-13): with the session language fixed, a flag
+                // pointing AWAY from it is refused — the 4B flagged a Korean row
+                // as Japanese and the re-decode produced "AIダクトを開発して…".
+                let allowed = TranscriptReconciler.languageFlagAllowed(lang, sessionLanguageTokenID: languageTokenID)
+                DebugLog.shared?.emit("reconcile", "language-flag", ["id": snapshot[line].uuidString, "lang": lang, "allowed": allowed,
+                                                                      "text": String(transcript.lines.first(where: { $0.id == snapshot[line] })?.text.prefix(80) ?? "")])
+                if !allowed { languageHeld += 1; return nil }
                 return (snapshot[line], lang)
             }
             return nil
@@ -2847,6 +2881,7 @@ final class SessionController: EngineProcessDelegate {
         var parts: [String] = []
         if merged > 0 { parts.append("화자 \(merged)건 병합") }
         if relabeled > 0 { parts.append("화자 \(relabeled)건 재지정") }
+        if languageHeld > 0 { parts.append("언어 \(languageHeld)건 보류(세션 언어와 다름)") }
         var languageAsync = false
         if !langFlags.isEmpty {
             languageAsync = reTranscribeLanguage(langFlags, completedParts: parts, mid: mid)

@@ -103,3 +103,18 @@ final class TranscriptReconcilerParseTests: XCTestCase {
         }
     }
 }
+
+/// L2 (2026-09-13): language corrections only toward the session's fixed language.
+final class ReconcilerLanguageFlagGateTests: XCTestCase {
+    func testFixedKoreanSessionRefusesOtherTargets() {
+        XCTAssertTrue(TranscriptReconciler.languageFlagAllowed("Korean", sessionLanguageTokenID: 50264))
+        XCTAssertFalse(TranscriptReconciler.languageFlagAllowed("Japanese", sessionLanguageTokenID: 50264), "the row was Korean; a Japanese re-decode is garbage")
+        XCTAssertFalse(TranscriptReconciler.languageFlagAllowed("English", sessionLanguageTokenID: 50264))
+    }
+    func testAutoDetectAllowsEveryFlag() {
+        XCTAssertTrue(TranscriptReconciler.languageFlagAllowed("Japanese", sessionLanguageTokenID: nil))
+    }
+    func testUnknownLanguageNameIsRefusedWhenFixed() {
+        XCTAssertFalse(TranscriptReconciler.languageFlagAllowed("Klingon", sessionLanguageTokenID: 50264))
+    }
+}

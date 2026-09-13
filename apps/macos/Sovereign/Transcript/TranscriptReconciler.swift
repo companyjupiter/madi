@@ -151,6 +151,14 @@ enum TranscriptReconciler {
         return plan
     }
 
+    /// L2: a language correction may only move a row TO the session's fixed
+    /// language (a row the engine decoded in the wrong language). With
+    /// auto-detect (nil) every flag is allowed.
+    static func languageFlagAllowed(_ name: String, sessionLanguageTokenID: Int?) -> Bool {
+        guard let tok = sessionLanguageTokenID else { return true }
+        return languageToken(name) == tok
+    }
+
     /// Whisper language token id for a language name (for Phase-2 re-transcription).
     static func languageToken(_ name: String) -> Int? {
         switch name {
