@@ -7,12 +7,19 @@ WRAPPER="$ROOT/apps/macos/scripts/release_local_free.sh"
 WORK="$(mktemp -d)"
 TEST_RELEASE_VERSION="99.99.99-localpublish.$$.$RANDOM"
 TEST_RELEASE_ROOT="$ROOT/build/local-release/$TEST_RELEASE_VERSION"
+TEST_RETIRED_VERSION="0.0.1-retired.$$.$RANDOM"
+TEST_RETIRED_ROOT="$ROOT/build/local-release/$TEST_RETIRED_VERSION"
 
 cleanup() {
   rm -rf "$WORK"
   case "$TEST_RELEASE_ROOT" in
     "$ROOT"/build/local-release/"$TEST_RELEASE_VERSION")
       rm -rf "$TEST_RELEASE_ROOT"
+      ;;
+  esac
+  case "$TEST_RETIRED_ROOT" in
+    "$ROOT"/build/local-release/"$TEST_RETIRED_VERSION")
+      rm -rf "$TEST_RETIRED_ROOT"
       ;;
   esac
 }
@@ -516,55 +523,90 @@ fi
 pass
 
 # ── prune: retire every published version except the live stable ───────────
+# The retired fixture has its own unique version: a refused prune still leaves
+# its run directory under build/local-release/<version>/, which cleanup removes.
 MOCK_BUCKET_DIR="$WORK/s3/test-bucket/madi"
-mkdir -p "$MOCK_BUCKET_DIR/releases/0.0.1"
-printf 'retired\n' > "$MOCK_BUCKET_DIR/releases/0.0.1/madi-0.0.1-arm64.dmg"
-jq '.releases += [{version: "0.0.1", platform: "macos-arm64", objectKey: "madi/releases/0.0.1/madi-0.0.1-arm64.dmg", sha256: "0000000000000000000000000000000000000000000000000000000000000000", size: 1, publishedAt: "2026-01-01T00:00:00Z"}]' \
-  "$MOCK_BUCKET_DIR/releases/index.json" > "$WORK/index.tmp"
+RETIRED="$TEST_RETIRED_VERSION"
+mkdir -p "$MOCK_BUCKET_DIR/releases/$RETIRED"
+printf 'retired\n' > "$MOCK_BUCKET_DIR/releases/$RETIRED/madi-$RETIRED-arm64.dmg"
+jq --arg retired "$RETIRED" '
+  .releases += [{
+    version: $retired,
+    platform: "macos-arm64",
+    objectKey: ("madi/releases/" + $retired + "/madi-" + $retired + "-arm64.dmg"),
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000",
+    size: 1,
+    publishedAt: "2026-01-01T00:00:00Z"
+  }]
+' "$MOCK_BUCKET_DIR/releases/index.json" > "$WORK/index.tmp"
 mv "$WORK/index.tmp" "$MOCK_BUCKET_DIR/releases/index.json"
 
 expect_fail "--dry-run must be rejected outside prune" run_cli plan "$TEST_RELEASE_VERSION" --dry-run --json
-expect_fail "prune must refuse a version that is not the live stable" run_cli prune 0.0.1 --json
-[ -f "$MOCK_BUCKET_DIR/releases/0.0.1/madi-0.0.1-arm64.dmg" ] || die "a refused prune must not delete anything"
+expect_fail "prune must refuse a version that is not the live stable" run_cli prune "$RETIRED" --json
+[ -f "$MOCK_BUCKET_DIR/releases/$RETIRED/madi-$RETIRED-arm64.dmg" ] || die "a refused prune must not delete anything"
 jq -e '.releases | length == 2' "$MOCK_BUCKET_DIR/releases/index.json" >/dev/null || die "a refused prune must not rewrite the index"
+[ -z "$(find "$TEST_RETIRED_ROOT" -name 'prune.json*' 2>/dev/null)" ] || die "a refused prune must not record a result"
 pass
 
+: > "$MOCK_AWS_LOG"
 expect_ok "prune --dry-run should report the retired versions without deleting" \
   run_cli prune "$TEST_RELEASE_VERSION" --dry-run --json
-jq -e --arg version "$TEST_RELEASE_VERSION" '
+jq -e --arg version "$TEST_RELEASE_VERSION" --arg retired "$RETIRED" '
   .command == "prune"
   and .version == $version
   and .applied == false
   and .kept == [$version]
-  and .deleted == ["0.0.1"]
+  and .deleted == [$retired]
+  and .deletedObjects == 1
   and .index.releasesBefore == 2
   and .index.releasesAfter == 1
 ' "$WORK/stdout" >/dev/null || { cat "$WORK/stdout" >&2; die "prune --dry-run JSON is wrong"; }
-[ -f "$MOCK_BUCKET_DIR/releases/0.0.1/madi-0.0.1-arm64.dmg" ] || die "prune --dry-run must not delete"
+[ -f "$MOCK_BUCKET_DIR/releases/$RETIRED/madi-$RETIRED-arm64.dmg" ] || die "prune --dry-run must not delete"
 jq -e '.releases | length == 2' "$MOCK_BUCKET_DIR/releases/index.json" >/dev/null || die "prune --dry-run must not rewrite the index"
+if grep -Eq '^(rm |invalidation )' "$MOCK_AWS_LOG"; then
+  die "prune --dry-run must not delete or invalidate"
+fi
 pass
 
 : > "$MOCK_AWS_LOG"
 expect_ok "prune should delete the retired versions, rewrite the index and invalidate the CDN" \
   run_cli prune "$TEST_RELEASE_VERSION" --json
-jq -e '
+jq -e --arg retired "$RETIRED" '
   .applied == true
-  and .deleted == ["0.0.1"]
+  and .deleted == [$retired]
   and .index.releasesAfter == 1
   and .deletedObjects == 1
   and .cdn.distributionId == "EMOCK"
   and .cdn.invalidationId == "ITEST"
 ' "$WORK/stdout" >/dev/null || { cat "$WORK/stdout" >&2; die "prune JSON is wrong"; }
-[ ! -e "$MOCK_BUCKET_DIR/releases/0.0.1" ] || die "prune must delete the retired version directory"
+[ ! -e "$MOCK_BUCKET_DIR/releases/$RETIRED" ] || die "prune must delete the retired version directory"
 [ -f "$MOCK_BUCKET_DIR/releases/$TEST_RELEASE_VERSION/madi-$TEST_RELEASE_VERSION-arm64.dmg" ] \
   || die "prune must keep the live stable version"
 jq -e --arg version "$TEST_RELEASE_VERSION" '.channels.stable == $version and (.releases | length == 1)' \
   "$MOCK_BUCKET_DIR/releases/index.json" >/dev/null || die "the index must list only the kept version"
 [ "$(json_field "$WORK/s3/test-bucket/madi/channels/stable/latest.json" '.version')" = "$TEST_RELEASE_VERSION" ] \
   || die "prune must not touch the channel feed"
-grep -q '^rm s3://test-bucket/madi/releases/0.0.1/$' "$MOCK_AWS_LOG" || die "prune must delete by version prefix"
-grep -q '^invalidation .*--paths /releases/0.0.1/madi-0.0.1-arm64.dmg --query' "$MOCK_AWS_LOG" || die "prune must invalidate the deleted object's exact path"
-[ -f "$TEST_RELEASE_ROOT/prune.json" ] || die "prune must record its result next to the version artifacts"
+grep -Fxq "rm s3://test-bucket/madi/releases/$RETIRED/" "$MOCK_AWS_LOG" || die "prune must delete by version prefix"
+grep -Fq "invalidation cloudfront create-invalidation --distribution-id EMOCK --paths /releases/$RETIRED/madi-$RETIRED-arm64.dmg --query" "$MOCK_AWS_LOG" \
+  || { cat "$MOCK_AWS_LOG" >&2; die "prune must invalidate the deleted object's exact path"; }
+apply_run="$(json_field "$WORK/stdout" '.runDir')"
+case "$apply_run" in
+  "$TEST_RELEASE_ROOT"/prune/*-apply-*) ;;
+  *) die "prune must record its run under the version's release root (got: $apply_run)" ;;
+esac
+[ -f "$apply_run/prune.json" ] && [ -f "$apply_run/release-index.before.json" ] \
+  || die "the apply run must keep its result and the index it started from"
+pass
+
+expect_ok "a dry run after an apply should succeed with nothing left to retire" \
+  run_cli prune "$TEST_RELEASE_VERSION" --dry-run --json
+dry_run="$(json_field "$WORK/stdout" '.runDir')"
+[ "$dry_run" != "$apply_run" ] || die "every prune run needs its own directory"
+jq -e '.applied == false and .deleted == []' "$WORK/stdout" >/dev/null || die "a second prune should find nothing to retire"
+jq -e --arg retired "$RETIRED" '.applied == true and .deleted == [$retired]' "$apply_run/prune.json" >/dev/null \
+  || die "a later dry run must not overwrite the apply run's record"
+jq -e '.releases | length == 2' "$apply_run/release-index.before.json" >/dev/null \
+  || die "the apply run's pre-prune index must survive a later dry run"
 pass
 
 printf 'madi_release tests passed: %d, skipped: %d\n' "$pass_count" "$skip_count"

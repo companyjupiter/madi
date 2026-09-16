@@ -139,9 +139,12 @@ paths allow 3000). The distribution is found by the base URL's alias, or pinned 
 (`cdn.note`), never fatal. `--dry-run` emits the same JSON (`deleted`, `kept`,
 `skipped` non-SemVer directories, index counts) without uploading, deleting, or
 invalidating. The bucket is versioned, so deleted objects become non-current
-versions that the owner can still restore; public URLs return 404. `prune`
-skips the build gates and records its result in
-`build/local-release/<version>/prune.json` next to the pre/post index copies.
+versions that the owner can still restore; their public URLs answer 403.
+`prune` skips the build gates. Every run keeps its own evidence directory,
+`build/local-release/<version>/prune/<UTC stamp>-<apply|dry-run>-<pid>/`
+(`prune.json`, `release-index.before.json` / `release-index.after.json`,
+`deleted-keys.json`; the JSON's `runDir` names it), so a later dry run never
+overwrites the record of an applied one.
 The S3 work lives in `apps/macos/scripts/prune_s3_releases.sh`
 (`tests/prune_s3_releases_test.sh`).
 

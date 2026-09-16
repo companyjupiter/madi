@@ -99,6 +99,7 @@ JSON_MODE=0
 BETA_EXPIRY=""
 REQUIRE_NOTARIZED=0
 DRY_RUN=0
+PRUNE_DIR=""
 SIGNING_MODE=""
 SIGNING_REASON=""
 
@@ -669,15 +670,21 @@ save_manifest() {
 }
 
 # Retire every published version except VERSION. The S3 work lives in
-# prune_s3_releases.sh (index rewrite first, then deletes, then one CDN
-# invalidation); this wrapper resolves configuration and records the result next
-# to the version's own artifacts.
+# prune_s3_releases.sh (index rewrite first, then deletes, then exact-path CDN
+# invalidations). Every run keeps its own evidence directory,
+# <release root>/prune/<UTC stamp>-<apply|dry-run>-<pid>/ (index before/after,
+# deleted keys, result), so a later dry run can never overwrite the record of an
+# applied one. A refused or failed run writes no prune.json; the files the script
+# already wrote stay for diagnosis.
 prune_release() {
-  local apply=true result="$RELEASE_ROOT/prune.json"
-  [ "$DRY_RUN" = 0 ] || apply=false
-  mkdir -p "$RELEASE_ROOT"
-  "$HERE/prune_s3_releases.sh" "$RELEASE_ROOT" "$RELEASE_BUCKET" "$DOWNLOAD_BASE_URL" "$RELEASE_PREFIX" \
-    "$VERSION" "$apply" > "$result.tmp"
+  local mode=apply apply=true raw
+  if [ "$DRY_RUN" = 1 ]; then
+    mode=dry-run
+    apply=false
+  fi
+  PRUNE_DIR="$RELEASE_ROOT/prune/$(date -u '+%Y%m%dT%H%M%SZ')-$mode-$$"
+  raw="$("$HERE/prune_s3_releases.sh" "$PRUNE_DIR" "$RELEASE_BUCKET" "$DOWNLOAD_BASE_URL" "$RELEASE_PREFIX" \
+    "$VERSION" "$apply")"
   jq \
     --arg command "$COMMAND" \
     --arg version "$VERSION" \
@@ -685,9 +692,9 @@ prune_release() {
     --arg bucket "$RELEASE_BUCKET" \
     --arg prefix "$RELEASE_PREFIX" \
     --arg latest_url "${DOWNLOAD_BASE_URL%/}/channels/$CHANNEL/latest.json" \
-    '{command: $command, version: $version, channel: $channel, bucket: $bucket, prefix: $prefix, latestUrl: $latest_url} + .' \
-    "$result.tmp" > "$result"
-  rm -f "$result.tmp"
+    --arg run_dir "$PRUNE_DIR" \
+    '{command: $command, version: $version, channel: $channel, bucket: $bucket, prefix: $prefix, latestUrl: $latest_url, runDir: $run_dir} + .' \
+    <<<"$raw" > "$PRUNE_DIR/prune.json"
 }
 
 emit_plan_json() {
@@ -838,9 +845,9 @@ esac
 
 if [ "$COMMAND" = prune ]; then
   if [ "$JSON_MODE" = 1 ]; then
-    cat "$RELEASE_ROOT/prune.json"
+    cat "$PRUNE_DIR/prune.json"
   fi
-  log "✅ prune result recorded in $RELEASE_ROOT/prune.json"
+  log "✅ prune result recorded in $PRUNE_DIR/prune.json"
   exit 0
 fi
 

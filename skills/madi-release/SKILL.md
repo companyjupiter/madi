@@ -45,7 +45,7 @@ Do not reimplement release logic, mutate S3 directly, or hand-edit `index.json`.
    - index URL
    - whether publish actually occurred
 
-   After `prune`, report instead: `deleted` and `kept` versions, `index.releasesBefore` → `index.releasesAfter`, `cdn.invalidationId` (or `cdn.note` when the CDN step did not run), and whether `applied` is true.
+   After `prune`, report instead: `deleted` and `kept` versions, `index.releasesBefore` → `index.releasesAfter`, `cdn.invalidationId` (or `cdn.note` when the CDN step did not run), whether `applied` is true, and `runDir` (that run's evidence directory).
 
 ## Command Rules
 
