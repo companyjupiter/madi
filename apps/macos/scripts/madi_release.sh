@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-usage: madi_release.sh <plan|build|upload|publish|promote-github> <version> [--offline] [--skip-tests] [--beta-expiry YYYY-MM-DD] [--json]
+usage: madi_release.sh <plan|build|upload|publish|promote-github|prune> <version> [--offline] [--skip-tests] [--beta-expiry YYYY-MM-DD] [--dry-run] [--json]
 
 Subcommands:
   plan            show resolved release configuration with no side effects
@@ -11,12 +11,16 @@ Subcommands:
   upload          build or reuse local DMG artifacts and upload immutable versioned objects to S3
   publish         build or reuse local DMG artifacts, upload them to S3, and advance channel/index metadata
   promote-github  legacy flow: reuse the existing GitHub Release DMG asset, publish it to S3, and undraft the GitHub Release
+  prune           retire every published version except <version>, which must already be the
+                  live stable: rewrite releases/index.json, delete the other releases/<v>/
+                  objects, invalidate their CDN paths; --dry-run previews; skips the build gates
 
 Common options:
   --offline            include the offline DMG in local/build/upload/publish flows
   --skip-tests         skip release gates
   --beta-expiry        override beta/rc expiry date (YYYY-MM-DD)
   --json               write only one JSON object to stdout; all logs go to stderr
+  --dry-run            prune only: list what would be deleted without touching S3 or the CDN
   --require-notarized  fail build/upload/publish unless Developer ID signing +
                        notarization credentials are available
 
@@ -78,7 +82,7 @@ case "$COMMAND" in
     usage
     exit 0
     ;;
-  plan|build|upload|publish|promote-github) ;;
+  plan|build|upload|publish|promote-github|prune) ;;
   *)
     die "unknown subcommand: $COMMAND"
     ;;
@@ -94,6 +98,7 @@ RUN_TESTS=1
 JSON_MODE=0
 BETA_EXPIRY=""
 REQUIRE_NOTARIZED=0
+DRY_RUN=0
 SIGNING_MODE=""
 SIGNING_REASON=""
 
@@ -116,6 +121,9 @@ while [ "$#" -gt 0 ]; do
     --require-notarized)
       REQUIRE_NOTARIZED=1
       ;;
+    --dry-run)
+      DRY_RUN=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -129,6 +137,9 @@ done
 
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]] \
   || die "version must be full SemVer without leading v"
+if [ "$DRY_RUN" = 1 ] && [ "$COMMAND" != prune ]; then
+  die "--dry-run only applies to prune"
+fi
 
 CHANNEL=stable
 [[ "$VERSION" == *-beta.* ]] && CHANNEL=beta
@@ -203,6 +214,7 @@ run_release_gates() {
 
   "$HERE/tests/publish_s3_release_test.sh" >&2
   "$HERE/tests/madi_release_test.sh" >&2
+  "$HERE/tests/prune_s3_releases_test.sh" >&2
   (cd "$ROOT/apps/macos" && swift test) >&2
 }
 
@@ -278,7 +290,7 @@ run_preflight() {
     esac
   fi
   case "$COMMAND" in
-    upload|publish|promote-github)
+    upload|publish|promote-github|prune)
       require_cmd aws
       aws sts get-caller-identity >/dev/null
       ;;
@@ -656,6 +668,28 @@ save_manifest() {
 
 }
 
+# Retire every published version except VERSION. The S3 work lives in
+# prune_s3_releases.sh (index rewrite first, then deletes, then one CDN
+# invalidation); this wrapper resolves configuration and records the result next
+# to the version's own artifacts.
+prune_release() {
+  local apply=true result="$RELEASE_ROOT/prune.json"
+  [ "$DRY_RUN" = 0 ] || apply=false
+  mkdir -p "$RELEASE_ROOT"
+  "$HERE/prune_s3_releases.sh" "$RELEASE_ROOT" "$RELEASE_BUCKET" "$DOWNLOAD_BASE_URL" "$RELEASE_PREFIX" \
+    "$VERSION" "$apply" > "$result.tmp"
+  jq \
+    --arg command "$COMMAND" \
+    --arg version "$VERSION" \
+    --arg channel "$CHANNEL" \
+    --arg bucket "$RELEASE_BUCKET" \
+    --arg prefix "$RELEASE_PREFIX" \
+    --arg latest_url "${DOWNLOAD_BASE_URL%/}/channels/$CHANNEL/latest.json" \
+    '{command: $command, version: $version, channel: $channel, bucket: $bucket, prefix: $prefix, latestUrl: $latest_url} + .' \
+    "$result.tmp" > "$result"
+  rm -f "$result.tmp"
+}
+
 emit_plan_json() {
   local action_build=0 action_upload=0 action_publish=0 action_promote_github=0
   local requires_aws=0 requires_gh=0
@@ -773,7 +807,7 @@ if [ "$COMMAND" = plan ]; then
   exit 0
 fi
 
-if [ "$RUN_TESTS" = 1 ]; then
+if [ "$RUN_TESTS" = 1 ] && [ "$COMMAND" != prune ]; then
   run_release_gates
 fi
 
@@ -797,7 +831,18 @@ case "$COMMAND" in
     publish_github_release_notes
     save_manifest "published" "github-release" true
     ;;
+  prune)
+    prune_release
+    ;;
 esac
+
+if [ "$COMMAND" = prune ]; then
+  if [ "$JSON_MODE" = 1 ]; then
+    cat "$RELEASE_ROOT/prune.json"
+  fi
+  log "✅ prune result recorded in $RELEASE_ROOT/prune.json"
+  exit 0
+fi
 
 if [ "$JSON_MODE" = 1 ]; then
   cat "$RELEASE_ROOT/manifest.json"

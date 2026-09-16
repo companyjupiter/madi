@@ -35,6 +35,7 @@ Do not reimplement release logic, mutate S3 directly, or hand-edit `index.json`.
    - `upload` — local build or reuse, then immutable S3 upload only
    - `publish` — local build or reuse, immutable S3 upload, then channel/index publish
    - `promote-github` — legacy GitHub Release asset promotion; use only when explicitly requested
+   - `prune` — retire every published version except `<version>` (S3 objects, index entries, CDN cache); only when the user explicitly asks to delete or retire old versions, and only after `<version>` is the live stable
 
 4. After any non-plan action, read the JSON manifest and report:
    - artifact path
@@ -43,6 +44,8 @@ Do not reimplement release logic, mutate S3 directly, or hand-edit `index.json`.
    - latest URL
    - index URL
    - whether publish actually occurred
+
+   After `prune`, report instead: `deleted` and `kept` versions, `index.releasesBefore` → `index.releasesAfter`, `cdn.invalidationId` (or `cdn.note` when the CDN step did not run), and whether `applied` is true.
 
 ## Command Rules
 
@@ -71,6 +74,14 @@ Do not reimplement release logic, mutate S3 directly, or hand-edit `index.json`.
   apps/macos/scripts/madi_release.sh promote-github <version> --json
   ```
 
+- To retire old versions, only an explicit request to delete or remove past versions authorizes:
+
+  ```bash
+  apps/macos/scripts/madi_release.sh prune <version> --dry-run --json   # preview first
+  apps/macos/scripts/madi_release.sh prune <version> --json             # then apply
+  ```
+
+  Always run the dry run first and report `deleted`, `kept`, and `skipped` before applying. `prune` refuses to run unless `<version>` is already the live `channels.stable`. Deleting GitHub Releases and tags is a separate `gh`/`git` step (docs/RELEASE.md §Retention), not part of the CLI.
 - Never run raw `aws s3`, `aws cloudfront`, or manual `jq` edits against release metadata when this skill applies.
 - Never edit `releases/index.json` by hand.
 - Never use `--skip-tests` unless the user explicitly requests it.

@@ -115,6 +115,7 @@ apps/macos/scripts/madi_release.sh build 0.1.0 --json
 apps/macos/scripts/madi_release.sh upload 0.1.0 --json
 apps/macos/scripts/madi_release.sh publish 0.1.0 --json
 apps/macos/scripts/madi_release.sh promote-github 0.1.0 --json
+apps/macos/scripts/madi_release.sh prune 0.1.0 --dry-run --json
 ```
 
 `plan` is read-only. `build` creates or reuses local artifacts. `upload`
@@ -123,6 +124,24 @@ local release path: it builds or reuses the local DMG, uploads the immutable S3
 artifacts, and then advances `releases/index.json` and
 `channels/<channel>/latest.json`. `promote-github` is the legacy path that
 reuses an existing GitHub Release DMG asset before publishing to S3.
+
+`prune <version>` retires every other published version. It refuses to run unless
+the live `channels.stable` already is `<version>` (publish first), then rewrites
+`releases/index.json` down to the versions a channel pointer still names
+(stable/beta/rc) **before** deleting the other `releases/<v>/` prefixes —
+including orphan directories that never made it into the index — and finally
+creates one CloudFront invalidation for the deleted paths (versioned objects are
+served `immutable`, so without it retired DMGs would stay downloadable from the
+edge). The distribution is found by the base URL's alias, or pinned with
+`MADI_CLOUDFRONT_DISTRIBUTION_ID`; an invalidation failure is reported in the JSON
+(`cdn.note`), never fatal. `--dry-run` emits the same JSON (`deleted`, `kept`,
+`skipped` non-SemVer directories, index counts) without uploading, deleting, or
+invalidating. The bucket is versioned, so deleted objects become non-current
+versions that the owner can still restore; public URLs return 404. `prune`
+skips the build gates and records its result in
+`build/local-release/<version>/prune.json` next to the pre/post index copies.
+The S3 work lives in `apps/macos/scripts/prune_s3_releases.sh`
+(`tests/prune_s3_releases_test.sh`).
 
 `apps/macos/scripts/release_local_free.sh` now acts as a compatibility wrapper:
 default = `build`, `--upload` = `upload`, `--publish-local` = `publish`, and
@@ -210,6 +229,37 @@ The tag sequence is therefore allowed to have gaps. `v0.1.3` does not exist and
 should not be created: 0.1.3 and 0.1.4 were both built from `450e527`, so
 `v0.1.4` already tags that tree and a second tag on the same commit would only
 make `git describe` ambiguous.
+
+### Retention: only the current stable stays published
+
+Since 2026-09-16 a release supersedes its predecessors completely: after a
+stable publish, `madi_release.sh prune <version>` removes every other version
+from S3 and the index, and the older GitHub Releases are deleted together with
+their tags (`gh release delete <tag> --cleanup-tag`, plus `git push origin
+--delete <tag>` for tags that had no Release). Only one `v<version>` tag and one
+GitHub Release exist at a time. The commits themselves stay in history; the
+retired tags are recorded here so a released binary can still be traced:
+
+| version | published | tag | commit | DMG sha256 (prefix) |
+|---|---|---|---|---|
+| 0.3.21 | 2026-09-08 | `v0.3.21` | `d43c1327d035` | `83b63b5d5cd2…` |
+| 0.3.7 | 2026-09-03 | — | — | `47a94c2484df…` |
+| 0.3.1 | 2026-09-02 | — | — | `2ca81846097b…` |
+| 0.3.0 | 2026-08-31 | — | — | `b94cea410f8a…` |
+| 0.2.0 | 2026-08-30 | `v0.2.0` | `8a921ea865a6` | `c9d566a2f557…` |
+| 0.1.9 | 2026-08-11 | `v0.1.9` | `c0f4634d4714` | `6094da37690e…` |
+| 0.1.8 | 2026-08-10 | `v0.1.8` | `1abc087f318f` | `15ceb2121119…` |
+| 0.1.7 | 2026-08-04 | `v0.1.7` | `92b0dba892b1` | `1522671cece7…` |
+| 0.1.6 | 2026-07-31 | `v0.1.6` | `f8f3dec5c53f` | `0c07417e325c…` |
+| 0.1.5 | 2026-07-26 | `v0.1.5` | `6bd587e65628` | `ecffd72fcdc9…` |
+| 0.1.4 | 2026-07-22 | `v0.1.4` | `450e5272637f` | `695e1b1c9b06…` |
+| 0.1.3 | 2026-07-22 | — | — | `fb6f60651522…` |
+| 0.1.2 | 2026-07-20 | `v0.1.2` | `f05397bafb1c` | `b45eb0fd34fa…` |
+| 0.1.1 | 2026-07-20 | `v0.1.1` | `17f107c9e875` | `467d162d5abe…` |
+| 0.1.0 | 2026-07-19 | `v0.1.0` | `ead0084e4b9e` | `1ebfb40a6934…` |
+
+0.9.0 was an orphan S3 directory from the abandoned beta line (never indexed);
+its release and tag had already been deleted on 2026-07-19.
 
 ---
 

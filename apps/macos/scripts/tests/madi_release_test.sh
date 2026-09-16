@@ -175,6 +175,53 @@ if [ "${1:-}" = "s3" ] && [ "${2:-}" = "cp" ]; then
   esac
   exit 0
 fi
+if [ "${1:-}" = "s3" ] && [ "${2:-}" = "rm" ]; then
+  uri="$3"
+  shift 3
+  recursive=0
+  for arg in "$@"; do
+    if [ "$arg" = --recursive ]; then
+      recursive=1
+    fi
+  done
+  printf 'rm %s\n' "$uri" >> "$MOCK_AWS_LOG"
+  path="$(mock_s3_path "$uri")"
+  if [ "$recursive" = 1 ]; then
+    rm -rf "$path"
+  else
+    rm -f "$path"
+  fi
+  exit 0
+fi
+if [ "${1:-}" = "s3api" ] && [ "${2:-}" = "list-objects-v2" ]; then
+  shift 2
+  bucket=""
+  prefix=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --bucket) bucket="$2"; shift 2 ;;
+      --prefix) prefix="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  dir="$MOCK_S3_ROOT/$bucket/$prefix"
+  if [ -d "$dir" ]; then
+    find "$dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
+      | sort | sed "s|^|$prefix|; s|\$|/|" | jq -R . | jq -s .
+  else
+    printf 'null\n'
+  fi
+  exit 0
+fi
+if [ "${1:-}" = "cloudfront" ] && [ "${2:-}" = "list-distributions" ]; then
+  printf 'None\n'
+  exit 0
+fi
+if [ "${1:-}" = "cloudfront" ] && [ "${2:-}" = "create-invalidation" ]; then
+  printf 'invalidation %s\n' "$*" >> "$MOCK_AWS_LOG"
+  printf 'ITEST\n'
+  exit 0
+fi
 printf 'unsupported fake aws invocation: %s\n' "$*" >&2
 exit 2
 SH
@@ -257,6 +304,7 @@ run_cli() {
   SPARKLE_ALLOW_UNSIGNED_APPCAST=1 \
   MOCK_S3_ROOT="$WORK/s3" \
   MOCK_AWS_LOG="$MOCK_AWS_LOG" \
+  MADI_CLOUDFRONT_DISTRIBUTION_ID=EMOCK \
   MOCK_GH_ASSET_NAME="${MOCK_GH_ASSET_NAME:-madi-1.2.3-arm64.dmg}" \
   MOCK_GH_ASSET_SHA256="${MOCK_GH_ASSET_SHA256:-0000000000000000000000000000000000000000000000000000000000000000}" \
   "$CLI" "$@"
@@ -461,6 +509,57 @@ jq -s -e \
 if grep -q "madi-$TEST_RELEASE_VERSION-offline-arm64.dmg" "$MOCK_AWS_LOG"; then
   die "promote-github should not send a stale offline dmg to fake S3"
 fi
+pass
+
+# ── prune: retire every published version except the live stable ───────────
+MOCK_BUCKET_DIR="$WORK/s3/test-bucket/madi"
+mkdir -p "$MOCK_BUCKET_DIR/releases/0.0.1"
+printf 'retired\n' > "$MOCK_BUCKET_DIR/releases/0.0.1/madi-0.0.1-arm64.dmg"
+jq '.releases += [{version: "0.0.1", platform: "macos-arm64", objectKey: "madi/releases/0.0.1/madi-0.0.1-arm64.dmg", sha256: "0000000000000000000000000000000000000000000000000000000000000000", size: 1, publishedAt: "2026-01-01T00:00:00Z"}]' \
+  "$MOCK_BUCKET_DIR/releases/index.json" > "$WORK/index.tmp"
+mv "$WORK/index.tmp" "$MOCK_BUCKET_DIR/releases/index.json"
+
+expect_fail "--dry-run must be rejected outside prune" run_cli plan "$TEST_RELEASE_VERSION" --dry-run --json
+expect_fail "prune must refuse a version that is not the live stable" run_cli prune 0.0.1 --json
+[ -f "$MOCK_BUCKET_DIR/releases/0.0.1/madi-0.0.1-arm64.dmg" ] || die "a refused prune must not delete anything"
+jq -e '.releases | length == 2' "$MOCK_BUCKET_DIR/releases/index.json" >/dev/null || die "a refused prune must not rewrite the index"
+pass
+
+expect_ok "prune --dry-run should report the retired versions without deleting" \
+  run_cli prune "$TEST_RELEASE_VERSION" --dry-run --json
+jq -e --arg version "$TEST_RELEASE_VERSION" '
+  .command == "prune"
+  and .version == $version
+  and .applied == false
+  and .kept == [$version]
+  and .deleted == ["0.0.1"]
+  and .index.releasesBefore == 2
+  and .index.releasesAfter == 1
+' "$WORK/stdout" >/dev/null || { cat "$WORK/stdout" >&2; die "prune --dry-run JSON is wrong"; }
+[ -f "$MOCK_BUCKET_DIR/releases/0.0.1/madi-0.0.1-arm64.dmg" ] || die "prune --dry-run must not delete"
+jq -e '.releases | length == 2' "$MOCK_BUCKET_DIR/releases/index.json" >/dev/null || die "prune --dry-run must not rewrite the index"
+pass
+
+: > "$MOCK_AWS_LOG"
+expect_ok "prune should delete the retired versions, rewrite the index and invalidate the CDN" \
+  run_cli prune "$TEST_RELEASE_VERSION" --json
+jq -e '
+  .applied == true
+  and .deleted == ["0.0.1"]
+  and .index.releasesAfter == 1
+  and .cdn.distributionId == "EMOCK"
+  and .cdn.invalidationId == "ITEST"
+' "$WORK/stdout" >/dev/null || { cat "$WORK/stdout" >&2; die "prune JSON is wrong"; }
+[ ! -e "$MOCK_BUCKET_DIR/releases/0.0.1" ] || die "prune must delete the retired version directory"
+[ -f "$MOCK_BUCKET_DIR/releases/$TEST_RELEASE_VERSION/madi-$TEST_RELEASE_VERSION-arm64.dmg" ] \
+  || die "prune must keep the live stable version"
+jq -e --arg version "$TEST_RELEASE_VERSION" '.channels.stable == $version and (.releases | length == 1)' \
+  "$MOCK_BUCKET_DIR/releases/index.json" >/dev/null || die "the index must list only the kept version"
+[ "$(json_field "$WORK/s3/test-bucket/madi/channels/stable/latest.json" '.version')" = "$TEST_RELEASE_VERSION" ] \
+  || die "prune must not touch the channel feed"
+grep -q '^rm s3://test-bucket/madi/releases/0.0.1/$' "$MOCK_AWS_LOG" || die "prune must delete by version prefix"
+grep -q '^invalidation .*/releases/0.0.1/\*' "$MOCK_AWS_LOG" || die "prune must invalidate the deleted version path"
+[ -f "$TEST_RELEASE_ROOT/prune.json" ] || die "prune must record its result next to the version artifacts"
 pass
 
 printf 'madi_release tests passed: %d, skipped: %d\n' "$pass_count" "$skip_count"
