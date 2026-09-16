@@ -130,9 +130,11 @@ the live `channels.stable` already is `<version>` (publish first), then rewrites
 `releases/index.json` down to the versions a channel pointer still names
 (stable/beta/rc) **before** deleting the other `releases/<v>/` prefixes —
 including orphan directories that never made it into the index — and finally
-creates one CloudFront invalidation for the deleted paths (versioned objects are
-served `immutable`, so without it retired DMGs would stay downloadable from the
-edge). The distribution is found by the base URL's alias, or pinned with
+invalidates the deleted objects' exact CDN paths, listed before deletion
+(versioned objects are served `immutable`, so without it retired DMGs would stay
+downloadable from the edge; wildcard invalidations are capped at 15 in progress
+per distribution — the first real prune of 16 versions hit that — while exact
+paths allow 3000). The distribution is found by the base URL's alias, or pinned with
 `MADI_CLOUDFRONT_DISTRIBUTION_ID`; an invalidation failure is reported in the JSON
 (`cdn.note`), never fatal. `--dry-run` emits the same JSON (`deleted`, `kept`,
 `skipped` non-SemVer directories, index counts) without uploading, deleting, or

@@ -72,8 +72,22 @@ BEFORE_COUNT="$(jq '.releases | length' "$CURRENT")"
 AFTER_COUNT="$(jq '.releases | length' "$NEXT")"
 
 # 4. Versioned objects are served immutable (max-age one year), so a delete
-#    alone leaves cached DMGs downloadable at the edge. Find the distribution
-#    that fronts BASE_URL unless one is pinned.
+#    alone leaves cached DMGs downloadable at the edge. Their keys are listed
+#    BEFORE deletion and invalidated as exact paths: wildcard invalidations are
+#    capped at 15 in progress per distribution (one prune of 16 versions already
+#    exceeds that), exact paths at 3000.
+KEYS_FILE="$WORK/deleted-keys.json"
+: > "$WORK/deleted-keys.txt"
+while IFS= read -r version; do
+  [ -n "$version" ] || continue
+  aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "$RELEASES_PREFIX$version/" \
+    --query 'Contents[].Key' --output json \
+    | jq -r '(. // [])[] | strings' >> "$WORK/deleted-keys.txt"
+done < <(jq -r '.[]' <<<"$DELETE_JSON")
+jq -R -s 'split("\n") | map(select(. != "")) | unique' "$WORK/deleted-keys.txt" > "$KEYS_FILE"
+rm -f "$WORK/deleted-keys.txt"
+DELETED_OBJECTS="$(jq 'length' "$KEYS_FILE")"
+
 DISTRIBUTION_ID="${MADI_CLOUDFRONT_DISTRIBUTION_ID:-}"
 CDN_NOTE=""
 if [ -z "$DISTRIBUTION_ID" ]; then
@@ -89,7 +103,21 @@ if [ -z "$DISTRIBUTION_ID" ]; then
   esac
 fi
 
-INVALIDATION_ID=""
+INVALIDATION_IDS_JSON='[]'
+submit_invalidation() {
+  local id
+  if id="$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
+      --paths "$@" --query Invalidation.Id --output text 2>"$WORK/cdn-invalidation-error.txt")"; then
+    rm -f "$WORK/cdn-invalidation-error.txt"
+    INVALIDATION_IDS_JSON="$(jq -c --arg id "$id" '. + [$id]' <<<"$INVALIDATION_IDS_JSON")"
+    echo "  CloudFront invalidation $id on $DISTRIBUTION_ID ($# paths)" >&2
+    return 0
+  fi
+  CDN_NOTE="create-invalidation failed on $DISTRIBUTION_ID: $(tr '\n' ' ' < "$WORK/cdn-invalidation-error.txt")"
+  echo "  ⚠ $CDN_NOTE" >&2
+  return 1
+}
+
 if [ "$APPLY" = true ]; then
   aws s3 cp "$NEXT" "s3://$BUCKET/$INDEX_KEY" --content-type application/json \
     --cache-control 'no-cache, no-store, must-revalidate' --only-show-errors
@@ -99,20 +127,18 @@ if [ "$APPLY" = true ]; then
     aws s3 rm "s3://$BUCKET/$RELEASES_PREFIX$version/" --recursive --only-show-errors
     echo "  deleted $RELEASES_PREFIX$version/" >&2
   done < <(jq -r '.[]' <<<"$DELETE_JSON")
-  if [ -n "$DISTRIBUTION_ID" ] && [ "$DELETE_COUNT" -gt 0 ]; then
+  if [ -n "$DISTRIBUTION_ID" ] && [ "$DELETED_OBJECTS" -gt 0 ]; then
     paths=()
-    while IFS= read -r version; do
-      [ -n "$version" ] || continue
-      paths+=("/releases/$version/*")
-    done < <(jq -r '.[]' <<<"$DELETE_JSON")
-    if INVALIDATION_ID="$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
-        --paths "${paths[@]}" --query Invalidation.Id --output text 2>"$WORK/cdn-invalidation-error.txt")"; then
-      rm -f "$WORK/cdn-invalidation-error.txt"
-      echo "  CloudFront invalidation $INVALIDATION_ID on $DISTRIBUTION_ID (${#paths[@]} paths)" >&2
-    else
-      INVALIDATION_ID=""
-      CDN_NOTE="create-invalidation failed on $DISTRIBUTION_ID: $(tr '\n' ' ' < "$WORK/cdn-invalidation-error.txt")"
-      echo "  ⚠ $CDN_NOTE" >&2
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      paths+=("$path")
+      if [ "${#paths[@]}" -ge 3000 ]; then
+        submit_invalidation "${paths[@]}" || break
+        paths=()
+      fi
+    done < <(jq -r --arg prefix "$PREFIX/" '.[] | "/" + ltrimstr($prefix)' "$KEYS_FILE")
+    if [ "${#paths[@]}" -gt 0 ] && [ -z "$CDN_NOTE" ]; then
+      submit_invalidation "${paths[@]}" || true
     fi
   fi
 fi
@@ -122,6 +148,7 @@ jq -n \
   --arg keep_version "$KEEP_VERSION" \
   --argjson kept "$KEEP_JSON" \
   --argjson deleted "$DELETE_JSON" \
+  --argjson deleted_objects "$DELETED_OBJECTS" \
   --argjson skipped "$SKIPPED_JSON" \
   --arg index_key "$INDEX_KEY" \
   --arg index_url "$BASE_URL/releases/index.json" \
@@ -129,8 +156,9 @@ jq -n \
   --argjson after "$AFTER_COUNT" \
   --arg before_file "$CURRENT" \
   --arg after_file "$NEXT" \
+  --arg keys_file "$KEYS_FILE" \
   --arg distribution "$DISTRIBUTION_ID" \
-  --arg invalidation "$INVALIDATION_ID" \
+  --argjson invalidations "$INVALIDATION_IDS_JSON" \
   --arg cdn_note "$CDN_NOTE" \
   '
     {
@@ -139,6 +167,8 @@ jq -n \
       keepVersion: $keep_version,
       kept: $kept,
       deleted: $deleted,
+      deletedObjects: $deleted_objects,
+      deletedKeysFile: $keys_file,
       skipped: $skipped,
       index: {
         key: $index_key,
@@ -150,14 +180,15 @@ jq -n \
       },
       cdn: {
         distributionId: (if $distribution == "" then null else $distribution end),
-        invalidationId: (if $invalidation == "" then null else $invalidation end),
+        invalidationId: ($invalidations[0] // null),
+        invalidationIds: $invalidations,
         note: (if $cdn_note == "" then null else $cdn_note end)
       }
     }
   '
 
 if [ "$APPLY" = true ]; then
-  echo "✅ pruned $DELETE_COUNT retired version(s); $INDEX_KEY now lists $AFTER_COUNT release(s)" >&2
+  echo "✅ pruned $DELETE_COUNT retired version(s), $DELETED_OBJECTS object(s); $INDEX_KEY now lists $AFTER_COUNT release(s)" >&2
 else
-  echo "ℹ️  dry run: $DELETE_COUNT version(s) would be deleted; nothing changed" >&2
+  echo "ℹ️  dry run: $DELETE_COUNT version(s), $DELETED_OBJECTS object(s) would be deleted; nothing changed" >&2
 fi

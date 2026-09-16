@@ -62,19 +62,23 @@ case "${1:-} ${2:-}" in
     shift 2
     bucket=""
     prefix=""
+    delimited=0
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --bucket) bucket="$2"; shift 2 ;;
         --prefix) prefix="$2"; shift 2 ;;
+        --delimiter) delimited=1; shift 2 ;;
         *) shift ;;
       esac
     done
     dir="$MOCK_S3_ROOT/$bucket/$prefix"
-    if [ -d "$dir" ]; then
+    if [ ! -d "$dir" ]; then
+      echo null
+    elif [ "$delimited" = 1 ]; then
       find "$dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
         | sort | sed "s|^|$prefix|; s|\$|/|" | jq -R . | jq -s .
     else
-      echo null
+      find "$dir" -type f ! -name '*.sha256' | sort | sed "s|^$MOCK_S3_ROOT/$bucket/||" | jq -R . | jq -s .
     fi
     exit 0
     ;;
@@ -179,6 +183,7 @@ jq -e '
   and .keepVersion == "1.1.0"
   and .kept == ["1.1.0"]
   and .deleted == ["0.8.0", "0.9.0", "1.0.0"]
+  and .deletedObjects == 6
   and .skipped == ["latest"]
   and .index.releasesBefore == 3
   and .index.releasesAfter == 1
@@ -203,6 +208,8 @@ jq -e '
   and .skipped == ["latest"]
   and .cdn.distributionId == "EABCDEF"
   and .cdn.invalidationId == "ITEST"
+  and .cdn.invalidationIds == ["ITEST"]
+  and .deletedObjects == 6
   and .cdn.note == null
 ' "$WORK/apply.json" >/dev/null || { cat "$WORK/apply.json" >&2; die "apply JSON is wrong"; }
 jq -e '.channels.stable == "1.1.0" and (.releases | length == 1) and .releases[0].version == "1.1.0"' "$INDEX" >/dev/null \
@@ -220,8 +227,11 @@ first_rm_line="$(grep -n '^s3 rm ' "$MOCK_AWS_LOG" | head -1 | cut -d: -f1)"
 grep -q '^s3 rm s3://downloads.example/madi/releases/0.9.0/ --recursive' "$MOCK_AWS_LOG" \
   || die "deletes must be recursive per version prefix"
 [ "$(grep -c '^cloudfront create-invalidation' "$MOCK_AWS_LOG")" = 1 ] || die "apply must issue exactly one invalidation"
-grep -q '^cloudfront create-invalidation --distribution-id EABCDEF --paths /releases/0.8.0/\* /releases/0.9.0/\* /releases/1.0.0/\*' "$MOCK_AWS_LOG" \
-  || { cat "$MOCK_AWS_LOG" >&2; die "invalidation must cover every deleted version path"; }
+grep -q '^cloudfront create-invalidation --distribution-id EABCDEF --paths /releases/0.8.0/madi-0.8.0-arm64.dmg /releases/0.8.0/release.json /releases/0.9.0/madi-0.9.0-arm64.dmg /releases/0.9.0/release.json /releases/1.0.0/madi-1.0.0-arm64.dmg /releases/1.0.0/release.json --query' "$MOCK_AWS_LOG" \
+  || { cat "$MOCK_AWS_LOG" >&2; die "invalidation must list every deleted object as an exact path"; }
+if grep -q 'create-invalidation.*\*' "$MOCK_AWS_LOG"; then
+  die "invalidation must not use wildcard paths (capped at 15 in progress)"
+fi
 
 # ── idempotent: a second apply deletes and invalidates nothing ─────────────
 reset_log

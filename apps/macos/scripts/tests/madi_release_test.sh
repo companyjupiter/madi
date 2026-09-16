@@ -197,19 +197,23 @@ if [ "${1:-}" = "s3api" ] && [ "${2:-}" = "list-objects-v2" ]; then
   shift 2
   bucket=""
   prefix=""
+  delimited=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --bucket) bucket="$2"; shift 2 ;;
       --prefix) prefix="$2"; shift 2 ;;
+      --delimiter) delimited=1; shift 2 ;;
       *) shift ;;
     esac
   done
   dir="$MOCK_S3_ROOT/$bucket/$prefix"
-  if [ -d "$dir" ]; then
+  if [ ! -d "$dir" ]; then
+    printf 'null\n'
+  elif [ "$delimited" = 1 ]; then
     find "$dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
       | sort | sed "s|^|$prefix|; s|\$|/|" | jq -R . | jq -s .
   else
-    printf 'null\n'
+    find "$dir" -type f ! -name '*.sha256' | sort | sed "s|^$MOCK_S3_ROOT/$bucket/||" | jq -R . | jq -s .
   fi
   exit 0
 fi
@@ -547,6 +551,7 @@ jq -e '
   .applied == true
   and .deleted == ["0.0.1"]
   and .index.releasesAfter == 1
+  and .deletedObjects == 1
   and .cdn.distributionId == "EMOCK"
   and .cdn.invalidationId == "ITEST"
 ' "$WORK/stdout" >/dev/null || { cat "$WORK/stdout" >&2; die "prune JSON is wrong"; }
@@ -558,7 +563,7 @@ jq -e --arg version "$TEST_RELEASE_VERSION" '.channels.stable == $version and (.
 [ "$(json_field "$WORK/s3/test-bucket/madi/channels/stable/latest.json" '.version')" = "$TEST_RELEASE_VERSION" ] \
   || die "prune must not touch the channel feed"
 grep -q '^rm s3://test-bucket/madi/releases/0.0.1/$' "$MOCK_AWS_LOG" || die "prune must delete by version prefix"
-grep -q '^invalidation .*/releases/0.0.1/\*' "$MOCK_AWS_LOG" || die "prune must invalidate the deleted version path"
+grep -q '^invalidation .*--paths /releases/0.0.1/madi-0.0.1-arm64.dmg --query' "$MOCK_AWS_LOG" || die "prune must invalidate the deleted object's exact path"
 [ -f "$TEST_RELEASE_ROOT/prune.json" ] || die "prune must record its result next to the version artifacts"
 pass
 
