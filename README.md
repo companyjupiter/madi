@@ -323,7 +323,21 @@ Released builds are published to the S3 `stable` channel and served through
 CloudFront; the in-app updater reads `channels/stable/latest.json`. Release
 mechanics and the git-tag rule are in [docs/RELEASE.md](docs/RELEASE.md).
 
-Published versions (S3 `releases/index.json`): 0.1.0 → 0.1.5 below, then **0.1.6**
+**Current `stable`: 0.4.0** (2026-09-16, `v0.4.0`, build 767) — and the only published
+version: non-English live line structure W/X5 (a weak speaker label cannot break a
+sentence; a weak-label island between two rows of one speaker joins that speaker),
+PreviewTrim (the gray preview starts where the committed text ends), Korean file-mode
+chunk dropouts 6/37 → 0 (F2), edited-row cascade fix (E1), stream-stop finalize (S3),
+language-correction gate (L2), number-formatter guards 4/5, translation runaway ×7 and
+example-replay retry, video import bounded by duration with streaming decode (F1).
+0.3.22 → 0.3.29 were the local verification builds of those rounds and were never
+published. **On 2026-09-16 every earlier version was retired**: S3 objects, index
+entries, GitHub Releases and their tags (`v0.1.0` … `v0.3.21`) were deleted
+(`madi_release.sh prune 0.4.0`); the tag → commit map is kept in
+[docs/RELEASE.md](docs/RELEASE.md). Everything below is history only — none of those
+DMGs are downloadable.
+
+Previously published versions (history): 0.1.0 → 0.1.5 below, then **0.1.6**
 (2026-07-31, Sparkle self-update), **0.1.7** (2026-08-05, translation display stability:
 NE-measured stable-prefix policy), **0.1.8** (2026-08-10, sentence hand-off without
 erasure + stability ledger file), **0.1.9** (2026-08-11, surface-correction rebind),
@@ -332,7 +346,7 @@ collapse live rows), **0.3.0** (2026-08-31, summary templates + live summary tab
 **0.3.1** (2026-09-02, engine headroom batch: seed prefill, forced-prefix preview and
 interim, context example), **0.3.7** (2026-09-03, live profiling rounds P0–P4: main-thread
 saturation, translation backlog, line-count-proportional CPU, STT loop guard), then
-**0.3.21** (2026-09-08, `v0.3.21`, build 742) — the current `stable`: language gate
+**0.3.21** (2026-09-08, build 742): language gate
 P5/P6 and the Hangul-only glossary prompt (P6-2), memory M1–M3, line joins L1/L2,
 translation bounds T7–T9, debug mode D1, deferred speaker numbers S1, turn grouping U1,
 seam view rules X1/X2/X4, full encoder context on quiet input (A1), input level readout.
