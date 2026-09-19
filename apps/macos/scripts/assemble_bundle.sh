@@ -28,8 +28,9 @@ for f in "${SMALL[@]}"; do
   else echo "  ⚠ missing asset: $f"; fi
 done
 
-# third-party notices ship with the bundled weights (MIT / Apache-2.0 / CC BY 4.0)
-for f in NOTICE THIRD_PARTY_LICENSES.md; do
+# Madi's own license (AGPL-3.0) and the third-party notices for the bundled
+# weights (MIT / Apache-2.0 / CC BY 4.0) ship inside the app
+for f in LICENSE NOTICE THIRD_PARTY_LICENSES.md; do
   if [ -f "$ROOT/$f" ]; then cp "$ROOT/$f" "$APP/Contents/Resources/$f"
   else echo "  ⚠ missing notice: $f"; fi
 done

@@ -109,9 +109,15 @@ in source and binary redistributions.
    Changes   : None. The framework is embedded as distributed.
 
 -------------------------------------------------------------------------------
-All other code in this repository is original work of this project.
+All other code in this repository is original work of this project:
+Copyright (C) 2026 companyjupiter and the Madi contributors, licensed under the GNU
+Affero General Public License, version 3 only (AGPL-3.0-only) — see LICENSE. The
+license covers the code; it grants no trademark rights in the name "Madi", its
+logo or its app icon.
 
 Prebuilt binaries: engine/prebuilt/translate-engine-{4b,2b} (bundled as
 Contents/MacOS/translate-engine-{4b,2b}) are built from the author's private
-sovereignLLM project. Their source is not included; they are distributed under the
+sovereignLLM project. They are separate programs the app launches as child
+processes and are NOT covered by the AGPL. Their source is not included; they are
+distributed under the
 Sovereign LLM Inference Engine License Agreement in engine/prebuilt/LICENSE.md.

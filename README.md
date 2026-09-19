@@ -378,6 +378,16 @@ per PERF_LOG entry) and were never published.
 - Ledgers: `PERF_LOG.md` (app + engine rounds since 2026-07), `engine/metal/STATUS.md` (current engine state), `engine/metal/PERF_LOG.md` (engine history), `engine/metal/PORT.md` (CUDA→Metal port notes).
 
 ## License / provenance
+**Madi's own code is free software under the GNU Affero General Public License,
+version 3 only (AGPL-3.0-only)** — see [`LICENSE`](LICENSE). Copyright (C) 2026
+companyjupiter and the Madi contributors. You may use, study, modify and redistribute
+it; a modified version you distribute, or let others use over a network, must be
+offered under the same license with its source. The license grants no trademark rights
+in the name "Madi", its logo or its app icon. The prebuilt translate engines in
+[`engine/prebuilt/`](engine/prebuilt/README.md) are separate programs the app launches
+as child processes; they are **not** covered by the AGPL and ship as binaries under
+their own agreement.
+
 Inference code is original work of this project. It reuses five third-party models
 and embeds the Sparkle update framework; their notices are retained as required and reproduced in full:
 

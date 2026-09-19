@@ -2,6 +2,10 @@
 
 Madi 的代码几乎全部为自研，但使用了五个第三方机器学习模型，并使用 Sparkle 框架实现 App 自动更新。这些许可所要求的著作权声明、署名（attribution）与变更告知，下面全部予以载明。许可原文具有法律效力，因此保留英文原文而不作翻译。
 
+## Madi 的许可
+
+Madi 自身的代码是采用 **GNU Affero General Public License v3.0**（AGPL-3.0-only）的自由软件。任何人都可以使用、研究、修改和再分发；分发修改版或通过网络向他人提供修改版时，必须以相同许可同时提供源代码。源代码位于 `github.com/companyjupiter/madi`，许可全文见 App 内附带的 `LICENSE` 文件。App 中的翻译引擎可执行文件（`translate-engine-2b`、`translate-engine-4b`）是不受 AGPL 约束的独立程序，仅以二进制形式分发。
+
 ## 组件一览
 
 | 组件 | 在 Madi 中的用途 | 分发方式 | 许可 |

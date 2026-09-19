@@ -255,8 +255,9 @@ fi
 # §4(a)(d) requires the license + NOTICE with every distribution, and CC BY 4.0
 # §3(a) requires attribution with the material. resnet34_diar.bin (CC BY 4.0),
 # silero_vad.bin and pyannote_osd.bin (MIT) are all inside this bundle, so the
-# notices ship here too — the manual footer carries the short form.
-for f in NOTICE THIRD_PARTY_LICENSES.md; do
+# notices ship here too — the manual footer carries the short form. LICENSE is
+# Madi's own AGPL-3.0 text: the license must reach everyone who receives the app.
+for f in LICENSE NOTICE THIRD_PARTY_LICENSES.md; do
   if [ -f "$ROOT/$f" ]; then
     cp "$ROOT/$f" "$BUNDLE/Contents/Resources/$f"
   else

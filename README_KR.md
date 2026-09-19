@@ -448,6 +448,13 @@ CloudFront로 `channels/<channel>/latest.json`과 `appcast.xml`을 읽고 크기
 ---
 
 ## 라이선스 / 출처
+**Madi 자체 코드는 GNU Affero General Public License v3.0(AGPL-3.0-only)의 자유 소프트웨어입니다**
+— [`LICENSE`](LICENSE) 참고. Copyright (C) 2026 companyjupiter 및 Madi 기여자. 사용·연구·수정·재배포가
+자유이며, 수정본을 배포하거나 네트워크로 남에게 쓰게 하면 같은 라이선스로 소스와 함께 제공해야
+합니다. 이 라이선스는 "Madi"라는 이름, 로고, 앱 아이콘에 대한 상표 권리를 주지 않습니다.
+[`engine/prebuilt/`](engine/prebuilt/README.md)의 사전 빌드 번역 엔진은 앱이 자식 프로세스로 실행하는
+별개 프로그램으로 AGPL 대상이 **아니며**, 별도 계약으로 바이너리만 배포합니다.
+
 추론 코드는 본 프로젝트의 독자 구현입니다. 다섯 가지 서드파티 모델을 재사용하고 앱 업데이트에
 Sparkle 프레임워크를 포함하며,
 요구되는 고지를 코드·배포물에 모두 유지합니다:
