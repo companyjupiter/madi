@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/companyjupiter/madi/security/advisories/new
+    about: Report security problems privately — never in a public issue.
+  - name: User manual
+    url: https://github.com/companyjupiter/madi/blob/main/docs/manual/ko/01-getting-started.md
+    about: How to install and use Madi (KO / EN / JA / ZH).

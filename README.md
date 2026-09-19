@@ -1,4 +1,47 @@
-# Madi — Apple Silicon (Metal)
+<p align="center"><img src="logo_madi.png" alt="Madi" width="249"></p>
+
+# Madi
+
+**On-device meeting transcription for Apple Silicon.** Madi records or imports a
+meeting and gives you a live, speaker-attributed transcript with word timestamps,
+plus optional translation, summaries and Q&A that also run on your Mac. No account,
+no API key, no cloud: audio never leaves the machine.
+
+**[Download the latest DMG](https://github.com/companyjupiter/madi/releases/latest)** ·
+[Getting started](docs/manual/en/01-getting-started.md) ·
+[한국어 README](README_KR.md) · [Contributing](CONTRIBUTING.md)
+
+- **Needs** an Apple Silicon Mac (M1 or newer) with macOS 14 or later. 8 GB of memory is enough.
+- **First launch** downloads the ~830 MB speech model once, SHA-256 verified. Translation
+  and summaries download a separate 1.3 GB or 2.8 GB model only if you turn them on.
+- **Gatekeeper:** the DMG is ad-hoc signed and not notarized yet. The first time,
+  right-click the app and choose Open.
+- **Updates** arrive in the app: Help → Install Update…
+
+## What it does
+- Live transcription from the microphone, from system audio (Teams, Zoom, a browser
+  tab), or both, and transcription of imported audio and video files.
+- Speaker diarization, word timestamps, language auto-detection, speaker names and
+  voiceprints, inline editing.
+- Export to Markdown, SRT, VTT, JSON and CSV.
+- On-device translation, meeting summaries with templates, and Q&A over the
+  transcript, run by a local DNA3.0 language model.
+- App UI in Korean, English and Japanese; the manual also in Chinese.
+
+## Build from source
+```sh
+brew install zig                              # 0.14.x; also: xcode-select --install
+git clone https://github.com/companyjupiter/madi.git && cd madi
+apps/macos/scripts/fetch_runtime_assets.sh    # seven small runtime assets, SHA-256 pinned
+apps/macos/scripts/make_app.sh                # → apps/macos/build/Madi.app
+cd apps/macos && swift test
+```
+The translate engines are prebuilt binaries in [`engine/prebuilt/`](engine/prebuilt/README.md);
+everything else builds from source. Madi is free software under the
+[AGPL-3.0](LICENSE) — see [License / provenance](#license--provenance).
+Security reports: [SECURITY.md](SECURITY.md).
+
+## The engine
 
 Self-contained Whisper **large-v3-turbo** speech-to-text for Apple Silicon, with
 **word timestamps**, **speaker diarization** (who-said-what), **language

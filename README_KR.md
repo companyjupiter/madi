@@ -1,4 +1,44 @@
-# Madiscribe — Apple Silicon (Metal) 한글 사용 가이드
+<p align="center"><img src="logo_madi.png" alt="Madi" width="249"></p>
+
+# Madi — 한글 가이드
+
+**Apple Silicon용 온디바이스 회의 전사 앱.** Madi는 회의를 녹음하거나 파일을 불러와
+화자별로 구분된 실시간 전사와 단어 타임스탬프를 만들어 줍니다. 번역, 요약, 질의응답도
+선택해서 쓸 수 있고 모두 Mac 안에서 돌아갑니다. 계정도, API 키도, 클라우드도 없습니다.
+오디오는 기기를 떠나지 않습니다.
+
+**[최신 DMG 내려받기](https://github.com/companyjupiter/madi/releases/latest)** ·
+[시작하기](docs/manual/ko/01-getting-started.md) ·
+[English README](README.md) · [기여 안내](CONTRIBUTING.md)
+
+- **필요 사양:** Apple Silicon Mac(M1 이상), macOS 14 이상. 메모리 8 GB면 충분합니다.
+- **첫 실행:** 음성 모델 약 830 MB를 한 번 내려받고 SHA-256으로 검증합니다. 번역과 요약은
+  켤 때만 별도 모델(1.3 GB 또는 2.8 GB)을 받습니다.
+- **Gatekeeper:** DMG는 ad-hoc 서명이고 아직 공증 전입니다. 처음 한 번은 앱을 우클릭해
+  "열기"를 선택하세요.
+- **업데이트:** 앱의 도움말 → 업데이트 설치…
+
+## 할 수 있는 것
+- 마이크, 시스템 오디오(Teams, Zoom, 브라우저 탭), 또는 둘 다를 실시간 전사하고, 오디오와
+  영상 파일도 전사합니다.
+- 화자 분리, 단어 타임스탬프, 언어 자동 감지, 화자 이름과 보이스프린트, 본문 편집.
+- Markdown, SRT, VTT, JSON, CSV 내보내기.
+- 로컬 DNA3.0 언어 모델로 번역, 템플릿 기반 회의 요약, 전사 내용 질의응답.
+- 앱 UI는 한국어, 영어, 일본어. 매뉴얼은 중국어까지 4개 언어.
+
+## 소스에서 빌드
+```sh
+brew install zig                              # 0.14.x, 그리고 xcode-select --install
+git clone https://github.com/companyjupiter/madi.git && cd madi
+apps/macos/scripts/fetch_runtime_assets.sh    # 작은 런타임 에셋 7개, SHA-256 고정
+apps/macos/scripts/make_app.sh                # → apps/macos/build/Madi.app
+cd apps/macos && swift test
+```
+번역 엔진은 [`engine/prebuilt/`](engine/prebuilt/README.md)의 사전 빌드 바이너리이고, 나머지는
+모두 소스에서 빌드됩니다. Madi는 [AGPL-3.0](LICENSE) 자유 소프트웨어입니다
+([라이선스 / 출처](#라이선스--출처)). 보안 제보는 [SECURITY.md](SECURITY.md)를 보세요.
+
+## 엔진
 
 Apple Silicon에서 동작하는 자체완결형 Whisper **large-v3-turbo** 음성인식기입니다.
 **워드 타임스탬프**, **화자 분리(diarization, 누가-언제-무엇을)**, **언어 자동감지**,

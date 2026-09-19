@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in Madi does not work as it should. 한국어로 작성하셔도 됩니다.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do **not** attach a debug bundle, recording or transcript of a private meeting. Issues are public.
+  - type: input
+    id: version
+    attributes:
+      label: Madi version
+      description: Help → About (for example 0.4.0)
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Mac and macOS
+      description: For example "MacBook Air M1, 8 GB, macOS 15.2"
+    validations:
+      required: true
+  - type: dropdown
+    id: input
+    attributes:
+      label: Audio source
+      options: [Microphone, System audio, Microphone + system audio, Imported file, Not related to audio]
+    validations:
+      required: true
+  - type: input
+    id: language
+    attributes:
+      label: Spoken language and translation target
+      description: For example "Korean, translated to English" or "English, no translation"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: A public clip that reproduces it (a link, not a private recording) helps the most.
+    validations:
+      required: true
