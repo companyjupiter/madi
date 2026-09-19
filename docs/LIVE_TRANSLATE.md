@@ -152,7 +152,8 @@ real meetings remains required before claiming 4B-equivalent semantic quality.
 ## Build phases
 - **P1 (DONE)**: TranslateEngine.swift (spawn + prompt + parse), Line.translation field,
   target picker, render under each line. Engine+model from a configured path
-  (dev: the sovereignLLM paths; ship: bundled binary + downloaded model).
+  (the prebuilt pair in `engine/prebuilt/`, or `TRANSLATE_ENGINE_{4B,2B}` for a fresh
+  sovereignLLM build; ship: bundled binary + downloaded model).
 - **P2**: lazy lifecycle + RAM-aware (translate XOR preview on low RAM), persistence.
 - **P3**: model download+verify flow (packaging option 2), export includes translation.
 - **P4**: KO↔ZH/JA quality A/B; optional 9B upgrade path (DNA3.0-9B.gguf also on disk).

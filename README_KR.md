@@ -257,7 +257,7 @@ WHISPER_LANG_ID=50264 ./out/transcribe assets/model.safetensors talk.wav assets/
 모두 동일한 **M4 Pro**에서 측정한 wall-clock / `vmmap -summary` 실측값이며 추정치가
 아닙니다. 앱에는 엔진이 두 개 들어가고 각각 따로 측정합니다.
 
-### 전사 — `transcribe` (Sovereign Whisper)
+### 전사 — `transcribe` (Madi)
 
 jfk 픽스처, 2026-06-19 재측정. 정본은
 [`engine/metal/STATUS.md`](engine/metal/STATUS.md), 이력은
@@ -380,7 +380,8 @@ X1/X2/X4, 조용한 입력의 전체 인코더 문맥(A1), 입력 레벨 표시.
 
 ## 10. 자산 목록 — 무엇이 있고, 어디에 있고, 어떻게 검증됐나
 
-아래는 모두 이 저장소(번역 엔진은 자매 저장소 `sovereignLLM`)에 실재하며, **측정으로
+아래는 모두 이 저장소에 실재하며(번역 엔진은 [`engine/prebuilt/`](engine/prebuilt/README.md)의
+사전 빌드 바이너리 — 소스는 비공개 자매 저장소 `sovereignLLM`), **측정으로
 확인된 것만 남긴** 결과다 — 이 프로젝트의 규칙. 반증된 레버도 같은 원장에 기록한다.
 행마다 정본 문서를 적었고, 행과 정본이 다르면 정본이 맞다.
 
@@ -388,7 +389,7 @@ X1/X2/X4, 조용한 입력의 전체 인코더 문맥(A1), 입력 레벨 표시.
 
 | 자산 | 무엇 | 위치 | 검증 |
 |---|---|---|---|
-| **Sovereign Whisper** `transcribe` | Whisper large-v3-turbo Q8, 순수 Zig + Metal. 파일 모드와 상주 **STREAM** 모드(5 s 창 + 오버랩, 단어 타임스탬프, `PREVIEW` 레인, `%%FP` 강제 접두, `EVENTS_FILE` JSONL 계약) | `engine/metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig`, `kernels/` | LibriSpeech WER 2.17 / 4.19 %, FLEURS-ko CER 4.05 %, jfk 디코드 ~402 tok/s, 최대 RSS 1.05 GB — [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
+| **Madi** `transcribe` | Whisper large-v3-turbo Q8, 순수 Zig + Metal. 파일 모드와 상주 **STREAM** 모드(5 s 창 + 오버랩, 단어 타임스탬프, `PREVIEW` 레인, `%%FP` 강제 접두, `EVENTS_FILE` JSONL 계약) | `engine/metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig`, `kernels/` | LibriSpeech WER 2.17 / 4.19 %, FLEURS-ko CER 4.05 %, jfk 디코드 ~402 tok/s, 최대 RSS 1.05 GB — [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
 | **화자분리** | WeSpeaker ResNet34 임베딩 + 온라인 클러스터링(주기적 재클러스터 `DIAR_RECLUSTER`), 겹침 검출(pyannote seg-3.0), Silero VAD 게이트, 화자 수 고정 + 미확인 버킷, ON/OFF 토글 | `diar_resnet.zig`, `online_diar.zig`, `osd_pyannote.zig` | VoxConverse dev DER 9.67 %; 라이브 DER/UX 게이트는 `engine/metal/bench/` — [`docs/DIAR_EVAL.md`](docs/DIAR_EVAL.md) |
 | **DNA3.0-4B / 2B 번역 엔진** | 온디바이스 LLM(번역·요약·Q&A·제목)용 GGUF Q4_K_M 러너. 턴 REPL: `%%TRN`(턴 + 예시 쌍), `%%PFX`(접두 슬롯), ` %%FP `(강제 접두), ` %%MAX n`(턴당 상한); 임베딩 창만 남기는 가중치 매핑 해제(4B RSS 5.4 → 2.5 GB) | `sovereignLLM/apps/metal-dna3-{4b,2b}-q4km/main.zig`(정본 `PERF_MATRIX.md`) | 프리필 B=14 69.8 ms / 디코드 64.7 tok/s(4B); Whisper 포함 8/16 GB 티어 메모리 예산 ≈ 4.05 GB — PERF_LOG M1 |
 | DNA3.0-9B 티어(24 GB+) | 엔진 측 완료(턴 프로토콜 6/6, mmap 해제, 컨텍스트 8192 +233 MB). 앱 배선과 GGUF 호스팅은 **2026-09-07부로 보류** | `sovereignLLM/apps/metal-dna3-9b-q4km/` | — |
@@ -427,7 +428,6 @@ M3 +2.3 MB/분 수정; 회귀용 `LEAK_CHECK` DebugAllocator 빌드).
 | `t1_harness.py` | 기록된 턴으로 번역 엔진을 턴 프로토콜대로 구동(번들의 `translate.jsonl`이 그대로 입력) | `engine/metal/bench/wer_runs/t1_harness.py`(`ENGINE`, `MODEL`) |
 | 품질 벤치 | `wer_bench.py`(LibriSpeech / FLEURS, 공식 정규화 + jiwer), DER 하네스(AMI, VoxConverse), `ko_diar_gate.py`, `live_ux_gate.py`, `preview_lane_gate.py`, VAD 캠페인, 엔진 A/B([`docs/ENGINE_EVAL.md`](docs/ENGINE_EVAL.md): FLEURS-ko CER Qwen3-ASR-1.7B 4.60 % vs Whisper turbo 5.63 %, 8 GB 티어에는 미채택) | `engine/metal/bench/`([README](engine/metal/bench/README.md)) |
 | 누수 변형 빌드 | DebugAllocator(`LEAK_CHECK`, ReleaseSafe/Debug)로 빌드한 `transcribe`가 종료 시 누수를 보고; 장기 실행 점검용 합성 프리뷰/seg 스트림 | `engine/metal/build.sh transcribe.zig`, PERF_LOG M2/M3 |
-| Quark 트리 | 엔진·앱의 심볼 단위 토폴로지(AI 탐색·커밋 후 신선도): `sovereign_metal_whisper`, `sovereign_whisper_app`, `sovereign_metal_dna3_{2b,4b,9b}` | `~/antigravity/quark/q.sh regen configs/<cfg>.mjs` |
 | 원장 | [`PERF_LOG.md`](PERF_LOG.md) — 날짜 붙은 42개 항목(2026-07-05 → 2026-09-07), 수치·채택·반증; [`engine/metal/PERF_LOG.md`](engine/metal/PERF_LOG.md) — 엔진 이력; [`docs/BACKLOG.md`](docs/BACKLOG.md) — 고려만 한 것 | — |
 
 ### 릴리스 파이프라인
@@ -447,7 +447,18 @@ CloudFront로 `channels/<channel>/latest.json`과 `appcast.xml`을 읽고 크기
 ---
 
 ## 라이선스 / 출처
-추론 코드는 본 프로젝트의 독자 구현입니다. 다섯 가지 서드파티 모델을 재사용하며,
+**Madi 자체 코드는 GNU Affero General Public License v3.0(AGPL-3.0-only)의 자유 소프트웨어입니다**
+— [`LICENSE`](LICENSE) 참고. Copyright (C) 2026 companyjupiter 및 Madi 기여자. 이 라이선스는 **Madi 0.4.0과 그 이후
+모든 버전**에 적용되며, git 이력에 남아 있는 그 이전 리비전은 참고용일 뿐 이 라이선스 대상이 아닙니다.
+사용·연구·수정·재배포가
+자유이며, 수정본을 배포하거나 네트워크로 남에게 쓰게 하면 같은 라이선스로 소스와 함께 제공해야
+합니다. 이 라이선스는 "Madi"라는 이름, 로고, 앱 아이콘에 대한 상표 권리를 주지 않습니다.
+[`engine/prebuilt/`](engine/prebuilt/README.md)의 사전 빌드 번역 엔진은 앱이 자식 프로세스로 실행하는
+별개 프로그램으로 AGPL 대상이 **아니며**, 바이너리로만 배포합니다. 개인·기업 누구나 무료로 쓰고
+수정 없이 재배포할 수 있습니다([`engine/prebuilt/LICENSE.md`](engine/prebuilt/LICENSE.md)).
+
+추론 코드는 본 프로젝트의 독자 구현입니다. 다섯 가지 서드파티 모델을 재사용하고 앱 업데이트에
+Sparkle 프레임워크를 포함하며,
 요구되는 고지를 코드·배포물에 모두 유지합니다:
 
 - **OpenAI Whisper** large-v3-turbo — **MIT License**, © 2022 OpenAI (전사).
@@ -461,6 +472,8 @@ CloudFront로 `channels/<channel>/latest.json`과 `appcast.xml`을 읽고 크기
 - **pyannote** segmentation-3.0 — **MIT License**, © 2020 CNRS (겹침 구간 검출).
 - **DNA3.0-2B / 4B** — **Apache License 2.0**, © Dnotitia Inc.; 베이스 모델
   Qwen3.5 © Alibaba Cloud (번역·요약·질의응답 — 번들이 아니라 필요 시 다운로드).
+- **Sparkle** — **MIT License**, © Andy Matuschak 및 Sparkle 기여자 (앱 내 업데이트,
+  `Sparkle.framework`를 수정 없이 포함; Sparkle에 든 외부 코드의 라이선스도 함께 고지).
 
 전체 고지·라이선스 전문은 [`NOTICE`](NOTICE)·[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md),
 소스 헤더(`engine/metal/transcribe.zig`·`engine/metal/diar_resnet.zig`)에도 동일 고지가 있습니다.

@@ -1,7 +1,7 @@
 # Live-transcription test fixtures
 
 Real-world fixtures for the live meeting-transcription pipeline
-(`metal/live_transcribe.sh` + resident `transcribe` STREAM mode).
+(`engine/metal/live_transcribe.sh` + resident `transcribe` STREAM mode).
 
 ## `wife_conv_3min.wav`
 - **~153 s**, 16 kHz mono, two speakers, **Korean with English tech terms**
@@ -11,17 +11,19 @@ Real-world fixtures for the live meeting-transcription pipeline
   chunking, and the hallucination guard.
 - **Local-only** (personal recording — git-ignored, not committed).
 
-### Regenerate the transcript / subtitles
+### Generate a transcript / subtitles
 ```bash
-cd metal
+cd engine/metal
 ./live_transcribe.sh --replay testdata/wife_conv_3min.wav -m ko-meeting \
-  --md testdata/wife_conv_3min.md --srt testdata/wife_conv_3min.srt
+  --md /tmp/conv_3min.md --srt /tmp/conv_3min.srt
 ```
 Resident pipeline processes the 153 s clip in ~35 s (≈4× real-time).
 
-### Outputs (committed as reference, regenerable)
-- `wife_conv_3min.md`  — Markdown transcript (speaker-attributed)
-- `wife_conv_3min.srt` — SRT subtitles
+The transcript and subtitles of this recording are **not part of the tree**: it is
+a private conversation, so its outputs stay local like the WAV (`.gitignore`
+refuses `*.srt` and `*_conv_*.md` here). Reference copies were committed until
+2026-09-19 and were removed ahead of the public release; older revisions keep
+them in git history.
 
 ### Known transcription quirks (model-level, expected)
 - Code-switched English is mostly correct (`Exactly`, `inference`, `accept`,
@@ -34,7 +36,7 @@ Resident pipeline processes the 153 s clip in ~35 s (≈4× real-time).
 
 ## Regression check
 ```bash
-cd metal
+cd engine/metal
 bash testdata/check.sh
 ```
 Runs the pipeline on the fixture (if present) and asserts key properties

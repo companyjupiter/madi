@@ -70,7 +70,7 @@ const goodCells = cellResults.filter(Boolean)
 phase('Synthesis')
 const synthesis = await agent(
 `You are the synthesis lead for a per-language × per-speaker VAD threshold (VAD_PROB) study for a
-sovereign Whisper diarization+ASR engine. The default is currently hardcoded 0.5 for everything.
+Madi diarization+ASR engine. The default is currently hardcoded 0.5 for everything.
 
 PER-CELL RESULTS (DER, English + clean Korean):
 ${JSON.stringify(goodCells, null, 2)}

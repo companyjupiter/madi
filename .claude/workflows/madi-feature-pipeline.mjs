@@ -1,12 +1,11 @@
 export const meta = {
   name: 'madi-feature-pipeline',
-  description: 'Build Madi (apps/macos) features end-to-end with full multi-agent verification: parallel scout → parallel build → coordinated integrate (authority build + tests) → quark forward-verify (배선율/완수도) → adversarial refute → report.',
-  whenToUse: 'Implementing one or more Madi macOS SwiftUI features and you want the established pipeline: parallel new-file builders, a single coordinated integrator, quark forward-check, and per-feature adversarial refute. Pass args.features = [{key, prompt}] to choose features; with no args it runs the 5 "for Human" ideas (open-loops, personal-vocabulary, explorer-feed, prep-brief, listen-review). The workflow leaves a verified WORKING TREE (it never commits) for the session to review/commit/PR.',
+  description: 'Build Madi (apps/macos) features end-to-end with full multi-agent verification: parallel scout → parallel build → coordinated integrate (authority build + tests) → adversarial refute → report.',
+  whenToUse: 'Implementing one or more Madi macOS SwiftUI features and you want the established pipeline: parallel new-file builders, a single coordinated integrator, and per-feature adversarial refute. Pass args.features = [{key, prompt}] to choose features; with no args it runs the 5 "for Human" ideas (open-loops, personal-vocabulary, explorer-feed, prep-brief, listen-review). The workflow leaves a verified WORKING TREE (it never commits) for the session to review/commit/PR.',
   phases: [
     { title: 'Scout', detail: 'read-only spec per feature' },
     { title: 'Build', detail: 'parallel new-file builders' },
     { title: 'Integrate', detail: 'single writer wires + make_app.sh build + swift test, fix to green' },
-    { title: 'Quark', detail: 'forward-verify 배선율 100% + no 완수도 regression' },
     { title: 'Refute', detail: 'parallel adversarial review, verify findings vs code' },
     { title: 'Fix', detail: 'integrator resolves refute-confirmed blockers, re-green' },
   ],
@@ -14,16 +13,13 @@ export const meta = {
 
 const ROOT = '/Users/jupitersong/antigravity/madi'
 const APP = ROOT + '/apps/macos/Sovereign'
-const QDIR = '/Users/jupitersong/antigravity/quark'
-const QCFG = 'configs/sovereign_whisper_app.mjs'
 
 // ── Madi architecture facts (accumulated) so agents don't re-discover the basics ──
 const CONTEXT = `Madi = on-device (sovereign) Korean meeting-intelligence macOS SwiftUI app. Repo ${ROOT}, sources ${APP}. Verify against real code; the notes below are a map, not gospel.
 - Entry: Sovereign/SovereignApp.swift (@main, @State session/downloader). UI/ContentView.swift = mainLayout ZStack( HStack(explorer | transcriptPane | sidePanel) + ⌘K palette overlay ); summarySheet, qaBlock (이 회의 / 전체 워크스페이스 RAG toggle), field() helper, calendarBlock, LiveActionRailView, sidePanel toggles (A.I 요약 / 라이브 액션 추출 / 자막 오버레이).
 - SessionController.swift (@MainActor @Observable): transcript:TranscriptStore (Line{speaker:Int,start,end:Double,words:[Word{t0,t1,text,conf}],overlapSpeakers,translations:[String:String],editedText}); speakerNames; voiceprintsDir(<name>.vec); autoSaveFolder + workspace:WorkspaceTree; sourceMediaURL + linePlayer (click-to-play, file sessions); calendar:CalendarBridge; liveRailItems + liveRailEnabled (≥16GB gate liveRailCapable); meetingSummary/meetingTitle; autoSaveMarkdown/autoSaveSummaryMarkdown; ensureSummaryEngine/ensureTranslateEngine (ONE model resident — summary kills translate); editLine; attributedLines.
 - Transcript/: TranscriptArchive(parse .md→Lines), Exporters(markdown/srt/vtt/json/csv), SummaryDeck(html), Retrieval + WorkspaceRetrieval(cross-meeting), PeopleAnalytics, EnergyArc, TitleGenerator, LiveActionRail, EditorCuts(EditorSettings, chapters). Engine/: EngineProcess(DIAR_MAXK env), SummaryEngine + TranslateEngine(DNA3 LLM, on-device; .ask/.summarize/.generateTitle/.extractActions emit via onResult(tag,text)). Audio/: AudioCapture+Segmenter, AudioDecode(AVAudioFile + AVAssetReader for video), LinePlayer. UI/: WorkspaceExplorer(file tree + 파일/사람 tabs), PeopleDashboard, TranscriptView(onPlay/playingLine), CaptionOverlay, Theme.
-- BUILD AUTHORITY: the real app build is apps/macos/scripts/make_app.sh (explicit SRCS array — EVERY new .swift file MUST be added there or it won't compile into the app). swiftc -typecheck alone is NOT authoritative (it has missed capture/shadow errors the -O build caught). Foundation-only cores (no SwiftUI/AppKit import) ALSO go in apps/macos/Package.swift SovereignCore sources to gain headless XCTest (Tests/SovereignCoreTests).
-- QUARK (config ${QCFG}, srcDir=apps/macos, @main=Sovereign/SovereignApp.swift): use './q.sh classify' NOT regen (quarkify doesn't parse .swift). INVARIANT: 배선율 must stay 100% — every new .swift file must be type-referenced from the @main graph (a View instantiated by a parent View reachable from ContentView; a model referenced by a wired file). An unwired new file drops 배선율 below 100% = FAIL.`
+- BUILD AUTHORITY: the real app build is apps/macos/scripts/make_app.sh (explicit SRCS array — EVERY new .swift file MUST be added there or it won't compile into the app). swiftc -typecheck alone is NOT authoritative (it has missed capture/shadow errors the -O build caught). Foundation-only cores (no SwiftUI/AppKit import) ALSO go in apps/macos/Package.swift SovereignCore sources to gain headless XCTest (Tests/SovereignCoreTests).`
 
 const features = (typeof args === 'object' && args && Array.isArray(args.features) && args.features.length)
   ? args.features
@@ -35,7 +31,7 @@ const features = (typeof args === 'object' && args && Array.isArray(args.feature
     { key: 'listen-review', prompt: `LISTEN-TO-REVIEW — confirm low-confidence words by ear, fast. In the detailed review navigator (the 검토 필요 flow over words with conf < Theme.confThreshold), add a mode that auto-plays each low-confidence word's audio span in sequence using the existing LinePlayer (file-transcribed sessions only, where sourceMediaURL exists) and advances. New: wire LinePlayer + the review index together + a small control. Reuse click-to-play infra.` },
   ]
 
-log(`madi-feature-pipeline: ${features.length} feature(s) → scout → build → integrate → quark → refute. Leaves a verified WORKING TREE (no commit).`)
+log(`madi-feature-pipeline: ${features.length} feature(s) → scout → build → integrate → refute. Leaves a verified WORKING TREE (no commit).`)
 
 // ── schemas ──
 const SPEC = { type: 'object', properties: {
@@ -60,12 +56,6 @@ const INTEGRATE = { type: 'object', properties: {
   fixes: { type: 'array', items: { type: 'string' }, description: 'compile/test errors fixed during integration' },
   notes: { type: 'string' },
 }, required: ['buildOk', 'notes'] }
-
-const QUARK = { type: 'object', properties: {
-  wiredPct: { type: 'string', description: '배선율, must be 100.0%' }, completionPct: { type: 'string' },
-  unwiredNewFiles: { type: 'array', items: { type: 'string' }, description: 'new .swift files NOT reachable from @main (배선율 < 100% → FAIL)' },
-  pass: { type: 'boolean', description: 'true only if 배선율 100% and no completion regression' }, notes: { type: 'string' },
-}, required: ['wiredPct', 'pass', 'notes'] }
 
 const VERDICT = { type: 'object', properties: {
   feature: { type: 'string' }, verdict: { type: 'string', enum: ['pass', 'concern', 'fail'] },
@@ -94,12 +84,7 @@ const INTEGRATE_RULES = `${CONTEXT}\n\nYou are the SINGLE coordinated writer. Ap
 const integration = await agent(`${INTEGRATE_RULES}\n\nBUILDERS OUTPUT:\n${JSON.stringify(built, null, 2)}`,
   { label: 'integrate', phase: 'Integrate', schema: INTEGRATE, effort: 'high' })
 
-// ── Phase 4: Quark forward-verify (배선율 100% + no completion regression) ──
-phase('Quark')
-const quark = await agent(`Forward-verify the Madi swift app with quark. Run:\n  cd ${QDIR} && ./q.sh classify ${QCFG}\n  cd ${QDIR} && ./q.sh gaps ${QCFG}\nCONFIRM the INVARIANT: 배선율(wired) must be 100.0% — EVERY new .swift file added this run must be type-referenced from the @main SovereignApp.swift graph. If any new file is unwired (배선율 < 100%), that is a FAIL — name the file(s) and why they're unreachable. Report 배선율, 완수도(completion) %, and pass=true ONLY if 배선율 is 100% and completion did not regress. Use classify NOT regen (quarkify doesn't parse .swift). New files list: ${JSON.stringify(built.flatMap((b) => b.files || []))}.`,
-  { label: 'quark:forward', phase: 'Quark', schema: QUARK })
-
-// ── Phase 5: Refute (parallel adversarial, verify findings vs code) ──
+// ── Phase 4: Refute (parallel adversarial, verify findings vs code) ──
 phase('Refute')
 const REFUTE_RULES = `${CONTEXT}\n\nADVERSARIALLY refute ONE feature AS IMPLEMENTED in the current WORKING TREE (read the actual files under ${APP}, not a commit). Try to find blockers / regressions / lifecycle / concurrency / memory bugs. Cite file:line + quoted code for every issue. CRUCIAL — verify each finding against the code and REJECT false positives (the integrator will trust your verdict): e.g. ProcessInfo.physicalMemory is FIXED installed RAM (not available memory); @MainActor methods are serialized (no interleave); @Observable propagates through NSHostingView on macOS 14+; a retain cycle on the single app-lifetime SessionController is benign. Speculative nits = 'minor'; only concrete code-grounded defects are 'major'/'blocker'. Return 'pass' if you genuinely can't find a real defect.`
 const verdicts = (await parallel(built.map((b) => () =>
@@ -108,7 +93,7 @@ const verdicts = (await parallel(built.map((b) => () =>
 ))).filter(Boolean)
 const blockers = verdicts.flatMap((v) => (v.issues || []).filter((i) => i.severity === 'blocker' || i.severity === 'major').map((i) => ({ feature: v.feature, ...i })))
 
-// ── Phase 6: Fix refute-confirmed blockers, re-green (only if any) ──
+// ── Phase 5: Fix refute-confirmed blockers, re-green (only if any) ──
 let fixIntegration = null
 if (blockers.length) {
   phase('Fix')
@@ -119,6 +104,6 @@ if (blockers.length) {
 return {
   features: features.map((f) => f.key),
   specs, built,
-  integration, quark, verdicts, blockers, fixIntegration,
-  summary: `${features.length} feature(s) implemented in the working tree. build=${(fixIntegration || integration).buildOk}, quark배선율=${quark.wiredPct} (pass=${quark.pass}), refute blockers fixed=${blockers.length}. Review the working tree, then commit + PR.`,
+  integration, verdicts, blockers, fixIntegration,
+  summary: `${features.length} feature(s) implemented in the working tree. build=${(fixIntegration || integration).buildOk}, refute blockers fixed=${blockers.length}. Review the working tree, then commit + PR.`,
 }

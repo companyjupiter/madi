@@ -1,6 +1,10 @@
 # 오픈소스 라이선스
 
-Madi의 코드는 대부분 자체 개발이지만, 다섯 개의 서드파티 머신러닝 모델을 사용합니다. 각 라이선스가 요구하는 저작권 고지·귀속(attribution)·변경 사실 고지를 아래에 모두 싣습니다. 라이선스 원문은 법적 효력을 갖는 문서이므로 번역하지 않고 영문 그대로 둡니다.
+Madi의 코드는 대부분 자체 개발이지만, 다섯 개의 서드파티 머신러닝 모델을 사용하고, 앱 자동 업데이트에는 Sparkle 프레임워크를 사용합니다. 각 라이선스가 요구하는 저작권 고지·귀속(attribution)·변경 사실 고지를 아래에 모두 싣습니다. 라이선스 원문은 법적 효력을 갖는 문서이므로 번역하지 않고 영문 그대로 둡니다.
+
+## Madi의 라이선스
+
+Madi 자체 코드는 **GNU Affero General Public License v3.0**(AGPL-3.0-only)의 자유 소프트웨어입니다. 이 라이선스는 Madi 0.4.0과 그 이후 모든 버전에 적용됩니다. 누구나 사용·연구·수정·재배포할 수 있고, 수정본을 배포하거나 네트워크로 제공하면 같은 라이선스로 소스를 함께 제공해야 합니다. 소스 코드는 `github.com/companyjupiter/madi`에 있으며, 라이선스 전문은 앱에 포함된 `LICENSE` 파일에 있습니다. 앱에 들어 있는 번역 엔진 실행 파일(`translate-engine-2b`, `translate-engine-4b`)은 AGPL 대상이 아닌 별개 프로그램이며 바이너리로만 배포합니다. 개인과 기업 누구나 무료로 사용하고 재배포할 수 있습니다.
 
 ## 구성요소 한눈에
 
@@ -11,6 +15,7 @@ Madi의 코드는 대부분 자체 개발이지만, 다섯 개의 서드파티 �
 | **Silero VAD** | 말한 구간과 침묵 구간 판정 | 앱에 포함 | MIT |
 | **pyannote** segmentation-3.0 | 겹쳐 말한 구간 검출 | 앱에 포함 | MIT |
 | **DNA3.0-2B / 4B** (dnotitia · Qwen3.5 기반) | 온디바이스 번역·요약·질의응답 | 사용 시 다운로드 | Apache-2.0 |
+| **Sparkle** | 앱 자동 업데이트 | 앱에 포함 | MIT |
 
 ## MIT License 구성요소
 
@@ -43,6 +48,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Sparkle (MIT) — 앱 자동 업데이트
+
+Madi는 업데이트 확인과 설치에 **Sparkle** 프레임워크(`github.com/sparkle-project/Sparkle`)를 수정 없이 앱에 포함해 사용합니다. 라이선스 조건은 위 MIT License 전문과 같습니다.
+
+```
+Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.
+```
+
+Sparkle에 포함된 외부 코드(bsdiff, sais-lite, ed25519, SUSignatureVerifier)의 라이선스 원문은 `THIRD_PARTY_LICENSES.md` §F에 있습니다.
 
 ## Apache License 2.0 구성요소
 

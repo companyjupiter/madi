@@ -75,3 +75,7 @@ keys.text
 # unignored 5.3 GB GGUF puts it in history permanently.
 *.gguf
 *.safetensors
+
+# live-fixture outputs of private recordings never enter the tree
+engine/metal/testdata/*.srt
+engine/metal/testdata/*_conv_*.md

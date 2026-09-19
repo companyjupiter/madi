@@ -8,7 +8,7 @@
       <circle id="traffic-close" cx="20" cy="14" r="6" fill="#FF5F57"/>
       <circle id="traffic-min" cx="40" cy="14" r="6" fill="#FEBC2E"/>
       <circle id="traffic-zoom" cx="60" cy="14" r="6" fill="#28C840"/>
-      <text id="window-title" x="360" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#3C3C43" opacity="0.85">Sovereign Whisper</text>
+      <text id="window-title" x="360" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#3C3C43" opacity="0.85">Madi</text>
     </g>
     <rect id="content-bg" x="0" y="28" width="720" height="452" fill="#FFFFFF"/>
 
@@ -17,7 +17,7 @@
         <circle cx="360" cy="170" r="24" fill="none" stroke="#007AFF" stroke-width="2"/>
         <path d="M348 170 l3 -8 l3 16 l3 -22 l3 28 l3 -22 l3 16 l3 -8" fill="none" stroke="#007AFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </g>
-      <text id="app-title" x="360" y="226" text-anchor="middle" font-size="17" font-weight="700" fill="#000000" opacity="0.85">Sovereign Whisper</text>
+      <text id="app-title" x="360" y="226" text-anchor="middle" font-size="17" font-weight="700" fill="#000000" opacity="0.85">Madi</text>
 
       <g id="download-progress">
         <text id="progress-label" x="200" y="262" font-size="12" fill="#000000" opacity="0.85">Downloading model (38%)</text>

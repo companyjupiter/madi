@@ -1,6 +1,10 @@
 # 开源许可
 
-Madi 的代码几乎全部为自研，但使用了五个第三方机器学习模型。这些许可所要求的著作权声明、署名（attribution）与变更告知，下面全部予以载明。许可原文具有法律效力，因此保留英文原文而不作翻译。
+Madi 的代码几乎全部为自研，但使用了五个第三方机器学习模型，并使用 Sparkle 框架实现 App 自动更新。这些许可所要求的著作权声明、署名（attribution）与变更告知，下面全部予以载明。许可原文具有法律效力，因此保留英文原文而不作翻译。
+
+## Madi 的许可
+
+Madi 自身的代码是采用 **GNU Affero General Public License v3.0**（AGPL-3.0-only）的自由软件。本许可适用于 Madi 0.4.0 及之后的所有版本。任何人都可以使用、研究、修改和再分发；分发修改版或通过网络向他人提供修改版时，必须以相同许可同时提供源代码。源代码位于 `github.com/companyjupiter/madi`，许可全文见 App 内附带的 `LICENSE` 文件。App 中的翻译引擎可执行文件（`translate-engine-2b`、`translate-engine-4b`）是不受 AGPL 约束的独立程序，仅以二进制形式分发。个人和企业均可免费使用和再分发。
 
 ## 组件一览
 
@@ -11,6 +15,7 @@ Madi 的代码几乎全部为自研，但使用了五个第三方机器学习模
 | **Silero VAD** | 判定发言段与静音段 | 随 App 打包 | MIT |
 | **pyannote** segmentation-3.0 | 检测重叠发言段 | 随 App 打包 | MIT |
 | **DNA3.0-2B / 4B**（dnotitia · 基于 Qwen3.5） | 设备端翻译、摘要与问答 | 使用时下载 | Apache-2.0 |
+| **Sparkle** | App 自动更新 | 随 App 打包 | MIT |
 
 ## MIT License 组件
 
@@ -43,6 +48,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Sparkle (MIT) —— App 自动更新
+
+Madi 在检查和安装更新时使用随 App 打包、未经修改的 **Sparkle** 框架（`github.com/sparkle-project/Sparkle`）。其许可条件与上文的 MIT License 全文相同。
+
+```
+Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.
+```
+
+Sparkle 所含外部代码（bsdiff、sais-lite、ed25519、SUSignatureVerifier）的许可原文见 `THIRD_PARTY_LICENSES.md` 的 §F。
 
 ## Apache License 2.0 组件
 

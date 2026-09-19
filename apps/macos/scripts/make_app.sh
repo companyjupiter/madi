@@ -255,8 +255,9 @@ fi
 # §4(a)(d) requires the license + NOTICE with every distribution, and CC BY 4.0
 # §3(a) requires attribution with the material. resnet34_diar.bin (CC BY 4.0),
 # silero_vad.bin and pyannote_osd.bin (MIT) are all inside this bundle, so the
-# notices ship here too — the manual footer carries the short form.
-for f in NOTICE THIRD_PARTY_LICENSES.md; do
+# notices ship here too — the manual footer carries the short form. LICENSE is
+# Madi's own AGPL-3.0 text: the license must reach everyone who receives the app.
+for f in LICENSE NOTICE THIRD_PARTY_LICENSES.md; do
   if [ -f "$ROOT/$f" ]; then
     cp "$ROOT/$f" "$BUNDLE/Contents/Resources/$f"
   else
@@ -277,11 +278,27 @@ if [ "${BUNDLE_MODEL:-0}" = "1" ]; then
   fi
 fi
 
-# ── 2c. model-specific translate engines (embedded metallib, ~1.1 MB each)
-# Both binaries are tiny; the selected 1.3/2.8 GB GGUF remains on-demand. The
-# legacy TRANSLATE_ENGINE override maps to 4B for release-pipeline compatibility.
-TRANSLATE_ENGINE_4B="${TRANSLATE_ENGINE_4B:-${TRANSLATE_ENGINE:-$ROOT/../sovereignLLM/out/metal-dna3-4b-q4km/sovereign-metal-dna3-4b-q4km}}"
-TRANSLATE_ENGINE_2B="${TRANSLATE_ENGINE_2B:-$ROOT/../sovereignLLM/out/metal-dna3-2b-q4km/sovereign-metal-dna3-2b-q4km}"
+# ── 2c. model-specific translate engines (embedded metallib, ~1.5 MB each)
+# Both binaries are tiny; the selected 1.3/2.8 GB GGUF remains on-demand. They are
+# prebuilt from the private sovereignLLM project and committed under
+# engine/prebuilt/ (see its README), so a clean clone builds a translation-capable
+# app. A default from that folder must match engine/prebuilt/SHA256SUMS.
+# TRANSLATE_ENGINE_{4B,2B} point at other binaries (a fresh engine build, a CI
+# download) and are not checked here; the legacy TRANSLATE_ENGINE maps to 4B.
+PREBUILT_DIR="$ROOT/engine/prebuilt"
+TRANSLATE_ENGINE_4B="${TRANSLATE_ENGINE_4B:-${TRANSLATE_ENGINE:-$PREBUILT_DIR/translate-engine-4b}}"
+TRANSLATE_ENGINE_2B="${TRANSLATE_ENGINE_2B:-$PREBUILT_DIR/translate-engine-2b}"
+verify_prebuilt_engine() {
+  local path="$1" name
+  case "$path" in "$PREBUILT_DIR"/*) ;; *) return 0 ;; esac
+  [ -f "$path" ] || return 0
+  name="$(basename "$path")"
+  ( cd "$PREBUILT_DIR" && grep -E "  $name\$" SHA256SUMS | shasum -a 256 -c - >/dev/null 2>&1 ) || {
+    echo "❌ $name does not match engine/prebuilt/SHA256SUMS — rerun update_translate_engines.sh or restore the file"; exit 1
+  }
+}
+verify_prebuilt_engine "$TRANSLATE_ENGINE_4B"
+verify_prebuilt_engine "$TRANSLATE_ENGINE_2B"
 BUNDLED_TRANSLATE_4B=0
 BUNDLED_TRANSLATE_2B=0
 if [ -x "$TRANSLATE_ENGINE_4B" ]; then

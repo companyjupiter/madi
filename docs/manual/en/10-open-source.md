@@ -1,6 +1,10 @@
 # Open-Source Licenses
 
-Madi is almost entirely original code, but it uses five third-party machine-learning models. Every copyright, attribution and change notice those licenses require is reproduced below. License texts are legal documents, so they are kept in their original English rather than translated.
+Madi is almost entirely original code, but it uses five third-party machine-learning models, and the Sparkle framework for in-app updates. Every copyright, attribution and change notice those licenses require is reproduced below. License texts are legal documents, so they are kept in their original English rather than translated.
+
+## Madi's license
+
+Madi's own code is free software under the **GNU Affero General Public License v3.0** (AGPL-3.0-only). The license applies to Madi 0.4.0 and every later version. Anyone may use, study, modify and redistribute it; a modified version that is distributed or offered over a network must come with its source under the same license. The source code is at `github.com/companyjupiter/madi`, and the full license text is the `LICENSE` file inside the app. The translate engine executables in the app (`translate-engine-2b`, `translate-engine-4b`) are separate programs that are not covered by the AGPL and ship as binaries only; anyone, individuals and companies alike, may use and redistribute them free of charge.
 
 ## Components at a glance
 
@@ -11,6 +15,7 @@ Madi is almost entirely original code, but it uses five third-party machine-lear
 | **Silero VAD** | Telling speech from silence | Bundled in the app | MIT |
 | **pyannote** segmentation-3.0 | Overlapped-speech detection | Bundled in the app | MIT |
 | **DNA3.0-2B / 4B** (dnotitia · Qwen3.5 base) | On-device translation, summary and Q&A | Downloaded when you enable it | Apache-2.0 |
+| **Sparkle** | In-app updates | Bundled in the app | MIT |
 
 ## MIT License components
 
@@ -43,6 +48,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Sparkle (MIT) — in-app updates
+
+Madi embeds the **Sparkle** framework (`github.com/sparkle-project/Sparkle`), unmodified, to check for and install updates. Its terms are the MIT License text above.
+
+```
+Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.
+```
+
+The license texts of the external code Sparkle bundles (bsdiff, sais-lite, ed25519, SUSignatureVerifier) are in `THIRD_PARTY_LICENSES.md` §F.
 
 ## Apache License 2.0 components
 

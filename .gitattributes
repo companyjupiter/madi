@@ -1,0 +1,2 @@
+# prebuilt engine executables: never diff, merge, or normalize line endings
+engine/prebuilt/translate-engine-* binary

@@ -5,9 +5,6 @@
 // only files are pulled into SovereignCore; views/engine-IO stay out.
 //
 //   cd app && swift test            # runs the unit tests headless
-//
-// quark v9 (configs/sovereign_whisper_app.mjs) reads Tests/ to mark modules
-// tested (wired → tested).
 import PackageDescription
 
 let package = Package(

@@ -143,7 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$TRANSLATE_ENGINE_4B_URL" ] && [ -z "$TRANSLATE_ENGINE_2B_URL" ]; then
-            echo "No translation engines configured; building transcription-only app"
+            echo "No translation engine URLs configured; make_app.sh bundles the prebuilt pair from engine/prebuilt"
             exit 0
           fi
           for name in TRANSLATE_ENGINE_4B_URL TRANSLATE_ENGINE_4B_SHA256 TRANSLATE_ENGINE_2B_URL TRANSLATE_ENGINE_2B_SHA256; do

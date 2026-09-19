@@ -177,7 +177,7 @@ dedicated var, so it never collides with the shell locale `$LANG`.
 All figures are wall-clock or `vmmap -summary` measurements on the same **M4 Pro**,
 not projections. Two engines ship in the app and are measured separately.
 
-### Transcription — `transcribe` (Sovereign Whisper)
+### Transcription — `transcribe` (Madi)
 
 jfk fixture, remeasured 2026-06-19. Canonical copy:
 [`engine/metal/STATUS.md`](engine/metal/STATUS.md); history in
@@ -248,8 +248,9 @@ Transcription did not change in that cycle; those rows are the baseline, not a r
 
 ## Assets — what exists, where it lives, how it is verified
 
-Everything below is in this repository (or in the sibling `sovereignLLM` repo for the
-translate engines) and was **kept only after a measurement** — the rule of the project.
+Everything below is in this repository (the translate engines as prebuilt binaries in
+[`engine/prebuilt/`](engine/prebuilt/README.md) — their source is the private sibling
+`sovereignLLM` project) and was **kept only after a measurement** — the rule of the project.
 Refuted levers are recorded in the same ledgers as the wins. Canon documents are named
 per row; when a row and a canon disagree, the canon wins.
 
@@ -257,7 +258,7 @@ per row; when a row and a canon disagree, the canon wins.
 
 | asset | what it is | where | verified by |
 |---|---|---|---|
-| **Sovereign Whisper** `transcribe` | Whisper large-v3-turbo, Q8, pure Zig + Metal; file mode and resident **STREAM** mode (5 s windows + overlap, word timestamps, `PREVIEW` lane, `%%FP` forced prefix, `EVENTS_FILE` JSONL contract) | `engine/metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig`, `kernels/` | LibriSpeech 2.17 / 4.19 % WER, FLEURS-ko 4.05 % CER, jfk decode ~402 tok/s, peak RSS 1.05 GB — [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
+| **Madi** `transcribe` | Whisper large-v3-turbo, Q8, pure Zig + Metal; file mode and resident **STREAM** mode (5 s windows + overlap, word timestamps, `PREVIEW` lane, `%%FP` forced prefix, `EVENTS_FILE` JSONL contract) | `engine/metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig`, `kernels/` | LibriSpeech 2.17 / 4.19 % WER, FLEURS-ko 4.05 % CER, jfk decode ~402 tok/s, peak RSS 1.05 GB — [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
 | **Speaker diarization** | WeSpeaker ResNet34 embeddings + online clustering with periodic re-cluster (`DIAR_RECLUSTER`), overlap detection (pyannote seg-3.0), Silero VAD gate, fixed-K + Unknown bucket, ON/OFF toggle | `diar_resnet.zig`, `online_diar.zig`, `osd_pyannote.zig` | 9.67 % DER VoxConverse dev; live DER/UX gates in `engine/metal/bench/` — [`docs/DIAR_EVAL.md`](docs/DIAR_EVAL.md) |
 | **DNA3.0-4B / 2B translate engines** | GGUF Q4_K_M runners for the on-device LLM (translation, summary, Q&A, titles). Turn REPL: `%%TRN` (turn + example pair), `%%PFX` (registered prefix slots), ` %%FP ` (forced prefix), ` %%MAX n` (per-turn cap); embedding-window-only weight mapping (RSS 5.4 → 2.5 GB, 4B) | `sovereignLLM/apps/metal-dna3-{4b,2b}-q4km/main.zig` (canon `PERF_MATRIX.md` there) | prefill B=14 69.8 ms / decode 64.7 tok/s (4B); memory budget for the 8/16 GB tiers ≈ 4.05 GB with Whisper — PERF_LOG M1 |
 | DNA3.0-9B tier (24 GB+) | Engine side complete (turn protocol 6/6, mmap release, 8192 context +233 MB); app wiring and GGUF hosting **on hold since 2026-09-07** | `sovereignLLM/apps/metal-dna3-9b-q4km/` | — |
@@ -298,7 +299,6 @@ drop-in, madvise on the weight mapping, an engine centroid merge is still a cand
 | `t1_harness.py` | Drives a translate engine through the turn protocol from recorded turns (a bundle's `translate.jsonl` is a valid input) | `engine/metal/bench/wer_runs/t1_harness.py` (`ENGINE`, `MODEL`) |
 | Quality benches | `wer_bench.py` (LibriSpeech / FLEURS, official normaliser + jiwer), DER harness (AMI, VoxConverse), `ko_diar_gate.py`, `live_ux_gate.py`, `preview_lane_gate.py`, VAD campaigns, engine A/B ([`docs/ENGINE_EVAL.md`](docs/ENGINE_EVAL.md): Qwen3-ASR-1.7B 4.60 % vs Whisper turbo 5.63 % CER on FLEURS-ko, not adopted on the 8 GB tier) | `engine/metal/bench/` ([README](engine/metal/bench/README.md)) |
 | Leak variant | `transcribe` built with the DebugAllocator (`LEAK_CHECK`, ReleaseSafe/Debug) reports leaks at exit; synthetic preview/seg streams for long-run checks | `engine/metal/build.sh transcribe.zig`, see PERF_LOG M2/M3 |
-| Quark trees | Symbol-level topology of the engine and the app for AI navigation and post-commit freshness (`sovereign_metal_whisper`, `sovereign_whisper_app`, `sovereign_metal_dna3_{2b,4b,9b}`) | `~/antigravity/quark/q.sh regen configs/<cfg>.mjs` |
 | Ledgers | [`PERF_LOG.md`](PERF_LOG.md) — 42 dated entries (2026-07-05 → 2026-09-07) with the numbers, wins and refutations; [`engine/metal/PERF_LOG.md`](engine/metal/PERF_LOG.md) — engine history; [`docs/BACKLOG.md`](docs/BACKLOG.md) — considered, not started | — |
 
 ### Release pipeline
@@ -377,8 +377,20 @@ per PERF_LOG entry) and were never published.
 - Ledgers: `PERF_LOG.md` (app + engine rounds since 2026-07), `engine/metal/STATUS.md` (current engine state), `engine/metal/PERF_LOG.md` (engine history), `engine/metal/PORT.md` (CUDA→Metal port notes).
 
 ## License / provenance
-Inference code is original work of this project. It reuses five third-party models,
-whose notices are retained as required and reproduced in full:
+**Madi's own code is free software under the GNU Affero General Public License,
+version 3 only (AGPL-3.0-only)** — see [`LICENSE`](LICENSE). Copyright (C) 2026
+companyjupiter and the Madi contributors. The license applies to **Madi 0.4.0 and every
+later version**; earlier revisions in the git history are kept for reference and are not
+licensed under it. You may use, study, modify and redistribute
+it; a modified version you distribute, or let others use over a network, must be
+offered under the same license with its source. The license grants no trademark rights
+in the name "Madi", its logo or its app icon. The prebuilt translate engines in
+[`engine/prebuilt/`](engine/prebuilt/README.md) are separate programs the app launches
+as child processes; they are **not** covered by the AGPL and ship as binaries that anyone
+may use and redistribute free of charge ([`engine/prebuilt/LICENSE.md`](engine/prebuilt/LICENSE.md)).
+
+Inference code is original work of this project. It reuses five third-party models
+and embeds the Sparkle update framework; their notices are retained as required and reproduced in full:
 
 - **OpenAI Whisper** large-v3-turbo — **MIT License**, © 2022 OpenAI
   (transcription). MIT requires keeping the copyright + permission notice.
@@ -392,6 +404,9 @@ whose notices are retained as required and reproduced in full:
 - **DNA3.0-2B / 4B** — **Apache License 2.0**, © Dnotitia Inc.; base model
   Qwen3.5 © Alibaba Cloud (translation, summary, Q&A — downloaded on demand,
   not bundled).
+- **Sparkle** — **MIT License**, © Andy Matuschak and the Sparkle contributors
+  (in-app updates; embedded unmodified as `Sparkle.framework`, with the licenses of
+  the external code it bundles).
 
 See [`NOTICE`](NOTICE) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)
 for the attributions and full license texts; source headers in

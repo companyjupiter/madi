@@ -3,7 +3,6 @@
 // i.e. C[m][n] = Σ_k A[m][k] · qs[n*K+k] · scales[n*(K/32)+k/32].
 // 32×32 output tile / threadgroup (4 simdgroups × 16×16). BK=32 (= one Q8 block,
 // so each B row has a single scale per K-tile). N,K are multiples of 32; M guarded.
-// Adapted from the llama.cpp/sovereign metal mul_mm simdgroup pattern.
 #include <metal_stdlib>
 using namespace metal;
 

@@ -1,5 +1,5 @@
 // metal_backend.zig — Lean Zig wrapper over the Objective-C Metal bridge.
-// Self-contained Whisper port. Exposes only what the Sovereign Whisper
+// Self-contained Whisper port. Exposes only what the Madi
 // pipeline needs, mapping 1:1 onto the CUDA Driver API idioms the original
 // code used (cuLaunchKernel → dispatch, cuMemAlloc → alloc, etc.).
 //

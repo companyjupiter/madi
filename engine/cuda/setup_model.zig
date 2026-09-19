@@ -14,7 +14,7 @@ pub fn main() !void {
         return;
     }
     const sf_path = args[1];
-    try out.print("=== Sovereign Whisper Model Setup ===\n", .{});
+    try out.print("=== Madi Model Setup ===\n", .{});
     try out.print("Loading: {s}\n", .{sf_path});
 
     // Read entire safetensors file

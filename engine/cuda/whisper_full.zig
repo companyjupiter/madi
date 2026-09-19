@@ -1,4 +1,4 @@
-// whisper_full.zig — Full Sovereign Whisper Encoder+Decoder
+// whisper_full.zig — Full Madi Encoder+Decoder
 // 100% ZIG + PTX, Zero Dependencies
 const std = @import("std");
 const CUresult = i32;
@@ -145,7 +145,7 @@ fn mapTensor(base:[]const u8, name:[]const u8,
 pub fn run(ext_ctx: *anyopaque, d_enc_in: u64) !u64 {
     const out = std.io.getStdOut().writer();
     const alloc = std.heap.page_allocator;
-    try out.print("\n=== SOVEREIGN WHISPER — FULL PIPELINE ===\n\n", .{});
+    try out.print("\n=== MADI — FULL PIPELINE ===\n\n", .{});
 
     // 1. CUDA
     var nv = std.DynLib.open("nvcuda.dll") catch return error.CudaNotFound;
@@ -456,7 +456,7 @@ pub fn run(ext_ctx: *anyopaque, d_enc_in: u64) !u64 {
     
     // Zero-copy: Return d_x pointer
     try out.print("\n  Zero-copy GPU Pointer returned\n", .{});
-    try out.print("\n  ✅ SOVEREIGN WHISPER — ENCODER COMPLETE\n", .{});
+    try out.print("\n  ✅ MADI — ENCODER COMPLETE\n", .{});
     return @intCast(d_x);
 }
 

@@ -1,6 +1,6 @@
 # Cross-platform product plan
 
-Sovereign Whisper must support Windows, macOS, and Linux. The current product
+Madi must support Windows, macOS, and Linux. The current product
 path is optimized for Apple Silicon macOS, so cross-platform support needs
 explicit platform boundaries instead of ad-hoc conditionals.
 
