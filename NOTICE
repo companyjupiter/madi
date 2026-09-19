@@ -83,3 +83,8 @@ in source and binary redistributions.
 
 -------------------------------------------------------------------------------
 All other code in this repository is original work of this project.
+
+Prebuilt binaries: engine/prebuilt/translate-engine-{4b,2b} (bundled as
+Contents/MacOS/translate-engine-{4b,2b}) are built from the author's private
+sovereignLLM project. Their source is not included; they are distributed under the
+Sovereign LLM Inference Engine License Agreement in engine/prebuilt/LICENSE.md.

@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "source": {
+    "project": "sovereignLLM (private; source not included in this repository)",
+    "headCommit": "0edc1ae6fb608dfd837c4dde88292c6218e33f4a",
+    "dirty": false
+  },
+  "engines": [
+    {
+      "name": "translate-engine-4b",
+      "model": "DNA3.0-4B i1-Q4_K_M",
+      "arch": "arm64",
+      "minos": "14.0",
+      "sha256": "64be74aed0e23a650ede70ae7951f131b44f0c229e82d2ee68a74d089ff78a0e",
+      "size": 1584672,
+      "uuid": "B74EFB17-E37B-3815-8F68-907706AF377E",
+      "builtAt": "2026-09-06T13:24:56Z",
+      "sourcePath": "out/metal-dna3-4b-q4km/sovereign-metal-dna3-4b-q4km",
+      "engineSource": {
+        "dir": "apps/metal-dna3-4b-q4km",
+        "lastCommit": "336a0edfdcd9457117122f8a663ca9e818ba6ce1"
+      }
+    },
+    {
+      "name": "translate-engine-2b",
+      "model": "DNA3.0-2B i1-Q4_K_M",
+      "arch": "arm64",
+      "minos": "14.0",
+      "sha256": "a9f0525ca9c72174228bb0bab42496cccdc563766e7beea4928fcf9350c27017",
+      "size": 1584816,
+      "uuid": "EB99A971-9ED7-35D6-83CE-6F47E31EFE54",
+      "builtAt": "2026-09-06T13:25:05Z",
+      "sourcePath": "out/metal-dna3-2b-q4km/sovereign-metal-dna3-2b-q4km",
+      "engineSource": {
+        "dir": "apps/metal-dna3-2b-q4km",
+        "lastCommit": "336a0edfdcd9457117122f8a663ca9e818ba6ce1"
+      }
+    }
+  ]
+}

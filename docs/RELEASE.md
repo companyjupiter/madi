@@ -28,8 +28,8 @@ Canonical bundle layout it produces:
 Madi.app/Contents/
   MacOS/Madi                     # the app
   MacOS/transcribe               # Zig/Metal speech engine
-  MacOS/translate-engine-4b      # optional quality-profile LLM runner
-  MacOS/translate-engine-2b      # optional 8 GB realtime-profile LLM runner
+  MacOS/translate-engine-4b      # quality-profile LLM runner (prebuilt, engine/prebuilt/)
+  MacOS/translate-engine-2b      # 8 GB realtime-profile LLM runner (prebuilt, engine/prebuilt/)
   Resources/whisper.metallib     # sealed by the bundle signature
   Resources/assets-small/*.bin   # the 7 files the engine opens at runtime
   Resources/manual/index.html    # offline user manual (Help menu)
@@ -44,6 +44,7 @@ bundled — they download on first run / on demand into Application Support.
 | asset | size | policy |
 |---|---|---|
 | engine + metallib + 7 `.bin` assets | small | **bundled** (`assemble_bundle.sh` / `make_app.sh`, same 7-file list) |
+| `translate-engine-{4b,2b}` (DNA3 runners) | ~1.5 MB each | **bundled** from `engine/prebuilt/` — committed binaries built from the private `sovereignLLM` project, SHA-256 checked against `engine/prebuilt/SHA256SUMS` before bundling |
 | `model.q8.safetensors` (speech) | ~830 MB | **downloaded** first run, SHA-256 verified (`ModelDownloader`) |
 | `DNA3.0-2B…gguf` (8 GB LLM) | ~1.3 GB | **downloaded** on demand, SHA-256 verified (`TranslateModelDownloader`) |
 | `DNA3.0-4B…gguf` (16 GB+ LLM) | ~2.8 GB | **downloaded** on demand, SHA-256 verified (`TranslateModelDownloader`) |
@@ -359,10 +360,13 @@ the release branch or tags, and add all Developer ID/notarization secrets:
 | `APPLE_NOTARY_ISSUER_ID` | App Store Connect API issuer ID |
 | `APPLE_NOTARY_KEY_P8_BASE64` | base64-encoded `AuthKey_….p8` |
 
-Translation is bundled only as a complete engine pair. Configure
-`MADI_TRANSLATE_ENGINE_{2B,4B}_{URL,SHA256}`. The legacy unsuffixed URL/SHA pair
-remains a 4B fallback, but the 2B pair is still required before translation can be
-included in a release.
+Translation is bundled only as a complete engine pair. The pair is committed in
+`engine/prebuilt/` (binaries only — the source lives in the private `sovereignLLM`
+project; `apps/macos/scripts/update_translate_engines.sh` refreshes the folder and
+its `SHA256SUMS` / `MANIFEST.json`), so local and CI builds need no configuration.
+`MADI_TRANSLATE_ENGINE_{2B,4B}_{URL,SHA256}` remain as an override that downloads a
+different pair; the legacy unsuffixed URL/SHA pair is a 4B fallback, and an override
+must still supply both engines.
 
 Create the small-assets archive once from a validated engine workspace, upload it
 to versioned immutable storage, and record its digest in the environment secret:

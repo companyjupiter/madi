@@ -248,8 +248,9 @@ Transcription did not change in that cycle; those rows are the baseline, not a r
 
 ## Assets — what exists, where it lives, how it is verified
 
-Everything below is in this repository (or in the sibling `sovereignLLM` repo for the
-translate engines) and was **kept only after a measurement** — the rule of the project.
+Everything below is in this repository (the translate engines as prebuilt binaries in
+[`engine/prebuilt/`](engine/prebuilt/README.md) — their source is the private sibling
+`sovereignLLM` project) and was **kept only after a measurement** — the rule of the project.
 Refuted levers are recorded in the same ledgers as the wins. Canon documents are named
 per row; when a row and a canon disagree, the canon wins.
 
