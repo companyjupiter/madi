@@ -4,7 +4,7 @@ Madi 的代码几乎全部为自研，但使用了五个第三方机器学习模
 
 ## Madi 的许可
 
-Madi 自身的代码是采用 **GNU Affero General Public License v3.0**（AGPL-3.0-only）的自由软件。任何人都可以使用、研究、修改和再分发；分发修改版或通过网络向他人提供修改版时，必须以相同许可同时提供源代码。源代码位于 `github.com/companyjupiter/madi`，许可全文见 App 内附带的 `LICENSE` 文件。App 中的翻译引擎可执行文件（`translate-engine-2b`、`translate-engine-4b`）是不受 AGPL 约束的独立程序，仅以二进制形式分发。
+Madi 自身的代码是采用 **GNU Affero General Public License v3.0**（AGPL-3.0-only）的自由软件。本许可适用于 Madi 0.4.0 及之后的所有版本。任何人都可以使用、研究、修改和再分发；分发修改版或通过网络向他人提供修改版时，必须以相同许可同时提供源代码。源代码位于 `github.com/companyjupiter/madi`，许可全文见 App 内附带的 `LICENSE` 文件。App 中的翻译引擎可执行文件（`translate-engine-2b`、`translate-engine-4b`）是不受 AGPL 约束的独立程序，仅以二进制形式分发。个人和企业均可免费使用和再分发。
 
 ## 组件一览
 

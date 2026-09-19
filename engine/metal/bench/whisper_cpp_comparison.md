@@ -1,4 +1,4 @@
-# Sovereign Whisper (Metal) vs whisper.cpp — head-to-head
+# Madi (Metal) vs whisper.cpp — head-to-head
 
 Honest, reproducible comparison on identical inputs. **whisper.cpp is the mature,
 fast baseline and wins on raw speed.** Our value is elsewhere — see "Takeaways".

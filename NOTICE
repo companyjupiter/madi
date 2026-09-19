@@ -1,4 +1,4 @@
-Sovereign Whisper — Apple Silicon (Metal)
+Madi — Apple Silicon (Metal)
 =========================================
 
 This product includes software and machine-learning model weights developed by
@@ -112,6 +112,8 @@ in source and binary redistributions.
 All other code in this repository is original work of this project:
 Copyright (C) 2026 companyjupiter and the Madi contributors, licensed under the GNU
 Affero General Public License, version 3 only (AGPL-3.0-only) — see LICENSE. The
+license applies to Madi 0.4.0 and every later version; earlier revisions in the git
+history are kept for reference and are not licensed under it. The
 license covers the code; it grants no trademark rights in the name "Madi", its
 logo or its app icon.
 
@@ -119,5 +121,6 @@ Prebuilt binaries: engine/prebuilt/translate-engine-{4b,2b} (bundled as
 Contents/MacOS/translate-engine-{4b,2b}) are built from the author's private
 sovereignLLM project. They are separate programs the app launches as child
 processes and are NOT covered by the AGPL. Their source is not included; they are
-distributed under the
-Sovereign LLM Inference Engine License Agreement in engine/prebuilt/LICENSE.md.
+free for anyone
+to use and to redistribute unmodified under the Madi Translate Engine Binary
+License in engine/prebuilt/LICENSE.md.

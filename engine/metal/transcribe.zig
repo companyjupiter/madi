@@ -1,4 +1,4 @@
-// transcribe.zig — Sovereign Whisper (Metal) full pipeline:
+// transcribe.zig — Madi (Metal) full pipeline:
 //   WAV → mel → Conv1D×2 → 32-layer encoder → cross-KV → 4-layer autoregressive
 //   decoder → argmax → BPE decode.  Reads model.safetensors directly (F16→F32).
 // Usage: transcribe <model.safetensors> <audio.wav> <WHISPER_BPE.bin> [weights for conv via same safetensors]

@@ -1,5 +1,5 @@
 // sovereign_whisper_v20_hybrid_masterpiece.zig
-// SSOT: Sovereign Whisper V20 Hybrid Architecture (trans workspace)
+// SSOT: Madi V20 Hybrid Architecture (trans workspace)
 // Architecture: Model Loading = CPU (BypassIO/mmap) -> Inference = 100% All-GPU (Zero CPU Stall)
 const std = @import("std");
 const CUresult = i32;
@@ -765,7 +765,7 @@ fn runZeroShotDiarization(out: anytype, enc_data: []const u8) !void {
 pub fn main() !void {
     const out = std.io.getStdOut().writer();
     const alloc = std.heap.page_allocator;
-    try out.print("\n=== SOVEREIGN WHISPER DECODER V2 ===\n",.{});
+    try out.print("\n=== MADI DECODER V2 ===\n",.{});
 
     // 1. CUDA init
     var nv = std.DynLib.open("nvcuda.dll") catch { try out.print("nvcuda.dll not found\n",.{}); return; };

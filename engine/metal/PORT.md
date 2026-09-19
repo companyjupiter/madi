@@ -1,6 +1,6 @@
-# Sovereign Whisper — Apple Silicon (Metal) Port
+# Madi — Apple Silicon (Metal) Port
 
-Self-contained macOS/Metal port of the Windows+CUDA Sovereign Whisper V20.
+Self-contained macOS/Metal port of the Windows+CUDA Madi V20.
 Target: Apple Silicon (developed on M4 Pro, macOS 26).
 
 ## Why a full rewrite of the GPU layer

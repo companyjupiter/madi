@@ -1,4 +1,4 @@
-# Sovereign Whisper (Metal) — current verified status
+# Madi (Metal) — current verified status
 
 Single-snapshot reference for the `feature/metal-q8` branch. Chronological detail
 lives in `PERF_LOG.md`; diarization study in `bench/*.md`. Re-measured 2026-06-09.

@@ -126,7 +126,7 @@ public enum KoreanNumberFormatter {
             let counter = ns.substring(with: m.range(at: 2))
             // guard 4 (2026-09-11): the counter must END the word. "어서 오십시오."
             // (the polite imperative -십시오) matched 오십+시 and became
-            // "어서 50시오." on a live LG U+ session; a real time never runs
+            // "어서 50시오." in a live session; a real time never runs
             // straight into 오/옵/십 ("5시 오분" has a space, "5시에/부터/까지/쯤"
             // are particles). Only these verb-ending syllables are refused.
             let end = m.range.location + m.range.length

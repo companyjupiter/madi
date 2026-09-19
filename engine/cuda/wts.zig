@@ -301,7 +301,7 @@ fn runZeroShotDiarization(out: anytype, enc_data: []const u8) !void {
 pub fn run(ext_ctx: *anyopaque, d_enc_out: u64) !void {
     const out = std.io.getStdOut().writer();
     const alloc = std.heap.page_allocator;
-    try out.print("\n=== SOVEREIGN WHISPER DECODER V2 ===\n",.{});
+    try out.print("\n=== MADI DECODER V2 ===\n",.{});
 
     // 1. CUDA init
     var nv = std.DynLib.open("nvcuda.dll") catch { try out.print("nvcuda.dll not found\n",.{}); return; };

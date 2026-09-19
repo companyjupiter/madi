@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Sovereign Whisper — Korea-friendly live transcription dashboard (scaffold)",
+  "description": "Madi — Korea-friendly live transcription dashboard (scaffold)",
   "scripts": {
     "sync:fixtures": "mkdir -p public/fixtures && cp ../fixtures/*.jsonl public/fixtures/",
     "predev": "npm run sync:fixtures",

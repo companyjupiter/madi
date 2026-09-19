@@ -9,9 +9,10 @@ DNA3.0 GGUF the app downloads on demand. The models themselves are **not** here.
 **Source is not in this repository, and these two files are not covered by Madi's
 AGPL-3.0 license.** They are separate programs that the app launches as child
 processes and talks to over pipes. The engines are built from the author's
-private `sovereignLLM` project and are distributed here as binaries only, under
-the Sovereign LLM Inference Engine License Agreement reproduced in
-[`LICENSE.md`](LICENSE.md). Everything else in Madi builds from source.
+private `sovereignLLM` project and are distributed here as binaries only. Anyone —
+individuals and companies alike — may use them free of charge and redistribute them
+unmodified under the [Madi Translate Engine Binary License](LICENSE.md). Everything
+else in Madi builds from source.
 
 | file | runs | checked by |
 |---|---|---|

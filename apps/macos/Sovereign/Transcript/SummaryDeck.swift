@@ -19,7 +19,7 @@ enum SummaryDeck {
         // title slide
         slides.append("""
             <section class="slide title">
-              <div class="brand">◍ Sovereign Whisper · 온디바이스 생성</div>
+              <div class="brand">◍ Madi · 온디바이스 생성</div>
               <h1>\(esc(title))</h1>
               <div class="date">\(esc(dateText))</div>
             </section>

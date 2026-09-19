@@ -3,7 +3,7 @@
        The designer turns these into Figma components; token names map 1:1 to
        design/tokens.json → Theme.swift. -->
   <rect width="720" height="800" fill="#FAFAFA"/>
-  <text x="24" y="36" font-size="17" font-weight="700" fill="#000000" opacity="0.85">Sovereign Whisper — Components &amp; Tokens</text>
+  <text x="24" y="36" font-size="17" font-weight="700" fill="#000000" opacity="0.85">Madi — Components &amp; Tokens</text>
 
   <!-- ── speaker palette ── -->
   <g id="speaker-palette">

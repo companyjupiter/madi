@@ -1,4 +1,4 @@
-# Model assets — Sovereign Whisper (Metal)
+# Model assets — Madi (Metal)
 
 Whisper **large-v3-turbo**. Large/generated files are git-ignored; regenerate
 with the commands below.

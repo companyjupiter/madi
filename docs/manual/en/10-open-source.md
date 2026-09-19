@@ -4,7 +4,7 @@ Madi is almost entirely original code, but it uses five third-party machine-lear
 
 ## Madi's license
 
-Madi's own code is free software under the **GNU Affero General Public License v3.0** (AGPL-3.0-only). Anyone may use, study, modify and redistribute it; a modified version that is distributed or offered over a network must come with its source under the same license. The source code is at `github.com/companyjupiter/madi`, and the full license text is the `LICENSE` file inside the app. The translate engine executables in the app (`translate-engine-2b`, `translate-engine-4b`) are separate programs that are not covered by the AGPL and ship as binaries only.
+Madi's own code is free software under the **GNU Affero General Public License v3.0** (AGPL-3.0-only). The license applies to Madi 0.4.0 and every later version. Anyone may use, study, modify and redistribute it; a modified version that is distributed or offered over a network must come with its source under the same license. The source code is at `github.com/companyjupiter/madi`, and the full license text is the `LICENSE` file inside the app. The translate engine executables in the app (`translate-engine-2b`, `translate-engine-4b`) are separate programs that are not covered by the AGPL and ship as binaries only; anyone, individuals and companies alike, may use and redistribute them free of charge.
 
 ## Components at a glance
 
