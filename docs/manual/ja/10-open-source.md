@@ -1,6 +1,6 @@
 # オープンソースライセンス
 
-Madi のコードはほぼすべて自社開発ですが、5 つのサードパーティ機械学習モデルを利用しています。各ライセンスが求める著作権表示・帰属（attribution）表示・変更の告知をすべて以下に記載します。ライセンス原文は法的効力を持つ文書のため、翻訳せず英語のまま掲載します。
+Madi のコードはほぼすべて自社開発ですが、5 つのサードパーティ機械学習モデルを利用しており、アプリの自動アップデートには Sparkle フレームワークを利用しています。各ライセンスが求める著作権表示・帰属（attribution）表示・変更の告知をすべて以下に記載します。ライセンス原文は法的効力を持つ文書のため、翻訳せず英語のまま掲載します。
 
 ## コンポーネント一覧
 
@@ -11,6 +11,7 @@ Madi のコードはほぼすべて自社開発ですが、5 つのサードパ�
 | **Silero VAD** | 発話区間と無音区間の判定 | アプリに同梱 | MIT |
 | **pyannote** segmentation-3.0 | 発話が重なった区間の検出 | アプリに同梱 | MIT |
 | **DNA3.0-2B / 4B**（dnotitia・Qwen3.5 ベース） | オンデバイス翻訳・要約・質疑応答 | 利用時にダウンロード | Apache-2.0 |
+| **Sparkle** | アプリの自動アップデート | アプリに同梱 | MIT |
 
 ## MIT License のコンポーネント
 
@@ -43,6 +44,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Sparkle (MIT) — アプリの自動アップデート
+
+Madi はアップデートの確認とインストールに **Sparkle** フレームワーク（`github.com/sparkle-project/Sparkle`）を改変せずに同梱して利用しています。ライセンス条件は上記の MIT License 全文と同じです。
+
+```
+Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.
+```
+
+Sparkle に含まれる外部コード（bsdiff、sais-lite、ed25519、SUSignatureVerifier）のライセンス原文は `THIRD_PARTY_LICENSES.md` の §F にあります。
 
 ## Apache License 2.0 のコンポーネント
 

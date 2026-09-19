@@ -1,15 +1,17 @@
 # Third-Party Licenses
 
-This project reuses the third-party machine-learning models listed below. The full
+This project reuses the third-party machine-learning models listed below and embeds
+the Sparkle update framework. The full
 license texts are reproduced below; a summary of components and changes is in [`NOTICE`](NOTICE).
 
 | Component | Use | License |
 |---|---|---|
-| **DNA3.0-4B** (dnotitia; Qwen3.5-4B base) — translation + summary/Q&A | downloaded GGUF · `Contents/MacOS/translate-engine` | Apache-2.0 (§A) |
+| **DNA3.0-2B / 4B** (dnotitia; Qwen3.5-2B / 4B base) — translation + summary/Q&A | downloaded GGUF · `Contents/MacOS/translate-engine-{2b,4b}` | Apache-2.0 (§A) |
 | **WeSpeaker** ResNet34 (diarization) | `metal/diar_resnet.zig`, `assets/resnet34_diar.bin` | Apache-2.0 (§A) · pretrained weights CC BY 4.0 (§E) |
 | **OpenAI Whisper** large-v3-turbo (transcription) | `metal/transcribe.zig`, `encoder.zig`, `decoder.zig`, `mel.zig` | MIT (§B) |
 | **Silero VAD** (voice-activity detection) | `assets/silero_vad.bin` | MIT (§C) |
 | **pyannote** (overlapped-speech detection) | `assets/pyannote_osd.bin` | MIT (§D) |
+| **Sparkle** 2 (in-app updates) | `Contents/Frameworks/Sparkle.framework` | MIT + bundled external licenses (§F) |
 
 ---
 
@@ -18,7 +20,7 @@ license texts are reproduced below; a summary of components and changes is in [`
 Applies to the two Apache-2.0 components below; the full license text follows.
 
 - **WeSpeaker** speaker-embedding toolkit and model architecture — https://github.com/wenet-e2e/wespeaker — Copyright (c) the WeSpeaker authors. (The *pretrained VoxCeleb weights* we ship are CC BY 4.0 — see §E.)
-- **DNA3.0-4B** translation / summary model (dnotitia; base model Qwen3.5-4B) — https://huggingface.co/dnotitia/DNA3.0-4B — Copyright (c) Dnotitia Inc.; base model Copyright (c) Alibaba Cloud (Qwen).
+- **DNA3.0-2B** and **DNA3.0-4B** translation / summary models (dnotitia; base models Qwen3.5-2B and Qwen3.5-4B) — https://huggingface.co/dnotitia/DNA3.0-2B · https://huggingface.co/dnotitia/DNA3.0-4B — Copyright (c) Dnotitia Inc.; base models Copyright (c) Alibaba Cloud (Qwen).
 
 ```
                                  Apache License
@@ -328,3 +330,151 @@ CC BY 4.0 permits commercial use and redistribution provided the attribution
 above travels with the material. Note separately that VoxCeleb is assembled from
 YouTube material and its publishers state that copyright in the source videos
 remains with the original owners.
+
+---
+
+## §F — Sparkle (MIT License) and the external code it bundles
+
+Applies to `Contents/Frameworks/Sparkle.framework`, embedded unmodified for in-app
+updates — https://github.com/sparkle-project/Sparkle. The text below is the
+`LICENSE` file of the Sparkle release pinned by
+`apps/macos/scripts/ensure_sparkle.sh`, reproduced verbatim; it covers Sparkle
+itself (MIT) and the external code it includes (bsdiff, sais-lite, ed25519,
+SUSignatureVerifier). Refresh this section when the pinned Sparkle version changes.
+
+```
+Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+=================
+EXTERNAL LICENSES
+=================
+
+bspatch.c and bsdiff.c, from bsdiff 4.3 <http://www.daemonology.net/bsdiff/>:
+
+Copyright 2003-2005 Colin Percival
+All rights reserved
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted providing that the following conditions 
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+--
+
+sais.c and sais.h, from sais-lite (2010/08/07) <https://sites.google.com/site/yuta256/sais>:
+
+The sais-lite copyright is as follows:
+
+Copyright (c) 2008-2010 Yuta Mori All Rights Reserved.
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+--
+
+Portable C implementation of Ed25519, from https://github.com/orlp/ed25519
+
+Copyright (c) 2015 Orson Peters <orsonpeters@gmail.com>
+
+This software is provided 'as-is', without any express or implied warranty. In no event will the
+authors be held liable for any damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose, including commercial
+applications, and to alter it and redistribute it freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not claim that you wrote the
+   original software. If you use this software in a product, an acknowledgment in the product
+   documentation would be appreciated but is not required.
+
+2. Altered source versions must be plainly marked as such, and must not be misrepresented as
+   being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
+
+--
+
+SUSignatureVerifier.m:
+
+Copyright (c) 2011 Mark Hamlin.
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted providing that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+```

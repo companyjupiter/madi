@@ -677,9 +677,9 @@
 </ul>
 <blockquote>선택된 DNA3.0 번역 모델은 <strong>번역</strong> 탭에서 관리합니다.</blockquote>
 <blockquote><strong>시스템 받아쓰기</strong>는 추후 제공 예정이라, 현재 베타에는 <strong>받아쓰기 탭이 없습니다.</strong> (<strong>시스템 받아쓰기 (추후 제공)</strong> 참고.)</blockquote></section>
-<section id="ko-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">오픈소스 라이선스</h1><p>Madi의 코드는 대부분 자체 개발이지만, 다섯 개의 서드파티 머신러닝 모델을 사용합니다. 각 라이선스가 요구하는 저작권 고지·귀속(attribution)·변경 사실 고지를 아래에 모두 싣습니다. 라이선스 원문은 법적 효력을 갖는 문서이므로 번역하지 않고 영문 그대로 둡니다.</p>
+<section id="ko-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">오픈소스 라이선스</h1><p>Madi의 코드는 대부분 자체 개발이지만, 다섯 개의 서드파티 머신러닝 모델을 사용하고, 앱 자동 업데이트에는 Sparkle 프레임워크를 사용합니다. 각 라이선스가 요구하는 저작권 고지·귀속(attribution)·변경 사실 고지를 아래에 모두 싣습니다. 라이선스 원문은 법적 효력을 갖는 문서이므로 번역하지 않고 영문 그대로 둡니다.</p>
 <h2 id="구성요소-한눈에">구성요소 한눈에</h2>
-<table><thead><tr><th>구성요소</th><th>Madi에서의 용도</th><th>배포 형태</th><th>라이선스</th></tr></thead><tbody><tr><td><strong>OpenAI Whisper</strong> large-v3-turbo</td><td>음성 전사</td><td>첫 실행 시 다운로드</td><td>MIT</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>화자 분리(음성 임베딩)</td><td>앱에 포함</td><td>툴킷 Apache-2.0 · 가중치 CC BY 4.0</td></tr><tr><td><strong>Silero VAD</strong></td><td>말한 구간과 침묵 구간 판정</td><td>앱에 포함</td><td>MIT</td></tr><tr><td><strong>pyannote</strong> segmentation-3.0</td><td>겹쳐 말한 구간 검출</td><td>앱에 포함</td><td>MIT</td></tr><tr><td><strong>DNA3.0-2B / 4B</strong> (dnotitia · Qwen3.5 기반)</td><td>온디바이스 번역·요약·질의응답</td><td>사용 시 다운로드</td><td>Apache-2.0</td></tr></tbody></table>
+<table><thead><tr><th>구성요소</th><th>Madi에서의 용도</th><th>배포 형태</th><th>라이선스</th></tr></thead><tbody><tr><td><strong>OpenAI Whisper</strong> large-v3-turbo</td><td>음성 전사</td><td>첫 실행 시 다운로드</td><td>MIT</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>화자 분리(음성 임베딩)</td><td>앱에 포함</td><td>툴킷 Apache-2.0 · 가중치 CC BY 4.0</td></tr><tr><td><strong>Silero VAD</strong></td><td>말한 구간과 침묵 구간 판정</td><td>앱에 포함</td><td>MIT</td></tr><tr><td><strong>pyannote</strong> segmentation-3.0</td><td>겹쳐 말한 구간 검출</td><td>앱에 포함</td><td>MIT</td></tr><tr><td><strong>DNA3.0-2B / 4B</strong> (dnotitia · Qwen3.5 기반)</td><td>온디바이스 번역·요약·질의응답</td><td>사용 시 다운로드</td><td>Apache-2.0</td></tr><tr><td><strong>Sparkle</strong></td><td>앱 자동 업데이트</td><td>앱에 포함</td><td>MIT</td></tr></tbody></table>
 <h2 id="mit-license-구성요소">MIT License 구성요소</h2>
 <ul>
 <li><strong>OpenAI Whisper</strong> large-v3-turbo — Copyright (c) 2022 OpenAI — <code>github.com/openai/whisper</code></li>
@@ -709,6 +709,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.</code></pre>
+<h2 id="sparkle-mit-앱-자동-업데이트">Sparkle (MIT) — 앱 자동 업데이트</h2>
+<p>Madi는 업데이트 확인과 설치에 <strong>Sparkle</strong> 프레임워크(<code>github.com/sparkle-project/Sparkle</code>)를 수정 없이 앱에 포함해 사용합니다. 라이선스 조건은 위 MIT License 전문과 같습니다.</p>
+<pre><code>Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.</code></pre>
+<p>Sparkle에 포함된 외부 코드(bsdiff, sais-lite, ed25519, SUSignatureVerifier)의 라이선스 원문은 <code>THIRD_PARTY_LICENSES.md</code> §F에 있습니다.</p>
 <h2 id="apache-license-2-0-구성요소">Apache License 2.0 구성요소</h2>
 <ul>
 <li><strong>DNA3.0-2B / 4B</strong> — Copyright (c) Dnotitia Inc. · 베이스 모델 Copyright (c) Alibaba Cloud (Qwen) — <code>dnotitia/DNA3.0-4B</code>(베이스 <code>Qwen/Qwen3.5-4B</code>), <code>dnotitia/DNA3.0-2B</code>(베이스 <code>Qwen/Qwen3.5-2B</code>). 디노티시아가 Qwen3.5를 한국어 중심으로 후처리 학습한 온디바이스 LLM으로, 실시간 번역과 회의 요약·질의응답에 사용합니다.</li>
@@ -1369,9 +1379,9 @@ Disclaimer: the material is licensed AS-IS, without warranties of any kind.</cod
 </ul>
 <blockquote>The selected DNA3.0 translation model is managed on the <strong>번역</strong> (Translation) tab.</blockquote>
 <blockquote><strong>System dictation</strong> is coming later, so the current beta has <strong>no 받아쓰기 (Dictation) tab.</strong> (See <strong>System dictation (coming later)</strong>.)</blockquote></section>
-<section id="en-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">Open-Source Licenses</h1><p>Madi is almost entirely original code, but it uses five third-party machine-learning models. Every copyright, attribution and change notice those licenses require is reproduced below. License texts are legal documents, so they are kept in their original English rather than translated.</p>
+<section id="en-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">Open-Source Licenses</h1><p>Madi is almost entirely original code, but it uses five third-party machine-learning models, and the Sparkle framework for in-app updates. Every copyright, attribution and change notice those licenses require is reproduced below. License texts are legal documents, so they are kept in their original English rather than translated.</p>
 <h2 id="components-at-a-glance">Components at a glance</h2>
-<table><thead><tr><th>Component</th><th>Use in Madi</th><th>How it ships</th><th>License</th></tr></thead><tbody><tr><td><strong>OpenAI Whisper</strong> large-v3-turbo</td><td>Speech transcription</td><td>Downloaded on first run</td><td>MIT</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>Speaker diarization (voice embedding)</td><td>Bundled in the app</td><td>Toolkit Apache-2.0 · weights CC BY 4.0</td></tr><tr><td><strong>Silero VAD</strong></td><td>Telling speech from silence</td><td>Bundled in the app</td><td>MIT</td></tr><tr><td><strong>pyannote</strong> segmentation-3.0</td><td>Overlapped-speech detection</td><td>Bundled in the app</td><td>MIT</td></tr><tr><td><strong>DNA3.0-2B / 4B</strong> (dnotitia · Qwen3.5 base)</td><td>On-device translation, summary and Q&amp;A</td><td>Downloaded when you enable it</td><td>Apache-2.0</td></tr></tbody></table>
+<table><thead><tr><th>Component</th><th>Use in Madi</th><th>How it ships</th><th>License</th></tr></thead><tbody><tr><td><strong>OpenAI Whisper</strong> large-v3-turbo</td><td>Speech transcription</td><td>Downloaded on first run</td><td>MIT</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>Speaker diarization (voice embedding)</td><td>Bundled in the app</td><td>Toolkit Apache-2.0 · weights CC BY 4.0</td></tr><tr><td><strong>Silero VAD</strong></td><td>Telling speech from silence</td><td>Bundled in the app</td><td>MIT</td></tr><tr><td><strong>pyannote</strong> segmentation-3.0</td><td>Overlapped-speech detection</td><td>Bundled in the app</td><td>MIT</td></tr><tr><td><strong>DNA3.0-2B / 4B</strong> (dnotitia · Qwen3.5 base)</td><td>On-device translation, summary and Q&amp;A</td><td>Downloaded when you enable it</td><td>Apache-2.0</td></tr><tr><td><strong>Sparkle</strong></td><td>In-app updates</td><td>Bundled in the app</td><td>MIT</td></tr></tbody></table>
 <h2 id="mit-license-components">MIT License components</h2>
 <ul>
 <li><strong>OpenAI Whisper</strong> large-v3-turbo — Copyright (c) 2022 OpenAI — <code>github.com/openai/whisper</code></li>
@@ -1401,6 +1411,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.</code></pre>
+<h2 id="sparkle-mit-in-app-updates">Sparkle (MIT) — in-app updates</h2>
+<p>Madi embeds the <strong>Sparkle</strong> framework (<code>github.com/sparkle-project/Sparkle</code>), unmodified, to check for and install updates. Its terms are the MIT License text above.</p>
+<pre><code>Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.</code></pre>
+<p>The license texts of the external code Sparkle bundles (bsdiff, sais-lite, ed25519, SUSignatureVerifier) are in <code>THIRD_PARTY_LICENSES.md</code> §F.</p>
 <h2 id="apache-license-2-0-components">Apache License 2.0 components</h2>
 <ul>
 <li><strong>DNA3.0-2B / 4B</strong> — Copyright (c) Dnotitia Inc. · base model Copyright (c) Alibaba Cloud (Qwen) — <code>dnotitia/DNA3.0-4B</code> (base <code>Qwen/Qwen3.5-4B</code>), <code>dnotitia/DNA3.0-2B</code> (base <code>Qwen/Qwen3.5-2B</code>). On-device LLMs from dnotitia, post-trained from Qwen3.5 with a focus on Korean; they power live translation and meeting summary / Q&amp;A.</li>
@@ -2061,9 +2081,9 @@ Disclaimer: the material is licensed AS-IS, without warranties of any kind.</cod
 </ul>
 <blockquote>選択された DNA3.0 翻訳モデルは <strong>번역</strong>（翻訳）タブで管理します。</blockquote>
 <blockquote><strong>システムディクテーション</strong>は今後提供予定のため、現在のベータには <strong>받아쓰기（ディクテーション）タブがありません。</strong>（<strong>システムディクテーション（音声入力・今後提供予定）</strong> を参照。）</blockquote></section>
-<section id="ja-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">オープンソースライセンス</h1><p>Madi のコードはほぼすべて自社開発ですが、5 つのサードパーティ機械学習モデルを利用しています。各ライセンスが求める著作権表示・帰属（attribution）表示・変更の告知をすべて以下に記載します。ライセンス原文は法的効力を持つ文書のため、翻訳せず英語のまま掲載します。</p>
+<section id="ja-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">オープンソースライセンス</h1><p>Madi のコードはほぼすべて自社開発ですが、5 つのサードパーティ機械学習モデルを利用しており、アプリの自動アップデートには Sparkle フレームワークを利用しています。各ライセンスが求める著作権表示・帰属（attribution）表示・変更の告知をすべて以下に記載します。ライセンス原文は法的効力を持つ文書のため、翻訳せず英語のまま掲載します。</p>
 <h2 id="コンポーネント一覧">コンポーネント一覧</h2>
-<table><thead><tr><th>コンポーネント</th><th>Madi での用途</th><th>提供形態</th><th>ライセンス</th></tr></thead><tbody><tr><td><strong>OpenAI Whisper</strong> large-v3-turbo</td><td>音声の文字起こし</td><td>初回起動時にダウンロード</td><td>MIT</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>話者分離（音声エンベディング）</td><td>アプリに同梱</td><td>ツールキット Apache-2.0 · 重み CC BY 4.0</td></tr><tr><td><strong>Silero VAD</strong></td><td>発話区間と無音区間の判定</td><td>アプリに同梱</td><td>MIT</td></tr><tr><td><strong>pyannote</strong> segmentation-3.0</td><td>発話が重なった区間の検出</td><td>アプリに同梱</td><td>MIT</td></tr><tr><td><strong>DNA3.0-2B / 4B</strong>（dnotitia・Qwen3.5 ベース）</td><td>オンデバイス翻訳・要約・質疑応答</td><td>利用時にダウンロード</td><td>Apache-2.0</td></tr></tbody></table>
+<table><thead><tr><th>コンポーネント</th><th>Madi での用途</th><th>提供形態</th><th>ライセンス</th></tr></thead><tbody><tr><td><strong>OpenAI Whisper</strong> large-v3-turbo</td><td>音声の文字起こし</td><td>初回起動時にダウンロード</td><td>MIT</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>話者分離（音声エンベディング）</td><td>アプリに同梱</td><td>ツールキット Apache-2.0 · 重み CC BY 4.0</td></tr><tr><td><strong>Silero VAD</strong></td><td>発話区間と無音区間の判定</td><td>アプリに同梱</td><td>MIT</td></tr><tr><td><strong>pyannote</strong> segmentation-3.0</td><td>発話が重なった区間の検出</td><td>アプリに同梱</td><td>MIT</td></tr><tr><td><strong>DNA3.0-2B / 4B</strong>（dnotitia・Qwen3.5 ベース）</td><td>オンデバイス翻訳・要約・質疑応答</td><td>利用時にダウンロード</td><td>Apache-2.0</td></tr><tr><td><strong>Sparkle</strong></td><td>アプリの自動アップデート</td><td>アプリに同梱</td><td>MIT</td></tr></tbody></table>
 <h2 id="mit-license-のコンポーネント">MIT License のコンポーネント</h2>
 <ul>
 <li><strong>OpenAI Whisper</strong> large-v3-turbo — Copyright (c) 2022 OpenAI — <code>github.com/openai/whisper</code></li>
@@ -2093,6 +2113,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.</code></pre>
+<h2 id="sparkle-mit-アプリの自動アップデート">Sparkle (MIT) — アプリの自動アップデート</h2>
+<p>Madi はアップデートの確認とインストールに <strong>Sparkle</strong> フレームワーク（<code>github.com/sparkle-project/Sparkle</code>）を改変せずに同梱して利用しています。ライセンス条件は上記の MIT License 全文と同じです。</p>
+<pre><code>Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.</code></pre>
+<p>Sparkle に含まれる外部コード（bsdiff、sais-lite、ed25519、SUSignatureVerifier）のライセンス原文は <code>THIRD_PARTY_LICENSES.md</code> の §F にあります。</p>
 <h2 id="apache-license-2-0-のコンポーネント">Apache License 2.0 のコンポーネント</h2>
 <ul>
 <li><strong>DNA3.0-2B / 4B</strong> — Copyright (c) Dnotitia Inc. · ベースモデル Copyright (c) Alibaba Cloud (Qwen) — <code>dnotitia/DNA3.0-4B</code>（ベース <code>Qwen/Qwen3.5-4B</code>）、<code>dnotitia/DNA3.0-2B</code>（ベース <code>Qwen/Qwen3.5-2B</code>）。dnotitia が Qwen3.5 を韓国語中心にポストトレーニングしたオンデバイス LLM で、リアルタイム翻訳と会議の要約・質疑応答に使用します。</li>
@@ -2753,9 +2783,9 @@ Disclaimer: the material is licensed AS-IS, without warranties of any kind.</cod
 </ul>
 <blockquote>选定的 DNA3.0 翻译模型在 <strong>번역</strong>（翻译）标签页中管理。</blockquote>
 <blockquote><strong>系统听写</strong>将在之后提供，因此当前测试版<strong>没有 받아쓰기（听写）标签页。</strong>（参见<strong>系统听写（后续提供）</strong>。）</blockquote></section>
-<section id="zh-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">开源许可</h1><p>Madi 的代码几乎全部为自研，但使用了五个第三方机器学习模型。这些许可所要求的著作权声明、署名（attribution）与变更告知，下面全部予以载明。许可原文具有法律效力，因此保留英文原文而不作翻译。</p>
+<section id="zh-10-open-source" class="doc"><div class="doc-num">10</div><h1 class="doc-title">开源许可</h1><p>Madi 的代码几乎全部为自研，但使用了五个第三方机器学习模型，并使用 Sparkle 框架实现 App 自动更新。这些许可所要求的著作权声明、署名（attribution）与变更告知，下面全部予以载明。许可原文具有法律效力，因此保留英文原文而不作翻译。</p>
 <h2 id="组件一览">组件一览</h2>
-<table><thead><tr><th>组件</th><th>在 Madi 中的用途</th><th>分发方式</th><th>许可</th></tr></thead><tbody><tr><td><strong>OpenAI Whisper</strong> large-v3-turbo</td><td>语音转写</td><td>首次启动时下载</td><td>MIT</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>说话人分离（声纹嵌入）</td><td>随 App 打包</td><td>工具包 Apache-2.0 · 权重 CC BY 4.0</td></tr><tr><td><strong>Silero VAD</strong></td><td>判定发言段与静音段</td><td>随 App 打包</td><td>MIT</td></tr><tr><td><strong>pyannote</strong> segmentation-3.0</td><td>检测重叠发言段</td><td>随 App 打包</td><td>MIT</td></tr><tr><td><strong>DNA3.0-2B / 4B</strong>（dnotitia · 基于 Qwen3.5）</td><td>设备端翻译、摘要与问答</td><td>使用时下载</td><td>Apache-2.0</td></tr></tbody></table>
+<table><thead><tr><th>组件</th><th>在 Madi 中的用途</th><th>分发方式</th><th>许可</th></tr></thead><tbody><tr><td><strong>OpenAI Whisper</strong> large-v3-turbo</td><td>语音转写</td><td>首次启动时下载</td><td>MIT</td></tr><tr><td><strong>WeSpeaker</strong> ResNet34</td><td>说话人分离（声纹嵌入）</td><td>随 App 打包</td><td>工具包 Apache-2.0 · 权重 CC BY 4.0</td></tr><tr><td><strong>Silero VAD</strong></td><td>判定发言段与静音段</td><td>随 App 打包</td><td>MIT</td></tr><tr><td><strong>pyannote</strong> segmentation-3.0</td><td>检测重叠发言段</td><td>随 App 打包</td><td>MIT</td></tr><tr><td><strong>DNA3.0-2B / 4B</strong>（dnotitia · 基于 Qwen3.5）</td><td>设备端翻译、摘要与问答</td><td>使用时下载</td><td>Apache-2.0</td></tr><tr><td><strong>Sparkle</strong></td><td>App 自动更新</td><td>随 App 打包</td><td>MIT</td></tr></tbody></table>
 <h2 id="mit-license-组件">MIT License 组件</h2>
 <ul>
 <li><strong>OpenAI Whisper</strong> large-v3-turbo —— Copyright (c) 2022 OpenAI —— <code>github.com/openai/whisper</code></li>
@@ -2785,6 +2815,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.</code></pre>
+<h2 id="sparkle-mit-app-自动更新">Sparkle (MIT) —— App 自动更新</h2>
+<p>Madi 在检查和安装更新时使用随 App 打包、未经修改的 <strong>Sparkle</strong> 框架（<code>github.com/sparkle-project/Sparkle</code>）。其许可条件与上文的 MIT License 全文相同。</p>
+<pre><code>Copyright (c) 2006-2013 Andy Matuschak.
+Copyright (c) 2009-2013 Elgato Systems GmbH.
+Copyright (c) 2011-2014 Kornel Lesiński.
+Copyright (c) 2015-2017 Mayur Pawashe.
+Copyright (c) 2014 C.W. Betts.
+Copyright (c) 2014 Petroules Corporation.
+Copyright (c) 2014 Big Nerd Ranch.</code></pre>
+<p>Sparkle 所含外部代码（bsdiff、sais-lite、ed25519、SUSignatureVerifier）的许可原文见 <code>THIRD_PARTY_LICENSES.md</code> 的 §F。</p>
 <h2 id="apache-license-2-0-组件">Apache License 2.0 组件</h2>
 <ul>
 <li><strong>DNA3.0-2B / 4B</strong> —— Copyright (c) Dnotitia Inc. · 基础模型 Copyright (c) Alibaba Cloud (Qwen) —— <code>dnotitia/DNA3.0-4B</code>（基础模型 <code>Qwen/Qwen3.5-4B</code>）、<code>dnotitia/DNA3.0-2B</code>（基础模型 <code>Qwen/Qwen3.5-2B</code>）。dnotitia 以韩语为重点对 Qwen3.5 进行后训练得到的设备端 LLM，用于实时翻译与会议摘要 / 问答。</li>

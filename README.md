@@ -378,8 +378,8 @@ per PERF_LOG entry) and were never published.
 - Ledgers: `PERF_LOG.md` (app + engine rounds since 2026-07), `engine/metal/STATUS.md` (current engine state), `engine/metal/PERF_LOG.md` (engine history), `engine/metal/PORT.md` (CUDA→Metal port notes).
 
 ## License / provenance
-Inference code is original work of this project. It reuses five third-party models,
-whose notices are retained as required and reproduced in full:
+Inference code is original work of this project. It reuses five third-party models
+and embeds the Sparkle update framework; their notices are retained as required and reproduced in full:
 
 - **OpenAI Whisper** large-v3-turbo — **MIT License**, © 2022 OpenAI
   (transcription). MIT requires keeping the copyright + permission notice.
@@ -393,6 +393,9 @@ whose notices are retained as required and reproduced in full:
 - **DNA3.0-2B / 4B** — **Apache License 2.0**, © Dnotitia Inc.; base model
   Qwen3.5 © Alibaba Cloud (translation, summary, Q&A — downloaded on demand,
   not bundled).
+- **Sparkle** — **MIT License**, © Andy Matuschak and the Sparkle contributors
+  (in-app updates; embedded unmodified as `Sparkle.framework`, with the licenses of
+  the external code it bundles).
 
 See [`NOTICE`](NOTICE) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)
 for the attributions and full license texts; source headers in

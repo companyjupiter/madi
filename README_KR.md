@@ -448,7 +448,8 @@ CloudFront로 `channels/<channel>/latest.json`과 `appcast.xml`을 읽고 크기
 ---
 
 ## 라이선스 / 출처
-추론 코드는 본 프로젝트의 독자 구현입니다. 다섯 가지 서드파티 모델을 재사용하며,
+추론 코드는 본 프로젝트의 독자 구현입니다. 다섯 가지 서드파티 모델을 재사용하고 앱 업데이트에
+Sparkle 프레임워크를 포함하며,
 요구되는 고지를 코드·배포물에 모두 유지합니다:
 
 - **OpenAI Whisper** large-v3-turbo — **MIT License**, © 2022 OpenAI (전사).
@@ -462,6 +463,8 @@ CloudFront로 `channels/<channel>/latest.json`과 `appcast.xml`을 읽고 크기
 - **pyannote** segmentation-3.0 — **MIT License**, © 2020 CNRS (겹침 구간 검출).
 - **DNA3.0-2B / 4B** — **Apache License 2.0**, © Dnotitia Inc.; 베이스 모델
   Qwen3.5 © Alibaba Cloud (번역·요약·질의응답 — 번들이 아니라 필요 시 다운로드).
+- **Sparkle** — **MIT License**, © Andy Matuschak 및 Sparkle 기여자 (앱 내 업데이트,
+  `Sparkle.framework`를 수정 없이 포함; Sparkle에 든 외부 코드의 라이선스도 함께 고지).
 
 전체 고지·라이선스 전문은 [`NOTICE`](NOTICE)·[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md),
 소스 헤더(`engine/metal/transcribe.zig`·`engine/metal/diar_resnet.zig`)에도 동일 고지가 있습니다.
