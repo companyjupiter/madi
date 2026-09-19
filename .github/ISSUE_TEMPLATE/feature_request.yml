@@ -1,0 +1,23 @@
+name: Feature request
+description: An idea for Madi. 한국어로 작성하셔도 됩니다.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+    validations:
+      required: true
+  - type: checkboxes
+    id: local
+    attributes:
+      label: Local-first
+      options:
+        - label: This can work on the device, without an account or a cloud service.
