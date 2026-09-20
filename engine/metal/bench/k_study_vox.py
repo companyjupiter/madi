@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Auto-K estimator shoot-out on VoxConverse-dev diar_embed_wav dumps.
 
-Usage: k_study_vox.py /tmp/voxk ~/Downloads/benchmark_samples/voxconverse/dev
+Usage: k_study_vox.py /tmp/voxk $MADI_BENCH_SAMPLES/voxconverse/dev
 Dump format (diar_embed_wav.zig): u32 n, then n × [f32 t0, f32 emb[256]]
 (already VAD-filtered). Ground-truth K = distinct speakers in the ref rttm.
 Estimators: sil (shipped), rsil (sil + recursive 2-way split at sub-sil ≥ tau),

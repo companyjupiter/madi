@@ -8,7 +8,7 @@ export const meta = {
   ],
 }
 
-const DIR = '/Users/jupitersong/antigravity/madi/engine/metal'
+const DIR = `${process.cwd()}/engine/metal`   // run from the repository root
 const CAMP = `${DIR}/bench/runs/vad_campaign.jsonl`      // {prob,fid,group,bucket,nspk_ref,der}
 const COMP = `${DIR}/bench/runs/vad_components.jsonl`    // + {scored,miss,fa,conf}
 const FLEURS = `${DIR}/bench/runs/fleurs_vad_sweep.jsonl`// {prob,result:"CER=.. WER=.. n=.. empty=.."}

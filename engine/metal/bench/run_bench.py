@@ -4,8 +4,9 @@
 # params without rebuilding. Prints per-file DER + mean (overall + by spk-count).
 import os, sys, subprocess, glob, json, statistics
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # metal/
-VOX = os.path.expanduser("~/Downloads/benchmark_samples/voxconverse")
-AUDIO = os.path.expanduser("~/Downloads/benchmark_samples/audio")
+BENCH_SAMPLES = os.path.expanduser(os.environ.get("MADI_BENCH_SAMPLES", "bench/data"))
+VOX = os.path.join(BENCH_SAMPLES, "voxconverse")
+AUDIO = os.path.join(BENCH_SAMPLES, "audio")
 MODEL = os.path.join(ROOT, "assets/model.safetensors")
 BPE = os.path.join(ROOT, "assets/WHISPER_BPE.bin")
 TR = os.path.join(ROOT, "out/transcribe")

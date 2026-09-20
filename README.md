@@ -213,7 +213,6 @@ dedicated var, so it never collides with the shell locale `$LANG`.
 > **Limits**: short segments crossing a speaker turn can flip mid-sentence
 > (use 8–10 s); Whisper may still mis-time/hallucinate words on noisy audio.
 > For the most accurate final copy, run the whole WAV through `transcribe` once
-> after the meeting. See `testdata/` for a KO+EN regression fixture.
 
 ## Performance
 

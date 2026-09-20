@@ -2458,7 +2458,7 @@ pub fn main() !void {
         //   · language token arg-max [50259..50358] (detected once per file)
         //   · P(<|nospeech|>=50363): the model's own speech/non-speech verdict.
         //     Energy cannot make this call — measured: pqmho's music has
-        //     HIGHER window RMS (p25 0.154) than wife real speech (med 0.052)
+        //     HIGHER window RMS (p25 0.154) than the KO 2-spk clip's speech (med 0.052)
         //     or ES2004a far-field (med 0.0067).
         // (P(nospeech) was measured here and REFUTED: ≈1e-10 on pure music and
         // real speech alike — <|nospeech|> is dead in large-v3-turbo. The SOT
@@ -2569,7 +2569,7 @@ pub fn main() !void {
         // the seek point and decoded again. Two cheaper shortcuts were
         // reverse-verified WORSE and removed:
         //   · banning EOT while voice remains → the model fills with junk
-        //     text when it wants to stop (wife_conv ". . . ~~" loop);
+        //     text when it wants to stop (the KO 2-spk clip's ". . . ~~" loop);
         //   · re-decoding the SAME encoder window with a forced initial
         //     timestamp (± <|startofprev|> prompt) → out-of-distribution,
         //     the model re-transcribes the window start (jfk "and so," dup).

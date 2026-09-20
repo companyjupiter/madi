@@ -31,8 +31,9 @@ from live_ux_metrics import analyze_live_ux
 ROOT = Path(__file__).resolve().parents[1]  # engine/metal
 BENCH = ROOT / "bench"
 RUNS = BENCH / "runs"
-VOX = Path("~/Downloads/benchmark_samples/voxconverse/dev").expanduser()
-VOX_AUDIO = Path("~/Downloads/benchmark_samples/audio").expanduser()
+BENCH_SAMPLES = Path(os.environ.get("MADI_BENCH_SAMPLES", "bench/data")).expanduser()
+VOX = BENCH_SAMPLES / "voxconverse" / "dev"
+VOX_AUDIO = BENCH_SAMPLES / "audio"
 
 
 @dataclass

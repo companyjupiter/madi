@@ -15,8 +15,9 @@ try:
 except OSError:
     sys.exit('another full_bench.py is running — refusing to race it')
 RTTM_DIR = tempfile.mkdtemp(prefix='fb_rttm_', dir=os.path.join(RUNS, "scratch"))
-VOX = os.path.expanduser("~/Downloads/benchmark_samples/voxconverse")
-AUDIO = os.path.expanduser("~/Downloads/benchmark_samples/audio")
+BENCH_SAMPLES = os.path.expanduser(os.environ.get("MADI_BENCH_SAMPLES", "bench/data"))
+VOX = os.path.join(BENCH_SAMPLES, "voxconverse")
+AUDIO = os.path.join(BENCH_SAMPLES, "audio")
 MODEL = os.path.join(ROOT, "assets/model.safetensors")
 BPE = os.path.join(ROOT, "assets/WHISPER_BPE.bin")
 TR = os.path.join(ROOT, "out/transcribe")

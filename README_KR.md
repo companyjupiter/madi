@@ -421,7 +421,6 @@ Sparkle과 DNA3.0-2B가 추가되고, 사전 빌드 번역 엔진은 누구나 �
 - `engine/metal/live_transcribe.sh` — 준실시간 라이브 회의 러너(마이크·오버랩·상주·색상·md/srt)
 - `engine/metal/merge_seg.awk` — 워드 타임스탬프 ↔ 화자 라벨 머지(오버랩 dedup·화자 캐리오버)
 - `engine/metal/online_diar.zig`·`diar_embed_wav.zig` — 독립 diar 도구(`--no-resident` 폴백용)
-- `engine/metal/testdata/` — 라이브 파이프라인 회귀 픽스처(한+영) + `check.sh`
 - `engine/metal/STATUS.md` — 현재 검증 상태(성능·RSS·DER·타임스탬프) 한눈에
 - `engine/metal/PERF_LOG.md` — 최적화 시계열 전체 기록
 - `engine/metal/bench/` — DER 벤치마크 하네스 + 화자분리 연구 문서
