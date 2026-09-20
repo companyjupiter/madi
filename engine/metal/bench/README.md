@@ -4,6 +4,18 @@ Objective DER (Diarization Error Rate) measurement against AMI ground truth.
 Large data files (`*.wav`, `*.rttm`, `md-eval.pl`, `*.bin`) are git-ignored —
 regenerate with the commands below.
 
+## Sample data location
+
+Benchmark audio and references are **not** in this repository. Scripts read them from
+`MADI_BENCH_SAMPLES` (default `bench/data`), laid out as
+`$MADI_BENCH_SAMPLES/{voxconverse/dev/*.rttm, audio/*.wav}`; the Korean diarization
+kit, which is supplied locally and not distributed, comes from `MADI_DIAR_KIT`.
+Either export the variable or symlink your download into `bench/data`:
+
+```bash
+export MADI_BENCH_SAMPLES=~/Downloads/benchmark_samples   # your own copy
+```
+
 ## Setup
 ```bash
 cd metal

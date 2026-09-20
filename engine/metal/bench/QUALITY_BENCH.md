@@ -24,8 +24,8 @@ whisper.cpp (same large-v3-turbo q8_0) as the cross-engine referee.
 over-births speakers on far-field audio (8 vs true 4) and merges similar clean
 voices (2 vs true 4). Knob tuning cannot fix both (verified: SIM sweep moves
 ES2004a but not demo4; capping MAXK=4 makes ES2004a *worse*, 53.25%, because
-early bad anchors get locked). Real 2-speaker close-mic audio (wife_conv
-fixture) is fine on both paths.
+early bad anchors get locked). Real 2-speaker close-mic audio (a local KO
+2-speaker clip, not distributed) is fine on both paths.
 
 > **WIN #1 (verified, largest): periodic re-clustering in live mode.**
 > Accumulate window embeddings and every N windows re-run the batch k-means +
@@ -47,7 +47,7 @@ tiny clusters (<3 windows) never mint ids. Streaming-emitted labels, measured:
 | ES2004a live (far-field 4spk, auto-K) | 38.33% (K=8) | **35.06% (K=6)** |
 | demo4 live + `DIAR_K=4` hint | 51.52% | **45.47%** |
 | demo4 live auto-K | 51.52% | 51.52% (silhouette picks K=2 — same in file mode; pre-existing estimator limit, needs the K hint) |
-| wife_conv (real 2-spk) | 2 main + 1 stray id | **exactly 2 speakers, ids 0/1, zero strays** |
+| ko-2spk local clip (real 2-spk) | 2 main + 1 stray id | **exactly 2 speakers, ids 0/1, zero strays** |
 | voiceprints / jfk file path | — | unchanged (regression PASS) |
 
 Remaining headroom to the file-mode ceiling (~32.5%) is the *streaming penalty*:
@@ -64,7 +64,7 @@ console stays streaming; the SAVED transcript gets end-of-session quality:
 |---|---|---|
 | demo4 + `DIAR_K=4` (short session) | 45.47% | **31.92%** |
 | ES2004a (17 min) | 35.06% | 35.13% (≈same — long sessions are already post-recluster stable) |
-| wife_conv + `--speakers "0=남편,1=아내"` | — | exactly 남편/아내, names preserved, zero strays |
+| ko-2spk local clip + `--speakers "0=A,1=B"` | — | exactly A/B, names preserved, zero strays |
 
 Reverse-verified: restricting reassignment to the final k-means' ids was WORSE
 (31.92→35.64 — stale centroids absorb coherent subsets); all-centroid
@@ -265,7 +265,7 @@ OpenAI-faithful seek with re-encode of the remaining window.
 | KO+EN fixture | PASS | **PASS** (plain path preserved) |
 | devops_ko / jfk text + word ts | — | bit-identical; acoustic referee unchanged (4/5 ms) |
 | decode tok/s (devops_ko) | 497-521 | 495-511 (wall time +0.2% = noise) |
-| false rescues on clean assets | — | 0 (jfk, devops_ko, wife, ES2004a) |
+| false rescues on clean assets | — | 0 (jfk, devops_ko, ko-2spk, ES2004a) |
 
 ## 3. Word timestamps (타임스탬프)
 
@@ -377,7 +377,7 @@ the 40-10 ms window before the boundary; clear-silence hysteresis 0.25×mean;
 80 ms span floor for soft words). Console prints `[t0s-t1s]`, the live runner
 parses both, `merge_seg.awk` carries ends into `@LINE`, and **.srt subtitles
 now end when the voice stops** instead of at the last word's onset (verified:
-wife_conv line ends no longer span pauses; a 750 ms gap stays subtitle-free).
+the ko-2spk clip's line ends no longer span pauses; a 750 ms gap stays subtitle-free).
 
 `bench/acoustic_score.py` automates the referee at scale: every voiced-region
 edge adjacent to a ≥150 ms pause is matched to the nearest word boundary

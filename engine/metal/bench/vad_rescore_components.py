@@ -9,7 +9,7 @@ from multiprocessing import Pool
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRATCH = os.path.join(HERE, "runs", "vad_scratch")
 MDEVAL = os.path.join(HERE, "md-eval.pl")
-BS = os.path.expanduser("~/Downloads/benchmark_samples")
+BS = os.path.expanduser(os.environ.get("MADI_BENCH_SAMPLES", "bench/data"))
 VOX_REF = os.path.join(BS, "voxconverse/dev")
 CAMP = os.path.join(HERE, "runs", "vad_campaign.jsonl")
 OUT = os.path.join(HERE, "runs", "vad_components.jsonl")

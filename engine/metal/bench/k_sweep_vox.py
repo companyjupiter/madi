@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sweep silhouette-tau (K=1 gate) and recursive-split sub-tau on VoxConverse.
 
-Usage: k_sweep_vox.py /tmp/voxk ~/Downloads/benchmark_samples/voxconverse/dev
+Usage: k_sweep_vox.py /tmp/voxk $MADI_BENCH_SAMPLES/voxconverse/dev
 Caches per-file (bestSil, bestK, per-cluster sub-sils, gt) so the sweeps are
 instant. Reports exact-match for the silhouette estimator under each tau, and
 for sil+split under each sub_tau (with the best tau).

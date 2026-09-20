@@ -43,7 +43,7 @@ enum AudioDecode {
     /// files, where bytes ≈ audio. In a video container the bytes are the
     /// picture (a 14.5-minute YouTube master is 6.9 GB) and the audio track is
     /// streamed by AVAssetReader, never loaded whole — so only the duration cap
-    /// applies there (2026-09-09: "지원하지 않는 형식" on neodi-neori.mp4).
+    /// applies there (2026-09-09: "지원하지 않는 형식" on a 6.9 GB 14.5-min H.264 mp4).
     static func validateImportBounds(inputBytes: Int64?,
                                      sourceFrames: AVAudioFramePosition,
                                      sampleRate: Double,

@@ -172,7 +172,7 @@ Qwen 교체가 보류된 뒤, **엔진 교체 없이** STT/화자분리 정확�
 
 ### S4-빔 후속 — 빔 서치 헤드룸 오프라인 프로브 (2026-09-02): **기각**
 
-위에서 "측정 불가"로 남긴 빔 서치를 닫았다. `~/antigravity/whisper.cpp`를 Metal로 빌드하고
+위에서 "측정 불가"로 남긴 빔 서치를 닫았다. whisper.cpp를 로컬에서 Metal로 빌드하고
 같은 공개 가중치(`ggml-large-v3-turbo.bin`, fp16 — 프로브 용도로만, 가중치 주권 규칙)를 물려
 FLEURS-ko 382에서 greedy(`-bs 1`) vs beam 5(`-bs 5 -bo 5`)를 동일 채점기(KO 정규화 + jiwer CER)로
 측정. 하네스 `bench/wer_runs/s4_beam_probe.sh`(gitignore).

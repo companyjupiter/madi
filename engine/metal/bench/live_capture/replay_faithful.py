@@ -2,11 +2,13 @@
 """Replay the live session's own segment WAVs at the EXACT offsets the app used
 (read from the live events file), so the only thing that differs from the live
 run is what we deliberately change.  ENGINE / EXTRA / WHISPER_LANG_ID via env."""
-import glob, json, os, re, subprocess, sys
-M = os.path.expanduser("~/antigravity/madi/engine/metal")
-SEGDIR = sys.argv[2] if len(sys.argv) > 2 else "/private/var/folders/pj/n1890y6s2l7dp5rwtjqbl6qr0000gn/T/sovereign-segs"
+import glob, json, os, re, subprocess, sys, tempfile
+M = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # engine/metal
+SEGDIR = sys.argv[2] if len(sys.argv) > 2 else os.environ.get(
+    "MADI_SEG_DIR", os.path.join(tempfile.gettempdir(), "sovereign-segs"))
 REF = os.path.join(M, "bench/wer_runs/p5/live_ref.json")   # frozen live reference
-_g = glob.glob('/private/var/folders/pj/*/T/madi-engine-*.events.jsonl')
+_g = glob.glob(os.path.join(tempfile.gettempdir(), 'madi-engine-*.events.jsonl')) \
+     or glob.glob('/private/var/folders/*/*/T/madi-engine-*.events.jsonl')
 LIVE = max(_g, key=os.path.getmtime) if _g else None
 ENGINE = os.environ.get("ENGINE", os.path.join(M, "out/transcribe"))
 MODEL = os.environ.get("MADI_MODEL", os.path.expanduser("~/Library/Application Support/Madi/model.q8.safetensors"))

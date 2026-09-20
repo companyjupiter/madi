@@ -11,7 +11,7 @@ export const meta = {
   ],
 }
 
-const ROOT = '/Users/jupitersong/antigravity/madi'
+const ROOT = process.cwd()   // run from the repository root
 const APP = ROOT + '/apps/macos/Sovereign'
 
 // ── Madi architecture facts (accumulated) so agents don't re-discover the basics ──

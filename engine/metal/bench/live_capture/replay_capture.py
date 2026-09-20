@@ -5,7 +5,7 @@ same wall-clock pacing. Then diff the live stdout's segments against the replay'
   python3 replay_capture.py <capture_dir> [--paced] [--engine out/transcribe_p5] [--env K=V,...]
 """
 import argparse, json, os, re, subprocess, sys, threading, time
-M = os.path.expanduser("~/antigravity/madi/engine/metal")
+M = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # engine/metal
 ap = argparse.ArgumentParser(); ap.add_argument("cap"); ap.add_argument("--paced", action="store_true")
 ap.add_argument("--engine", default=os.path.join(M, "out/transcribe_p5")); ap.add_argument("--env", default="")
 ap.add_argument("--limit", type=int, default=0)

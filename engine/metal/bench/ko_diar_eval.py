@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Reproducible Korean diarization gate for the local madi_diar_kit.
+"""Reproducible Korean diarization gate for a local Korean diarization kit.
+
+The kit (TTS-synthesized audio + RTTM + word timestamps) is supplied locally and is
+not distributed with this repository; point --kit-root or MADI_DIAR_KIT at it.
 
 The kit's RTTM rows cover utterance blocks, including pauses between words.
 This runner scores that canonical reference and a derived word-support
@@ -8,7 +11,7 @@ from merely turning internal silence into speech.
 
 Example:
   python3 bench/ko_diar_eval.py \
-    --kit-root ~/Documents/madi_diar_kit \
+    --kit-root "$MADI_DIAR_KIT" \
     --out-dir bench/runs/ko_diar_baseline
 """
 
@@ -210,7 +213,7 @@ def main() -> None:
     parser.add_argument(
         "--kit-root",
         type=Path,
-        default=Path(os.environ.get("MADI_DIAR_KIT", "~/Documents/madi_diar_kit")).expanduser(),
+        default=Path(os.environ.get("MADI_DIAR_KIT", "bench/data/ko_diar_kit")).expanduser(),
     )
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument(

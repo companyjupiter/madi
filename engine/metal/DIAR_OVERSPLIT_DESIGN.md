@@ -91,10 +91,10 @@ margin을 깎아 "화자분리중"을 고착시키는 경로를 끊는다).
 
 ### 계측
 ```bash
-cd ~/antigravity/madi/engine/metal
+cd engine/metal
 for c in xypdm ufpel; do
-  python3 bench/diar_panel_eval.py --audio "$HOME/antigravity/benchmark_samples/audio 2/$c.wav" \
-    --ref "$HOME/antigravity/benchmark_samples/voxconverse/dev/$c.rttm" \
+  python3 bench/diar_panel_eval.py --audio "$MADI_BENCH_SAMPLES/audio/$c.wav" \
+    --ref "$MADI_BENCH_SAMPLES/voxconverse/dev/$c.rttm" \
     --id $c --mode auto --live --out-dir bench/runs/provA_$c
 done
 python3 bench/diar_panel_eval.py --audio bench/ko4.wav --ref bench/ko4.ref.rttm --id ko4 \
@@ -144,7 +144,7 @@ if (diar_k == 0 and n_anchor == 0 and collapse != .min_sep and
 python3 bench/diar_panel_eval.py --vox-all --speakers-from-ref --live --mode auto \
   --out-dir bench/runs/provB_vox        # 216파일. 무거우면 --vox-id로 20개 서브셋
 python3 bench/live_ux_gate.py bench/runs/vox_base bench/runs/provB_vox --require-win
-python3 bench/ko_diar_eval.py --kit-root ~/Documents/madi_diar_kit --out-dir bench/runs/provB_ko
+python3 bench/ko_diar_eval.py --kit-root "$MADI_DIAR_KIT" --out-dir bench/runs/provB_ko
 python3 bench/ko_diar_gate.py bench/runs/ko_base bench/runs/provB_ko
 ```
 합격 기준: VoxConverse 서브셋 **평균 DER 무회귀(+0.2 pt 이내)** 그리고 **DER이 2 pt 이상 악화된
@@ -206,10 +206,9 @@ A 구현 → 3케이스 계측
 
 ## 계측 환경 메모
 
-- VoxConverse 실데이터: `~/antigravity/benchmark_samples/voxconverse/dev/*.rttm`(216) +
-  `~/antigravity/benchmark_samples/audio 2/*.wav`. `diar_panel_eval.py`의 `--vox-id/--vox-all`은
-  `~/Downloads/benchmark_samples/{voxconverse,audio}`를 하드코딩하므로 심링크가 필요하다.
-  `--audio/--ref`를 직접 주면 심링크 없이 동작한다(위 명령은 그 형태).
+- VoxConverse 실데이터(공개 코퍼스, 저장소에 포함하지 않음): `$MADI_BENCH_SAMPLES/voxconverse/dev/*.rttm`(216)
+  + `$MADI_BENCH_SAMPLES/audio/*.wav`. `diar_panel_eval.py`의 `--vox-id/--vox-all`이 그 변수를 읽는다
+  (기본값 `bench/data`, `bench/README.md` 참고). `--audio/--ref`를 직접 주면 변수 없이도 동작한다(위 명령은 그 형태).
 - `diar_panel_eval.py`는 엔진 경로 `out/transcribe`를 하드코딩한다. A/B는 후보 바이너리를
   `out/transcribe`로 복사해 돌리고 끝나면 되돌린다(`bench/runs/p4/chain.sh` 참고).
 - 단일 파일 스모크: `python3 bench/live_der.py bench/ko1.wav bench/ko1.ref.rttm 10 3` (1화자 22.6 s).
