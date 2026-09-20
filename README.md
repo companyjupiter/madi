@@ -24,6 +24,14 @@
 
 ## Install
 
+With Homebrew:
+
+```sh
+brew install --cask companyjupiter/tap/madi
+```
+
+Or install the DMG manually:
+
 1. **[Download the DMG](https://github.com/companyjupiter/madi/releases/latest)**, open it, drag **Madi** into Applications.
 2. On the first launch, **right-click the app → Open**. The DMG is ad-hoc signed and not notarized yet, so Gatekeeper warns once.
 3. Madi downloads the speech model (~830 MB, SHA-256 verified) once, then you can record.
@@ -93,8 +101,8 @@ Madi's wedge is a **native on-device meeting engine** — not another configurab
 AI-provider wrapper. The whole core path runs on your Mac with **no account, no
 API key, no cloud**:
 
-1. **Install** `Madi.app` (build locally with `apps/macos/scripts/make_app.sh`, or
-   ship a signed DMG — see [docs/RELEASE.md](docs/RELEASE.md)).
+1. **Install** `Madi.app` with `brew install --cask companyjupiter/tap/madi`,
+   build locally with `apps/macos/scripts/make_app.sh`, or use the latest DMG.
 2. **Model ready** — on first launch the ~830 MB speech model downloads once into
    Application Support, SHA-256 verified. A setup gate blocks recording until it's
    ready (progress / cancel / retry / re-download all recoverable).

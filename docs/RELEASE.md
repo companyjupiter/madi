@@ -322,7 +322,8 @@ Two release workflows are maintained:
 | `.github/workflows/release-macos-paid.yml.disabled` | disabled | Developer ID signing, notarization, stapled DMG |
 
 Both paths run tests, build the engine/app, validate the bundle, create DMGs and
-checksums, and upload a GitHub Release. Both paths use the customer-facing
+checksums, attach them to a GitHub Release, and update the Homebrew Cask after a
+published stable release. Both paths use the customer-facing
 `madi-<version>-arm64.dmg` filename convention; the free build remains clearly
 marked as unnotarized in the GitHub Release title and notes. They use the
 standard `macos-26` Apple-silicon runner rather than a billable larger runner.
@@ -351,6 +352,12 @@ configure them as **GitHub Actions repository variables**, not secrets:
 | `MADI_RELEASE_ASSETS_SHA256` | SHA-256 of that tarball |
 
 Path: **Settings → Secrets and variables → Actions → Variables**.
+
+Add a fine-grained `HOMEBREW_TAP_TOKEN` Actions secret with **Contents: Read and
+write** access to `companyjupiter/homebrew-tap`. Published stable releases use it
+to update `Casks/madi.rb`; drafts, beta releases and release candidates do not
+change the tap. The workflow uploads the DMG and `SHA256SUMS.txt` to the GitHub
+Release before publishing it, so the Cask never points at a missing asset.
 
 For the paid workflow, create a GitHub environment named `release`, restrict it to
 the release branch or tags, and add all Developer ID/notarization secrets:

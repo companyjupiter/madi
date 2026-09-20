@@ -110,6 +110,11 @@ jobs:
 
       - name: Verify required secrets
         shell: bash
+        env:
+          PUBLISH: ${{ steps.meta.outputs.publish }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           set -euo pipefail
           for name in ASSETS_URL ASSETS_SHA256 AWS_REGION AWS_ROLE_ARN RELEASE_BUCKET DOWNLOAD_BASE_URL; do
@@ -119,6 +124,11 @@ jobs:
           for name in "${required_secrets[@]}"; do
             [ -n "${!name:-}" ] || { echo "Missing GitHub secret for $name" >&2; exit 1; }
           done
+          if [ "$PUBLISH" = true ] && [ "$CHANNEL" = stable ]; then
+            [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+              || { echo "Homebrew stable release requires x.y.z: $VERSION" >&2; exit 1; }
+            [ -n "$HOMEBREW_TAP_TOKEN" ] || { echo "Missing HOMEBREW_TAP_TOKEN GitHub secret" >&2; exit 1; }
+          fi
 
       - name: Install Zig 0.14.1
         shell: bash
@@ -226,7 +236,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          (cd dist && shasum -a 256 ./*.dmg > SHA256SUMS.txt)
+          (cd dist && shasum -a 256 *.dmg > SHA256SUMS.txt)
+
+      - name: Check out Homebrew tap
+        if: steps.meta.outputs.publish == 'true' && steps.meta.outputs.channel == 'stable'
+        uses: actions/checkout@v4
+        with:
+          repository: companyjupiter/homebrew-tap
+          path: homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6.1.0
@@ -257,13 +275,33 @@ jobs:
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --notes-file dist/release-notes.md
-            if [ "$PUBLISH" = true ]; then gh release edit "$TAG" --draft=false; fi
-            exit 0
+          else
+            args=("$TAG" --target "$GITHUB_SHA" --title "Madi $VERSION" --notes-file dist/release-notes.md --draft)
+            [ "$CHANNEL" = stable ] || args+=(--prerelease)
+            gh release create "${args[@]}"
           fi
-          args=("$TAG" --target "$GITHUB_SHA" --title "Madi $VERSION" --notes-file dist/release-notes.md)
-          [ "$CHANNEL" = stable ] || args+=(--prerelease)
-          [ "$PUBLISH" = true ] || args+=(--draft)
-          gh release create "${args[@]}"
+          gh release upload "$TAG" dist/*.dmg dist/SHA256SUMS.txt --clobber
+          if [ "$PUBLISH" = true ]; then gh release edit "$TAG" --draft=false; fi
+
+      - name: Update Homebrew Cask
+        if: steps.meta.outputs.publish == 'true' && steps.meta.outputs.channel == 'stable'
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          asset="madi-$VERSION-arm64.dmg"
+          sha256="$(awk -v asset="$asset" '$2 == asset { print $1 }' dist/SHA256SUMS.txt)"
+          [ -n "$sha256" ] || { echo "Missing checksum for $asset" >&2; exit 1; }
+          tap="$GITHUB_WORKSPACE/homebrew-tap"
+          apps/macos/scripts/update_homebrew_cask.sh "$tap/Casks/madi.rb" "$VERSION" "$sha256"
+          brew style "$tap/Casks/madi.rb"
+          git -C "$tap" config user.name "github-actions[bot]"
+          git -C "$tap" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$tap" add Casks/madi.rb
+          git -C "$tap" diff --cached --quiet && exit 0
+          git -C "$tap" commit -m "Update Madi to $VERSION"
+          git -C "$tap" push
 
       - name: Remove signing material
         if: always()

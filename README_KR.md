@@ -23,6 +23,14 @@
 
 ## 설치
 
+Homebrew로 설치할 수 있습니다.
+
+```sh
+brew install --cask companyjupiter/tap/madi
+```
+
+DMG로 직접 설치하려면 다음 순서로 진행합니다.
+
 1. **[DMG 내려받기](https://github.com/companyjupiter/madi/releases/latest)** → 열어서 **Madi**를 응용 프로그램 폴더로 끌어다 놓습니다.
 2. 처음 실행할 때는 앱을 **우클릭 → 열기**를 누릅니다. DMG가 ad-hoc 서명이라 Gatekeeper 경고가 한 번 뜹니다.
 3. 음성 모델(약 830 MB, SHA-256 검증)을 한 번 내려받으면 바로 녹음할 수 있습니다.
