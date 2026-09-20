@@ -244,11 +244,14 @@ stable publish, `madi_release.sh prune <version>` removes every other version
 from S3 and the index, and the older GitHub Releases are deleted together with
 their tags (`gh release delete <tag> --cleanup-tag`, plus `git push origin
 --delete <tag>` for tags that had no Release). Only one `v<version>` tag and one
-GitHub Release exist at a time. The commits themselves stay in history; the
+GitHub Release exist at a time. Tags retired before the 2026-09-19 move to this
+repository were deleted in the previous one (now `companyjupiter/madi-archive`), so
+they are not in this repository's history either. The commits themselves stay in history; the
 retired tags are recorded here so a released binary can still be traced:
 
 | version | published | tag | commit | DMG sha256 (prefix) |
 |---|---|---|---|---|
+| 0.4.0 | 2026-09-16 | `v0.4.0` | `318f71ab5327` | `8205f2a4730b…` |
 | 0.3.21 | 2026-09-08 | `v0.3.21` | `d43c1327d035` | `83b63b5d5cd2…` |
 | 0.3.7 | 2026-09-03 | — | — | `47a94c2484df…` |
 | 0.3.1 | 2026-09-02 | — | — | `2ca81846097b…` |

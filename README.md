@@ -366,17 +366,21 @@ Released builds are published to the S3 `stable` channel and served through
 CloudFront; the in-app updater reads `channels/stable/latest.json`. Release
 mechanics and the git-tag rule are in [docs/RELEASE.md](docs/RELEASE.md).
 
-**Current `stable`: 0.4.0** (2026-09-16, `v0.4.0`, build 767) — and the only published
-version: non-English live line structure W/X5 (a weak speaker label cannot break a
+**Current `stable`: 0.4.1** (2026-09-20, `v0.4.1`, build 781) — and the only published
+version. A licensing and notices release: Madi's own code is AGPL-3.0 and the license
+text ships inside the app, the third-party notices gained Sparkle and DNA3.0-2B, the
+prebuilt translate engines carry their own free binary license, and the exported
+summary deck says "Madi". Transcription and translation behave exactly as in 0.4.0
+(identical engine binaries). **0.4.0** (2026-09-16, build 767) brought: non-English live line structure W/X5 (a weak speaker label cannot break a
 sentence; a weak-label island between two rows of one speaker joins that speaker),
 PreviewTrim (the gray preview starts where the committed text ends), Korean file-mode
 chunk dropouts 6/37 → 0 (F2), edited-row cascade fix (E1), stream-stop finalize (S3),
 language-correction gate (L2), number-formatter guards 4/5, translation runaway ×7 and
 example-replay retry, video import bounded by duration with streaming decode (F1).
 0.3.22 → 0.3.29 were the local verification builds of those rounds and were never
-published. **On 2026-09-16 every earlier version was retired**: S3 objects, index
-entries, GitHub Releases and their tags (`v0.1.0` … `v0.3.21`) were deleted
-(`madi_release.sh prune 0.4.0`); the tag → commit map is kept in
+published. **Only the current stable stays published**: every earlier version was
+retired from S3 and the index, and its GitHub Release and tag deleted, on 2026-09-16
+(`v0.1.0` … `v0.3.21`) and on 2026-09-20 (`v0.4.0`). The tag → commit map is kept in
 [docs/RELEASE.md](docs/RELEASE.md). Everything below is history only — none of those
 DMGs are downloadable.
 
