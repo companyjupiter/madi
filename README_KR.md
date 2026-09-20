@@ -1,22 +1,41 @@
-<p align="center"><img src="logo_madi.png" alt="Madi" width="249"></p>
+<p align="center">
+  <img src="logo_madi.png" alt="Madi" width="249">
+</p>
 
-# Madi — 한글 가이드
+<h1 align="center">Madi</h1>
 
-**Apple Silicon용 온디바이스 회의 전사 앱.** Madi는 회의를 녹음하거나 파일을 불러와
-화자별로 구분된 실시간 전사와 단어 타임스탬프를 만들어 줍니다. 번역, 요약, 질의응답도
-선택해서 쓸 수 있고 모두 Mac 안에서 돌아갑니다. 계정도, API 키도, 클라우드도 없습니다.
-오디오는 기기를 떠나지 않습니다.
+<p align="center">
+  <b>Apple Silicon용 온디바이스 회의 전사 앱.</b><br>
+  화자별로 구분된 실시간 전사와 단어 타임스탬프, 그리고 Mac 안에서 도는 번역·요약·질의응답.<br>
+  계정도 API 키도 클라우드도 없습니다. 오디오는 기기를 떠나지 않습니다.
+</p>
 
-**[최신 DMG 내려받기](https://github.com/companyjupiter/madi/releases/latest)** ·
+<p align="center">
+  <a href="https://github.com/companyjupiter/madi/releases/latest"><b>⬇&nbsp; macOS용 Madi 내려받기</b></a><br>
+  <sub>Apple Silicon · macOS 14 이상 · 약 38 MB · 자유 소프트웨어 (AGPL-3.0)</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/companyjupiter/madi/releases/latest"><img alt="최신 릴리스" src="https://img.shields.io/github/v/release/companyjupiter/madi?label=release"></a>
+  <a href="https://github.com/companyjupiter/madi/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/companyjupiter/madi/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="LICENSE"><img alt="라이선스 AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
+</p>
+
+## 설치
+
+1. **[DMG 내려받기](https://github.com/companyjupiter/madi/releases/latest)** → 열어서 **Madi**를 응용 프로그램 폴더로 끌어다 놓습니다.
+2. 처음 실행할 때는 앱을 **우클릭 → 열기**를 누릅니다. DMG가 ad-hoc 서명이라 Gatekeeper 경고가 한 번 뜹니다.
+3. 음성 모델(약 830 MB, SHA-256 검증)을 한 번 내려받으면 바로 녹음할 수 있습니다.
+
+Apple Silicon Mac(M1 이상), macOS 14 이상이 필요하고 메모리는 8 GB면 충분합니다. 번역과
+요약은 켤 때만 별도 모델(8 GB 기기 1.3 GB, 그 이상 2.8 GB)을 받습니다. 업데이트는 앱의
+**도움말 → 업데이트 설치…**에서 받습니다.
+
 [시작하기](docs/manual/ko/01-getting-started.md) ·
-[English README](README.md) · [기여 안내](CONTRIBUTING.md)
-
-- **필요 사양:** Apple Silicon Mac(M1 이상), macOS 14 이상. 메모리 8 GB면 충분합니다.
-- **첫 실행:** 음성 모델 약 830 MB를 한 번 내려받고 SHA-256으로 검증합니다. 번역과 요약은
-  켤 때만 별도 모델(1.3 GB 또는 2.8 GB)을 받습니다.
-- **Gatekeeper:** DMG는 ad-hoc 서명이고 아직 공증 전입니다. 처음 한 번은 앱을 우클릭해
-  "열기"를 선택하세요.
-- **업데이트:** 앱의 도움말 → 업데이트 설치…
+[English README](README.md) ·
+[기여 안내](CONTRIBUTING.md) ·
+[보안 제보](SECURITY.md) ·
+[버전 이력](#7-b-버전-이력)
 
 ## 할 수 있는 것
 - 마이크, 시스템 오디오(Teams, Zoom, 브라우저 탭), 또는 둘 다를 실시간 전사하고, 오디오와
@@ -35,8 +54,19 @@ apps/macos/scripts/make_app.sh                # → apps/macos/build/Madi.app
 cd apps/macos && swift test
 ```
 번역 엔진은 [`engine/prebuilt/`](engine/prebuilt/README.md)의 사전 빌드 바이너리이고, 나머지는
-모두 소스에서 빌드됩니다. Madi는 [AGPL-3.0](LICENSE) 자유 소프트웨어입니다
-([라이선스 / 출처](#라이선스--출처)). 보안 제보는 [SECURITY.md](SECURITY.md)를 보세요.
+모두 소스에서 빌드됩니다.
+
+## 어디를 보면 되나
+
+| 하고 싶은 일 | 문서 |
+|---|---|
+| 앱 사용법 | [사용 설명서](docs/manual/ko/01-getting-started.md) (한/영/일/중) |
+| 기여 | [CONTRIBUTING.md](CONTRIBUTING.md) · [CLA.md](CLA.md) · [AUTHORS.md](AUTHORS.md) |
+| 취약점 제보 | [SECURITY.md](SECURITY.md) |
+| 엔진 이해 | 이 문서의 나머지 · [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
+| 측정 기록 | [`PERF_LOG.md`](PERF_LOG.md)(앱+엔진) · [`engine/metal/PERF_LOG.md`](engine/metal/PERF_LOG.md) |
+| 릴리스 절차 | [docs/RELEASE.md](docs/RELEASE.md) |
+| 라이선스 | [라이선스 / 출처](#라이선스--출처) · [LICENSE](LICENSE) · [NOTICE](NOTICE) |
 
 ## 엔진
 
