@@ -1,9 +1,16 @@
 name: CI
 
-# Automatic checks are paused while the GitHub Actions account is over its
-# included plan. Run the macOS release gates through madi_release.sh.
+# Pushes to main, every pull request (forks included — no secrets are used), and
+# on demand. The macOS release gates stay in madi_release.sh.
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
