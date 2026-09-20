@@ -30,6 +30,7 @@ Madi.app/Contents/
   MacOS/transcribe               # Zig/Metal speech engine
   MacOS/translate-engine-4b      # quality-profile LLM runner (prebuilt, engine/prebuilt/)
   MacOS/translate-engine-2b      # 8 GB realtime-profile LLM runner (prebuilt, engine/prebuilt/)
+  Resources/LICENSE, NOTICE, THIRD_PARTY_LICENSES.md, TRANSLATE_ENGINE_LICENSE.md
   Resources/whisper.metallib     # sealed by the bundle signature
   Resources/assets-small/*.bin   # the 7 files the engine opens at runtime
   Resources/manual/index.html    # offline user manual (Help menu)

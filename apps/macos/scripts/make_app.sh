@@ -318,6 +318,15 @@ fi
 if [ "${REQUIRE_TRANSLATE_ENGINE:-0}" = "1" ] && { [ "$BUNDLED_TRANSLATE_4B" != "1" ] || [ "$BUNDLED_TRANSLATE_2B" != "1" ]; }; then
   echo "❌ both 4B and 2B translate engines are required for this build"; exit 1
 fi
+# The engines are not AGPL: their binary license permits redistribution only
+# when its text travels with them, so it ships beside them in every bundle.
+if [ "$BUNDLED_TRANSLATE_4B" = "1" ] || [ "$BUNDLED_TRANSLATE_2B" = "1" ]; then
+  if [ -f "$PREBUILT_DIR/LICENSE.md" ]; then
+    cp "$PREBUILT_DIR/LICENSE.md" "$BUNDLE/Contents/Resources/TRANSLATE_ENGINE_LICENSE.md"
+  else
+    echo "❌ engine/prebuilt/LICENSE.md missing — the engines may not be redistributed without it"; exit 1
+  fi
+fi
 
 # ── 3. ad-hoc sign for local development ────────────────────────────────────
 echo "[3/4] ad-hoc codesign (local dev; Developer ID via sign_notarize.sh)"

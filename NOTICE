@@ -117,6 +117,10 @@ history are kept for reference and are not licensed under it. The
 license covers the code; it grants no trademark rights in the name "Madi", its
 logo or its app icon.
 
+The Madi logo, the app icon and the interface icons (apps/macos/Sovereign/Resources/
+*.svg, *.png, AppIcon.icns, design/) were drawn for this project by its designer
+and are not taken from a third-party icon set.
+
 Prebuilt binaries: engine/prebuilt/translate-engine-{4b,2b} (bundled as
 Contents/MacOS/translate-engine-{4b,2b}) are built from the author's private
 sovereignLLM project. They are separate programs the app launches as child

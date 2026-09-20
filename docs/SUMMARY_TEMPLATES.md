@@ -189,8 +189,6 @@ MeetingMode.summaryPromptSuffix 이관: lecture/interview 서픽스는 템플릿
   한국어 강의 전사 → [요약]/[요점]/[용어] 구조 + 같은 언어 응답;
   2인 인터뷰 전사 → Q→A 짝 형식 준수. map-reduce 경로는 >800자 강의 전사에서
   condense 왕복 후 요점·용어 보존 확인.
-- **quark v9**: `./q.sh complete configs/sovereign_whisper_app.mjs` —
-  SummaryTemplate.swift wired 확인.
 
 ## 6. PR 슬라이스 (순서 고정)
 
