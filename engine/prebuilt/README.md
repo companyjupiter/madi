@@ -21,7 +21,9 @@ else in Madi builds from source.
 | `MANIFEST.json` | provenance: sha256, size, LC_UUID, build time, the sovereignLLM commit that last touched each engine | — |
 
 `apps/macos/scripts/make_app.sh` bundles these by default and refuses a file whose
-SHA-256 does not match `SHA256SUMS`. `TRANSLATE_ENGINE_4B` / `TRANSLATE_ENGINE_2B`
+SHA-256 does not match `SHA256SUMS`. It also copies [`LICENSE.md`](LICENSE.md) into the
+app as `Contents/Resources/TRANSLATE_ENGINE_LICENSE.md`, because that license permits
+redistribution only when its text travels with the binaries. `TRANSLATE_ENGINE_4B` / `TRANSLATE_ENGINE_2B`
 point it at other binaries (a fresh engine build, a CI download); those are not
 checked against this folder.
 

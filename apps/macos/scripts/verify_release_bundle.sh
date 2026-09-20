@@ -56,6 +56,10 @@ if [ -e "$translate_4b" ] || [ -e "$translate_2b" ]; then
   [ -s "$translate_4b" ] && [ -s "$translate_2b" ] || {
     echo "❌ translation engines must be bundled as a 4B+2B pair" >&2; exit 1;
   }
+  # their binary license allows redistribution only with its text alongside
+  [ -s "$APP/Contents/Resources/TRANSLATE_ENGINE_LICENSE.md" ] || {
+    echo "❌ bundled translate engines without Resources/TRANSLATE_ENGINE_LICENSE.md" >&2; exit 1;
+  }
   executables+=("$translate_4b" "$translate_2b")
 fi
 

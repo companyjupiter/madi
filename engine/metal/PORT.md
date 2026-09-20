@@ -148,17 +148,6 @@ Build+run a harness: `bash build.sh test_conv1d.zig && ./out/test_conv1d`
   TODO (optional): 2 s-overlap merge for long audio; streaming/mic front-end for
   real-time meetings (see assessment).
 
-## Quark (kernel topology analysis)
-This port has its own quark tree, isolated from the LLM trees (no folder
-overlap): config `quark/configs/sovereign_metal_whisper.mjs` → output
-`quark/sovereign_llm/metal/whisper-turbo-v3/`.
-Regenerate after any `.metal`/`.zig` change (mandatory per global CLAUDE.md):
-```
-cd ~/antigravity/quark && node quarkify_v7_metal.mjs configs/sovereign_metal_whisper.mjs
-```
-Browse a kernel atom, e.g.:
-`tree -L 2 sovereign_llm/metal/whisper-turbo-v3/quark/file__kernels_conv1d.metal/`
-
 ## Assets — PREPARED ✅ (see `assets/README.md`)
 Downloaded/generated locally (git-ignored): `model.safetensors` (1.5 GB,
 large-v3-turbo), tokenizer/configs, `mel_filters.bin`, `suppress_tokens.bin`
