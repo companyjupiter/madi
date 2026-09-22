@@ -92,6 +92,25 @@ Landing: https://madi-apple-silicon.jupitersong47.chatgpt.site/
 Feedback on the local-first architecture, Metal/Zig implementation, and contributor
 onboarding is especially welcome.
 
+## GitHub Discussions — welcome
+
+**Title:** Welcome to Madi Discussions
+
+**Body:**
+
+Madi is now open source. This is the place to compare local-first meeting workflows,
+ask build or usage questions, propose product and engine ideas, and show what you have
+built with Madi.
+
+- Use **Q&A** for setup, build, and usage questions.
+- Use **Ideas** for product, UX, Zig, Metal, and on-device inference proposals.
+- Use **Show and tell** for workflows, integrations, benchmarks, and demos.
+- Use GitHub Issues for reproducible bugs and scoped implementation work.
+- Report security issues privately through the process in `SECURITY.md`.
+
+Korean and English are both welcome. If you are new here, tell us what kind of
+meeting workflow you want Madi to make possible.
+
 ## Launch gate
 
 - [x] Public repository metadata and topics are set.
@@ -99,7 +118,10 @@ onboarding is especially welcome.
 - [x] Privacy, security, governance, support, roadmap, and contribution docs exist.
 - [x] Source-only and standard application bundles build and verify.
 - [x] Core, release-tooling, and dashboard checks pass.
-- [x] Landing page and 1200×630 social preview are published.
+- [x] Landing page and its 1200×630 Open Graph image are published.
 - [x] CodeQL, dependency review, Dependabot, SBOM, and provenance workflows exist.
+- [ ] Launch-hardening pull request passes all required checks and is merged to `main`.
+- [ ] GitHub repository social preview uses `design/social/madi-open-graph.png`.
+- [ ] Welcome post is published in GitHub Discussions.
 - [ ] Owner-managed notarization is complete for the promoted DMG.
 - [ ] Replace the unchecked line above with `[x]` immediately before posting.
