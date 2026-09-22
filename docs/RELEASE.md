@@ -247,7 +247,8 @@ binary objects from S3 and the active release index. It must not delete GitHub
 Release notes or git tags. Tags are permanent source provenance; release notes,
 publication dates, and checksums remain even when their DMGs are no longer an
 active download. Historical tags that were removed before this policy are listed
-below and should be restored only when the exact original commit is known:
+below. Tags with an exact original commit were restored on 2026-09-23; entries
+without an exact commit remain intentionally untagged:
 
 | version | published | tag | commit | DMG sha256 (prefix) |
 |---|---|---|---|---|

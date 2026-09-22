@@ -430,9 +430,10 @@ chunk dropouts 6/37 → 0 (F2), edited-row cascade fix (E1), stream-stop finaliz
 language-correction gate (L2), number-formatter guards 4/5, translation runaway ×7 and
 example-replay retry, video import bounded by duration with streaming decode (F1).
 0.3.22 → 0.3.29 were the local verification builds of those rounds and were never
-published. **Only the current stable stays published**: every earlier version was
-retired from S3 and the index, and its GitHub Release and tag deleted, on 2026-09-16
-(`v0.1.0` … `v0.3.21`) and on 2026-09-20 (`v0.4.0`). The tag → commit map is kept in
+published. **Only the current stable binary stays published**: every earlier DMG was
+retired from S3 and the active index on 2026-09-16 (`v0.1.0` … `v0.3.21`) or
+2026-09-20 (`v0.4.0`). Their exact source tags and archival GitHub Release notes were
+restored on 2026-09-23; the tag → commit map is kept in
 [docs/RELEASE.md](docs/RELEASE.md). Everything below is history only — none of those
 DMGs are downloadable.
 
