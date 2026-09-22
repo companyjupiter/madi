@@ -81,9 +81,13 @@ enum AudioDevices {
             mSelector: kAudioObjectPropertyName,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
-        var cf: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
-        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &cf) == noErr else { return nil }
-        return cf as String
+        // Core Audio returns an unretained CFString object pointer. Represent it
+        // as Unmanaged so Swift does not form a raw pointer to a reference-storing
+        // variable (which is undefined under the ownership model).
+        var unmanaged: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &unmanaged) == noErr,
+              let value = unmanaged?.takeUnretainedValue() else { return nil }
+        return value as String
     }
 }

@@ -214,10 +214,14 @@ update_release_index() {
     --only-show-errors
 }
 
-for path in "$DIST"/*.dmg "$DIST/SHA256SUMS.txt"; do
+for path in "$DIST"/*.dmg "$DIST"/*.spdx.json "$DIST/SHA256SUMS.txt"; do
   [ -f "$path" ] || continue
   content_type=application/octet-stream
-  case "$path" in *.dmg) content_type=application/x-apple-diskimage ;; *.txt) content_type=text/plain ;; esac
+  case "$path" in
+    *.dmg) content_type=application/x-apple-diskimage ;;
+    *.spdx.json) content_type=application/spdx+json ;;
+    *.txt) content_type=text/plain ;;
+  esac
   upload_immutable "$path" "$content_type" "$PREFIX/releases/$VERSION/$(basename "$path")"
 done
 upload_immutable "$DIST/release.json" application/json "$PREFIX/releases/$VERSION/release.json"
@@ -235,6 +239,10 @@ fi
   echo "## Downloads"
   echo
   for path in "$DIST"/*.dmg; do
+    [ -f "$path" ] || continue
+    echo "- [$(basename "$path")]($HTTP_ROOT/$(basename "$path"))"
+  done
+  for path in "$DIST"/*.spdx.json; do
     [ -f "$path" ] || continue
     echo "- [$(basename "$path")]($HTTP_ROOT/$(basename "$path"))"
   done

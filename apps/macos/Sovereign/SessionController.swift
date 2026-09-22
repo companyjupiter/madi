@@ -2299,9 +2299,9 @@ final class SessionController: EngineProcessDelegate {
 
         // Decode ANY container (m4a/mp3/aac/flac/wav…) to a normalized 16k PCM WAV
         // off the main actor first — the engine's file reader only accepts PCM WAV.
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task.detached(priority: .userInitiated) {
             let wav: URL
-            do { wav = try AudioDecode.toWav16k(url) }
+            do { wav = try await AudioDecode.toWav16k(url) }
             catch {
                 let name = url.lastPathComponent
                 Task { @MainActor in
@@ -2594,7 +2594,7 @@ final class SessionController: EngineProcessDelegate {
         // idle backfill runs only while recording). No shedding after stop.
         translate?.maxPending = 0
         translate?.shedSecondaryTargetsAt = 0
-        if let t = translate, !backlogKeys.isEmpty {
+        if translate != nil, !backlogKeys.isEmpty {
             backfillPendingKeys = Set(backlogKeys.filter { key in
                 guard let line = transcript.lines.first(where: { $0.id == key.id }) else { return false }
                 return lineHash(line.text) == key.sourceRevision

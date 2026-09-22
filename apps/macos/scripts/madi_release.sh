@@ -93,6 +93,13 @@ VERSION="${1:-}"
 [ -n "$VERSION" ] || die "version is required"
 shift
 
+CANONICAL_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+VERSION_CORE="${VERSION%%[-+]*}"
+if [ "${MADI_ALLOW_VERSION_OVERRIDE:-0}" != "1" ]; then
+  [ "$VERSION_CORE" = "$CANONICAL_VERSION" ] \
+    || die "release version $VERSION does not match canonical VERSION $CANONICAL_VERSION"
+fi
+
 INCLUDE_OFFLINE=0
 RUN_TESTS=1
 JSON_MODE=0
@@ -349,7 +356,7 @@ build_dmg() {
   shift 3
   mkdir -p "$build_dir"
   env "$@" "$HERE/make_app.sh" "$build_dir" >&2
-  "$HERE/verify_release_bundle.sh" "$build_dir/Madi.app" "$VERSION" >&2
+  "$HERE/verify_release_bundle.sh" "$build_dir/Madi.app" "$VERSION" bundled >&2
   if [ "$SIGNING_MODE" = developer-id ]; then
     "$HERE/sign_notarize.sh" "$build_dir/Madi.app" >&2
   else
@@ -494,6 +501,8 @@ build_local_release() {
 
   standard_env=(
     STRICT_ASSETS=1
+    MADI_BUNDLE_TRANSLATE_ENGINES=1
+    REQUIRE_TRANSLATE_ENGINE=1
     MADI_VERSION="$VERSION"
     MADI_BUILD="$BUILD_NUMBER"
     MADI_CHANNEL="$CHANNEL"
@@ -506,6 +515,8 @@ build_local_release() {
     offline_env=(
       BUNDLE_MODEL=1
       STRICT_ASSETS=1
+      MADI_BUNDLE_TRANSLATE_ENGINES=1
+      REQUIRE_TRANSLATE_ENGINE=1
       MADI_VERSION="$VERSION"
       MADI_BUILD="$BUILD_NUMBER"
       MADI_CHANNEL="$CHANNEL"

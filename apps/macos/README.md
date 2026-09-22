@@ -1,69 +1,66 @@
-# Madi — macOS app
+# Madi macOS app
 
-Standalone window app that wraps the bit-validated `metal/` engine into a
-signed, notarized `.dmg` for Apple Silicon (M1+). See [DESIGN.md](DESIGN.md)
-for the full architecture; this README is the build/run quickstart.
+Native SwiftUI application for Apple Silicon, built directly with `swiftc` and
+Swift Package Manager. There is no Xcode project to generate or maintain.
 
-## What this is
+The app launches the Zig/Metal transcription engine as a child process and talks
+to it over stdin/stdout. Microphone and system audio capture use Apple frameworks;
+the speech model downloads on first run and is verified by SHA-256.
 
-The app **spawns** `metal/out/transcribe` (STREAM mode) as a child process and
-talks to it over stdin/stdout — it never links the engine. Native
-`AVAudioEngine` replaces the old `ffmpeg` mic capture. The ~830 MB Q8 model
-(1.86× smaller than F16) is downloaded on first run; small assets ship in the bundle.
+## Build
 
+Requirements: Apple Silicon, macOS 14+, Xcode command-line tools, and Zig 0.14.x.
+
+```sh
+cd ../..
+apps/macos/scripts/fetch_runtime_assets.sh
+apps/macos/scripts/make_app.sh
+open apps/macos/build/Madi.app
 ```
+
+The default product bundle includes the two separately licensed prebuilt translate
+engines in `engine/prebuilt/`. Build the AGPL/source-only variant without them:
+
+```sh
+MADI_BUNDLE_TRANSLATE_ENGINES=0 apps/macos/scripts/make_app.sh
+```
+
+The source-only variant keeps transcription and export; translation, summaries,
+Q&A, and AI titles are unavailable because their runners are absent. See
+[`../../docs/PROVENANCE.md`](../../docs/PROVENANCE.md).
+
+`VERSION` at the repository root is canonical. An ordinary source build gets a
+`<version>-dev.<git-sha>` full version; release tooling supplies the exact release
+SemVer and verifies it against `VERSION`.
+
+## Test
+
+```sh
+cd apps/macos
+swift test
+scripts/check_version_consistency.sh
+```
+
+`Package.swift` exposes the Foundation-only `SovereignCore` target so most product
+logic runs headlessly. `scripts/make_app.sh` is the authoritative application
+source list; add every new app `.swift` file there as well as to the package target
+when appropriate.
+
+## Layout
+
+```text
 Sovereign/
-  SovereignApp.swift        app entry (WindowGroup + Settings)
-  SessionController.swift    state machine: capture → engine → transcript
-  Engine/
-    EngineProtocol.swift     stdout line → EngineEvent (pure, unit-tested)
-    EngineProcess.swift      spawn + stdin jobs + stdout framing
-  Audio/
-    AudioCapture.swift       AVAudioEngine → 16k mono WAV segmenter (SEG/OVERLAP)
-    WavWriter.swift          16-bit PCM WAV
-  Model/
-    AssetManifest.swift      URLs + SHA-256 + paths   ← FILL IN hosting/hash
-    ModelDownloader.swift    first-run download + verify
-  Transcript/
-    TranscriptStore.swift    events → live lines → FLUSH relabel + overlap markers
-    EditorCuts.swift         fillers / silences / tighten / chapters / retakes / highlights
-    Exporters.swift          .md / .txt / .srt / .vtt / .json / tighten.csv / chapters.txt
-  UI/                        ContentView, TranscriptView, ModelGate, Settings
-  Info.plist                 NSMicrophoneUsageDescription, min OS 14, arm64
-  Sovereign.entitlements     audio-input (hardened runtime via codesign)
-scripts/
-  build_engine.sh            metal/build.sh → out/transcribe
-  assemble_bundle.sh         copy engine + curated small assets into .app
-  sign_notarize.sh           Developer ID sign (inner→outer) + notarize + staple
-  make_dmg.sh                create-dmg / hdiutil + staple
+  AppInfo/       version, update, and first-run policy
+  Audio/         microphone/system capture, decode, segmentation, WAV IO
+  Dictation/     dictation controller and formatting
+  Engine/        child-process protocols and local LLM lanes
+  Model/         model manifests, downloaders, workspace tree
+  Transcript/    transcript state, export, retrieval, summaries, voiceprints
+  UI/            SwiftUI application views
+scripts/         build, verification, signing, DMG, and release tooling
+Tests/           SovereignCore and integration-style headless tests
 ```
 
-## Build (once you have an Xcode project)
-
-This scaffold provides the Swift sources, Info.plist, entitlements, and the
-packaging scripts. To turn it into a buildable product:
-
-1. **Create an Xcode app target** (SwiftUI, macOS, arm64) and add `Sovereign/`
-   sources, `Info.plist`, and `Sovereign.entitlements`. Enable **Hardened
-   Runtime**; add the **Microphone** capability.
-2. Build the engine: `app/scripts/build_engine.sh`.
-3. Archive the app, then:
-   ```bash
-   app/scripts/assemble_bundle.sh  /path/to/Sovereign.app
-   SIGN_ID="Developer ID Application: … (TEAMID)" \
-   APPLE_ID=… TEAM_ID=… APP_PW=… \
-     app/scripts/sign_notarize.sh /path/to/Sovereign.app
-   app/scripts/make_dmg.sh        /path/to/Sovereign.app 1.0
-   ```
-
-## Before shipping — fill these in
-
-- `AssetManifest.swift`: real model **URL + SHA-256 + size** (host on R2/S3/CDN).
-- `SettingsView.swift` `WhisperLang`: confirm language token ids vs the BPE table.
-- App icon (`Assets.xcassets`), bundle id, signing team.
-
-## Tests
-
-`Tests/EngineProtocolTests.swift` covers the stdout parser (the load-bearing,
-Xcode-independent part). Run via the Xcode test target or `swift test` if you
-add a Package.swift.
+Architecture and release details live in [DESIGN.md](DESIGN.md) and
+[`../../docs/RELEASE.md`](../../docs/RELEASE.md). Signing and notarization are a
+separate release step; local builds are ad-hoc signed.

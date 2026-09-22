@@ -9,6 +9,7 @@
 # Usage:
 #   make_app.sh [outdir]          # default ./build → ./build/Madi.app
 #   SEED_MODEL=1 make_app.sh      # also symlink the repo model into App Support
+#   MADI_BUNDLE_TRANSLATE_ENGINES=0 make_app.sh  # AGPL/source-only bundle
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "$HERE/.." && pwd)"        # apps/macos
@@ -16,8 +17,32 @@ ROOT="$(cd "$APP_DIR/../.." && pwd)"     # repo root (apps/macos → ..)
 OUT="${1:-$APP_DIR/build}"
 BUNDLE="$OUT/Madi.app"
 SPARKLE_ENABLED="${SPARKLE_ENABLED:-1}"
+MADI_BUNDLE_TRANSLATE_ENGINES="${MADI_BUNDLE_TRANSLATE_ENGINES:-1}"
 SPARKLE_DIR=""
 SWIFTC_SPARKLE_FLAGS=()
+
+case "$MADI_BUNDLE_TRANSLATE_ENGINES" in
+  0|1) ;;
+  *) echo "❌ MADI_BUNDLE_TRANSLATE_ENGINES must be 0 or 1"; exit 1 ;;
+esac
+
+# VERSION is the canonical marketing version. Release builds provide the exact
+# full SemVer; ordinary source builds identify themselves as a prerelease tied
+# to the checkout so an official build of the same version still wins updates.
+PROJECT_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+if ! [[ "$PROJECT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "❌ VERSION must contain x.y.z: $PROJECT_VERSION"; exit 1
+fi
+if [ -z "${MADI_VERSION:-}" ]; then
+  SOURCE_REVISION="$(git -C "$ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+  SOURCE_DIRTY=""
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      && ! git -C "$ROOT" diff --quiet --ignore-submodules -- 2>/dev/null; then
+    SOURCE_DIRTY="+dirty"
+  fi
+  MADI_VERSION="$PROJECT_VERSION-dev.$SOURCE_REVISION$SOURCE_DIRTY"
+  MADI_BUILD="${MADI_BUILD:-$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)}"
+fi
 
 plist_set_or_add_string() {
   local plist="$1" key="$2" value="$3"
@@ -178,22 +203,23 @@ BUNDLE_CHANNEL="${MADI_CHANNEL:-stable}"
 # Release metadata can be injected by CI without modifying tracked sources.
 # MADI_VERSION is the full SemVer (for example 0.9.1-beta.2); the numeric core
 # remains CFBundleShortVersionString as required by macOS.
-if [ -n "${MADI_VERSION:-}" ]; then
-  if ! [[ "$MADI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-    echo "❌ invalid MADI_VERSION: $MADI_VERSION"; exit 1
-  fi
-  MARKETING="${MADI_VERSION%%[-+]*}"
-  CHANNEL="${MADI_CHANNEL:-stable}"
-  case "$MADI_VERSION" in
-    *-beta.*) CHANNEL="${MADI_CHANNEL:-beta}" ;;
-    *-rc.*)   CHANNEL="${MADI_CHANNEL:-rc}" ;;
-  esac
-  BUNDLE_CHANNEL="$CHANNEL"
-  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING" "$BUNDLE/Contents/Info.plist"
-  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${MADI_BUILD:-1}" "$BUNDLE/Contents/Info.plist"
-  /usr/libexec/PlistBuddy -c "Set :MADIFullVersion $MADI_VERSION" "$BUNDLE/Contents/Info.plist"
-  /usr/libexec/PlistBuddy -c "Set :MADIChannel $CHANNEL" "$BUNDLE/Contents/Info.plist"
+if ! [[ "$MADI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+  echo "❌ invalid MADI_VERSION: $MADI_VERSION"; exit 1
 fi
+MARKETING="${MADI_VERSION%%[-+]*}"
+[ "$MARKETING" = "$PROJECT_VERSION" ] || {
+  echo "❌ MADI_VERSION ($MADI_VERSION) does not match canonical VERSION ($PROJECT_VERSION)"; exit 1;
+}
+CHANNEL="${MADI_CHANNEL:-stable}"
+case "$MADI_VERSION" in
+  *-beta.*) CHANNEL="${MADI_CHANNEL:-beta}" ;;
+  *-rc.*)   CHANNEL="${MADI_CHANNEL:-rc}" ;;
+esac
+BUNDLE_CHANNEL="$CHANNEL"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING" "$BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${MADI_BUILD:-1}" "$BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :MADIFullVersion $MADI_VERSION" "$BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :MADIChannel $CHANNEL" "$BUNDLE/Contents/Info.plist"
 if [ "$SPARKLE_ENABLED" = "1" ]; then
   SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://madi.devart.tv/channels/$BUNDLE_CHANNEL/appcast.xml}"
   plist_set_or_add_string "$BUNDLE/Contents/Info.plist" "SUFeedURL" "$SPARKLE_FEED_URL"
@@ -297,23 +323,27 @@ verify_prebuilt_engine() {
     echo "❌ $name does not match engine/prebuilt/SHA256SUMS — rerun update_translate_engines.sh or restore the file"; exit 1
   }
 }
-verify_prebuilt_engine "$TRANSLATE_ENGINE_4B"
-verify_prebuilt_engine "$TRANSLATE_ENGINE_2B"
 BUNDLED_TRANSLATE_4B=0
 BUNDLED_TRANSLATE_2B=0
-if [ -x "$TRANSLATE_ENGINE_4B" ]; then
-  echo "[2c] bundling DNA3.0-4B engine ($(du -h "$TRANSLATE_ENGINE_4B" | cut -f1))"
-  cp "$TRANSLATE_ENGINE_4B" "$BUNDLE/Contents/MacOS/translate-engine-4b"
-  BUNDLED_TRANSLATE_4B=1
+if [ "$MADI_BUNDLE_TRANSLATE_ENGINES" = "0" ]; then
+  echo "[2c] source-only bundle: omitting separately licensed translate engines"
 else
-  echo "[2c] (4B translate engine not found at $TRANSLATE_ENGINE_4B)"
-fi
-if [ -x "$TRANSLATE_ENGINE_2B" ]; then
-  echo "[2c] bundling DNA3.0-2B engine ($(du -h "$TRANSLATE_ENGINE_2B" | cut -f1))"
-  cp "$TRANSLATE_ENGINE_2B" "$BUNDLE/Contents/MacOS/translate-engine-2b"
-  BUNDLED_TRANSLATE_2B=1
-else
-  echo "[2c] (2B translate engine not found at $TRANSLATE_ENGINE_2B)"
+  verify_prebuilt_engine "$TRANSLATE_ENGINE_4B"
+  verify_prebuilt_engine "$TRANSLATE_ENGINE_2B"
+  if [ -x "$TRANSLATE_ENGINE_4B" ]; then
+    echo "[2c] bundling DNA3.0-4B engine ($(du -h "$TRANSLATE_ENGINE_4B" | cut -f1))"
+    cp "$TRANSLATE_ENGINE_4B" "$BUNDLE/Contents/MacOS/translate-engine-4b"
+    BUNDLED_TRANSLATE_4B=1
+  else
+    echo "[2c] (4B translate engine not found at $TRANSLATE_ENGINE_4B)"
+  fi
+  if [ -x "$TRANSLATE_ENGINE_2B" ]; then
+    echo "[2c] bundling DNA3.0-2B engine ($(du -h "$TRANSLATE_ENGINE_2B" | cut -f1))"
+    cp "$TRANSLATE_ENGINE_2B" "$BUNDLE/Contents/MacOS/translate-engine-2b"
+    BUNDLED_TRANSLATE_2B=1
+  else
+    echo "[2c] (2B translate engine not found at $TRANSLATE_ENGINE_2B)"
+  fi
 fi
 if [ "${REQUIRE_TRANSLATE_ENGINE:-0}" = "1" ] && { [ "$BUNDLED_TRANSLATE_4B" != "1" ] || [ "$BUNDLED_TRANSLATE_2B" != "1" ]; }; then
   echo "❌ both 4B and 2B translate engines are required for this build"; exit 1

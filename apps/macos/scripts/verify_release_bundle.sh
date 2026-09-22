@@ -2,9 +2,15 @@
 # Fail-fast structural checks before an app is signed and notarized.
 set -euo pipefail
 
-APP="${1:?usage: verify_release_bundle.sh <Madi.app> <full-version>}"
-EXPECTED_VERSION="${2:?usage: verify_release_bundle.sh <Madi.app> <full-version>}"
+APP="${1:?usage: verify_release_bundle.sh <Madi.app> <full-version> [bundled|absent|either]}"
+EXPECTED_VERSION="${2:?usage: verify_release_bundle.sh <Madi.app> <full-version> [bundled|absent|either]}"
+EXPECTED_TRANSLATE_MODE="${3:-either}"
 PLIST="$APP/Contents/Info.plist"
+
+case "$EXPECTED_TRANSLATE_MODE" in
+  bundled|absent|either) ;;
+  *) echo "❌ translate mode must be bundled, absent, or either" >&2; exit 1 ;;
+esac
 
 required=(
   "$APP/Contents/MacOS/Madi"
@@ -61,6 +67,18 @@ if [ -e "$translate_4b" ] || [ -e "$translate_2b" ]; then
     echo "❌ bundled translate engines without Resources/TRANSLATE_ENGINE_LICENSE.md" >&2; exit 1;
   }
   executables+=("$translate_4b" "$translate_2b")
+fi
+if [ "$EXPECTED_TRANSLATE_MODE" = "bundled" ]; then
+  [ -s "$translate_4b" ] && [ -s "$translate_2b" ] || {
+    echo "❌ expected bundled translate engines" >&2; exit 1;
+  }
+elif [ "$EXPECTED_TRANSLATE_MODE" = "absent" ]; then
+  [ ! -e "$translate_4b" ] && [ ! -e "$translate_2b" ] || {
+    echo "❌ source-only bundle unexpectedly contains translate engines" >&2; exit 1;
+  }
+  [ ! -e "$APP/Contents/Resources/TRANSLATE_ENGINE_LICENSE.md" ] || {
+    echo "❌ source-only bundle unexpectedly contains the binary-engine license" >&2; exit 1;
+  }
 fi
 
 for executable in "${executables[@]}"; do

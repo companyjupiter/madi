@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Fixtures exercise arbitrary SemVer/channel combinations. Production release
+# invocations leave this unset and must match the repository's VERSION file.
+export MADI_ALLOW_VERSION_OVERRIDE=1
+
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 CLI="$ROOT/apps/macos/scripts/madi_release.sh"
 WRAPPER="$ROOT/apps/macos/scripts/release_local_free.sh"

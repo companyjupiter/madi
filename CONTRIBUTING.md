@@ -1,7 +1,7 @@
 # Contributing to Madi
 
-Thanks for wanting to help. Madi is a local-first macOS app: the whole core path
-runs on the user's Mac with no account, no API key and no cloud. Contributions that
+Thanks for wanting to help. Madi is a local-first macOS app: the whole inference
+path runs on the user's Mac with no account, no API key and no cloud processing. Contributions that
 keep it that way are welcome. 한국어로 이슈와 PR을 작성하셔도 됩니다.
 
 ## Before you start
@@ -19,13 +19,15 @@ Requirements: an Apple Silicon Mac, macOS 14 or later, Xcode command-line tools
 ```sh
 apps/macos/scripts/fetch_runtime_assets.sh   # once: seven small runtime assets, SHA-256 pinned
 apps/macos/scripts/make_app.sh               # builds the engine if needed → apps/macos/build/Madi.app
+MADI_BUNDLE_TRANSLATE_ENGINES=0 apps/macos/scripts/make_app.sh  # AGPL/source-only bundle
 cd apps/macos && swift test                  # core test suite
 apps/macos/scripts/tests/madi_release_test.sh   # release tooling tests (only if you touch scripts/)
 ```
 
-The translate engines are prebuilt binaries in [`engine/prebuilt/`](engine/prebuilt/README.md);
-everything else builds from source. The speech model (~830 MB) is downloaded by the
-app on first launch, not by the build.
+The normal product bundle includes separately licensed prebuilt translate engines
+from [`engine/prebuilt/`](engine/prebuilt/README.md). The source-only command above
+omits them. The speech model (~830 MB) is downloaded by the app on first launch,
+not by the build. See [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
 
 ## What a good pull request looks like
 - **One change, explained.** Say what was wrong or missing, what you changed, and
@@ -45,5 +47,5 @@ app on first launch, not by the build.
 
 ## Releases
 Maintainers cut releases with `apps/macos/scripts/madi_release.sh`
-([docs/RELEASE.md](docs/RELEASE.md)). Only the current stable version stays
-published.
+([docs/RELEASE.md](docs/RELEASE.md)). Older binaries may leave the active download
+channel, but release notes and source tags are permanent provenance.

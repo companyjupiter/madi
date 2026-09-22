@@ -87,7 +87,11 @@ publish_release() {
   rm -rf "$dist"
   mkdir -p "$dist"
   printf 'dmg-%s\n' "$version" > "$dist/madi-$version-arm64.dmg"
-  printf 'checksum  madi-%s-arm64.dmg\n' "$version" > "$dist/SHA256SUMS.txt"
+  printf '{"spdxVersion":"SPDX-2.3","name":"madi-%s"}\n' "$version" > "$dist/madi-$version-arm64.spdx.json"
+  (
+    cd "$dist"
+    shasum -a 256 "madi-$version-arm64.dmg" "madi-$version-arm64.spdx.json" > SHA256SUMS.txt
+  )
   SPARKLE_APPCAST_SIGN=0 SPARKLE_ALLOW_UNSIGNED_APPCAST=1 PATH="$FAKE_BIN:$PATH" "$PUBLISH" "$dist" downloads.example \
     https://downloads.example.test madi "$version" "$channel" "$publish"
 }
@@ -97,6 +101,8 @@ STABLE_APPCAST="$MOCK_S3_ROOT/downloads.example/madi/channels/stable/appcast.xml
 BETA_APPCAST="$MOCK_S3_ROOT/downloads.example/madi/channels/beta/appcast.xml"
 
 publish_release 0.9.0 stable true
+[ -s "$MOCK_S3_ROOT/downloads.example/madi/releases/0.9.0/madi-0.9.0-arm64.spdx.json" ]
+grep -Fq 'madi-0.9.0-arm64.spdx.json' "$WORK/dist/release-notes.md"
 jq -e '
   .channels.stable == "0.9.0"
   and (.releases | length == 1)

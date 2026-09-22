@@ -74,7 +74,7 @@ final class DebugLog: @unchecked Sendable {
                     FileManager.default.createFile(atPath: url.path, contents: nil)
                 }
                 guard let opened = try? FileHandle(forWritingTo: url) else { return }
-                try? opened.seekToEnd()
+                _ = try? opened.seekToEnd()
                 handles[name] = opened
                 h = opened
             }
