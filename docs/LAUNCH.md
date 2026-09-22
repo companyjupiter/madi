@@ -120,9 +120,9 @@ meeting workflow you want Madi to make possible.
 - [x] Core, release-tooling, and dashboard checks pass.
 - [x] Landing page and its 1200×630 Open Graph image are published.
 - [x] CodeQL, dependency review, Dependabot, SBOM, and provenance workflows exist.
-- [ ] Launch-hardening pull request passes all required checks and is merged to `main`.
+- [x] Launch-hardening pull request passes all required checks and is merged to `main`.
 - [x] GitHub repository social preview uses `design/social/madi-open-graph.png`.
-- [x] Welcome post is published in GitHub Discussions.
+- [x] [Welcome post](https://github.com/companyjupiter/madi/discussions/16) is published in GitHub Discussions.
 - [ ] Owner-managed notarization is complete for the promoted DMG.
 
 Notarization is intentionally outside this hardening task. Mark that owner-managed
