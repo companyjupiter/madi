@@ -58,6 +58,7 @@ xcrun metallib "${AIR[@]}" -o "$BUILD/whisper.metallib"
 cp "$BUILD/whisper.metallib" whisper.metallib   # for @embedFile
 
 echo "[2/4] Compile ObjC bridge → .o"
+# The same probe also keeps macOS 26-only MTL4 declarations out of older SDK builds.
 clang -c -fobjc-arc -O2 -mmacosx-version-min="$MACOS_MIN_VERSION" \
     -DMADI_HAS_MTL4_SDK="$METAL4_AVAILABLE" \
     metal_backend.m -o "$BUILD/metal_backend.o"
