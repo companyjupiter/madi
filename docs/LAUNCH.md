@@ -124,4 +124,6 @@ meeting workflow you want Madi to make possible.
 - [ ] GitHub repository social preview uses `design/social/madi-open-graph.png`.
 - [ ] Welcome post is published in GitHub Discussions.
 - [ ] Owner-managed notarization is complete for the promoted DMG.
-- [ ] Replace the unchecked line above with `[x]` immediately before posting.
+
+Notarization is intentionally outside this hardening task. Mark that owner-managed
+gate complete immediately before posting the launch announcement.
