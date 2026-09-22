@@ -10,4 +10,5 @@
 - [ ] New `.swift` files are in the `make_app.sh` source list
 - [ ] No new network call, account, or telemetry in the core path
 - [ ] Third-party code or weights are named here and added to `NOTICE` / `THIRD_PARTY_LICENSES.md` (or none)
-- [ ] I have read the [Contributor License Agreement](../blob/main/CLA.md) and I agree to it for this contribution
+- [ ] I have read the [Contributor License Agreement](https://github.com/companyjupiter/madi/blob/main/CLA.md) and I agree to it for this contribution
+- [ ] This is my original work, or I identified its source/license above; I have any employer permission needed to submit it
