@@ -59,6 +59,7 @@ cp "$BUILD/whisper.metallib" whisper.metallib   # for @embedFile
 
 echo "[2/4] Compile ObjC bridge → .o"
 clang -c -fobjc-arc -O2 -mmacosx-version-min="$MACOS_MIN_VERSION" \
+    -DMADI_HAS_MTL4_SDK="$METAL4_AVAILABLE" \
     metal_backend.m -o "$BUILD/metal_backend.o"
 
 echo "[3/4] Compile Zig ($ENTRY) → .o"

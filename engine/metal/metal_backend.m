@@ -9,6 +9,14 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+#ifndef MADI_HAS_MTL4_SDK
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
+#define MADI_HAS_MTL4_SDK 1
+#else
+#define MADI_HAS_MTL4_SDK 0
+#endif
+#endif
+
 // ── 글로벌 상태 ──────────────────────────────────────────
 
 static id<MTLDevice>       g_device       = nil;
@@ -56,12 +64,16 @@ static NSUInteger mtl4_vis(void) {
 
 static int mtl4_enabled_env(void) {
     if (g_mtl4_enabled_env < 0) {
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
             const char* e = getenv("SOV_MTL4");
             g_mtl4_enabled_env = (e && e[0] && e[0] != '0') ? 1 : 0;
         } else {
             g_mtl4_enabled_env = 0;
         }
+#else
+        g_mtl4_enabled_env = 0;
+#endif
     }
     return g_mtl4_enabled_env;
 }
@@ -298,6 +310,7 @@ void mtl_cleanup(void) {
         g_device  = nil;
         g_n_functions = 0;
         // MTL4 영속 객체 해제
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
             if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
             g_mtl4_cb = nil;
@@ -309,6 +322,7 @@ void mtl_cleanup(void) {
             g_mtl4_compiler = nil;
             g_mtl4_queue = nil;
         }
+#endif
         g_mtl4_active = 0;
         g_mtl4_init_ok = 0;
         // Clear hash table
@@ -475,6 +489,7 @@ void* mtl_create_argument_buffer(const void** ptrs, int n_buffers, int pipeline_
 // ── Metal 4 영속 객체 생성 (SOV_MTL4=1, mtl_load_library 에서 1회) ─────
 // g_library 가 로드된 후 호출. 실패 시 g_mtl4_init_ok=0 유지 → classic 폴백.
 static void mtl4_init_persistent(void) {
+#if MADI_HAS_MTL4_SDK
     if (@available(macOS 26.0, *)) {
         @autoreleasepool {
             NSError* err = nil;
@@ -510,11 +525,13 @@ static void mtl4_init_persistent(void) {
             MLOG("[MTL4] persistent objects ready (queue/compiler/allocator/argtable/residency/event)\n");
         }
     }
+#endif
 }
 
 // 모든 alloc 버퍼 + arg buffer + param ring 을 residency set 에 등록 후 resident 요청.
 // dirty(신규 alloc 발생) 일 때만 재빌드. 모델 로드 완료 후 첫 forward 에서 1회 수렴.
 static void mtl4_rebuild_residency(void) {
+#if MADI_HAS_MTL4_SDK
     if (@available(macOS 26.0, *)) {
         if (!g_mtl4_init_ok || !g_mtl4_res_dirty) return;
         @autoreleasepool {
@@ -532,6 +549,7 @@ static void mtl4_rebuild_residency(void) {
             g_mtl4_res_dirty = 0;
         }
     }
+#endif
 }
 
 int mtl_mtl4_enabled(void) { return g_mtl4_init_ok; }
@@ -620,6 +638,7 @@ int mtl_get_function(const char* name, int* out_id) {
 
         // Phase 1: 동일 g_library 함수로 MTL4 pipeline 도 생성 (셰이더 재컴파일 0).
         // 실패 시 해당 슬롯 nil → mtl4_dispatch 에서 classic 폴백 가드.
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
             if (g_mtl4_init_ok) {
                 NSError* e4 = nil;
@@ -634,6 +653,7 @@ int mtl_get_function(const char* name, int* out_id) {
                 g_mtl4_pipelines[idx] = p4;
             }
         }
+#endif
 
         g_n_functions++;
         *out_id = idx;
@@ -657,6 +677,7 @@ int mtl_dispatch(int func_id,
         MTLSize threadgroupCount = MTLSizeMake(grid_x,  grid_y,  grid_z);
 
         // ── MTL4 경로 (Phase 1): argtable + stage barrier. begin 에서 enc 생성됨.
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
           if (g_mtl4_active && g_mtl4_init_ok) {
             id<MTLComputePipelineState> pso = g_mtl4_pipelines[func_id];
@@ -691,6 +712,7 @@ int mtl_dispatch(int func_id,
             return 0;
           }
         }
+#endif
 
         // ── PROFILE 모드: 이 dispatch 하나만 독립 cmdbuf 로 격리 측정 후 early-return.
         // 공유 encoder/cmdbuf 상태머신 안 건드림. profile OFF면 skip.
@@ -776,12 +798,14 @@ int mtl_dispatch(int func_id,
 
 void mtl_flush(void) {
     @autoreleasepool {
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
             if (g_mtl4_active && g_mtl4_init_ok) {
                 if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
                 return;
             }
         }
+#endif
         if (g_encoder) {
             [g_encoder endEncoding];
             g_encoder = nil;
@@ -791,6 +815,7 @@ void mtl_flush(void) {
 
 int mtl_sync(void) {
     @autoreleasepool {
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
             if (g_mtl4_active && g_mtl4_init_ok) {
                 if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
@@ -801,6 +826,7 @@ int mtl_sync(void) {
                 return 0;
             }
         }
+#endif
         if (g_encoder) { [g_encoder endEncoding]; g_encoder = nil; }
         
         if (g_committed_cmdbuf != nil) {
@@ -834,6 +860,7 @@ int mtl_sync(void) {
 
 int mtl_begin_command_buffer(void) {
     @autoreleasepool {
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
             if (g_mtl4_active && g_mtl4_init_ok) {
                 if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
@@ -848,6 +875,7 @@ int mtl_begin_command_buffer(void) {
                 return (g_mtl4_cb != nil) ? 0 : -1;
             }
         }
+#endif
         if (g_encoder) { [g_encoder endEncoding]; g_encoder = nil; }
         g_active_cmdbuf_idx = (g_active_cmdbuf_idx + 1) & 1;
         g_cmdbufs[g_active_cmdbuf_idx] = [g_queue commandBuffer];
@@ -857,6 +885,7 @@ int mtl_begin_command_buffer(void) {
 
 int mtl_commit_command_buffer(void) {
     @autoreleasepool {
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
             if (g_mtl4_active && g_mtl4_init_ok) {
                 if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
@@ -872,6 +901,7 @@ int mtl_commit_command_buffer(void) {
                 return -1;
             }
         }
+#endif
         if (g_encoder) { [g_encoder endEncoding]; g_encoder = nil; }
         id<MTLCommandBuffer> buf = g_cmdbufs[g_active_cmdbuf_idx];
         if (buf != nil) {
