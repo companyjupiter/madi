@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://madi-apple-silicon.jupitersong47.chatgpt.site/sitemap.xml

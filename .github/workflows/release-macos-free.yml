@@ -3,8 +3,8 @@ name: Release macOS (free account)
 # Active release path while the project has no Developer ID certificate.
 # make_app.sh applies an ad-hoc code signature, but the DMG is not notarized.
 # Disable this workflow before enabling release-macos-paid.yml.
-# Automatic PR/tag runs are paused while GitHub Actions is unavailable; the
-# current release path is apps/macos/scripts/release_local_free.sh.
+# PR/tag runs are intentionally disabled while the Developer ID/notarized path
+# is being brought online. The canonical release path is madi_release.sh.
 
 on:
   workflow_dispatch:
@@ -44,7 +44,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Validate scripts
         shell: bash
@@ -68,6 +68,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      attestations: write
     env:
       ASSETS_URL: ${{ vars.MADI_RELEASE_ASSETS_URL }}
       ASSETS_SHA256: ${{ vars.MADI_RELEASE_ASSETS_SHA256 }}
@@ -85,7 +86,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -113,6 +114,11 @@ jobs:
             beta_expiry="$INPUT_BETA_EXPIRY"
           fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
+          canonical="$(tr -d '[:space:]' < VERSION)"
+          [[ "${version%%[-+]*}" == "$canonical" ]] || {
+            echo "Release $version does not match canonical VERSION $canonical" >&2
+            exit 1
+          }
           [[ "$beta_expiry" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]
           channel=stable
           [[ "$version" == *-beta.* ]] && channel=beta
@@ -198,9 +204,10 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/standard"
           STRICT_ASSETS=1 MADI_VERSION="$VERSION" MADI_BUILD="$GITHUB_RUN_NUMBER" \
+            MADI_BUNDLE_TRANSLATE_ENGINES=1 REQUIRE_TRANSLATE_ENGINE=1 \
             MADI_CHANNEL="$CHANNEL" MADI_BETA_EXPIRY="$BETA_EXPIRY" \
             apps/macos/scripts/make_app.sh "$out"
-          apps/macos/scripts/verify_release_bundle.sh "$out/Madi.app" "$VERSION"
+          apps/macos/scripts/verify_release_bundle.sh "$out/Madi.app" "$VERSION" bundled
           mkdir -p dist
           (cd dist && SKIP_STAPLE=1 ../apps/macos/scripts/make_dmg.sh "$out/Madi.app" "$VERSION")
           mv "dist/Madi-$VERSION.dmg" "dist/madi-$VERSION-arm64.dmg"
@@ -220,28 +227,48 @@ jobs:
           echo "$SPEECH_MODEL_SHA256  $model" | shasum -a 256 -c -
           out="$RUNNER_TEMP/offline"
           BUNDLE_MODEL=1 STRICT_ASSETS=1 MADI_VERSION="$VERSION" MADI_BUILD="$GITHUB_RUN_NUMBER" \
+            MADI_BUNDLE_TRANSLATE_ENGINES=1 REQUIRE_TRANSLATE_ENGINE=1 \
             MADI_CHANNEL="$CHANNEL" MADI_BETA_EXPIRY="$BETA_EXPIRY" \
             apps/macos/scripts/make_app.sh "$out"
-          apps/macos/scripts/verify_release_bundle.sh "$out/Madi.app" "$VERSION"
+          apps/macos/scripts/verify_release_bundle.sh "$out/Madi.app" "$VERSION" bundled
           (cd dist && SKIP_STAPLE=1 ../apps/macos/scripts/make_dmg.sh "$out/Madi.app" "$VERSION-offline")
           mv "dist/Madi-$VERSION-offline.dmg" "dist/madi-$VERSION-offline-arm64.dmg"
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: ${{ runner.temp }}/standard/Madi.app
+          format: spdx-json
+          output-file: dist/madi-${{ steps.meta.outputs.version }}-arm64.spdx.json
+          artifact-name: madi-${{ steps.meta.outputs.version }}-arm64-sbom
 
       - name: Generate checksums
         shell: bash
         run: |
           set -euo pipefail
-          (cd dist && shasum -a 256 *.dmg > SHA256SUMS.txt)
+          (cd dist && shasum -a 256 *.dmg *.spdx.json > SHA256SUMS.txt)
+
+      - name: Attest DMG build provenance
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: dist/*.dmg
+
+      - name: Attest standard DMG SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/madi-${{ steps.meta.outputs.version }}-arm64.dmg
+          sbom-path: dist/madi-${{ steps.meta.outputs.version }}-arm64.spdx.json
 
       - name: Check out Homebrew tap
         if: steps.meta.outputs.publish == 'true' && steps.meta.outputs.channel == 'stable'
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: companyjupiter/homebrew-tap
           path: homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6.1.0
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -274,7 +301,7 @@ jobs:
             [ "$CHANNEL" = stable ] || args+=(--prerelease)
             gh release create "${args[@]}"
           fi
-          gh release upload "$TAG" dist/*.dmg dist/SHA256SUMS.txt --clobber
+          gh release upload "$TAG" dist/*.dmg dist/*.spdx.json dist/SHA256SUMS.txt --clobber
           if [ "$PUBLISH" = true ]; then gh release edit "$TAG" --draft=false; fi
 
       - name: Update Homebrew Cask

@@ -94,7 +94,7 @@ struct Segmenter {
     /// 10 ms-hop silence tracking with an adaptive threshold (see earlyFlush*).
     private mutating func analyze(_ frames: [Int16]) {
         guard earlyFlushSilenceSeconds > 0 else { return }
-        var buf = hopRemainder + frames
+        let buf = hopRemainder + frames
         let hop = sampleRate / 100          // 10 ms
         var i = 0
         while i + hop <= buf.count {

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Madi — On-device meeting intelligence for Apple Silicon</title>
+  <meta name="description" content="Open-source, local-first transcription, speaker separation, translation, summaries, and meeting recall for Apple Silicon.">
+  <meta name="theme-color" content="#09090b">
+  <link rel="canonical" href="https://madi-apple-silicon.jupitersong47.chatgpt.site/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Madi — On-device meeting intelligence">
+  <meta property="og:description" content="Open-source, local-first meeting intelligence for Apple Silicon.">
+  <meta property="og:url" content="https://madi-apple-silicon.jupitersong47.chatgpt.site/">
+  <meta property="og:image" content="https://madi-apple-silicon.jupitersong47.chatgpt.site/assets/social-preview.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Madi waveform and speaker timeline">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Madi — On-device meeting intelligence">
+  <meta name="twitter:description" content="Open-source, local-first meeting intelligence for Apple Silicon.">
+  <meta name="twitter:image" content="https://madi-apple-silicon.jupitersong47.chatgpt.site/assets/social-preview.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #09090b;
+      --surface: #111116;
+      --surface-2: #17171e;
+      --line: rgba(255,255,255,.12);
+      --muted: #9d9daa;
+      --text: #f5f5f7;
+      --violet: #9c7cff;
+      --cyan: #4bd9ff;
+      --green: #74e8a2;
+      --max: 1160px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(900px 520px at 68% 18%, rgba(77,102,255,.12), transparent 68%),
+        radial-gradient(760px 430px at 83% 31%, rgba(34,211,238,.07), transparent 70%),
+        var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+    .skip-link { position: absolute; left: -999px; top: 0; }
+    .skip-link:focus { left: 16px; top: 16px; z-index: 20; background: white; color: black; padding: 8px 12px; }
+    .wrap { width: min(calc(100% - 40px), var(--max)); margin: 0 auto; }
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(9,9,11,.78); backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .nav-inner { height: 68px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 720; letter-spacing: -.02em; }
+    .brand-mark { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 9px; display: grid; place-items: center; background: #fff; color: #09090b; font-size: 14px; }
+    .nav-links { display: flex; align-items: center; gap: 22px; color: #c8c8d1; font-size: 14px; }
+    .nav-links a { text-decoration: none; }
+    .nav-links a:hover { color: #fff; }
+    .nav-github { border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; background: rgba(255,255,255,.04); }
+    .hero { padding: 94px 0 72px; }
+    .eyebrow { display: flex; align-items: center; gap: 10px; color: #cfcfd8; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+    .dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; box-shadow: 0 0 20px rgba(116,232,162,.8); }
+    h1 { margin: 22px 0 22px; max-width: 900px; font-size: clamp(48px, 7vw, 84px); line-height: .98; letter-spacing: -.055em; font-weight: 730; }
+    .signal-text { color: transparent; background: linear-gradient(90deg, #fff 8%, #c9bfff 47%, #75ddff); background-clip: text; -webkit-background-clip: text; }
+    .lede { max-width: 700px; color: #b8b8c3; font-size: clamp(19px, 2.3vw, 25px); line-height: 1.42; letter-spacing: -.015em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 20px; border-radius: 12px; font-size: 15px; font-weight: 650; text-decoration: none; transition: transform .15s ease, border-color .15s ease; }
+    .button:hover { transform: translateY(-1px); }
+    .button-primary { background: #f5f5f7; color: #09090b; }
+    .button-secondary { border: 1px solid var(--line); background: rgba(255,255,255,.04); }
+    .fine { margin-top: 16px; color: #767683; font-size: 13px; }
+    .product-frame { position: relative; margin-top: 74px; padding: 1px; border-radius: 23px; background: linear-gradient(120deg, rgba(156,124,255,.68), rgba(255,255,255,.08) 44%, rgba(75,217,255,.45)); box-shadow: 0 42px 110px rgba(0,0,0,.55); }
+    .product-frame::before { content: ""; position: absolute; inset: -60px 5% auto; height: 140px; background: linear-gradient(90deg, rgba(156,124,255,.20), rgba(75,217,255,.18)); filter: blur(70px); z-index: -1; }
+    .product-shell { background: #111115; border-radius: 22px; padding: 20px; overflow: hidden; }
+    .product-shell img { width: 100%; display: block; border-radius: 13px; background: white; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 54px 0 0; }
+    .stat { padding: 25px 18px; border-right: 1px solid var(--line); }
+    .stat:last-child { border-right: 0; }
+    .stat strong { display: block; font-size: 25px; letter-spacing: -.03em; }
+    .stat span { color: var(--muted); font-size: 13px; }
+    section { padding: 98px 0; }
+    .section-kicker { color: var(--violet); text-transform: uppercase; font-size: 12px; letter-spacing: .12em; font-weight: 700; }
+    h2 { max-width: 740px; margin: 12px 0 18px; font-size: clamp(34px, 4.5vw, 56px); line-height: 1.06; letter-spacing: -.045em; }
+    .section-copy { max-width: 670px; color: var(--muted); font-size: 18px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 44px; }
+    .card { min-height: 215px; padding: 25px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.018)); }
+    .card-icon { width: 39px; height: 39px; display: grid; place-items: center; border: 1px solid rgba(156,124,255,.35); border-radius: 11px; color: #cbbfff; background: rgba(156,124,255,.08); font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .card h3 { margin: 24px 0 8px; font-size: 19px; letter-spacing: -.02em; }
+    .card p { margin: 0; color: var(--muted); font-size: 15px; }
+    .principles { display: grid; grid-template-columns: .9fr 1.1fr; gap: 72px; align-items: start; }
+    .principle-list { border-top: 1px solid var(--line); }
+    .principle { display: grid; grid-template-columns: 38px 1fr; gap: 14px; padding: 22px 0; border-bottom: 1px solid var(--line); }
+    .principle b { color: #777783; font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding-top: 4px; }
+    .principle h3 { margin: 0 0 5px; font-size: 17px; }
+    .principle p { margin: 0; color: var(--muted); font-size: 14px; }
+    .license-note { margin-top: 34px; padding: 18px 20px; border-left: 2px solid var(--cyan); background: rgba(75,217,255,.055); color: #b9bbc5; font-size: 14px; }
+    .cta { position: relative; overflow: hidden; padding: 62px; border: 1px solid var(--line); border-radius: 24px; background: #111116; }
+    .cta::after { content: ""; position: absolute; width: 390px; height: 390px; right: -130px; top: -170px; border-radius: 50%; background: radial-gradient(circle, rgba(76,215,255,.22), rgba(156,124,255,.08) 42%, transparent 70%); }
+    .cta h2 { max-width: 620px; margin-top: 0; }
+    .cta p { max-width: 590px; color: var(--muted); font-size: 17px; }
+    footer { padding: 34px 0 50px; color: #777783; font-size: 13px; }
+    .footer-inner { display: flex; justify-content: space-between; gap: 30px; padding-top: 24px; border-top: 1px solid var(--line); }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 18px; }
+    .footer-links a { text-decoration: none; }
+    @media (max-width: 820px) {
+      .nav-links a:not(.nav-github) { display: none; }
+      .hero { padding-top: 68px; }
+      .grid { grid-template-columns: 1fr 1fr; }
+      .principles { grid-template-columns: 1fr; gap: 34px; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stat:nth-child(2) { border-right: 0; }
+      .stat:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+    }
+    @media (max-width: 560px) {
+      .wrap { width: min(calc(100% - 28px), var(--max)); }
+      .hero { padding: 52px 0 40px; }
+      h1 { font-size: 47px; }
+      .lede { font-size: 18px; }
+      .actions { display: grid; }
+      .product-frame { margin-top: 45px; border-radius: 15px; }
+      .product-shell { padding: 9px; border-radius: 14px; }
+      section { padding: 70px 0; }
+      .grid { grid-template-columns: 1fr; }
+      .cta { padding: 32px 24px; }
+      .footer-inner { flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .button { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <nav aria-label="Primary navigation">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top" aria-label="Madi home"><span class="brand-mark">M</span> Madi</a>
+      <div class="nav-links">
+        <a href="#capabilities">Capabilities</a>
+        <a href="#open-source">Open source</a>
+        <a href="https://github.com/companyjupiter/madi/blob/main/docs/manual/en/01-quick-start.md">Docs</a>
+        <a class="nav-github" href="https://github.com/companyjupiter/madi">GitHub ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+    <header class="hero" id="top">
+      <div class="wrap">
+        <div class="eyebrow"><span class="dot" aria-hidden="true"></span> Open source · Built for Apple Silicon</div>
+        <h1>Meetings stay useful.<br><span class="signal-text">And stay on your Mac.</span></h1>
+        <p class="lede">Madi turns live audio into searchable transcripts, speaker-aware notes, translation, summaries, and recall — with inference on your own Apple Silicon.</p>
+        <div class="actions">
+          <a class="button button-primary" href="https://github.com/companyjupiter/madi/releases/latest">Download for macOS</a>
+          <a class="button button-secondary" href="https://github.com/companyjupiter/madi">View source on GitHub</a>
+        </div>
+        <p class="fine">macOS 14+ · Apple Silicon · No cloud processing · Speech model downloads once on first launch</p>
+
+        <div class="product-frame" aria-label="Madi recording interface">
+          <div class="product-shell"><img src="assets/main-recording.svg" alt="Madi recording a Korean sprint review with speaker-separated transcript rows"></div>
+        </div>
+
+        <div class="stats" aria-label="Project facts">
+          <div class="stat"><strong>688</strong><span>headless core tests</span></div>
+          <div class="stat"><strong>4</strong><span>interface languages</span></div>
+          <div class="stat"><strong>0</strong><span>cloud processing</span></div>
+          <div class="stat"><strong>AGPL‑3.0</strong><span>application source</span></div>
+        </div>
+      </div>
+    </header>
+
+    <section id="capabilities">
+      <div class="wrap">
+        <div class="section-kicker">One local workspace</div>
+        <h2>From live speech to durable meeting memory.</h2>
+        <p class="section-copy">Capture system audio or a microphone, follow the conversation live, then search and reuse what was said without uploading the meeting to a processing service.</p>
+        <div class="grid">
+          <article class="card"><div class="card-icon">01</div><h3>Live transcription</h3><p>Low-latency captions with overlap-aware merging, stable interim text, and Korean-friendly formatting.</p></article>
+          <article class="card"><div class="card-icon">02</div><h3>Speaker separation</h3><p>Speaker-aware turns and voiceprint workflows keep multi-person conversations readable.</p></article>
+          <article class="card"><div class="card-icon">03</div><h3>Local translation</h3><p>Optional on-device language models translate without sending transcript content to a hosted model.</p></article>
+          <article class="card"><div class="card-icon">04</div><h3>Summaries and recall</h3><p>Build recaps, action items, open loops, and answers from the meetings already in your workspace.</p></article>
+          <article class="card"><div class="card-icon">05</div><h3>Exportable by design</h3><p>Your recordings and transcripts remain local files with practical export paths for downstream work.</p></article>
+          <article class="card"><div class="card-icon">06</div><h3>Native Mac surface</h3><p>A SwiftUI application backed by Metal and Zig, tuned around Apple Silicon rather than a browser shell.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="open-source">
+      <div class="wrap principles">
+        <div>
+          <div class="section-kicker">Inspect the whole path</div>
+          <h2>Local-first is an architecture, not a slogan.</h2>
+          <p class="section-copy">The source, data paths, build instructions, privacy model, and release provenance are public and reviewable.</p>
+          <div class="license-note">The Madi application source is AGPL‑3.0. Release bundles may also contain separately licensed redistributable translation-engine binaries. A source-only build flag omits them and produces an AGPL-only application bundle.</div>
+        </div>
+        <div class="principle-list">
+          <div class="principle"><b>01</b><div><h3>No cloud processing</h3><p>Audio, transcripts, translation, summaries, and retrieval are processed on-device. Network use is limited to explicit downloads and update checks.</p></div></div>
+          <div class="principle"><b>02</b><div><h3>Reproducible license boundary</h3><p>Build the public source without separately licensed translation engines using one documented environment flag.</p></div></div>
+          <div class="principle"><b>03</b><div><h3>Supply-chain evidence</h3><p>Release workflows generate checksums, SPDX SBOMs, and build provenance attestations.</p></div></div>
+          <div class="principle"><b>04</b><div><h3>Community-owned direction</h3><p>Governance, security reporting, support, contribution rules, and a public roadmap live beside the code.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="cta">
+          <h2>Use it. Inspect it. Help shape what comes next.</h2>
+          <p>Madi is now public. Try the current release, build an AGPL-only bundle from source, or pick up an issue and make local meeting intelligence better.</p>
+          <div class="actions">
+            <a class="button button-primary" href="https://github.com/companyjupiter/madi/releases/latest">Get the latest release</a>
+            <a class="button button-secondary" href="https://github.com/companyjupiter/madi/blob/main/CONTRIBUTING.md">Contribute</a>
+            <a class="button button-secondary" href="https://github.com/companyjupiter/madi/discussions">Join the discussion</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-inner">
+      <span>Madi by Team Jupiter · Source AGPL‑3.0</span>
+      <div class="footer-links">
+        <a href="https://github.com/companyjupiter/madi/blob/main/PRIVACY.md">Privacy</a>
+        <a href="https://github.com/companyjupiter/madi/blob/main/SECURITY.md">Security</a>
+        <a href="https://github.com/companyjupiter/madi/blob/main/GOVERNANCE.md">Governance</a>
+        <a href="https://github.com/companyjupiter/madi/blob/main/ROADMAP.md">Roadmap</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Default review ownership
+* @jupitersong
+
+# Security, licensing, and release surfaces
+/SECURITY.md @jupitersong
+/LICENSE @jupitersong
+/NOTICE @jupitersong
+/THIRD_PARTY_LICENSES.md @jupitersong
+/engine/prebuilt/ @jupitersong
+/.github/workflows/ @jupitersong
+/apps/macos/scripts/ @jupitersong

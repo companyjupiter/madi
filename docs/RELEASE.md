@@ -16,11 +16,14 @@ No Xcode project — the app is built entirely with `swiftc`.
 ```sh
 apps/macos/scripts/make_app.sh [outdir]     # default → apps/macos/build/Madi.app
 SEED_MODEL=1 apps/macos/scripts/make_app.sh  # also symlink the repo Q8 model into App Support
+MADI_BUNDLE_TRANSLATE_ENGINES=0 apps/macos/scripts/make_app.sh  # AGPL/source-only bundle
 ```
 
 `make_app.sh` will build the engine first if `engine/metal/out/transcribe` is
 missing (`build_engine.sh`, needs Zig 0.14.x + `xcrun metal`), then compile the
 SwiftUI sources, assemble the bundle, and **ad-hoc** codesign it for local dev.
+The source-only mode omits the two source-unavailable translation runners and
+their license file. Release builds explicitly require the pair.
 
 Canonical bundle layout it produces:
 
@@ -45,7 +48,7 @@ bundled — they download on first run / on demand into Application Support.
 | asset | size | policy |
 |---|---|---|
 | engine + metallib + 7 `.bin` assets | small | **bundled** (`assemble_bundle.sh` / `make_app.sh`, same 7-file list) |
-| `translate-engine-{4b,2b}` (DNA3 runners) | ~1.5 MB each | **bundled** from `engine/prebuilt/` — committed binaries built from the private `sovereignLLM` project, SHA-256 checked against `engine/prebuilt/SHA256SUMS` before bundling |
+| `translate-engine-{4b,2b}` (DNA3 runners) | ~1.5 MB each | **bundled in product releases** from `engine/prebuilt/` — separately licensed binaries built from the private `sovereignLLM` project, SHA-256 checked against `engine/prebuilt/SHA256SUMS`; omitted when `MADI_BUNDLE_TRANSLATE_ENGINES=0` |
 | `model.q8.safetensors` (speech) | ~830 MB | **downloaded** first run, SHA-256 verified (`ModelDownloader`) |
 | `DNA3.0-2B…gguf` (8 GB LLM) | ~1.3 GB | **downloaded** on demand, SHA-256 verified (`TranslateModelDownloader`) |
 | `DNA3.0-4B…gguf` (16 GB+ LLM) | ~2.8 GB | **downloaded** on demand, SHA-256 verified (`TranslateModelDownloader`) |
@@ -237,17 +240,15 @@ should not be created: 0.1.3 and 0.1.4 were both built from `450e527`, so
 `v0.1.4` already tags that tree and a second tag on the same commit would only
 make `git describe` ambiguous.
 
-### Retention: only the current stable stays published
+### Retention: binaries may retire; provenance does not
 
-Since 2026-09-16 a release supersedes its predecessors completely: after a
-stable publish, `madi_release.sh prune <version>` removes every other version
-from S3 and the index, and the older GitHub Releases are deleted together with
-their tags (`gh release delete <tag> --cleanup-tag`, plus `git push origin
---delete <tag>` for tags that had no Release). Only one `v<version>` tag and one
-GitHub Release exist at a time. Tags retired before the 2026-09-19 move to this
-repository were deleted in the previous one (now `companyjupiter/madi-archive`), so
-they are not in this repository's history either. The commits themselves stay in history; the
-retired tags are recorded here so a released binary can still be traced:
+After a stable publish, `madi_release.sh prune <version>` may remove superseded
+binary objects from S3 and the active release index. It must not delete GitHub
+Release notes or git tags. Tags are permanent source provenance; release notes,
+publication dates, and checksums remain even when their DMGs are no longer an
+active download. Historical tags that were removed before this policy are listed
+below. Tags with an exact original commit were restored on 2026-09-23; entries
+without an exact commit remain intentionally untagged:
 
 | version | published | tag | commit | DMG sha256 (prefix) |
 |---|---|---|---|---|
@@ -312,7 +313,7 @@ See [DEMO.md](DEMO.md) for a reproducible transcript/export proof to attach to a
 
 ---
 
-## GitHub Actions release definitions (automatic runs paused)
+## GitHub Actions release definitions (manual until notarized)
 
 Two release workflows are maintained:
 
@@ -337,10 +338,11 @@ mv .github/workflows/release-macos-paid.yml.disabled \
    .github/workflows/release-macos-paid.yml
 ```
 
-The free workflow is retained for later use, but its PR and tag triggers are
-disabled. After Actions billing is restored, it can still be invoked manually
-through **Actions → Release macOS (free account) → Run workflow**. The local
-script above is the source of truth until automatic runs are explicitly restored.
+The free workflow intentionally has no PR or tag trigger. It may be invoked
+manually through **Actions → Release macOS (free account) → Run workflow**
+only when an explicitly unnotarized artifact is wanted. The release CLI above
+remains the source of truth; keep the free workflow disabled once the paid,
+notarized workflow is enabled so a tag cannot publish two competing builds.
 
 The runtime archive is a versioned build dependency created before an app release,
 not an output of that same app build. Its URL and digest are public metadata, so

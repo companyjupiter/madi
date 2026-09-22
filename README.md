@@ -8,12 +8,13 @@
   <b>On-device meeting transcription for Apple Silicon.</b><br>
   Live, speaker-attributed transcripts with word timestamps — plus translation,
   summaries and Q&amp;A that also run on your Mac.<br>
-  No account, no API key, no cloud: the audio never leaves the machine.
+  No account or API key. No cloud processing: audio and transcripts stay on your Mac.
 </p>
 
 <p align="center">
-  <a href="https://github.com/companyjupiter/madi/releases/latest"><b>⬇&nbsp; Download Madi for macOS</b></a><br>
-  <sub>Apple Silicon · macOS 14+ · ~38 MB · free software (AGPL-3.0)</sub>
+  <a href="https://github.com/companyjupiter/madi/releases/latest"><b>⬇&nbsp; Download Madi for macOS</b></a>
+  &nbsp;·&nbsp; <a href="https://madi-apple-silicon.jupitersong47.chatgpt.site/"><b>Website</b></a><br>
+  <sub>Apple Silicon · macOS 14+ · ~38 MB · AGPL-3.0 app source</sub>
 </p>
 
 <p align="center">
@@ -44,7 +45,9 @@ enough. Translation and summaries pull a separate model (1.3 GB on 8 GB Macs,
 [Getting started](docs/manual/en/01-getting-started.md) ·
 [한국어 README](README_KR.md) ·
 [Contributing](CONTRIBUTING.md) ·
+[Privacy](PRIVACY.md) ·
 [Security](SECURITY.md) ·
+[Changelog](CHANGELOG.md) ·
 [Version history](#version-history)
 
 ## What it does
@@ -65,16 +68,26 @@ apps/macos/scripts/fetch_runtime_assets.sh    # seven small runtime assets, SHA-
 apps/macos/scripts/make_app.sh                # → apps/macos/build/Madi.app
 cd apps/macos && swift test
 ```
-The translate engines are prebuilt binaries in [`engine/prebuilt/`](engine/prebuilt/README.md);
-everything else builds from source.
+The normal product bundle includes separately licensed, source-unavailable translate
+engines from [`engine/prebuilt/`](engine/prebuilt/README.md). To build the AGPL
+application without those binaries:
+
+```sh
+MADI_BUNDLE_TRANSLATE_ENGINES=0 apps/macos/scripts/make_app.sh
+```
+
+That source-only bundle supports transcription and export; translation, summaries,
+Q&amp;A and AI titles require the omitted runners. See
+[source and licensing provenance](docs/PROVENANCE.md) for the exact boundary.
 
 ## Where things are
 
 | If you want to | Read |
 |---|---|
 | use the app | [the manual](docs/manual/en/01-getting-started.md) (KO / EN / JA / ZH) |
-| contribute | [CONTRIBUTING.md](CONTRIBUTING.md) · [CLA.md](CLA.md) · [AUTHORS.md](AUTHORS.md) |
+| contribute | [CONTRIBUTING.md](CONTRIBUTING.md) · [GOVERNANCE.md](GOVERNANCE.md) · [ROADMAP.md](ROADMAP.md) · [CLA.md](CLA.md) · [AUTHORS.md](AUTHORS.md) |
 | report a vulnerability | [SECURITY.md](SECURITY.md) |
+| understand privacy and support | [PRIVACY.md](PRIVACY.md) · [SUPPORT.md](SUPPORT.md) |
 | understand the engine | the rest of this file · [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
 | see what was measured | [`PERF_LOG.md`](PERF_LOG.md) (app + engine rounds) · [`engine/metal/PERF_LOG.md`](engine/metal/PERF_LOG.md) |
 | cut a release | [docs/RELEASE.md](docs/RELEASE.md) |
@@ -98,8 +111,9 @@ Python/PyTorch/onnxruntime at runtime**. Korean guide: [README_KR.md](README_KR.
 ## The primary flow: a local-first macOS app
 
 Madi's wedge is a **native on-device meeting engine** — not another configurable
-AI-provider wrapper. The whole core path runs on your Mac with **no account, no
-API key, no cloud**:
+AI-provider wrapper. The whole inference path runs on your Mac with **no account,
+no API key, and no cloud processing**. Network access is limited to model and
+software-update delivery:
 
 1. **Install** `Madi.app` with `brew install --cask companyjupiter/tap/madi`,
    build locally with `apps/macos/scripts/make_app.sh`, or use the latest DMG.
@@ -372,7 +386,7 @@ drop-in, madvise on the weight mapping, an engine centroid merge is still a cand
 
 | tool | purpose | run |
 |---|---|---|
-| `swift test` (SovereignCore) | 649 headless tests over the merger, store ledger, translation queue, shedding, runaway, stale-keep, numbering, debug log | `cd apps/macos && swift test` |
+| `swift test` (SovereignCore) | 688 headless tests over the merger, store ledger, translation queue, shedding, runaway, stale-keep, numbering, debug log | `cd apps/macos && swift test` |
 | Capture replay gate | Replays a session's `stdout.log` byte-for-byte through the real Decoder → TranscriptStore and prints lines / unexplained breaks / seam-dup rows / dup words / overlap rows / turn-head rows / numbering, with each lever off and on | `MADI_CAPTURE_STDOUT=<bundle>/stdout.log swift test --filter CaptureFragmentationGateTests` |
 | Events gate | Same over the engine's `EVENTS_FILE` JSONL (`MADI_EVENTS_JSONL=…`); note it cannot see view-state defects such as X1 | same test class |
 | `bench/live_capture/` | `tee_transcribe.py` records the real app → engine stream; `replay_capture.py` / `replay_faithful.py` replay it offline (works on a debug bundle) | [`engine/metal/bench/live_capture/README.md`](engine/metal/bench/live_capture/README.md) |
@@ -416,9 +430,10 @@ chunk dropouts 6/37 → 0 (F2), edited-row cascade fix (E1), stream-stop finaliz
 language-correction gate (L2), number-formatter guards 4/5, translation runaway ×7 and
 example-replay retry, video import bounded by duration with streaming decode (F1).
 0.3.22 → 0.3.29 were the local verification builds of those rounds and were never
-published. **Only the current stable stays published**: every earlier version was
-retired from S3 and the index, and its GitHub Release and tag deleted, on 2026-09-16
-(`v0.1.0` … `v0.3.21`) and on 2026-09-20 (`v0.4.0`). The tag → commit map is kept in
+published. **Only the current stable binary stays published**: every earlier DMG was
+retired from S3 and the active index on 2026-09-16 (`v0.1.0` … `v0.3.21`) or
+2026-09-20 (`v0.4.0`). Their exact source tags and archival GitHub Release notes were
+restored on 2026-09-23; the tag → commit map is kept in
 [docs/RELEASE.md](docs/RELEASE.md). Everything below is history only — none of those
 DMGs are downloadable.
 
@@ -473,6 +488,9 @@ in the name "Madi", its logo or its app icon. The prebuilt translate engines in
 [`engine/prebuilt/`](engine/prebuilt/README.md) are separate programs the app launches
 as child processes; they are **not** covered by the AGPL and ship as binaries that anyone
 may use and redistribute free of charge ([`engine/prebuilt/LICENSE.md`](engine/prebuilt/LICENSE.md)).
+Accordingly, the standard DMG is a mixed-license aggregate and is not described as
+wholly open source. Build with `MADI_BUNDLE_TRANSLATE_ENGINES=0` for an app bundle
+that omits those source-unavailable executables. See [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
 
 Inference code is original work of this project. It reuses five third-party models
 and embeds the Sparkle update framework; their notices are retained as required and reproduced in full:

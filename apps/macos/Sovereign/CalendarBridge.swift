@@ -42,13 +42,13 @@ final class CalendarBridge {
         // Run the SYNCHRONOUS EventKit query off the main actor — on large
         // calendars events(matching:) can block 100ms+, and this runs at record
         // start. Hop to a background queue, then assign back on @MainActor.
-        let evStore = self.store
         let now = Date()
-        let loaded: MeetingEvent? = await withCheckedContinuation { cont in
-            DispatchQueue.global(qos: .userInitiated).async {
-                cont.resume(returning: Self.nearestEvent(store: evStore, now: now))
-            }
-        }
+        let loaded = await Task.detached(priority: .userInitiated) {
+            // Authorization is process-wide. Create and consume this EventStore
+            // on the worker so a non-Sendable framework object never crosses an
+            // actor boundary.
+            Self.nearestEvent(store: EKEventStore(), now: now)
+        }.value
         event = loaded
     }
 

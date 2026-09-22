@@ -9,6 +9,14 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+#ifndef MADI_HAS_MTL4_SDK
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
+#define MADI_HAS_MTL4_SDK 1
+#else
+#define MADI_HAS_MTL4_SDK 0
+#endif
+#endif
+
 // ── 글로벌 상태 ──────────────────────────────────────────
 
 static id<MTLDevice>       g_device       = nil;
@@ -24,14 +32,17 @@ static id<MTLComputeCommandEncoder> g_encoder = nil;
 static int                          g_mtl4_enabled_env  = -1;   // -1=미확인, 0/1
 static int                          g_mtl4_init_ok      = 0;    // 영속 객체 생성 성공
 static int                          g_mtl4_active       = 0;    // 현 사이클 MTL4 경로 사용?
-static id<MTL4CommandQueue>         g_mtl4_queue        = nil;
-static id<MTL4Compiler>             g_mtl4_compiler     = nil;
-static id<MTL4CommandAllocator>     g_mtl4_alloc        = nil;
-static id<MTL4ArgumentTable>        g_mtl4_argtable     = nil;
-static id<MTLResidencySet>          g_mtl4_residency    = nil;
-static id<MTLSharedEvent>           g_mtl4_event        = nil;
-static id<MTL4CommandBuffer>        g_mtl4_cb           = nil;
-static id<MTL4ComputeCommandEncoder> g_mtl4_enc         = nil;
+// Metal 4 protocol types are macOS 26-only. Keep long-lived storage type-erased;
+// every access is narrowed by an explicit @available guard below. This preserves
+// the macOS 14 deployment target without suppressing availability diagnostics.
+static id                           g_mtl4_queue        = nil;
+static id                           g_mtl4_compiler     = nil;
+static id                           g_mtl4_alloc        = nil;
+static id                           g_mtl4_argtable     = nil;
+static id                           g_mtl4_residency    = nil;
+static id                           g_mtl4_event        = nil;
+static id                           g_mtl4_cb           = nil;
+static id                           g_mtl4_enc          = nil;
 static id<MTLComputePipelineState>  g_mtl4_pipelines[96];       // MAX_FUNCTIONS
 static id<MTLBuffer>                g_mtl4_param_buffer = nil;   // 스칼라 인자 ring (setBytes 대체)
 static int                          g_mtl4_param_offset = 0;
@@ -40,23 +51,29 @@ static int                          g_mtl4_res_dirty    = 1;     // residency �
 // dispatch 간 barrier 의 cache-flush 범위. Device(1<<0)=device-coherent flush(보수적/안전),
 // None(0)=실행순서만(Apple unified LLC 코히런시 의존). SOV_MTL4_VIS=0 으로 None 실험.
 static int                          g_mtl4_vis          = -1;    // -1=미확인
-static MTL4VisibilityOptions mtl4_vis(void) {
+static NSUInteger mtl4_vis(void) {
     if (g_mtl4_vis < 0) {
         const char* e = getenv("SOV_MTL4_VIS");
         // 기본 = Device (안전). SOV_MTL4_VIS=0 이면 None.
         g_mtl4_vis = (e && e[0] == '0') ? 0 : 1;
     }
-    return g_mtl4_vis ? MTL4VisibilityOptionDevice : MTL4VisibilityOptionNone;
+    // MTL4VisibilityOptionDevice == 1, None == 0. The enum cast occurs only
+    // inside a macOS 26 availability region.
+    return g_mtl4_vis ? 1u : 0u;
 }
 
 static int mtl4_enabled_env(void) {
     if (g_mtl4_enabled_env < 0) {
+#if MADI_HAS_MTL4_SDK
         if (@available(macOS 26.0, *)) {
             const char* e = getenv("SOV_MTL4");
             g_mtl4_enabled_env = (e && e[0] && e[0] != '0') ? 1 : 0;
         } else {
             g_mtl4_enabled_env = 0;
         }
+#else
+        g_mtl4_enabled_env = 0;
+#endif
     }
     return g_mtl4_enabled_env;
 }
@@ -293,15 +310,19 @@ void mtl_cleanup(void) {
         g_device  = nil;
         g_n_functions = 0;
         // MTL4 영속 객체 해제
-        if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
-        g_mtl4_cb = nil;
-        g_mtl4_param_buffer = nil;
-        g_mtl4_residency = nil;
-        g_mtl4_event = nil;
-        g_mtl4_argtable = nil;
-        g_mtl4_alloc = nil;
-        g_mtl4_compiler = nil;
-        g_mtl4_queue = nil;
+#if MADI_HAS_MTL4_SDK
+        if (@available(macOS 26.0, *)) {
+            if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
+            g_mtl4_cb = nil;
+            g_mtl4_param_buffer = nil;
+            g_mtl4_residency = nil;
+            g_mtl4_event = nil;
+            g_mtl4_argtable = nil;
+            g_mtl4_alloc = nil;
+            g_mtl4_compiler = nil;
+            g_mtl4_queue = nil;
+        }
+#endif
         g_mtl4_active = 0;
         g_mtl4_init_ok = 0;
         // Clear hash table
@@ -468,6 +489,7 @@ void* mtl_create_argument_buffer(const void** ptrs, int n_buffers, int pipeline_
 // ── Metal 4 영속 객체 생성 (SOV_MTL4=1, mtl_load_library 에서 1회) ─────
 // g_library 가 로드된 후 호출. 실패 시 g_mtl4_init_ok=0 유지 → classic 폴백.
 static void mtl4_init_persistent(void) {
+#if MADI_HAS_MTL4_SDK
     if (@available(macOS 26.0, *)) {
         @autoreleasepool {
             NSError* err = nil;
@@ -503,26 +525,31 @@ static void mtl4_init_persistent(void) {
             MLOG("[MTL4] persistent objects ready (queue/compiler/allocator/argtable/residency/event)\n");
         }
     }
+#endif
 }
 
 // 모든 alloc 버퍼 + arg buffer + param ring 을 residency set 에 등록 후 resident 요청.
 // dirty(신규 alloc 발생) 일 때만 재빌드. 모델 로드 완료 후 첫 forward 에서 1회 수렴.
 static void mtl4_rebuild_residency(void) {
-    if (!g_mtl4_init_ok || !g_mtl4_res_dirty) return;
-    @autoreleasepool {
-        pthread_mutex_lock(&g_alloc_mutex);
-        [g_mtl4_residency removeAllAllocations];
-        for (int i = 0; i < HASH_SIZE; i++) {
-            if (g_buf_hash[i].ptr != NULL && g_buf_hash[i].buffer != nil) {
-                [g_mtl4_residency addAllocation:g_buf_hash[i].buffer];
+#if MADI_HAS_MTL4_SDK
+    if (@available(macOS 26.0, *)) {
+        if (!g_mtl4_init_ok || !g_mtl4_res_dirty) return;
+        @autoreleasepool {
+            pthread_mutex_lock(&g_alloc_mutex);
+            [g_mtl4_residency removeAllAllocations];
+            for (int i = 0; i < HASH_SIZE; i++) {
+                if (g_buf_hash[i].ptr != NULL && g_buf_hash[i].buffer != nil) {
+                    [g_mtl4_residency addAllocation:g_buf_hash[i].buffer];
+                }
             }
+            pthread_mutex_unlock(&g_alloc_mutex);
+            [g_mtl4_residency addAllocation:g_mtl4_param_buffer];
+            [g_mtl4_residency commit];
+            [g_mtl4_residency requestResidency];
+            g_mtl4_res_dirty = 0;
         }
-        pthread_mutex_unlock(&g_alloc_mutex);
-        [g_mtl4_residency addAllocation:g_mtl4_param_buffer];
-        [g_mtl4_residency commit];
-        [g_mtl4_residency requestResidency];
-        g_mtl4_res_dirty = 0;
     }
+#endif
 }
 
 int mtl_mtl4_enabled(void) { return g_mtl4_init_ok; }
@@ -611,18 +638,22 @@ int mtl_get_function(const char* name, int* out_id) {
 
         // Phase 1: 동일 g_library 함수로 MTL4 pipeline 도 생성 (셰이더 재컴파일 0).
         // 실패 시 해당 슬롯 nil → mtl4_dispatch 에서 classic 폴백 가드.
-        if (g_mtl4_init_ok) {
-            NSError* e4 = nil;
-            MTL4LibraryFunctionDescriptor* fd = [MTL4LibraryFunctionDescriptor new];
-            fd.library = g_library; fd.name = ns_name;
-            MTL4ComputePipelineDescriptor* pd = [MTL4ComputePipelineDescriptor new];
-            pd.computeFunctionDescriptor = fd;
-            id<MTLComputePipelineState> p4 = [g_mtl4_compiler newComputePipelineStateWithDescriptor:pd compilerTaskOptions:nil error:&e4];
-            if (!p4) {
-                fprintf(stderr, "[MTL4] pipeline FAIL for %s: %s\n", name, e4?[[e4 localizedDescription] UTF8String]:"?");
+#if MADI_HAS_MTL4_SDK
+        if (@available(macOS 26.0, *)) {
+            if (g_mtl4_init_ok) {
+                NSError* e4 = nil;
+                MTL4LibraryFunctionDescriptor* fd = [MTL4LibraryFunctionDescriptor new];
+                fd.library = g_library; fd.name = ns_name;
+                MTL4ComputePipelineDescriptor* pd = [MTL4ComputePipelineDescriptor new];
+                pd.computeFunctionDescriptor = fd;
+                id<MTLComputePipelineState> p4 = [g_mtl4_compiler newComputePipelineStateWithDescriptor:pd compilerTaskOptions:nil error:&e4];
+                if (!p4) {
+                    fprintf(stderr, "[MTL4] pipeline FAIL for %s: %s\n", name, e4?[[e4 localizedDescription] UTF8String]:"?");
+                }
+                g_mtl4_pipelines[idx] = p4;
             }
-            g_mtl4_pipelines[idx] = p4;
         }
+#endif
 
         g_n_functions++;
         *out_id = idx;
@@ -646,7 +677,9 @@ int mtl_dispatch(int func_id,
         MTLSize threadgroupCount = MTLSizeMake(grid_x,  grid_y,  grid_z);
 
         // ── MTL4 경로 (Phase 1): argtable + stage barrier. begin 에서 enc 생성됨.
-        if (g_mtl4_active && g_mtl4_init_ok) {
+#if MADI_HAS_MTL4_SDK
+        if (@available(macOS 26.0, *)) {
+          if (g_mtl4_active && g_mtl4_init_ok) {
             id<MTLComputePipelineState> pso = g_mtl4_pipelines[func_id];
             if (pso == nil) { fprintf(stderr, "[MTL4] no pipeline func_id %d\n", func_id); return -1; }
             if (g_mtl4_enc == nil && g_mtl4_cb != nil) {   // flush 후 재진입 가드(decode 미사용)
@@ -675,9 +708,11 @@ int mtl_dispatch(int func_id,
             [g_mtl4_enc dispatchThreadgroups:threadgroupCount threadsPerThreadgroup:threadgroupSize];
             // 보수적 정합성 우선: 매 dispatch 뒤 device-visible barrier (classic serial-dispatch 등가).
             // Phase1 게이트(1081) 통과 후 독립 op barrier 생략으로 최적화 예정.
-            [g_mtl4_enc barrierAfterEncoderStages:MTLStageDispatch beforeEncoderStages:MTLStageDispatch visibilityOptions:mtl4_vis()];
+            [g_mtl4_enc barrierAfterEncoderStages:MTLStageDispatch beforeEncoderStages:MTLStageDispatch visibilityOptions:(MTL4VisibilityOptions)mtl4_vis()];
             return 0;
+          }
         }
+#endif
 
         // ── PROFILE 모드: 이 dispatch 하나만 독립 cmdbuf 로 격리 측정 후 early-return.
         // 공유 encoder/cmdbuf 상태머신 안 건드림. profile OFF면 skip.
@@ -763,10 +798,14 @@ int mtl_dispatch(int func_id,
 
 void mtl_flush(void) {
     @autoreleasepool {
-        if (g_mtl4_active && g_mtl4_init_ok) {
-            if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
-            return;
+#if MADI_HAS_MTL4_SDK
+        if (@available(macOS 26.0, *)) {
+            if (g_mtl4_active && g_mtl4_init_ok) {
+                if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
+                return;
+            }
         }
+#endif
         if (g_encoder) {
             [g_encoder endEncoding];
             g_encoder = nil;
@@ -776,14 +815,18 @@ void mtl_flush(void) {
 
 int mtl_sync(void) {
     @autoreleasepool {
-        if (g_mtl4_active && g_mtl4_init_ok) {
-            if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
-            if (g_mtl4_signal > 0) {
-                BOOL ok = [g_mtl4_event waitUntilSignaledValue:g_mtl4_signal timeoutMS:10000];
-                if (!ok) { fprintf(stderr, "[MTL4] sync TIMEOUT at signal %llu\n", (unsigned long long)g_mtl4_signal); return -1; }
+#if MADI_HAS_MTL4_SDK
+        if (@available(macOS 26.0, *)) {
+            if (g_mtl4_active && g_mtl4_init_ok) {
+                if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
+                if (g_mtl4_signal > 0) {
+                    BOOL ok = [g_mtl4_event waitUntilSignaledValue:g_mtl4_signal timeoutMS:10000];
+                    if (!ok) { fprintf(stderr, "[MTL4] sync TIMEOUT at signal %llu\n", (unsigned long long)g_mtl4_signal); return -1; }
+                }
+                return 0;
             }
-            return 0;
         }
+#endif
         if (g_encoder) { [g_encoder endEncoding]; g_encoder = nil; }
         
         if (g_committed_cmdbuf != nil) {
@@ -817,18 +860,22 @@ int mtl_sync(void) {
 
 int mtl_begin_command_buffer(void) {
     @autoreleasepool {
-        if (g_mtl4_active && g_mtl4_init_ok) {
-            if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
-            mtl4_rebuild_residency();          // 신규 alloc 반영 (모델 로드후 1회 수렴)
-            [g_mtl4_alloc reset];              // 직전 cb 는 sync 로 완료됨 → 안전
-            g_mtl4_cb = [g_device newCommandBuffer];
-            [g_mtl4_cb beginCommandBufferWithAllocator:g_mtl4_alloc];
-            [g_mtl4_cb useResidencySet:g_mtl4_residency];
-            g_mtl4_enc = [g_mtl4_cb computeCommandEncoder];
-            [g_mtl4_enc setArgumentTable:g_mtl4_argtable];
-            g_mtl4_param_offset = 0;
-            return (g_mtl4_cb != nil) ? 0 : -1;
+#if MADI_HAS_MTL4_SDK
+        if (@available(macOS 26.0, *)) {
+            if (g_mtl4_active && g_mtl4_init_ok) {
+                if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
+                mtl4_rebuild_residency();          // 신규 alloc 반영 (모델 로드후 1회 수렴)
+                [g_mtl4_alloc reset];              // 직전 cb 는 sync 로 완료됨 → 안전
+                g_mtl4_cb = [g_device newCommandBuffer];
+                [g_mtl4_cb beginCommandBufferWithAllocator:g_mtl4_alloc];
+                [g_mtl4_cb useResidencySet:g_mtl4_residency];
+                g_mtl4_enc = [g_mtl4_cb computeCommandEncoder];
+                [g_mtl4_enc setArgumentTable:g_mtl4_argtable];
+                g_mtl4_param_offset = 0;
+                return (g_mtl4_cb != nil) ? 0 : -1;
+            }
         }
+#endif
         if (g_encoder) { [g_encoder endEncoding]; g_encoder = nil; }
         g_active_cmdbuf_idx = (g_active_cmdbuf_idx + 1) & 1;
         g_cmdbufs[g_active_cmdbuf_idx] = [g_queue commandBuffer];
@@ -838,19 +885,23 @@ int mtl_begin_command_buffer(void) {
 
 int mtl_commit_command_buffer(void) {
     @autoreleasepool {
-        if (g_mtl4_active && g_mtl4_init_ok) {
-            if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
-            if (g_mtl4_cb) {
-                [g_mtl4_cb endCommandBuffer];
-                const id<MTL4CommandBuffer> cbs[1] = { g_mtl4_cb };
-                [g_mtl4_queue commit:cbs count:1];
-                g_mtl4_signal++;
-                [g_mtl4_queue signalEvent:g_mtl4_event value:g_mtl4_signal];
-                g_mtl4_cb = nil;
-                return 0;
+#if MADI_HAS_MTL4_SDK
+        if (@available(macOS 26.0, *)) {
+            if (g_mtl4_active && g_mtl4_init_ok) {
+                if (g_mtl4_enc) { [g_mtl4_enc endEncoding]; g_mtl4_enc = nil; }
+                if (g_mtl4_cb) {
+                    [g_mtl4_cb endCommandBuffer];
+                    const id<MTL4CommandBuffer> cbs[1] = { g_mtl4_cb };
+                    [g_mtl4_queue commit:cbs count:1];
+                    g_mtl4_signal++;
+                    [g_mtl4_queue signalEvent:g_mtl4_event value:g_mtl4_signal];
+                    g_mtl4_cb = nil;
+                    return 0;
+                }
+                return -1;
             }
-            return -1;
         }
+#endif
         if (g_encoder) { [g_encoder endEncoding]; g_encoder = nil; }
         id<MTLCommandBuffer> buf = g_cmdbufs[g_active_cmdbuf_idx];
         if (buf != nil) {

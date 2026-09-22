@@ -117,8 +117,8 @@ enum ExpiryStatus: Equatable {
 enum AppVersion {
     /// Fallbacks used when the Info.plist keys are absent (e.g. the headless
     /// test bundle). Keep in lockstep with Info.plist.
-    static let fallbackFull = "0.1.1"
-    static let fallbackMarketing = "0.1.1"
+    static let fallbackFull = "0.4.1"
+    static let fallbackMarketing = "0.4.1"
     static let fallbackChannel = "stable"
 
     /// GitHub repository retained as the human-facing release/support page.

@@ -7,12 +7,13 @@
 <p align="center">
   <b>Apple Silicon용 온디바이스 회의 전사 앱.</b><br>
   화자별로 구분된 실시간 전사와 단어 타임스탬프, 그리고 Mac 안에서 도는 번역·요약·질의응답.<br>
-  계정도 API 키도 클라우드도 없습니다. 오디오는 기기를 떠나지 않습니다.
+  계정과 API 키가 필요 없습니다. 클라우드 추론 없이 오디오와 전사문은 Mac에 남습니다.
 </p>
 
 <p align="center">
-  <a href="https://github.com/companyjupiter/madi/releases/latest"><b>⬇&nbsp; macOS용 Madi 내려받기</b></a><br>
-  <sub>Apple Silicon · macOS 14 이상 · 약 38 MB · 자유 소프트웨어 (AGPL-3.0)</sub>
+  <a href="https://github.com/companyjupiter/madi/releases/latest"><b>⬇&nbsp; macOS용 Madi 내려받기</b></a>
+  &nbsp;·&nbsp; <a href="https://madi-apple-silicon.jupitersong47.chatgpt.site/"><b>웹사이트</b></a><br>
+  <sub>Apple Silicon · macOS 14 이상 · 약 38 MB · 앱 소스 AGPL-3.0</sub>
 </p>
 
 <p align="center">
@@ -42,7 +43,9 @@ Apple Silicon Mac(M1 이상), macOS 14 이상이 필요하고 메모리는 8 GB�
 [시작하기](docs/manual/ko/01-getting-started.md) ·
 [English README](README.md) ·
 [기여 안내](CONTRIBUTING.md) ·
+[프라이버시](PRIVACY.md) ·
 [보안 제보](SECURITY.md) ·
+[변경 이력](CHANGELOG.md) ·
 [버전 이력](#7-b-버전-이력)
 
 ## 할 수 있는 것
@@ -61,16 +64,24 @@ apps/macos/scripts/fetch_runtime_assets.sh    # 작은 런타임 에셋 7개, SH
 apps/macos/scripts/make_app.sh                # → apps/macos/build/Madi.app
 cd apps/macos && swift test
 ```
-번역 엔진은 [`engine/prebuilt/`](engine/prebuilt/README.md)의 사전 빌드 바이너리이고, 나머지는
-모두 소스에서 빌드됩니다.
+일반 제품 번들은 [`engine/prebuilt/`](engine/prebuilt/README.md)의 별도 라이선스·소스 미공개
+번역 엔진을 포함합니다. 이 바이너리를 제외한 AGPL 앱을 만들려면 다음처럼 빌드합니다.
+
+```sh
+MADI_BUNDLE_TRANSLATE_ENGINES=0 apps/macos/scripts/make_app.sh
+```
+
+이 소스 전용 번들은 전사와 내보내기를 지원하지만 번역·요약·질의응답·AI 제목에는 제외한
+실행 파일이 필요합니다. 정확한 경계는 [소스와 라이선스 출처](docs/PROVENANCE.md)를 참고하십시오.
 
 ## 어디를 보면 되나
 
 | 하고 싶은 일 | 문서 |
 |---|---|
 | 앱 사용법 | [사용 설명서](docs/manual/ko/01-getting-started.md) (한/영/일/중) |
-| 기여 | [CONTRIBUTING.md](CONTRIBUTING.md) · [CLA.md](CLA.md) · [AUTHORS.md](AUTHORS.md) |
+| 기여 | [CONTRIBUTING.md](CONTRIBUTING.md) · [GOVERNANCE.md](GOVERNANCE.md) · [ROADMAP.md](ROADMAP.md) · [CLA.md](CLA.md) · [AUTHORS.md](AUTHORS.md) |
 | 취약점 제보 | [SECURITY.md](SECURITY.md) |
+| 프라이버시와 지원 | [PRIVACY.md](PRIVACY.md) · [SUPPORT.md](SUPPORT.md) |
 | 엔진 이해 | 이 문서의 나머지 · [`engine/metal/STATUS.md`](engine/metal/STATUS.md) |
 | 측정 기록 | [`PERF_LOG.md`](PERF_LOG.md)(앱+엔진) · [`engine/metal/PERF_LOG.md`](engine/metal/PERF_LOG.md) |
 | 릴리스 절차 | [docs/RELEASE.md](docs/RELEASE.md) |
@@ -429,8 +440,9 @@ Sparkle과 DNA3.0-2B가 추가되고, 사전 빌드 번역 엔진은 누구나 �
 함께 싣는다. 전사·번역 동작은 0.4.0과 같다(엔진 바이너리 동일). **0.4.0**(2026-09-16, 빌드 767)은
 비영어 라이브 줄 구조 W/X5, PreviewTrim, 한국어 파일 모드 청크 탈락 0(F2), 편집 행 연쇄 수정(E1),
 스트림 정지 확정(S3), 언어 교정 게이트(L2), 숫자 포매터 가드 4/5, 번역 폭주 상한, 길이 기준 영상
-가져오기(F1)를 담았다. **게시는 현재 stable 하나만 유지한다** — 이전 버전은 S3·인덱스·GitHub
-릴리스·태그에서 삭제됐다(2026-09-16 `v0.1.0`…`v0.3.21`, 2026-09-20 `v0.4.0`). 옛 태그→커밋 맵은
+가져오기(F1)를 담았다. **현재 stable 바이너리만 게시한다** — 이전 DMG는 S3와 활성 인덱스에서
+내려갔다(2026-09-16 `v0.1.0`…`v0.3.21`, 2026-09-20 `v0.4.0`). 정확한 소스 태그와 보존용
+GitHub Release 노트는 2026-09-23에 복원했으며, 태그→커밋 맵은
 [docs/RELEASE.md](docs/RELEASE.md)에 있다.
 
 | 버전 | 게시일 | 태그 | 주요 내용 |
@@ -542,6 +554,9 @@ CloudFront로 `channels/<channel>/latest.json`과 `appcast.xml`을 읽고 크기
 [`engine/prebuilt/`](engine/prebuilt/README.md)의 사전 빌드 번역 엔진은 앱이 자식 프로세스로 실행하는
 별개 프로그램으로 AGPL 대상이 **아니며**, 바이너리로만 배포합니다. 개인·기업 누구나 무료로 쓰고
 수정 없이 재배포할 수 있습니다([`engine/prebuilt/LICENSE.md`](engine/prebuilt/LICENSE.md)).
+따라서 일반 DMG는 혼합 라이선스 집합이며 전체가 오픈소스라고 표현하지 않습니다.
+`MADI_BUNDLE_TRANSLATE_ENGINES=0`으로 빌드하면 소스 미공개 실행 파일을 제외할 수 있습니다.
+자세한 경계는 [`docs/PROVENANCE.md`](docs/PROVENANCE.md)에 기록합니다.
 
 추론 코드는 본 프로젝트의 독자 구현입니다. 다섯 가지 서드파티 모델을 재사용하고 앱 업데이트에
 Sparkle 프레임워크를 포함하며,

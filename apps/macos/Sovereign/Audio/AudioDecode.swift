@@ -66,13 +66,13 @@ enum AudioDecode {
     /// Transcode `src` → temp 16 kHz mono PCM16 WAV; returns the temp URL.
     /// Audio-only files go through AVAudioFile; anything it rejects (video
     /// containers) falls back to the AVAssetReader audio-track path.
-    static func toWav16k(_ src: URL) throws -> URL {
+    static func toWav16k(_ src: URL) async throws -> URL {
         let dst = FileManager.default.temporaryDirectory.appendingPathComponent("sovereign-decode.wav")
         let out = try WavWriter.Streaming(url: dst)
         if let file = try? AVAudioFile(forReading: src) {
-            try decodeAudioFile(file, src: src, into: out)
+            try await decodeAudioFile(file, src: src, into: out)
         } else {
-            try decodeAssetAudioTrack(src, into: out)
+            try await decodeAssetAudioTrack(src, into: out)
         }
         try out.finish()
         guard out.samples > 0 else {
@@ -83,12 +83,12 @@ enum AudioDecode {
     }
 
     /// Audio-only path (m4a/mp3/aac/flac/wav…).
-    private static func decodeAudioFile(_ file: AVAudioFile, src: URL, into out: WavWriter.Streaming) throws {
+    private static func decodeAudioFile(_ file: AVAudioFile, src: URL, into out: WavWriter.Streaming) async throws {
         let attrs = try? FileManager.default.attributesOfItem(atPath: src.path)
         // AVAudioFile happily opens an mp4/mov that carries AAC — this path is
         // not "audio-only files" but "containers AVAudioFile can read", so the
         // byte cap must still be decided by what the bytes ARE.
-        let hasVideo = !AVURLAsset(url: src).tracks(withMediaType: .video).isEmpty
+        let hasVideo = !(try await AVURLAsset(url: src).loadTracks(withMediaType: .video)).isEmpty
         try validateImportBounds(
             inputBytes: attrs?[.size] as? Int64,
             sourceFrames: file.length,
@@ -112,21 +112,21 @@ enum AudioDecode {
 
     /// Video-container path (mp4/mov/m4v…): pull the first audio track's LPCM via
     /// AVAssetReader (interleaved Float32 at native rate), then the same Resampler.
-    private static func decodeAssetAudioTrack(_ src: URL, into out: WavWriter.Streaming) throws {
+    private static func decodeAssetAudioTrack(_ src: URL, into out: WavWriter.Streaming) async throws {
         let attrs = try? FileManager.default.attributesOfItem(atPath: src.path)
         let asset = AVURLAsset(url: src)
-        guard let track = asset.tracks(withMediaType: .audio).first else {
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
             throw NSError(domain: "AudioDecode", code: 6,
                           userInfo: [NSLocalizedDescriptionKey: "no audio track in file"])
         }
-        guard let fmtDesc = (track.formatDescriptions as? [CMFormatDescription])?.first,
+        guard let fmtDesc = try await track.load(.formatDescriptions).first,
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fmtDesc)?.pointee else {
             throw NSError(domain: "AudioDecode", code: 7,
                           userInfo: [NSLocalizedDescriptionKey: "unreadable audio format"])
         }
         try validateImportBounds(
             inputBytes: attrs?[.size] as? Int64,
-            sourceFrames: AVAudioFramePosition(CMTimeGetSeconds(asset.duration) * asbd.mSampleRate),
+            sourceFrames: AVAudioFramePosition(CMTimeGetSeconds(try await asset.load(.duration)) * asbd.mSampleRate),
             sampleRate: asbd.mSampleRate,
             videoContainer: true
         )

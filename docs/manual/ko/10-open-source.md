@@ -4,7 +4,7 @@ Madi의 코드는 대부분 자체 개발이지만, 다섯 개의 서드파티 �
 
 ## Madi의 라이선스
 
-Madi 자체 코드는 **GNU Affero General Public License v3.0**(AGPL-3.0-only)의 자유 소프트웨어입니다. 이 라이선스는 Madi 0.4.0과 그 이후 모든 버전에 적용됩니다. 누구나 사용·연구·수정·재배포할 수 있고, 수정본을 배포하거나 네트워크로 제공하면 같은 라이선스로 소스를 함께 제공해야 합니다. 소스 코드는 `github.com/companyjupiter/madi`에 있으며, 라이선스 전문은 앱에 포함된 `LICENSE` 파일에 있습니다. 앱에 들어 있는 번역 엔진 실행 파일(`translate-engine-2b`, `translate-engine-4b`)은 AGPL 대상이 아닌 별개 프로그램이며 바이너리로만 배포합니다. 개인과 기업 누구나 무료로 사용하고 재배포할 수 있습니다.
+Madi 자체 코드는 **GNU Affero General Public License v3.0**(AGPL-3.0-only)의 자유 소프트웨어입니다. 이 라이선스는 Madi 0.4.0과 그 이후 모든 버전에 적용됩니다. 누구나 사용·연구·수정·재배포할 수 있고, 수정본을 배포하거나 네트워크로 제공하면 같은 라이선스로 소스를 함께 제공해야 합니다. 소스 코드는 `github.com/companyjupiter/madi`에 있으며, 라이선스 전문은 앱에 포함된 `LICENSE` 파일에 있습니다. 일반 앱에 포함된 번역 엔진 실행 파일(`translate-engine-2b`, `translate-engine-4b`)은 자체 바이너리 라이선스로 제공되는 별도 소스 미공개 프로그램이며 AGPL 대상이 아닙니다. 따라서 일반 DMG는 전체가 오픈소스인 결과물이 아니라 혼합 라이선스 집합입니다. `MADI_BUNDLE_TRANSLATE_ENGINES=0`으로 소스 전용 번들을 만들 수 있으며, 이 변형에서는 번역·요약·질의응답을 사용할 수 없습니다.
 
 ## 구성요소 한눈에
 

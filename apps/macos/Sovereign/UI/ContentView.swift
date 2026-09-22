@@ -754,19 +754,6 @@ struct ContentView: View {
                 .foregroundStyle(session.captionOverlayOn ? Theme.Colors.accent : Theme.Colors.textSecondary)
                 .help(session.captionOverlayOn ? uiLang("자막 오버레이 끄기", "Turn off caption overlay") : uiLang("자막 오버레이 — 화면 위 실시간 번역 자막 창", "Caption overlay — a floating live-translation window"))
             }
-            // C18: chat layout toggle (two-party only) — hidden from the toolbar
-            // (the 말풍선 icon). The .chat mode still exists in code but isn't
-            // exposed here; flip `showChatToggle` to restore it.
-            let showChatToggle = false
-            if showChatToggle, twoSpeakers {
-                Button { chatLayout.toggle() } label: {
-                    Image(systemName: chatLayout ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(chatLayout ? Theme.Colors.accent : Theme.Colors.textSecondary)
-                .help(uiLang("대화 레이아웃 (직원 왼쪽 · 환자 오른쪽)", "Chat layout (staff left · patient right)"))
-            }
             contentModeSwitch
                 .disabled(chatLayout && twoSpeakers)
                 .opacity(chatLayout && twoSpeakers ? 0.45 : 1)
@@ -2564,11 +2551,15 @@ struct LevelMeter: View {
 /// No-op on earlier macOS, where the hairline never appears.
 private struct HideTopScrollEdgeHairline: ViewModifier {
     func body(content: Content) -> some View {
+#if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             content.scrollEdgeEffectHidden(true, for: .top)
         } else {
             content
         }
+#else
+        content
+#endif
     }
 }
 

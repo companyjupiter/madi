@@ -1,9 +1,10 @@
 # Security policy
 
 ## Supported versions
-Only the current stable release is supported and published; older versions are
-retired when a new one ships ([docs/RELEASE.md](docs/RELEASE.md), Retention). Please
-update before reporting (Help → Install Update…).
+Only the current stable binary is supported. Older binaries can be removed from
+the active download channel, while their release notes and source tags remain as
+provenance ([docs/RELEASE.md](docs/RELEASE.md), Retention). Please update before
+reporting (Help → Install Update…).
 
 ## Reporting a vulnerability
 **Do not open a public issue.** Use GitHub's private reporting: the repository's
@@ -13,8 +14,8 @@ answer within a week. Please give us reasonable time to ship a fix before
 disclosing.
 
 Useful to know when you assess impact:
-- Madi processes audio on the device. The core path makes no network requests
-  except model and update downloads.
+- Madi processes audio on the device. The inference path makes no network requests;
+  the app network surface is model and update delivery. See [PRIVACY.md](PRIVACY.md).
 - Downloads are integrity-checked: the speech and translation models by pinned
   SHA-256, app updates by Sparkle's EdDSA signature and by the SHA-256 and byte
   size in the release feed.
