@@ -264,7 +264,7 @@ final class SpeakerFixStructureStabilityTests: XCTestCase {
         }
     }
 
-    func testSpkfixMergeKeepsStructureAndRelabelsInPlace() async throws {
+    func testSpkfixMergeKeepsStructureAndRelabelsInPlace() {
         let s = TranscriptStore()
         seed(s)
         let before = s.lines.map(\.id)
@@ -276,14 +276,14 @@ final class SpeakerFixStructureStabilityTests: XCTestCase {
         // one line (the "3-5 lines vanish at once" report).
         s.ingest(.speakerFix(SpeakerLabel(time: 2.0, id: 1, dur: 2.0, margin: 0.9)))
         s.ingest(.speakerFix(SpeakerLabel(time: 6.0, id: 1, dur: 2.0, margin: 0.9)))
-        try await Task.sleep(nanoseconds: 120_000_000)   // coalesced rebuild (~50ms)
+        s.flushPendingSpeakerFixRebuild()
         XCTAssertEqual(s.lines.count, beforeCount,
                        "a label merge must relabel in place, not collapse rows")
         XCTAssertEqual(s.lines.map(\.id), before, "line identity must survive the merge verdict")
         XCTAssertEqual(Set(s.lines.map(\.speaker)), [1], "…but every line now SHOWS speaker 1")
     }
 
-    func testTranslationSurvivesSpkfixMerge() async throws {
+    func testTranslationSurvivesSpkfixMerge() {
         let s = TranscriptStore()
         seed(s)
         // translate a mid-tail line, then merge its label into the neighbor
@@ -291,14 +291,14 @@ final class SpeakerFixStructureStabilityTests: XCTestCase {
         guard let rev = s.sourceRevision(for: line.id) else { return XCTFail() }
         XCTAssertTrue(s.setTranslation(line.id, lang: "English", "Nice to meet you", sourceRevision: rev))
         s.ingest(.speakerFix(SpeakerLabel(time: 2.0, id: 1, dur: 2.0, margin: 0.9)))
-        try await Task.sleep(nanoseconds: 120_000_000)
+        s.flushPendingSpeakerFixRebuild()
         let after = s.lines.first(where: { $0.id == line.id })
         XCTAssertNotNil(after, "the translated line must still exist")
         XCTAssertEqual(after?.translations["English"], "Nice to meet you",
                        "same id + same text → translation stays VALID, not stale")
     }
 
-    func testLiveJoinMatchesFinalizeForUnfinishedRows() async throws {
+    func testLiveJoinMatchesFinalizeForUnfinishedRows() {
         // L1 (2026-09-06): mid-sentence rows that a label merge makes the same
         // speaker join LIVE now — the same structure the one-shot finalize
         // regroup produces, so the live view and the saved file agree.
@@ -308,7 +308,7 @@ final class SpeakerFixStructureStabilityTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(before, 3)
         s.ingest(.speakerFix(SpeakerLabel(time: 2.0, id: 1, dur: 2.0, margin: 0.9)))
         s.ingest(.speakerFix(SpeakerLabel(time: 6.0, id: 1, dur: 2.0, margin: 0.9)))
-        try await Task.sleep(nanoseconds: 120_000_000)
+        s.flushPendingSpeakerFixRebuild()
         XCTAssertLessThan(s.lines.count, before, "unfinished same-speaker rows joined live")
         XCTAssertEqual(Set(s.lines.map(\.speaker)), [1])
         let liveCount = s.lines.count

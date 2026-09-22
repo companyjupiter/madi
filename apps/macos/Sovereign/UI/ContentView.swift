@@ -2551,11 +2551,15 @@ struct LevelMeter: View {
 /// No-op on earlier macOS, where the hairline never appears.
 private struct HideTopScrollEdgeHairline: ViewModifier {
     func body(content: Content) -> some View {
+#if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             content.scrollEdgeEffectHidden(true, for: .top)
         } else {
             content
         }
+#else
+        content
+#endif
     }
 }
 
