@@ -31,11 +31,24 @@ mkdir -p "$BUILD" "$OUT"
 
 echo "[1/4] Compile kernels → whisper.metallib"
 AIR=()
+if xcrun metal -E -P -std=metal4.0 kernels/smoke.metal -o /dev/null \
+    >/dev/null 2>&1; then
+    METAL4_AVAILABLE=1
+else
+    METAL4_AVAILABLE=0
+    echo "⚠️  Metal 4 compiler support unavailable; using the MPS encoder fallback"
+fi
 for m in kernels/*.metal; do
     [ "$(basename "$m")" = "smoke.metal" ] && continue   # smoke has its own lib
     base="$(basename "$m" .metal)"
     case "$base" in
-        m4_*) STD=metal4.0 ;;   # Metal 4 tensor-ops kernels
+        m4_*)
+            [ "$METAL4_AVAILABLE" = 1 ] || {
+                echo "   skip $m (requires Metal 4)"
+                continue
+            }
+            STD=metal4.0
+            ;;
         *)    STD=metal3.0 ;;
     esac
     xcrun metal -c "$m" -o "$BUILD/${base}.air" -std=$STD -Wall -Werror
