@@ -3,8 +3,8 @@ name: Release macOS (free account)
 # Active release path while the project has no Developer ID certificate.
 # make_app.sh applies an ad-hoc code signature, but the DMG is not notarized.
 # Disable this workflow before enabling release-macos-paid.yml.
-# Automatic PR/tag runs are paused while GitHub Actions is unavailable; the
-# current release path is apps/macos/scripts/release_local_free.sh.
+# PR/tag runs are intentionally disabled while the Developer ID/notarized path
+# is being brought online. The canonical release path is madi_release.sh.
 
 on:
   workflow_dispatch:

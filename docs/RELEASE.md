@@ -313,7 +313,7 @@ See [DEMO.md](DEMO.md) for a reproducible transcript/export proof to attach to a
 
 ---
 
-## GitHub Actions release definitions (automatic runs paused)
+## GitHub Actions release definitions (manual until notarized)
 
 Two release workflows are maintained:
 
@@ -338,10 +338,11 @@ mv .github/workflows/release-macos-paid.yml.disabled \
    .github/workflows/release-macos-paid.yml
 ```
 
-The free workflow is retained for later use, but its PR and tag triggers are
-disabled. After Actions billing is restored, it can still be invoked manually
-through **Actions → Release macOS (free account) → Run workflow**. The local
-script above is the source of truth until automatic runs are explicitly restored.
+The free workflow intentionally has no PR or tag trigger. It may be invoked
+manually through **Actions → Release macOS (free account) → Run workflow**
+only when an explicitly unnotarized artifact is wanted. The release CLI above
+remains the source of truth; keep the free workflow disabled once the paid,
+notarized workflow is enabled so a tag cannot publish two competing builds.
 
 The runtime archive is a versioned build dependency created before an app release,
 not an output of that same app build. Its URL and digest are public metadata, so
