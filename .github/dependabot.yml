@@ -9,6 +9,14 @@ updates:
       timezone: Asia/Seoul
     open-pull-requests-limit: 5
     groups:
+      react-major:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+        update-types:
+          - major
       dashboard-minor-and-patch:
         update-types:
           - minor
