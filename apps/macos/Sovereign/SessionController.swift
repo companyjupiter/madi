@@ -1,7 +1,6 @@
-// SessionController.swift — orchestrates the live transcription session:
-// AudioCapture → EngineProcess → TranscriptStore. Owns the state machine the
-// UI binds to. This is the "live_transcribe.sh" logic re-homed in Swift, minus
-// ffmpeg (native capture) and minus awk (TranscriptStore).
+// SessionController.swift — UI-facing session composition and transcript/AI
+// policy. SessionCoordinator owns lifecycle, capture and process resources;
+// SessionArchiveWriter owns automatic persistence.
 
 import Foundation
 import Observation
@@ -12,13 +11,24 @@ import AppKit
 
 @Observable
 @MainActor
-final class SessionController: EngineProcessDelegate {
-    enum Phase: Equatable {
-        case idle, countingDown(Int), engineStarting, ready, recording, paused, processing, flushing, done
-        case error(String)
-    }
+final class SessionController {
+    typealias Phase = SessionCoordinator.Phase
+    var phase: Phase { lifecycle.phase }
 
-    private(set) var phase: Phase = .idle
+    @ObservationIgnored private lazy var lifecycle: SessionCoordinator = {
+        let coordinator = SessionCoordinator()
+        coordinator.onEvent = { [weak self] in self?.engine(didEmit: $0) }
+        coordinator.onStructured = { [weak self] in self?.engine(didEmitStructured: $0) }
+        coordinator.onDiagnostic = { [weak self] in self?.engineDiag.ingest($0) }
+        coordinator.onRecording = { [weak self] in
+            self?.startPeriodicAutosave(); self?.startSilenceWatch()
+        }
+        coordinator.onFinished = { [weak self] in self?.finalizeOnce() }
+        coordinator.onFailed = { [weak self] in self?.checkpointFailedSession() }
+        coordinator.onFlushTimeout = { [weak self] in self?.transcript.markDiarNamespaceBroken() }
+        coordinator.failureMessage = { [weak self] in self?.sessionFailureMessage($0) ?? "Session failed" }
+        return coordinator
+    }()
 
     /// Session-level AI pipeline state (Phase 4):
     /// idle → listening → transcribing → diarizing → translating → completed/error.
@@ -70,18 +80,8 @@ final class SessionController: EngineProcessDelegate {
     private(set) var meterLevel: Float = 0
     private var lastMeterAt = Date()
 
-    // Wall-clock recording timer for the 총 시간 readout — paused spans are
-    // subtracted so it counts RECORDED time, matching what lands in the file.
-    private(set) var recordStartedAt: Date? = nil
-    private var recordEndedAt: Date? = nil
-    private var pausedAt: Date? = nil
-    private var pausedAccum: TimeInterval = 0
-    var recordedSeconds: TimeInterval {
-        guard let s = recordStartedAt else { return 0 }
-        let end = recordEndedAt ?? Date()
-        let inPause = pausedAt.map { end.timeIntervalSince($0) } ?? 0
-        return max(0, end.timeIntervalSince(s) - pausedAccum - inPause)
-    }
+    var recordStartedAt: Date? { lifecycle.recordStartedAt }
+    var recordedSeconds: TimeInterval { lifecycle.recordedSeconds }
     let transcript = TranscriptStore()
     /// Local Calendar glue — prefills the meeting title/attendees and matches
     /// speakers to attendees after the session (read-only, on-device).
@@ -780,11 +780,12 @@ final class SessionController: EngineProcessDelegate {
     /// Attach meeting intelligence to the shared resident DNA3 broker. Translation,
     /// rail, summary and Q&A serialize onto one model/process at every RAM tier.
     private func ensureSummaryEngine() -> SummaryEngine? {
+        let sessionToken = lifecycle.generation
         guard let eng = AssetManifest.translateEngineURL, AssetManifest.translateModelIsValid() else { return nil }
         if summaryEngine == nil {
             let s = SummaryEngine()
             s.onResult = { [weak self] tag, text in
-                guard let self else { return }
+                guard let self, self.lifecycle.generation == sessionToken else { return }
                 switch tag {
                 case "summary":
                     self.summarizing = false
@@ -960,12 +961,15 @@ final class SessionController: EngineProcessDelegate {
     func ensurePrepBrief() {
         guard let ev = calendar.event else { prepBriefData = nil; return }
         loadingPrepBrief = true
+        let eventID = ev.id
         let title = ev.title
         let attendees = ev.attendees
         let mdFiles = workspaceTranscriptURLs()
+        let sessionToken = lifecycle.generation
         Task.detached(priority: .userInitiated) {
             let brief = MeetingPrepBrief.aggregate(title: title, attendees: attendees, mdFiles: mdFiles)
             await MainActor.run {
+                guard self.lifecycle.generation == sessionToken, self.calendar.event?.id == eventID else { return }
                 self.prepBriefData = brief
                 self.loadingPrepBrief = false
                 self.updateCoachAgenda()   // agenda inputs changed → re-derive + recompute
@@ -1050,6 +1054,7 @@ final class SessionController: EngineProcessDelegate {
 
     /// Start the translate engine on demand (targets set + assets present).
     private func ensureTranslateEngine() -> TranslateEngine? {
+        let sessionToken = lifecycle.generation
         guard !translateTargets.isEmpty,
               let eng = AssetManifest.translateEngineURL,
               AssetManifest.translateModelIsValid() else { return nil }
@@ -1062,18 +1067,18 @@ final class SessionController: EngineProcessDelegate {
             // can't keep up with are shed and remembered for the stop-time backfill.
             t.maxPending = Self.liveTranslateCap(for: AssetManifest.translateModelVariant)
             t.onDiscard = { [weak self] id, lang, source in
-                guard let self else { return }
+                guard let self, self.lifecycle.generation == sessionToken else { return }
                 _ = self.finishInterimTurn(id: id, lang: lang, source: source, text: nil)
             }
             t.onDrop = { [weak self] id, lang, source in
-                guard let self else { return }
+                guard let self, self.lifecycle.generation == sessionToken else { return }
                 if self.finishInterimTurn(id: id, lang: lang, source: source, text: nil) { return }
                 let key = TranslationWorkKey(id: id, lang: lang, sourceRevision: self.revisionFor(id: id, source: source))
                 self.backlogKeys.insert(key)
                 self.translateBacklog = Set(self.backlogKeys.map(\.id)).count
             }
             t.onResult = { [weak self] id, lang, text, source in
-                guard let self else { return }
+                guard let self, self.lifecycle.generation == sessionToken else { return }
                 if self.finishInterimTurn(id: id, lang: lang, source: source,
                                           text: text.isEmpty ? nil : text) { return }
                 // A7: this turn finished streaming — drop the caret.
@@ -1108,7 +1113,7 @@ final class SessionController: EngineProcessDelegate {
             // streaming partial (T5): the reply types itself onto the screen
             // (~19 ms/token) instead of appearing whole ~0.5-0.9 s later.
             t.onPartial = { [weak self] id, lang, text, source in
-                guard let self else { return }
+                guard let self, self.lifecycle.generation == sessionToken else { return }
                 if let request = self.interimRequests[id] {
                     guard request.sentence == nil, id == self.activeInterimID,
                           request.source == source,
@@ -1126,7 +1131,7 @@ final class SessionController: EngineProcessDelegate {
             }
             // queue depth (D20) — the engine reports queued + in-flight turns.
             t.onQueueChange = { [weak self] depth in
-                guard let self else { return }
+                guard let self, self.lifecycle.generation == sessionToken else { return }
                 self.translateQueueDepth = depth
                 self.updatePreviewAdmission()
             }
@@ -1253,10 +1258,11 @@ final class SessionController: EngineProcessDelegate {
     private func scheduleInterimTranslate() {
         guard !translateTargets.isEmpty else { return }
         interimGen += 1
+        let sessionToken = lifecycle.generation
         let gen = interimGen
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(Int(InterimTuning.debounceMs)))
-            guard let self, gen == self.interimGen, self.activeInterimID == nil,
+            guard let self, self.lifecycle.generation == sessionToken, gen == self.interimGen, self.activeInterimID == nil,
                   !self.currentInterimSentence.isEmpty else { return }
             guard let t = self.ensureTranslateEngine() else { return }
             // P8+P12: translate the agreed OPEN SENTENCE — completed sentences
@@ -1478,12 +1484,13 @@ final class SessionController: EngineProcessDelegate {
     private func scheduleTailTranslate() {
         guard !translateTargets.isEmpty else { return }
         tailGen += 1
+        let sessionToken = lifecycle.generation
         let gen = tailGen
         let delay = translateTailSeconds   // captured at schedule time (re-armed per word)
         let snapshot = transcript.lines.last.map { ($0.id, lineHash($0.text)) }
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(delay))
-            guard let self, gen == self.tailGen,
+            guard let self, self.lifecycle.generation == sessionToken, gen == self.tailGen,
                   let (id, h) = snapshot,
                   let line = self.transcript.lines.last, line.id == id,
                   self.lineHash(line.text) == h else { return }
@@ -1653,7 +1660,9 @@ final class SessionController: EngineProcessDelegate {
     /// post-init reassignment, never during init.
     let workspace = WorkspaceTree(root: SessionController.defaultSaveFolder())
     /// Last auto-saved file (UI confirmation); cleared when a new session starts.
-    private(set) var lastAutoSaved: URL? = nil
+    private let archiveWriter = SessionArchiveWriter()
+    var lastAutoSaved: URL? { archiveWriter.transcriptURL }
+    var autoSaveError: String? { archiveWriter.lastError }
 
     /// Write the transcript as Markdown into the auto-save folder. File-mode names
     /// after the source file; live recordings get a timestamped "회의" name. Never
@@ -1661,37 +1670,13 @@ final class SessionController: EngineProcessDelegate {
     /// still works). Not sandboxed, so a plain path write is enough.
     private func autoSaveMarkdown() {
         guard autoSaveEnabled, !transcript.lines.isEmpty else { return }
-        // Same session, already snapshotted → overwrite in place (periodic saves
-        // + the final save all land in ONE file; reset() clears lastAutoSaved so
-        // the next session gets a fresh name).
-        if let existing = lastAutoSaved {
-            try? FileManager.default.createDirectory(at: existing.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? Exporters.markdown(transcript.lines, names: speakerNames)
-                .write(to: existing, atomically: true, encoding: .utf8)
-            return
+        let base = fileName.isEmpty ? TitleGenerator.fallbackTitle(date: Date())
+            : (fileName as NSString).deletingPathExtension
+        let previous = lastAutoSaved
+        if archiveWriter.saveTranscript(Exporters.markdown(transcript.lines, names: speakerNames),
+                                        folder: autoSaveFolder, base: base), previous != lastAutoSaved {
+            workspace.reload()
         }
-        let base: String
-        if fileName.isEmpty {
-            base = TitleGenerator.fallbackTitle(date: Date())   // "회의 yyyy-MM-dd HHmm"
-        } else {
-            base = (fileName as NSString).deletingPathExtension
-        }
-        // The save folder can disappear under us (moved, renamed, iCloud
-        // eviction) and write(to:) then fails silently in the catch below —
-        // observed 2026-09-06: three live sessions produced no autosave at all
-        // because ~/Documents/Madi no longer existed. Recreate it every time.
-        try? FileManager.default.createDirectory(at: autoSaveFolder, withIntermediateDirectories: true)
-        var url = autoSaveFolder.appendingPathComponent(base).appendingPathExtension("md")
-        var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = autoSaveFolder.appendingPathComponent("\(base) \(n)").appendingPathExtension("md"); n += 1
-        }
-        do {
-            try Exporters.markdown(transcript.lines, names: speakerNames)
-                .write(to: url, atomically: true, encoding: .utf8)
-            lastAutoSaved = url
-            workspace.reload()   // surface the new .md in the explorer
-        } catch { /* non-fatal — manual export remains available */ }
     }
 
     /// Crash insurance: snapshot the transcript every 30s while a session is
@@ -1716,18 +1701,8 @@ final class SessionController: EngineProcessDelegate {
     /// Base is taken from the just-saved transcript URL so the collision suffix
     /// matches (e.g. "회의 … 2.md" → "회의 … 2 요약.md", not "회의 … 요약 2.md").
     private func autoSaveSummaryMarkdown(_ summary: String) {
-        guard autoSaveEnabled, let transcriptURL = lastAutoSaved else { return }
-        let base = transcriptURL.deletingPathExtension().lastPathComponent
-        var url = autoSaveFolder.appendingPathComponent("\(base) 요약").appendingPathExtension("md")
-        var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = autoSaveFolder.appendingPathComponent("\(base) 요약 \(n)").appendingPathExtension("md"); n += 1
-        }
-        let body = "# \(base) — 회의 요약\n\n\(summary)\n"
-        do {
-            try body.write(to: url, atomically: true, encoding: .utf8)
-            workspace.reload()   // surface the new 요약 .md in the explorer
-        } catch { /* non-fatal */ }
+        guard autoSaveEnabled else { return }
+        if archiveWriter.saveSummary(summary) { workspace.reload() }
     }
 
     /// Kick off summary generation at session end for the "A.I 요약" auto-save.
@@ -1787,9 +1762,8 @@ final class SessionController: EngineProcessDelegate {
         try? FileManager.default.copyItem(at: src, to: dst)
     }
 
-    private var engine: EngineProcess?
     var debugMemTask: Task<Void, Never>? = nil   // debug bundle memory sampler
-    private let capture = AudioCapture()
+    private var capture = AudioCapture()
 
     private var isError: Bool { if case .error = phase { return true }; return false }
     private var recordingStartAdmission: RecordingStartAdmission.State {
@@ -1855,11 +1829,6 @@ final class SessionController: EngineProcessDelegate {
 
     // MARK: session lifecycle
 
-    private var countdownTask: Task<Void, Never>?
-    private var captureStartTask: Task<Void, Never>?
-    // Safety net: if the engine never reports ready (rare crash/hang), surface a
-    // Korean error instead of an infinite "모델 로딩…" spinner.
-    private var engineStartTimeoutTask: Task<Void, Never>?
     // Crash insurance: while a session accumulates lines, snapshot the .md every
     // 30s so a crash/force-quit mid-meeting loses at most the last half minute.
     private var periodicSaveTask: Task<Void, Never>?
@@ -1875,7 +1844,7 @@ final class SessionController: EngineProcessDelegate {
         guard phase == .idle || phase == .done || isError else { return }
         audioPermissionIssue = nil
         guard AssetManifest.modelIsValid() else {
-            phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요.")
+            lifecycle.fail(.message("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."))
             return
         }
         preflightMicrophonePermission(from: n)
@@ -1893,9 +1862,10 @@ final class SessionController: EngineProcessDelegate {
             showMicrophonePermissionError()
             return
         case .notDetermined:
+            let token = lifecycle.generation
             AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
                 Task { @MainActor in
-                    guard let self else { return }
+                    guard let self, self.lifecycle.generation == token else { return }
                     if granted { self.preflightSystemAudioPermission(from: n) }
                     else { self.showMicrophonePermissionError() }
                 }
@@ -1921,10 +1891,10 @@ final class SessionController: EngineProcessDelegate {
         // relaunch after first approval before ScreenCaptureKit can capture.
         if CGRequestScreenCaptureAccess() {
             audioPermissionIssue = .systemAudioRestartRequired
-            phase = .error(permissionText(
+            lifecycle.fail(.message(permissionText(
                 "시스템 오디오 권한을 허용했어요. 적용을 위해 Madi를 한 번 다시 시작해주세요.",
                 "System audio access is allowed. Restart Madi once to apply it.",
-                "システムオーディオのアクセスを許可しました。適用するため Madi を再起動してください。"))
+                "システムオーディオのアクセスを許可しました。適用するため Madi を再起動してください。")))
         } else {
             showSystemAudioPermissionError()
         }
@@ -1932,18 +1902,18 @@ final class SessionController: EngineProcessDelegate {
 
     private func showMicrophonePermissionError() {
         audioPermissionIssue = .microphoneDenied
-        phase = .error(permissionText(
+        lifecycle.fail(.message(permissionText(
             "녹음 전에 마이크 권한이 필요해요. 시스템 설정에서 Madi를 허용한 뒤 다시 시도해주세요.",
             "Madi needs microphone access before recording. Allow it in System Settings, then try again.",
-            "録音前にマイクへのアクセスが必要です。システム設定で Madi を許可してから、もう一度お試しください。"))
+            "録音前にマイクへのアクセスが必要です。システム設定で Madi を許可してから、もう一度お試しください。")))
     }
 
     private func showSystemAudioPermissionError() {
         audioPermissionIssue = .systemAudioDenied
-        phase = .error(permissionText(
+        lifecycle.fail(.message(permissionText(
             "녹음 전에 시스템 오디오 권한이 필요해요. 시스템 설정 → 개인정보 보호 및 보안 → 화면 및 시스템 오디오 기록에서 Madi를 허용한 뒤 다시 시작해주세요.",
             "Madi needs system audio access before recording. Allow it in System Settings → Privacy & Security → Screen & System Audio Recording, then restart Madi.",
-            "録音前にシステムオーディオへのアクセスが必要です。システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオで Madi を許可してから再起動してください。"))
+            "録音前にシステムオーディオへのアクセスが必要です。システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオで Madi を許可してから再起動してください。")))
     }
 
     private func permissionText(_ ko: String, _ en: String, _ ja: String) -> String {
@@ -1968,46 +1938,30 @@ final class SessionController: EngineProcessDelegate {
     }
 
     private func beginCountdown(from n: Int) {
-        countdownTask?.cancel()
-        countdownTask = Task { @MainActor in
-            for k in stride(from: n, through: 1, by: -1) {
-                phase = .countingDown(k)
-                try? await Task.sleep(nanoseconds: 1_000_000_000)   // 1s/tick — clock cadence
-                if Task.isCancelled { return }
-            }
-            countdownTask = nil
-            start()
-        }
+        lifecycle.beginCountdown(from: n) { [weak self] in self?.start() }
     }
-    func cancelCountdown() {
-        countdownTask?.cancel(); countdownTask = nil
-        phase = .idle
-    }
+    func cancelCountdown() { lifecycle.cancelCountdown() }
 
     /// #3 — clear the current transcript and return to idle WITHOUT the
     /// stop→start dance. Only when not actively capturing.
     func reset() {
         guard phase == .done || phase == .idle || isError else { return }
-        terminateTranscriptionEngines()
-        countdownTask?.cancel(); countdownTask = nil
-        captureStartTask?.cancel(); captureStartTask = nil
-        capture.abort()
+        resetSessionData()
+    }
+
+    private func resetSessionData() {
+        retireSession()
+        capture = AudioCapture() // release the retired session's temporary segments
         audioPermissionIssue = nil
-        periodicSaveTask?.cancel(); periodicSaveTask = nil
-        silenceWatchTask?.cancel(); silenceWatchTask = nil; micSilent = false
-        meterLevel = 0; level = 0
-        recordStartedAt = nil; recordEndedAt = nil; pausedAt = nil; pausedAccum = 0
         transcript.reset()
         speakerNames = [:]
         userEditedLines.removeAll()
         autoRecognizedSpeakers.removeAll()
         pendingEnrollment.clear()
-        lastAutoSaved = nil
+        archiveWriter.reset()
         translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0; engineDiag = EngineDiagnostics()
         interimCache.clear()
-        clearSummary()
         fileName = ""; chunksDone = 0; chunksTotal = 0
-        livePartial = ""; clearInterimCaption()
         TranslationStabilityMetrics.shared.reset()
         streamingTranslation = nil; translateQueueDepth = 0
         backlogKeys.removeAll(); translateBacklog = 0
@@ -2015,8 +1969,8 @@ final class SessionController: EngineProcessDelegate {
         interimRequests.removeAll(); activeInterimID = nil
         segmentAudio.removeAll(); decodeRiskRanges.removeAll(); reconcileNote = nil; reconciling = false; languageCorrectionsPending = 0
         reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
-        stopWatchdog(); segQueue.removeAll(); segmentsInFlight = 0; coverageGaps.removeAll(); hangRecoveries = 0; captureEndedReason = nil
-        phase = .idle
+        pendingFinalReconcile = false
+        coverageGaps.removeAll(); hangRecoveries = 0; captureEndedReason = nil
     }
 
     /// X button on the loaded-file chip (Figma node 30:118): drop the staged/
@@ -2025,11 +1979,7 @@ final class SessionController: EngineProcessDelegate {
     /// user explicitly asked to cancel, not just clear a finished result.
     func cancelFile() {
         guard sourceMediaURL != nil else { return }
-        if phase == .processing || phase == .flushing {
-            engine?.terminate(); engine = nil
-        }
-        if phase != .done && phase != .idle && !isError { phase = .done }
-        reset()
+        resetSessionData()
     }
 
     /// Re-open an archived transcript .md (clicked in the workspace explorer)
@@ -2044,7 +1994,7 @@ final class SessionController: EngineProcessDelegate {
         autoRecognizedSpeakers.removeAll()
         transcript.load(parsed.lines)
         fileName = url.lastPathComponent
-        phase = .done
+        lifecycle.openArchive()
     }
 
     /// #2 — commit an inline edit to a (committed) line and, if live translation
@@ -2103,76 +2053,24 @@ final class SessionController: EngineProcessDelegate {
         // terminal tick; otherwise the UI remains frozen on “1” forever.
         guard RecordingStartAdmission.allows(recordingStartAdmission) else { return }
         guard AssetManifest.modelIsValid() else {
-            phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."); return
+            lifecycle.fail(.message("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요.")); return
         }
-        // A failed capture can leave a fully resident engine behind while phase
-        // moves to .error. Retrying used to overwrite `engine` and orphan that
-        // process (including its Metal allocations). Always retire any previous
-        // main/preview pair before installing the next session's processes.
-        terminateTranscriptionEngines()
-        captureStartTask?.cancel(); captureStartTask = nil
-        capture.abort()
-        audioPermissionIssue = nil
-        transcript.reset()
-        // The language gates (X5/W) are decided here so the debug manifest
-        // records what this session actually runs with (0.3.28's manifest
-        // showed both off for a Korean session: they were set only later).
+        resetSessionData()
         LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
         LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
-        debugSessionStart()   // debug bundle (docs/DEBUG_MODE.md)
-        speakerNames = [:]
-        userEditedLines.removeAll()
-        autoRecognizedSpeakers.removeAll()
-        pendingEnrollment.clear()
-        lastAutoSaved = nil
-        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0; engineDiag = EngineDiagnostics()
-        interimCache.clear()
-        backlogKeys.removeAll(); translateBacklog = 0
-        backfillPendingKeys.removeAll(); backfillRemaining = 0
-        interimRequests.removeAll(); activeInterimID = nil
-        clearSummary()
+        debugSessionStart()
         DNAEngineBroker.shared.onBusyChange = { [weak self] busy in
             guard let self else { return }
             self.dnaBusy = busy
             self.updatePreviewAdmission()
         }
-        streamingTranslation = nil; translateQueueDepth = 0; lastCommitAt = Date()
-        segmentAudio.removeAll(); decodeRiskRanges.removeAll(); reconcileNote = nil; reconciling = false; languageCorrectionsPending = 0
-        reconcileSpeakerNamesBefore = nil; reconcileAutoNamesBefore = nil
-        // T11 prewarm: spawn the translate engine during the dead time between
-        // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
-        // first caption's translation doesn't pay the cold start.
-        _ = ensureTranslateEngine()
-        // Live-summary prewarm: with translation OFF the line above spawns
-        // nothing (targets gate), and the summary's first tick would cold-launch
-        // the 4B mid-recording — model load competing with Whisper decode. Same
-        // dead time, same resident broker; a no-op when translation already
-        // warmed it or the gate/model rules the feature out.
-        if translateTargets.isEmpty, Self.liveRailCapable,
-           liveSummaryEnabled, LiveFeatureWiring.liveSummary {
-            _ = ensureSummaryEngine()
-        }
-        // Prefill from the live calendar event. ContentView observes calendar.event.id
-        // and calls ensurePrepBrief() on change, so we do NOT call it here too (that
-        // double-ran the headless aggregation and raced two detached tasks).
-        if Self.calendarPrepEnabled { Task { await calendar.loadCurrentEvent() } }
-        startLiveRail()                              // throttled live action extraction (≥16GB + on)
-        startLiveSummary()                           // rolling 요약 tab (≥16GB + on, lowest lane)
-        startLiveCoach()                             // throttled coach recompute (~1Hz while recording)
-        phase = .engineStarting
-
+        lastCommitAt = Date()
         LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
         LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
-        let e = EngineProcess(config: makeConfig())
-        e.delegate = self
-        e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }
-        engine = e
-
         capture.inputDeviceID = inputDeviceID  // bind chosen mic before start
         capture.source = audioSource           // mic / system / both
         capture.onError = { [weak self] msg in
             guard let self else { return }
-            guard AudioPermissionPolicy.requires(.systemAudio, for: self.audioSource) else { return }
             // S3: mid-recording the engine is healthy and the transcript is
             // worth keeping — end the session the way 정지 does (flush,
             // finalize, translations, summary) instead of dropping into an
@@ -2182,21 +2080,19 @@ final class SessionController: EngineProcessDelegate {
             // the dead session and re-decoded one row as Japanese.
             if self.phase == .recording || self.phase == .paused {
                 self.captureEndedReason = self.permissionText(
-                    "시스템 오디오 연결이 끊겨 녹음을 마쳤어요", "The system audio connection stopped, so the recording was ended",
-                    "システムオーディオの接続が切れたため録音を終了しました")
+                    "오디오 연결이 끊겨 녹음을 마쳤어요", "The audio connection stopped, so the recording was ended",
+                    "オーディオの接続が切れたため録音を終了しました")
                 self.debugWatchdog("capture-error", ["msg": msg, "phase": "\(self.phase)"])
                 self.stop()
                 return
             }
-            self.capture.abort()
-            self.terminateTranscriptionEngines()
-            if !CGPreflightScreenCaptureAccess() {
+            if AudioPermissionPolicy.requires(.systemAudio, for: self.audioSource), !CGPreflightScreenCaptureAccess() {
                 self.showSystemAudioPermissionError()
             } else {
-                self.phase = .error(self.permissionText(
-                    "시스템 오디오 연결이 중단됐어요. (\(msg))",
-                    "The system audio connection stopped. (\(msg))",
-                    "システムオーディオの接続が停止しました。(\(msg))"))
+                self.lifecycle.fail(.message(self.permissionText(
+                    "오디오 연결이 중단됐어요. (\(msg))",
+                    "The audio connection stopped. (\(msg))",
+                    "オーディオの接続が停止しました。(\(msg))")))
             }
         }
         // live FELT-latency knob — applied before the segmenter resets in capture.start()
@@ -2210,7 +2106,6 @@ final class SessionController: EngineProcessDelegate {
             self.segQueue.append(SegJob(offset: offset, url: url, hadSpeech: hadSpeech, retried: false, fedAt: Date()))
             self.segmentsInFlight = self.segQueue.count
             self.updatePreviewAdmission()
-            self.engine?.feed(offset: offset, wav: url)
         }
         capture.onLevel = { [weak self] lvl in
             guard let self else { return }
@@ -2252,22 +2147,30 @@ final class SessionController: EngineProcessDelegate {
             capture.onPreview = nil
         }
 
-        do { try e.start() }
-        catch {
-            terminateTranscriptionEngines()
-            phase = .error("전사 엔진을 시작하지 못했어요: \(error.localizedDescription)")
+        lifecycle.startLive(engine: SessionEngineAdapter(config: makeConfig()), capture: capture)
+        guard phase == .engineStarting || phase == .ready || phase == .recording else { return }
+        // Bind background clients to the generation admitted by the coordinator.
+        // T11 prewarm: spawn the translate engine during the dead time between
+        // pressing record and the first utterance (READY takes 1.4-3.5 s) so the
+        // first caption's translation doesn't pay the cold start.
+        _ = ensureTranslateEngine()
+        // Live-summary prewarm: with translation OFF the line above spawns
+        // nothing (targets gate), and the summary's first tick would cold-launch
+        // the 4B mid-recording — model load competing with Whisper decode. Same
+        // dead time, same resident broker; a no-op when translation already
+        // warmed it or the gate/model rules the feature out.
+        if translateTargets.isEmpty, Self.liveRailCapable,
+           liveSummaryEnabled, LiveFeatureWiring.liveSummary {
+            _ = ensureSummaryEngine()
         }
+        // Prefill from the live calendar event. ContentView observes calendar.event.id
+        // and calls ensurePrepBrief() on change, so we do NOT call it here too (that
+        // double-ran the headless aggregation and raced two detached tasks).
+        if Self.calendarPrepEnabled { Task { await calendar.loadCurrentEvent() } }
+        startLiveRail()                              // throttled live action extraction (≥16GB + on)
+        startLiveSummary()                           // rolling 요약 tab (≥16GB + on, lowest lane)
+        startLiveCoach()                             // throttled coach recompute (~1Hz while recording)
 
-        engineStartTimeoutTask?.cancel()
-        engineStartTimeoutTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 45_000_000_000)
-            if Task.isCancelled { return }
-            if case .engineStarting = phase {
-                engine?.terminate(); engine = nil
-                preview.stop(); livePartial = ""
-                phase = .error("엔진 시작이 너무 오래 걸려요. 다시 시도해주세요 — 계속되면 앱을 재시작해주세요.")
-            }
-        }
     }
 
     /// Drag-&-drop: transcribe an audio FILE through the same resident engine +
@@ -2277,123 +2180,91 @@ final class SessionController: EngineProcessDelegate {
     func transcribeFile(_ url: URL) {
         guard phase == .idle || phase == .done || isError else { return }
         guard AssetManifest.modelIsValid() else {
-            phase = .error("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."); return
+            lifecycle.fail(.message("음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요.")); return
         }
-        terminateTranscriptionEngines()
-        transcript.reset()
-        speakerNames = [:]
-        userEditedLines.removeAll()
-        autoRecognizedSpeakers.removeAll()
-        pendingEnrollment.clear()
-        lastAutoSaved = nil
-        translatedHash.removeAll(); stablePassHash.removeAll(); coalescedSource.removeAll(); coalescedRevision.removeAll(); sttTurnarounds.removeAll(); translateQueuedLines = 0; engineDiag = EngineDiagnostics()
-        interimCache.clear()
-        clearSummary()
+        resetSessionData()
         fileName = url.lastPathComponent
         sourceMediaURL = url        // arm click-to-play (original timeline matches)
         chunksDone = 0; chunksTotal = 0
-        phase = .processing
         LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
         LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
         debugSessionStart()   // file sessions get a debug bundle too (the byshu-01 cascade had none to read)
 
         // Decode ANY container (m4a/mp3/aac/flac/wav…) to a normalized 16k PCM WAV
         // off the main actor first — the engine's file reader only accepts PCM WAV.
-        Task.detached(priority: .userInitiated) {
-            let wav: URL
-            do { wav = try await AudioDecode.toWav16k(url) }
-            catch {
-                let name = url.lastPathComponent
-                Task { @MainActor in
-                    let why = AudioDecode.reason(error) ?? "지원하지 않는 형식이거나 손상된 파일입니다"
-                    self.phase = .error("'\(name)' 을(를) 열 수 없습니다 — \(why).")
-                }
-                return
+        lifecycle.startFile(prepare: {
+            let decode = Task.detached(priority: .userInitiated) { try await AudioDecode.toWav16k(url) }
+            return try await withTaskCancellationHandler(operation: { try await decode.value },
+                                                          onCancel: { decode.cancel() })
+        }, makeEngine: { [unowned self] wav in
+            var config = self.makeConfig()
+            config.fileURL = wav
+            return SessionEngineAdapter(config: config)
+        })
+        startPeriodicAutosave()
+    }
+
+    func pauseRecording() { lifecycle.pause() }
+    func resumeRecording() { lifecycle.resume() }
+    func stop() { lifecycle.stop() }
+
+    /// Retire both transcription resources and the old session's AI work before
+    /// clearing product data. The shared model broker may stay resident.
+    private func retireSession() {
+        lifecycle.reset()
+        stopSessionActivity()
+        translate?.stop(); translate = nil
+        clearSummary()
+    }
+
+    private func stopSessionActivity() {
+        languageCorrectionTask?.cancel(); languageCorrectionTask = nil
+        periodicSaveTask?.cancel(); periodicSaveTask = nil
+        silenceWatchTask?.cancel(); silenceWatchTask = nil
+        micSilent = false; meterLevel = 0; level = 0
+        preview.stop(); livePartial = ""; clearInterimCaption()
+        stopLiveRail(); stopLiveSummary(); stopLiveCoach(); stopWatchdog()
+        segQueue.removeAll(); segmentsInFlight = 0
+    }
+
+    private func checkpointFailedSession() {
+        stopSessionActivity()
+        // Errors preserve the text already received and snapshot it once. No
+        // post-session generation is launched on a failed engine.
+        summaryEngine?.stop(); summaryEngine = nil
+        translate?.stop(); translate = nil
+        summarizing = false; speakerSummarizing = false; qaAsking = false
+        reconciling = false; languageCorrectionsPending = 0
+        streamingTranslation = nil; translateQueueDepth = 0; translateQueuedLines = 0
+        backlogKeys.removeAll(); translateBacklog = 0
+        backfillPendingKeys.removeAll(); backfillRemaining = 0
+        transcript.finalize()
+        autoSaveMarkdown()
+        debugSessionEnd(tag: "@error")
+    }
+
+    private func sessionFailureMessage(_ failure: SessionCoordinator.Failure) -> String {
+        switch failure {
+        case .message(let text): return text
+        case .engineStart(let error): return "전사 엔진을 시작하지 못했어요: \(error.localizedDescription)"
+        case .startupTimeout: return "엔진 시작이 너무 오래 걸려요. 다시 시도해주세요 — 계속되면 앱을 재시작해주세요."
+        case .engineExit(let code):
+            debugWatchdog("engine-exit", ["code": Int(code), "phase": "\(phase)"])
+            return "전사 엔진이 예기치 않게 종료되었어요 (코드 \(code)). 다시 시도해주세요."
+        case .preparation(let error):
+            let why = AudioDecode.reason(error) ?? "지원하지 않는 형식이거나 손상된 파일입니다"
+            return "'\(fileName)' 을(를) 열 수 없습니다 — \(why)."
+        case .captureStart(let error):
+            if AudioPermissionPolicy.requires(.systemAudio, for: audioSource), !CGPreflightScreenCaptureAccess() {
+                audioPermissionIssue = .systemAudioDenied
+                return permissionText(
+                    "녹음 전에 시스템 오디오 권한이 필요해요. 시스템 설정에서 Madi를 허용한 뒤 다시 시작해주세요.",
+                    "Madi needs system audio access before recording. Allow it in System Settings, then restart Madi.",
+                    "録音前にシステムオーディオへのアクセスが必要です。システム設定で Madi を許可してから再起動してください。")
             }
-            Task { @MainActor in self.runFileEngine(wav) }
-        }
-    }
-
-    private func runFileEngine(_ wav: URL) {
-        LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
-        LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
-        guard phase == .processing else { return }   // user may have navigated away
-        var cfg = makeConfig()
-        cfg.fileURL = wav                  // native FILE mode (fast batched + offline diar)
-        let e = EngineProcess(config: cfg)
-        e.delegate = self
-        e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }
-        engine = e
-        do { try e.start() }
-        catch { phase = .error("전사 엔진을 시작하지 못했어요: \(error.localizedDescription)") }
-        startPeriodicAutosave()   // file transcription accumulates lines too
-    }
-
-    /// Pause live capture — the mic stays warm; the paused span is dropped so the
-    /// recording skips the break. No engine flush (the session continues).
-    func pauseRecording() {
-        guard phase == .recording else { return }
-        capture.pause()
-        pausedAt = Date()
-        phase = .paused
-    }
-    func resumeRecording() {
-        guard phase == .paused else { return }
-        capture.resume()
-        if let p = pausedAt { pausedAccum += Date().timeIntervalSince(p); pausedAt = nil }
-        phase = .recording
-    }
-
-    func stop() {
-        guard phase == .recording || phase == .paused else { return }
-        recordEndedAt = Date()   // freeze the 총 시간 readout at the stop moment
-        phase = .flushing
-        capture.stop()          // flush final tail segment(s) into the engine
-        engine?.flush()         // → SPKFIX/SPKOV → <<FLUSH_END>>
-        // NOTE: do NOT clear interimCache here. finalizeOnce() runs later (post-flush
-        // via engineDidFlush) and reuses the cached interim translations for the final
-        // committed lines, then clears. Clearing here would defeat that final-line reuse.
-    }
-
-    // MARK: EngineProcessDelegate
-
-    // live mic path only (file mode never emits `[stream] ready`)
-    func engineDidBecomeReady() {
-        engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
-        // W2 재시작 엔진의 ready는 무시 — capture.start() 재진입은 installTap
-        // 중복 크래시 + 세그먼터 타임라인/파일 리셋을 일으킨다 (역검증
-        // app-state-1/watchdog-conc-0). 캡처는 최초 기동에서만 시작.
-        guard phase == .engineStarting || phase == .ready else { return }
-        phase = .ready
-        captureStartTask?.cancel()
-        captureStartTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await self.capture.start()
-                guard !Task.isCancelled, self.phase == .ready else {
-                    self.capture.abort()
-                    return
-                }
-                self.recordStartedAt = Date(); self.recordEndedAt = nil
-                self.pausedAccum = 0; self.pausedAt = nil
-                self.phase = .recording
-                self.startPeriodicAutosave()
-                self.startSilenceWatch()
-            } catch {
-                guard !Task.isCancelled else { return }
-                self.capture.abort()
-                self.terminateTranscriptionEngines()
-                if AudioPermissionPolicy.requires(.systemAudio, for: self.audioSource),
-                   !CGPreflightScreenCaptureAccess() {
-                    self.showSystemAudioPermissionError()
-                } else {
-                    self.phase = .error(self.permissionText(
-                        "오디오 입력을 시작하지 못했어요: \(error.localizedDescription)",
-                        "Could not start audio input: \(error.localizedDescription)",
-                        "オーディオ入力を開始できませんでした: \(error.localizedDescription)"))
-                }
-            }
-            self.captureStartTask = nil
+            return permissionText("오디오 입력을 시작하지 못했어요: \(error.localizedDescription)",
+                                  "Could not start audio input: \(error.localizedDescription)",
+                                  "オーディオ入力を開始できませんでした: \(error.localizedDescription)")
         }
     }
 
@@ -2477,7 +2348,7 @@ final class SessionController: EngineProcessDelegate {
                     if !job.retried, segQueue.isEmpty {
                         var retry = job; retry.retried = true; retry.fedAt = Date()
                         segQueue.append(retry)
-                        engine?.feed(offset: job.offset, wav: job.url)
+                        lifecycle.feed(offset: job.offset, wav: job.url)
                     } else {
                         coverageGaps.append(job.offset)
                         debugWatchdog("w1-gap", ["offset": job.offset, "retried": job.retried, "queue": segQueue.count])
@@ -2514,32 +2385,6 @@ final class SessionController: EngineProcessDelegate {
         }
     }
 
-    func engineDidFlush() { finalizeOnce() }
-
-    func engine(didTerminate code: Int32) {
-        debugWatchdog("engine-exit", ["code": Int(code), "phase": "\(phase)"])
-        // file mode exits 0 on its own after <<FLUSH_END>>; finalize if a late
-        // exit beats the FLUSH_END line (finalizeOnce is idempotent).
-        if code == 0 { finalizeOnce(); return }
-        if phase != .done, phase != .flushing {
-            preview.stop(); livePartial = ""; clearInterimCaption()
-            engine = nil
-            phase = .error("전사 엔진이 예기치 않게 종료되었어요 (코드 \(code)). 다시 시도해주세요.")
-        }
-    }
-
-    /// Hard teardown for retry/reset/error paths. `EngineProcess.stop()` only
-    /// requests FLUSH; these paths must release the process immediately because
-    /// there may be no live session left to deliver <<FLUSH_END>>.
-    private func terminateTranscriptionEngines() {
-        engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
-        captureStartTask?.cancel(); captureStartTask = nil
-        engine?.delegate = nil
-        engine?.terminate()
-        engine = nil
-        preview.stop()
-    }
-
     private func startPreviewLane() {
         previewLaneStartedAt = Date(); previewAdmits = 0
         preview.start { [weak self] wav, windowStart in
@@ -2554,15 +2399,13 @@ final class SessionController: EngineProcessDelegate {
             let forced = PreviewTrim.forcedPrefix(committed: shown, gate: self.interimSourceGate.committedText)
             DebugLog.shared?.emit("preview", "feed", ["windowStart": windowStart, "shownInWindow": shown.count,
                                                       "forcedChars": forced.count])
-            self.engine?.feedPreview(wav: wav, forced: forced)
+            self.lifecycle.feedPreview(wav: wav, forced: forced)
             return forced
         }
     }
 
     private func finalizeOnce() {
-        guard phase != .done else { return }
         periodicSaveTask?.cancel(); periodicSaveTask = nil
-        engineStartTimeoutTask?.cancel(); engineStartTimeoutTask = nil
         silenceWatchTask?.cancel(); silenceWatchTask = nil; micSilent = false
         meterLevel = 0; level = 0
         transcript.finalize()
@@ -2574,14 +2417,11 @@ final class SessionController: EngineProcessDelegate {
         // and so never met the stable-line gate) and anything a late glossary rule
         // now covers.
         for line in transcript.lines { applyTextPasses(line) }
-        engine?.terminate()
         // Drain mid-session names now that the engine has dumped its centroids
         // (.last/spk<id>.vec) on flush — THIS is the enrollment-timing fix.
         for p in pendingEnrollment.pending() { enrollVoiceprint(speaker: p.id, name: p.name) }
         pendingEnrollment.clear()
-        engine = nil
         preview.stop(); livePartial = ""; clearInterimCaption()   // disarm PREVIEW lane + interim text
-        phase = .done
         // Backfill: lines the live queue shed under load get re-translated now,
         // uncapped, so the on-screen transcript/scrollback is complete after stop
         // (the live captions themselves already moved on). backfillRemaining drives
@@ -2622,8 +2462,10 @@ final class SessionController: EngineProcessDelegate {
         let finalTag = "@final " + sttStatsTag()
         TranslationStabilityMetrics.shared.flushSummary(finalTag)
         debugSessionEnd(tag: finalTag)
-        Task { @MainActor in
+        let finishedGeneration = lifecycle.generation
+        Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(10))
+            guard self?.lifecycle.generation == finishedGeneration else { return }
             TranslationStabilityMetrics.shared.flushSummary("@settled")
         }
         stopLiveRail()       // recording ended — keep the accumulated rail for review
@@ -2751,18 +2593,6 @@ final class SessionController: EngineProcessDelegate {
 
     private func tickWatchdog() {
         idleBackfillTick()
-        // A8: 정지 직후(.flushing)는 부하가 가장 큰 순간 — 여기서 행이면
-        // FLUSH_END가 영영 안 와 세션이 '정리 중'에 갇힌다. 활동 없이 45s면
-        // 라이브 라벨로 강제 마감 (역검증 watchdog-conc-5).
-        if phase == .flushing {
-            if Date().timeIntervalSince(lastEngineActivityAt) > 45 {
-                engine?.delegate = nil
-                engine?.terminate()
-                transcript.markDiarNamespaceBroken()
-                engineDidFlush()
-            }
-            return
-        }
         guard phase == .recording || phase == .paused, let oldest = segQueue.first else { return }
         // A6: 진행(엔진 활동) 기준 — 큐가 밀렸어도 SEG_END/단어가 나오고 있으면
         // 건강한 엔진이다. 큐 대기시간으로 재면 백로그에서 오재시작·연쇄 발산
@@ -2773,21 +2603,16 @@ final class SessionController: EngineProcessDelegate {
         debugWatchdog("w2-restart", ["queue": segQueue.count, "oldestFedAgo": Date().timeIntervalSince(oldest.fedAt),
                                      "lastActivityAgo": Date().timeIntervalSince(lastEngineActivityAt),
                                      "recoveries": hangRecoveries, "phase": "\(phase)"])
-        engine?.delegate = nil   // 구엔진의 didTerminate(SIGTERM)가 세션을 error로 죽이지 않게 (watchdog-conc-1)
-        engine?.terminate()
         transcript.markDiarNamespaceBroken()   // 새 엔진 화자 id는 0부터 — FLUSH 라벨 대체 금지 (app-state-6)
         LiveFeatureWiring.speakerIslandAbsorption = LiveFeatureWiring.islandAbsorption(for: languageTokenID)
         LiveFeatureWiring.weakLabelContinuation = LiveFeatureWiring.weakLabelContinuation(for: languageTokenID)
-        let e = EngineProcess(config: makeConfig())
-        e.delegate = self
-        e.onDiagnosticLine = { [weak self] line in self?.engineDiag.ingest(line) }
-        engine = e
-        do { try e.start() } catch { phase = .error("엔진 재시작 실패: \(error.localizedDescription)"); return }
+        guard lifecycle.replaceEngine(SessionEngineAdapter(config: makeConfig())) else { return }
         for i in segQueue.indices { segQueue[i].fedAt = Date() }
-        for job in segQueue { e.feed(offset: job.offset, wav: job.url) }
+        for job in segQueue { lifecycle.feed(offset: job.offset, wav: job.url) }
     }
 
     private var pendingFinalReconcile = false
+    @ObservationIgnored private var languageCorrectionTask: Task<Void, Never>?
 
     @discardableResult
     private func kickReconcile(mid: Bool = false) -> Bool {
@@ -2983,10 +2808,13 @@ final class SessionController: EngineProcessDelegate {
         languageCorrectionsPending = jobs.count
         reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ")
             + (completedParts + ["언어 0/\(jobs.count)줄 교정 중"]).joined(separator: " · ")
-        Task.detached { [weak self] in
+        let sessionToken = lifecycle.generation
+        languageCorrectionTask?.cancel()
+        languageCorrectionTask = Task.detached { [weak self] in
             var applied = 0
             var failed = unavailable
             for (index, job) in jobs.enumerated() {
+                guard !Task.isCancelled, await MainActor.run(body: { [weak self] in self?.lifecycle.generation == sessionToken }) else { return }
                 var clip: URL?
                 do {
                     clip = try WavWriter.crop16kMonoPCM(source: job.source,
@@ -2996,20 +2824,21 @@ final class SessionController: EngineProcessDelegate {
                 }
                 var didApply = false
                 if let clip {
-                    let text = Self.runOneShotTranscribe(
-                        bin: bin, model: model, wav: clip, bpe: bpe, assets: assets,
-                        langToken: job.langToken)
+                    let text = await SessionOneShotTranscriber.transcribe(.init(
+                        binary: bin, model: model, wav: clip, bpe: bpe, assets: assets,
+                        languageToken: job.langToken))
                     try? FileManager.default.removeItem(at: clip)
-                    if let text, !text.isEmpty {
+                    if !Task.isCancelled, let text, !text.isEmpty {
                         didApply = await MainActor.run { [weak self] in
-                            self?.applyTextCorrection(job.id, to: text,
-                                                      expectedRevision: job.expectedRevision, learn: false) ?? false
+                            guard !Task.isCancelled, let self, self.lifecycle.generation == sessionToken else { return false }
+                            return self.applyTextCorrection(job.id, to: text,
+                                                      expectedRevision: job.expectedRevision, learn: false)
                         }
                     }
                     if didApply { applied += 1 } else { failed += 1 }
                 }
                 await MainActor.run { [weak self] in
-                    guard let self else { return }
+                    guard !Task.isCancelled, let self, self.lifecycle.generation == sessionToken else { return }
                     self.languageCorrectionsPending = jobs.count - index - 1
                     self.reconcileNote = (mid ? "AI 교정(진행 중): " : "AI 교정: ")
                         + (completedParts + ["언어 \(index + 1)/\(jobs.count)줄 처리"]).joined(separator: " · ")
@@ -3018,7 +2847,8 @@ final class SessionController: EngineProcessDelegate {
             let appliedCount = applied
             let failedCount = failed
             await MainActor.run { [weak self] in
-                self?.finishLanguageCorrections(applied: appliedCount, failed: failedCount,
+                guard !Task.isCancelled, let self, self.lifecycle.generation == sessionToken else { return }
+                self.finishLanguageCorrections(applied: appliedCount, failed: failedCount,
                                                 completedParts: completedParts, mid: mid)
             }
         }
@@ -3038,39 +2868,6 @@ final class SessionController: EngineProcessDelegate {
         completeReconcileCycle(mid: mid)
     }
 
-    /// Run the bundled `transcribe` binary once on a single wav in plain FILE
-    /// mode with a forced language, and return the transcription text. Runs off
-    /// the main actor (blocking Process I/O).
-    nonisolated private static func runOneShotTranscribe(
-        bin: URL, model: URL, wav: URL, bpe: URL, assets: URL, langToken: Int) -> String? {
-        let p = Process()
-        p.executableURL = bin
-        p.arguments = [model.path, wav.path, bpe.path]
-        p.currentDirectoryURL = assets
-        var env = ProcessInfo.processInfo.environment
-        env["DIAR"] = "0"; env["AUDIO_CTX"] = "auto"; env["WHISPER_LANG_ID"] = String(langToken)
-        env.removeValue(forKey: "STREAM"); env.removeValue(forKey: "APP_FILE")
-        p.environment = env
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        guard let s = String(data: data, encoding: .utf8) else { return nil }
-        // Plain file mode prints "=== TRANSCRIPTION (...) ===" then the text lines.
-        let lines = s.components(separatedBy: "\n")
-        guard let start = lines.firstIndex(where: { $0.hasPrefix("=== TRANSCRIPTION") }) else { return nil }
-        var text = ""
-        for l in lines[(start + 1)...] {
-            if l.hasPrefix("===") || l.hasPrefix("[") { break }   // next section / perf line
-            let t = l.trimmingCharacters(in: .whitespaces)
-            if t.isEmpty { if text.isEmpty { continue } else { break } }
-            text += (text.isEmpty ? "" : " ") + t
-        }
-        return text.trimmingCharacters(in: .whitespaces)
-    }
-
     // MARK: export
 
     func exportMarkdown(to url: URL) throws {
@@ -3083,26 +2880,8 @@ final class SessionController: EngineProcessDelegate {
     /// already done synchronously with the timestamp name, so a failed/late title
     /// never loses data — this only upgrades the filename. Collision-safe.
     private func renameAutoSavedToTitle(_ title: String) {
-        let fm = FileManager.default
-        guard let src = lastAutoSaved, fm.fileExists(atPath: src.path) else { return }
-        let oldBase = src.deletingPathExtension().lastPathComponent
-        var dst = autoSaveFolder.appendingPathComponent(title).appendingPathExtension("md")
-        var n = 2
-        while fm.fileExists(atPath: dst.path) {
-            dst = autoSaveFolder.appendingPathComponent("\(title) \(n)").appendingPathExtension("md"); n += 1
-        }
-        do {
-            try fm.moveItem(at: src, to: dst)
-            lastAutoSaved = dst
-            // Move the companion "<oldBase> 요약.md" too, if it landed already.
-            let oldSummary = autoSaveFolder.appendingPathComponent("\(oldBase) 요약").appendingPathExtension("md")
-            if fm.fileExists(atPath: oldSummary.path) {
-                let newBase = dst.deletingPathExtension().lastPathComponent
-                try? fm.moveItem(at: oldSummary,
-                                 to: autoSaveFolder.appendingPathComponent("\(newBase) 요약").appendingPathExtension("md"))
-            }
-            workspace.reload()
-        } catch { /* non-fatal — the timestamp-named file is intact */ }
+        _ = archiveWriter.rename(to: title, folder: autoSaveFolder)
+        workspace.reload()
     }
 
     /// Render the meeting summary as a self-contained, presentation-style HTML deck

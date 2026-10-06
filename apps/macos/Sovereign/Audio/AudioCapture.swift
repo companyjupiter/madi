@@ -15,7 +15,7 @@
 import AVFoundation
 
 @MainActor
-final class AudioCapture {
+final class AudioCapture: SessionCapture {
     /// SEG/OVERLAP mirror the runner defaults; user-tunable in Settings.
     var segmentSeconds: Double = 10 { didSet { segmenter.segmentSeconds = segmentSeconds } }
     var overlapSeconds: Double = 3 { didSet { segmenter.overlapSeconds = overlapSeconds } }
@@ -50,6 +50,7 @@ final class AudioCapture {
     private let engine = AVAudioEngine()
     private var resampler: Resampler?
     private var micTapInstalled = false
+    private var acceptsSamples = false
     private var segmenter = Segmenter()
     private var segIndex = 0
     private let tempDir: URL
@@ -57,15 +58,19 @@ final class AudioCapture {
 
     init() {
         tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sovereign-segs", isDirectory: true)
+            .appendingPathComponent("sovereign-segs-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     }
+
+    deinit { try? FileManager.default.removeItem(at: tempDir) }
 
     // MARK: live mic
 
     func start() async throws {
+        try Task.checkCancellation()
         resetSegmenter()
         micPending.removeAll(); sysPending.removeAll()
+        acceptsSamples = true
 
         do {
             if source != .system {   // mic or both
@@ -95,7 +100,15 @@ final class AudioCapture {
                 sysCapture = sc
                 // Do not report recording until ScreenCaptureKit has actually
                 // accepted the stream. Permission errors now reach the caller.
-                try await sc.start()
+                do {
+                    try await sc.start()
+                    try Task.checkCancellation()
+                } catch {
+                    // abort() may have cleared sysCapture while start awaited
+                    // ScreenCaptureKit. Always stop this exact local instance.
+                    sc.stop()
+                    throw error
+                }
             }
         } catch {
             stopInputs()
@@ -109,6 +122,9 @@ final class AudioCapture {
     private var micPending: [Int16] = []
     private var sysPending: [Int16] = []
     private func ingest(_ samples: [Int16], level: Float, mic: Bool) {
+        // A tap's main-actor delivery can already be queued when stop removes
+        // the tap. It must not repopulate/reset-named segment files after abort.
+        guard acceptsSamples else { return }
         guard source == .both else { consume(samples, level: level); return }
         if paused { onLevel?(0); micPending.removeAll(); sysPending.removeAll(); return }
         if mic { micPending.append(contentsOf: samples) } else { sysPending.append(contentsOf: samples) }
@@ -193,12 +209,14 @@ final class AudioCapture {
 
     /// Tear down partially-started inputs without flushing a phantom segment.
     private func stopInputs() {
+        acceptsSamples = false
         if micTapInstalled {
             engine.inputNode.removeTap(onBus: 0)
             micTapInstalled = false
         }
         engine.stop()
         resampler = nil
+        sysCapture?.onSamples = nil; sysCapture?.onError = nil
         sysCapture?.stop(); sysCapture = nil
     }
 

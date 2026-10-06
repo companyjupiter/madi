@@ -1,6 +1,6 @@
 // TranscriptArchive.swift — re-open an archived transcript .md back into the
-// view (workspace explorer → click a past meeting). This is the exact inverse
-// of Exporters.markdown: it parses the bullet lines
+// view (workspace explorer → click a past meeting). This reads the display
+// representation from Exporters.markdown: it parses the bullet lines
 //
 //     - **[mm:ss] Who** body words *low-confidence* ⟨+Name 겹침⟩
 //
@@ -29,7 +29,7 @@ enum TranscriptArchive {
     /// `- **[mm:ss] who** body` — who is captured non-greedily so the first `**`
     /// closes the bold; the rest is the body (+ overlap markers).
     private static let bullet = try! NSRegularExpression(
-        pattern: #"^- \*\*\[(\d{1,2}):(\d{2})\] (.+?)\*\* ?(.*)$"#)
+        pattern: #"^- \*\*\[(\d+):(\d{2})\] (.+?)\*\* ?(.*)$"#)
     private static let overlapMark = try! NSRegularExpression(pattern: #"\s*⟨\+[^⟩]*⟩"#)
     private static let speakerN = try! NSRegularExpression(pattern: #"^Speaker (\d+)$"#)
     private static let translation = try! NSRegularExpression(

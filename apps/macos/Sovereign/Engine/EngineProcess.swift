@@ -143,15 +143,34 @@ final class EngineProcess {
         process.standardError = FileHandle.nullDevice  // perf/log noise on stderr
 
         process.terminationHandler = { [weak self] proc in
+            guard let self else { return }
             let code = proc.terminationStatus
-            Task { @MainActor in self?.delegate?.engine(didTerminate: code) }
+            let reader = self.stdoutPipe.fileHandleForReading
+            reader.readabilityHandler = nil
+            // Exit can arrive before the last readability callback. Drain on
+            // the same queue as live reads, then enqueue termination AFTER all
+            // decoded output. Otherwise the session drops buffered tail words.
+            self.ioQueue.async {
+                if let remaining = try? reader.readToEnd(), !remaining.isEmpty {
+                    DebugLog.shared?.append(remaining, to: "stdout.log")
+                    self.ingest(remaining)
+                }
+                if !self.lineBuffer.isEmpty { self.ingest(Data([0x0A])) }
+                DispatchQueue.main.async {
+                    self.delegate?.engine(didTerminate: code)
+                }
+            }
         }
 
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            DebugLog.shared?.append(chunk, to: "stdout.log")   // debug bundle: bytes as received
-            self?.ioQueue.async { self?.ingest(chunk) }
+            guard let self else { return }
+            // Serialize the read itself, not just parsing, with the exit drain.
+            self.ioQueue.sync {
+                let chunk = handle.availableData
+                guard !chunk.isEmpty else { handle.readabilityHandler = nil; return }
+                DebugLog.shared?.append(chunk, to: "stdout.log")
+                self.ingest(chunk)
+            }
         }
 
         if let dbg = DebugLog.shared {
@@ -268,7 +287,9 @@ final class EngineProcess {
             let structured: [StructuredEvent]
             if event == .segmentEnd || event == .flushEnd { structured = drainStructuredEvents() }
             else { structured = [] }
-            Task { @MainActor in
+            // FIFO delivery also orders the termination callback behind the
+            // final output batch; independent Tasks do not promise that order.
+            DispatchQueue.main.async {
                 for item in structured { self.delegate?.engine(didEmitStructured: item) }
                 self.dispatch(event)
             }

@@ -63,4 +63,20 @@ final class TranscriptArchiveTests: XCTestCase {
         XCTAssertEqual(parsed.lines.first?.translations["English"], "Hello")
         XCTAssertEqual(parsed.lines.first?.translations["Japanese"], "こんにちは")
     }
+
+    func testLongSessionExportReopensEveryLineAndKeepsTranslationsOnTheirSource() throws {
+        let starts: [Double] = [5999, 6000, 7200, 43200]
+        let lines = starts.enumerated().map { index, start in
+            Line(id: UUID(), speaker: 0, start: start, end: start + 1,
+                 words: [Word(t0: start, t1: start + 1, text: "발언\(index)")],
+                 translations: ["English": "statement \(index)"])
+        }
+        let markdown = Exporters.markdown(lines, names: [0: "주영"])
+        XCTAssertTrue(markdown.contains("[100:00]"))
+        let parsed = try XCTUnwrap(TranscriptArchive.parse(text: markdown))
+        XCTAssertEqual(parsed.lines.map(\.start), starts)
+        XCTAssertEqual(parsed.lines.map(\.text), lines.map(\.text))
+        XCTAssertEqual(parsed.lines.map { $0.translations["English"] }, lines.map { $0.translations["English"] })
+        XCTAssertEqual(parsed.names[parsed.lines[0].speaker], "주영")
+    }
 }

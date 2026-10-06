@@ -5,6 +5,16 @@ the `stable` release channel; retired binaries remain represented by permanent
 source tags and release notes. See [docs/RELEASE.md](docs/RELEASE.md) for the full
 release and provenance policy.
 
+## Unreleased
+
+- Separated session lifecycle/resource ownership and automatic archive writing
+  from the UI controller, with deterministic failure/cancellation tests.
+- Stop capture and background session work consistently on transcription failure;
+  reject callbacks and decoded files from retired sessions or replaced engines.
+- Isolate temporary audio per session/import and clean up cancelled file decoding.
+- Deliver buffered engine output before process-exit completion, preserving tail events.
+- Reopen transcript rows and their translations beyond 99:59 without dropping them.
+
 ## [0.4.1] — 2026-09-20
 
 - Clarified that the Madi application source is AGPL-3.0-only.

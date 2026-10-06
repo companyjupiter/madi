@@ -98,6 +98,13 @@ jobs:
       - name: Run SovereignCore test suite
         run: swift test
 
+      - name: Verify native audio import isolation and cancellation
+        run: |
+          swiftc -parse-as-library Sovereign/Audio/AudioDecode.swift \
+            Sovereign/Audio/Resampler.swift Sovereign/Audio/WavWriter.swift \
+            Tests/AudioDecodeLimitTests.swift -o "$RUNNER_TEMP/madi-audio-decode-tests"
+          "$RUNNER_TEMP/madi-audio-decode-tests"
+
   source-only-app:
     name: Source-only app bundle
     runs-on: macos-15
