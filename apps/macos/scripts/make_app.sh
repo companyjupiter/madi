@@ -142,6 +142,10 @@ SRCS=(
   "$APP_DIR"/Sovereign/Transcript/ReviewController.swift
   "$APP_DIR"/Sovereign/Dictation/DictationFormatting.swift
   "$APP_DIR"/Sovereign/Dictation/DictationController.swift
+  "$APP_DIR"/Sovereign/Session/SessionArchiveWriter.swift
+  "$APP_DIR"/Sovereign/Session/SessionOneShotTranscriber.swift
+  "$APP_DIR"/Sovereign/Session/SessionCoordinator.swift
+  "$APP_DIR"/Sovereign/Session/SessionEngineAdapter.swift
   "$APP_DIR"/Sovereign/SessionController.swift
   "$APP_DIR"/Sovereign/CalendarBridge.swift
   "$APP_DIR"/Sovereign/AppInfo/AppVersion.swift

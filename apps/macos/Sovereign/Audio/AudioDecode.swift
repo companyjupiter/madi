@@ -67,18 +67,23 @@ enum AudioDecode {
     /// Audio-only files go through AVAudioFile; anything it rejects (video
     /// containers) falls back to the AVAssetReader audio-track path.
     static func toWav16k(_ src: URL) async throws -> URL {
-        let dst = FileManager.default.temporaryDirectory.appendingPathComponent("sovereign-decode.wav")
+        try Task.checkCancellation()
+        let dst = FileManager.default.temporaryDirectory.appendingPathComponent("sovereign-decode-\(UUID().uuidString).wav")
+        var succeeded = false
+        defer { if !succeeded { try? FileManager.default.removeItem(at: dst) } }
         let out = try WavWriter.Streaming(url: dst)
         if let file = try? AVAudioFile(forReading: src) {
             try await decodeAudioFile(file, src: src, into: out)
         } else {
             try await decodeAssetAudioTrack(src, into: out)
         }
+        try Task.checkCancellation()
         try out.finish()
         guard out.samples > 0 else {
             throw NSError(domain: "AudioDecode", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "no audio decoded"])
         }
+        succeeded = true
         return dst
     }
 
@@ -100,6 +105,7 @@ enum AudioDecode {
                           userInfo: [NSLocalizedDescriptionKey: "resampler init failed"])
         }
         while file.framePosition < file.length {
+            try Task.checkCancellation()
             guard let buf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 8192) else { break }
             try file.read(into: buf)
             if buf.frameLength == 0 { break }
@@ -145,6 +151,7 @@ enum AudioDecode {
         }
         reader.add(output)
         reader.startReading()
+        defer { if reader.status == .reading { reader.cancelReading() } }
         // Init the Resampler from the reader's OWN LPCM output format description —
         // it carries the channel layout AVAudioConverter needs to downmix stereo→
         // mono. A manually-built multi-channel AVAudioFormat lacks that layout and
@@ -152,6 +159,7 @@ enum AudioDecode {
         var rs: Resampler?
         var pcmFormat: AVAudioFormat?
         while reader.status == .reading, let sbuf = output.copyNextSampleBuffer() {
+            try Task.checkCancellation()
             if pcmFormat == nil, let fd = CMSampleBufferGetFormatDescription(sbuf) {
                 pcmFormat = AVAudioFormat(cmAudioFormatDescription: fd)
                 rs = pcmFormat.flatMap { Resampler(from: $0) }
