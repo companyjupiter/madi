@@ -25,18 +25,19 @@ enum LiveFeatureWiring {
     /// the behaviour it already implements for the pre-first-translation window.
     static let interimTranslation = false
 
-    /// The rolling live-summary pane (30 s tick, previous summary + new lines).
+    /// The live key-point notes pane (right-side 요약 tab).
     ///
-    /// OFF pending a redesign. The rolling-carry shape works — the P4 starvation
-    /// valve got it updating again — but a summary built from a live transcript
-    /// inherits every transcription defect in it, and the 40-minute session it was
-    /// measured on produced three generic sentences. That is a design problem, not
-    /// a scheduling one, so the feature is unwired until it is redesigned rather
-    /// than left running and disappointing.
+    /// Unwired 2026-09-05: the rolling carry produced three generic sentences on a
+    /// 40-minute session. Redesigned 2026-10-08 (LiveSummary, docs/LIVE_SUMMARY.md):
+    /// one note per ~minute of NEW speech, appended and never rewritten. Replayed on
+    /// that kind of meeting it keeps 14-15 of 15 key facts in the meeting's language,
+    /// and holds the engine p50 ~1 s / max ~1.6 s per request (the carry: 2.4 / 4.3 s).
     ///
-    /// The post-session summary is untouched: it runs on the finished transcript
-    /// with the machine to itself, which is where a summary belongs today.
-    static let liveSummary = false
+    /// Still OFF by default until a live session confirms caption latency with it on.
+    /// Wire it for that trial without a rebuild:
+    ///   defaults write com.companyjupiter.madi liveSummaryWired -bool YES
+    /// Read when a recording starts.
+    static var liveSummary: Bool { UserDefaults.standard.bool(forKey: "liveSummaryWired") }
 
     /// Translate the live tail line only once the transcription preview has
     /// gone quiet — i.e. the line is really finished, not merely unchanged for
