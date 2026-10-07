@@ -113,15 +113,13 @@ final class SummaryEngine {
         enqueue("live-rail", LiveActionRail.prompt(String(t.suffix(chunkChars))))
     }
 
-    /// LIVE rolling core summary — carry (the previous summary) + only the NEW
-    /// lines since it, → an updated flat bullet list for the right-side 요약 tab.
-    /// Rides the LOWEST broker lane (.postSession — see enqueue), input capped in
-    /// LiveSummary.prompt, so one request's in-flight time stays ~1-2 s on the 4B
-    /// (probed): the worst it can ever delay a caption turn. "live-summary" tag.
-    func liveSummarize(carry: String?, lines: [String], template: SummaryTemplate) {
-        let t = transcriptOneLine(lines)
-        guard !t.isEmpty else { onResult?("live-summary", nil); return }
-        enqueue("live-summary", LiveSummary.prompt(carry: carry, window: t, template: template))
+    /// LIVE key-point note — one note from only the NEW lines (LiveSummary.takeWindow), for
+    /// the right-side 요약 tab. Rides the LOWEST broker lane (.postSession — see enqueue); the
+    /// window cap and a one-line answer keep a request's in-flight time ~1 s on the 4B
+    /// (replayed: p50 1.0 s, max 1.4 s) — the worst it can delay a caption turn. "live-summary" tag.
+    func liveNote(window: String, language: LiveSummary.Language, template: SummaryTemplate) {
+        guard !window.isEmpty else { onResult?("live-summary", nil); return }
+        enqueue("live-summary", LiveSummary.notePrompt(window: window, language: language, template: template))
     }
 
     /// POST-SESSION diarization/language reconcile — the model reads the numbered,
