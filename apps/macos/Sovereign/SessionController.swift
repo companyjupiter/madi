@@ -244,19 +244,19 @@ final class SessionController {
         summaryEngine?.cancelQueued()
     }
 
-    // ── live rolling summary (우측 요약 탭) ──
+    // ── live key-point notes (우측 요약 탭) ──
     // Forked from the live-rail scheduler above (per-feature fork, not shared) —
     // same no-degradation envelope, laxer cadence: LiveSummary.tickSeconds (30 s)
-    // and minNewLines (6) vs the rail's 18 s / 3, and the LOWEST broker lane.
+    // and minNewLines (10) vs the rail's 18 s / 3, and the LOWEST broker lane.
 
-    /// Start the rolling-summary loop for a live recording. Same ≥16 GB gate as
-    /// the rail: the machines it admits always run the 4B (12 GB model-tier
-    /// boundary), the only model the live prompt was probed healthy on.
+    /// Start the live-notes loop for a live recording. Same ≥16 GB gate as the
+    /// rail: the machines it admits always run the 4B (12 GB model-tier
+    /// boundary), the only model the note prompt was replayed on.
     private func startLiveSummary() {
         liveSummaryTimer?.invalidate(); liveSummaryTimer = nil
         guard LiveFeatureWiring.liveSummary else { return }
         guard Self.liveRailCapable, liveSummaryEnabled else { return }
-        liveSummaryText = nil; liveSummaryUpdatedAt = nil
+        liveNotes = []; liveSummaryUpdatedAt = nil; liveSummaryInFlight = []
         liveSummaryLastCount = 0; liveSummaryWindowStart = 0
         liveSummaryBusy = false; liveSummaryBusyTicks = 0
         liveSummaryProgressAt = Date()          // P4: starvation clock starts here
@@ -298,30 +298,50 @@ final class SessionController {
             if liveSummaryBusyTicks >= 4 {
                 liveSummaryBusy = false; liveSummaryBusyTicks = 0
                 liveSummaryLastCount = liveSummaryWindowStart
+                // The abandoned request still answers (FIFO, before the retry) — that
+                // reply belongs to a window we are about to re-send; ignore it.
+                liveSummaryStaleReplies += 1
+                liveSummaryInFlight = []
             }
             return
         }
-        let total = transcript.lines.count
+        let lines = transcript.lines
+        let total = lines.count
         // A mid-session recluster (P15) can SHRINK the line count — clamp the
-        // watermark or `suffix(total - last)` goes negative (precondition crash).
+        // watermark or the slice below starts past the end (precondition crash).
         if liveSummaryLastCount > total { liveSummaryLastCount = total }
         guard total >= liveSummaryLastCount + LiveSummary.minNewLines else { return }
         guard let s = ensureSummaryEngine() else { return }
-        // Slice BEFORE attributing — a 2-hour meeting shouldn't re-render every
-        // line's speaker label per tick just to feed the newest handful.
-        let newLines = transcript.lines.suffix(total - liveSummaryLastCount).map {
-            "\(SpeakerID.display($0.speaker, names: speakerNames, fallback: "화자\($0.speaker)")): \($0.text)"
+        // Lines go OLDEST first, a window at a time — nothing between two notes is skipped.
+        // Only a lane starved for minutes jumps ahead, so the pane can't trail the meeting.
+        var from = liveSummaryLastCount
+        var pending = lines[from...].reduce(0) { $0 + $1.text.count }
+        while pending > LiveSummary.maxBacklogChars, from < total - 1 {
+            pending -= lines[from].text.count; from += 1
         }
-        liveSummaryWindowStart = liveSummaryLastCount
-        liveSummaryLastCount = total
+        let window = lines[from...].map { l in
+            LiveSummary.WindowLine(id: l.id, start: l.start, end: l.end,
+                                   speaker: SpeakerID.display(l.speaker, names: speakerNames, fallback: "화자\(l.speaker)"),
+                                   text: l.text)
+        }
+        let (text, used) = LiveSummary.takeWindow(window)
+        guard used > 0 else { return }
+        liveSummaryInFlight = Array(window.prefix(used))
+        // Language of the recent speech, not of the window: a burst of English Q&A inside a
+        // Korean meeting must not turn its notes English.
+        liveSummaryLanguage = LiveSummary.dominantLanguage(
+            of: lines.suffix(300).map(\.text).joined(separator: " "))
+        liveSummaryWindowStart = from
+        liveSummaryLastCount = from + used
         liveSummaryBusy = true; liveSummaryBusyTicks = 0
         liveSummaryProgressAt = Date()          // submitted — restart the starvation clock
-        s.liveSummarize(carry: liveSummaryText, lines: newLines, template: summaryTemplate)
+        s.liveNote(window: text, language: liveSummaryLanguage, template: summaryTemplate)
     }
 
     private func stopLiveSummary() {
         liveSummaryTimer?.invalidate(); liveSummaryTimer = nil
-        liveSummaryBusy = false; liveSummaryBusyTicks = 0
+        if liveSummaryBusy { liveSummaryStaleReplies += 1 }   // its reply still comes
+        liveSummaryBusy = false; liveSummaryBusyTicks = 0; liveSummaryInFlight = []
         // The pane disappears with the recording; the post-session summary is
         // the authoritative replacement (full transcript, template sections).
     }
@@ -783,6 +803,9 @@ final class SessionController {
         let sessionToken = lifecycle.generation
         guard let eng = AssetManifest.translateEngineURL, AssetManifest.translateModelIsValid() else { return nil }
         if summaryEngine == nil {
+            // Owed live-note replies belong to the engine that was discarded; its replies
+            // never reach this one (the generation guard drops them), so start the count clean.
+            liveSummaryStaleReplies = 0
             let s = SummaryEngine()
             s.onResult = { [weak self] tag, text in
                 guard let self, self.lifecycle.generation == sessionToken else { return }
@@ -823,13 +846,18 @@ final class SessionController {
                         if added { self.recomputeCoach() }
                     }
                 case "live-summary":
-                    // Rolling update landed (already sanitized engine-side).
-                    // Empty/nil ⇒ keep the previous summary — a blank pane and a
-                    // poisoned carry are both worse than a stale one.
+                    // One note landed (already sanitized engine-side). It joins the pane
+                    // only if it parses, is in the session's language and says something
+                    // new; otherwise nothing changes — earlier notes are never rewritten.
+                    if self.liveSummaryStaleReplies > 0 { self.liveSummaryStaleReplies -= 1; break }
                     self.liveSummaryBusy = false; self.liveSummaryBusyTicks = 0
                     self.liveSummaryProgressAt = Date()
-                    if let text, !text.isEmpty {
-                        self.liveSummaryText = text
+                    let window = self.liveSummaryInFlight; self.liveSummaryInFlight = []
+                    if let text, let note = LiveSummary.parseNote(text),
+                       LiveSummary.accepts(note, language: self.liveSummaryLanguage, existing: self.liveNotes),
+                       let first = window.first, let last = window.last {
+                        self.liveNotes.append(.init(text: note, start: first.start, end: last.end,
+                                                    lineIDs: window.map(\.id)))
                         self.liveSummaryUpdatedAt = Date()
                     }
                 case "reconcile":
@@ -1017,7 +1045,7 @@ final class SessionController {
         summaryTemplate = meetingMode.defaultSummaryTemplate
         calendar.clear()
         stopLiveRail(); liveRailItems = []         // new session → reset the live rail
-        stopLiveSummary(); liveSummaryText = nil; liveSummaryUpdatedAt = nil
+        stopLiveSummary(); liveNotes = []; liveSummaryUpdatedAt = nil
         stopLiveCoach(); coachAgenda = []; liveCoachState = .empty   // reset the coach too
         linePlayer.stop(); sourceMediaURL = nil   // new session → drop click-to-play audio
         summaryEngine?.stop(); summaryEngine = nil
@@ -1537,7 +1565,7 @@ final class SessionController {
     var liveSummaryEnabled: Bool = (UserDefaults.standard.object(forKey: "liveSummaryEnabled") as? Bool) ?? true {
         didSet {
             UserDefaults.standard.set(liveSummaryEnabled, forKey: "liveSummaryEnabled")
-            if !liveSummaryEnabled { stopLiveSummary(); liveSummaryText = nil }
+            if !liveSummaryEnabled { stopLiveSummary(); liveNotes = [] }
             else {
                 // Re-arm in ANY active session phase (paused, counting down,
                 // engine starting …) — the tick's own .recording guard keeps a
@@ -1551,18 +1579,21 @@ final class SessionController {
             }
         }
     }
-    /// Sanitized rolling summary (flat bullets) — doubles as the next carry.
-    private(set) var liveSummaryText: String? = nil
+    /// Key-point notes, appended one per request and never rewritten (LiveSummary).
+    private(set) var liveNotes: [LiveSummary.Note] = []
     private(set) var liveSummaryUpdatedAt: Date? = nil
     private(set) var liveSummaryBusy = false
     private var liveSummaryTimer: Timer?
     private var liveSummaryLastCount = 0
     private var liveSummaryWindowStart = 0   // in-flight request's window origin (unwedge rollback)
     private var liveSummaryBusyTicks = 0
-    /// The right-side pane opens with the first landed summary ("양이 모이면
+    private var liveSummaryInFlight: [LiveSummary.WindowLine] = []   // the in-flight request's source lines
+    private var liveSummaryLanguage: LiveSummary.Language = .ko
+    private var liveSummaryStaleReplies = 0   // replies still owed by abandoned (unwedged/stopped) requests
+    /// The right-side pane opens with the first landed note ("양이 모이면
     /// 열리면서") and lives only through the recording.
     var liveSummaryPaneVisible: Bool {
-        LiveFeatureWiring.liveSummary && liveSummaryText != nil && liveSummaryEnabled
+        LiveFeatureWiring.liveSummary && !liveNotes.isEmpty && liveSummaryEnabled
     }
 
     /// Host-facing live coach / teleprompter toggle (agenda coverage + unanswered

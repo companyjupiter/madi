@@ -10,9 +10,16 @@ final class LiveFeatureWiringTests: XCTestCase {
                        "translating the in-progress hypothesis was measured to cost more than it returns")
     }
 
-    func testLiveSummaryIsUnwired() {
-        XCTAssertFalse(LiveFeatureWiring.liveSummary,
-                       "the rolling summary pane is unwired pending a redesign")
+    /// Redesigned (live notes) but OFF by default until a live session confirms caption
+    /// latency with it on; the trial switch is a user default, not a build change.
+    func testLiveSummaryIsUnwiredByDefault() {
+        let key = "liveSummaryWired"
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(saved, forKey: key) }
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertFalse(LiveFeatureWiring.liveSummary, "off unless deliberately switched on")
+        UserDefaults.standard.set(true, forKey: key)
+        XCTAssertTrue(LiveFeatureWiring.liveSummary, "the trial switch wires it without a rebuild")
     }
 }
 
