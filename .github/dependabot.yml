@@ -30,3 +30,7 @@ updates:
       time: "03:30"
       timezone: Asia/Seoul
     open-pull-requests-limit: 5
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
