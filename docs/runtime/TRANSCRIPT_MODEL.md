@@ -111,6 +111,10 @@ state model and DOM adapter are now connected separately; see
 [`TRANSCRIPT_FOLLOW.md`](TRANSCRIPT_FOLLOW.md) for exact model comparisons and
 the still-open native interaction/visual gates.
 
+The archive foundation now connects optional persistence and reopen to this
+owner; see [`TRANSCRIPT_ARCHIVE.md`](TRANSCRIPT_ARCHIVE.md). Its temporary-folder
+checks do not imply that the Tauri workspace/settings boundary is connected.
+
 `file_workflow_smoke` runs the timed owner using explicitly supplied native engine,
 decoder, assets and a public source fixture. It verifies the completed transcript,
 edit identity, reset, rejection of a stale edit, source hash preservation, model

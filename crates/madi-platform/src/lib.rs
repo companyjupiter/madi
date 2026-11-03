@@ -13,4 +13,5 @@ pub mod model_setup_service;
 pub mod prepared_audio;
 #[cfg(target_os = "macos")]
 pub mod runtime_bundle;
+pub mod session_archive;
 pub mod transcript_native;

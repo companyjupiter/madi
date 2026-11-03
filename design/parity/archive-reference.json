@@ -1,0 +1,15 @@
+{
+  "cases": 284,
+  "fixtureWords": 1566,
+  "sources": {
+    "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+    "apps/macos/Sovereign/Transcript/Exporters.swift": "4db520162040d8913b0680f5488943e311d875d41010544831cca0392d58e94d",
+    "apps/macos/Sovereign/Transcript/TranscriptArchive.swift": "2269fe85512b93689067c5b5db6dcbed58532daf5d6ed93b5356f04f2e10c298",
+    "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+    "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+    "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+    "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+  },
+  "corpusSHA256": "f13b67077dc5bb353fdd68cc343c68bba385204207ef4c09508ba15dcc9914c8",
+  "resultSHA256": "f02c75aa96b59c86cb78b60ac1e6723e53ab44d6a9b10b05d5ef938b790e5197"
+}

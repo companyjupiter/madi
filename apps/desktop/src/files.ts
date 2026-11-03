@@ -15,6 +15,7 @@ export interface FileSnapshot {
   fileName: string; sizeLabel: string; chunksDone: number; chunksTotal: number;
   lines: TranscriptLine[]; speakerNumbers: { numbers: Record<string, number> };
   speakerNames: Record<string, string>; partial: string; speakerIslandAbsorption: boolean;
+  archive: { enabled: boolean; folder: string | null; transcript: string | null; error: string | null };
 }
 export type FileArtwork = Record<'follow', { dataUrl: string; width: number; height: number }>;
 export const fileArtwork = () => invoke<FileArtwork | null>('file_artwork');
@@ -23,7 +24,7 @@ export type FileEdit =
   | { type: 'word'; id: string; index: number; text: string }
   | { type: 'translation'; id: string; language: string; text: string }
   | { type: 'speakerName'; speaker: number; name: string };
-export const emptyFile: FileSnapshot = { revision: 0, generation: 0, phase: { kind: 'idle' }, fileName: '', sizeLabel: '', chunksDone: 0, chunksTotal: 0, lines: [], speakerNumbers: { numbers: {} }, speakerNames: {}, partial: '', speakerIslandAbsorption: false };
+export const emptyFile: FileSnapshot = { revision: 0, generation: 0, phase: { kind: 'idle' }, fileName: '', sizeLabel: '', chunksDone: 0, chunksTotal: 0, lines: [], speakerNumbers: { numbers: {} }, speakerNames: {}, partial: '', speakerIslandAbsorption: false, archive: { enabled: false, folder: null, transcript: null, error: null } };
 export const fileSnapshot = () => browserFixture ? Promise.resolve(emptyFile) : invoke<FileSnapshot>('file_snapshot');
 export const startFile = () => invoke<FileSnapshot>('file_start');
 export const resetFile = (generation: number) => invoke<FileSnapshot>('file_reset', { generation });

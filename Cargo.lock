@@ -1783,6 +1783,7 @@ name = "madi-core"
 version = "0.1.0"
 dependencies = [
  "madi-protocol",
+ "regex",
  "serde",
  "unicode-normalization",
  "unicode-segmentation",

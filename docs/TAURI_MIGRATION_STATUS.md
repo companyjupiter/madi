@@ -15,15 +15,28 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Archive foundation: Markdown/plain export and lossy reopen match unchanged
+  Swift in 284 cases including 1,566 real fixture words. The session writer matches
+  48 real-file sequences / 825 states; concurrency checks preserve 12 simultaneous
+  writers. The optional workflow persistence now uses the production 30-second
+  timer, final/failure checkpoints and generation-protected reopen. Local Rust
+  checks pass 71 tests (11 core / 46 platform / 14 protocol). The Tauri host's
+  workspace/settings boundary is still unconnected and persistence remains
+  disabled there; no existing user preferences or archive data were migrated.
+  See `runtime/TRANSCRIPT_ARCHIVE.md` for scope and remaining product work.
 - Transcript reading/follow candidate: the production TypeScript model matches
   unchanged Swift in 287 cases / 13,294 intermediate states. File transcription
   now uses the original top anchor; recording-only follow remains distinct from
   processing. The DOM adapter, new-transcript pill, native arrow artwork, 700 pt
   reading width and fade/inset values are connected. Native wheel/scrollbar,
   geometry, animation and pixels remain unverified. Local frontend, clippy,
-  native symbol comparison and debug package checks pass; committed CI for this
-  follow change is pending. See `runtime/TRANSCRIPT_FOLLOW.md` and
-  `evidence/macos-transcript-follow-2026-11-04.json`.
+  native symbol comparison and debug package checks pass. Follow revision
+  `109f712` passed CI `41732929922` on macOS 15 / Windows Server 2022, including
+  65/58 Rust tests and the live Swift / pinned frontend follow gate. Downloaded
+  binaries, package, inner runtime and 15 notices match their hashes; build trees
+  and retained diffs are clean. See `runtime/TRANSCRIPT_FOLLOW.md`,
+  `evidence/macos-transcript-follow-2026-11-04.json` and
+  `evidence/desktop-ci-109f712-2026-11-04.json`.
 - Connected file workflow candidate: 65 local macOS Rust tests pass (11 core,
   14 protocol, 40 platform), including six new real-child workflow cases for
   stream/edit/fix delivery, cancellation/generation isolation, errors/retry and

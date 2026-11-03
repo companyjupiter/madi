@@ -50,6 +50,232 @@ async fn cleaned(root: &Path) {
 }
 
 #[tokio::test]
+async fn archive_checkpoints_finish_and_reopen_keep_session_ownership() {
+    let (root, configuration, original) = fixture("", &format!("{WORDS}\n{HOLD}"));
+    let folder = root.path().join("archives");
+    let workflow = FileWorkflow::with_archive(
+        configuration,
+        Some(ArchiveSettings {
+            enabled: true,
+            folder: folder.clone(),
+        }),
+        |_| {},
+    )
+    .unwrap();
+    let started = workflow
+        .start(original.clone(), FileSettings::default(), None)
+        .await
+        .unwrap();
+    let streamed = state_when(&workflow, |state| !state.lines.is_empty()).await;
+    let readonly = root.path().join("read-only.md");
+    std::fs::write(&readonly, "- **[00:01] Name** archived").unwrap();
+    assert_eq!(
+        workflow
+            .open_archive(started.generation, readonly.clone())
+            .await
+            .unwrap()
+            .generation,
+        started.generation
+    );
+    assert_eq!(workflow.snapshot().phase, ViewPhase::Processing);
+    // Exercise the production 30-second clock with real children and disk I/O.
+    let checkpoint = timeout(Duration::from_secs(45), async {
+        let mut watch = workflow.owner.snapshot.clone();
+        loop {
+            let state = watch.borrow_and_update().clone();
+            if state.archive.transcript.is_some() {
+                break state;
+            }
+            watch.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(checkpoint.phase, ViewPhase::Processing);
+    let saved = checkpoint.archive.transcript.unwrap();
+    let before = std::fs::read_to_string(&saved).unwrap();
+    assert!(before.contains("Hello"));
+    workflow
+        .edit(
+            started.generation,
+            Edit::Line {
+                id: streamed.lines[0].line.id.to_string(),
+                text: "Final edit".into(),
+            },
+        )
+        .await
+        .unwrap();
+    // An inline edit alone does not invent a new native autosave trigger.
+    assert_eq!(std::fs::read_to_string(&saved).unwrap(), before);
+    std::fs::write(root.path().join("finish"), "finish").unwrap();
+    let finished = state_when(&workflow, |state| state.phase == ViewPhase::Done).await;
+    assert_eq!(
+        finished.archive.transcript.as_deref(),
+        Some(saved.as_path())
+    );
+    assert!(
+        std::fs::read_to_string(&saved)
+            .unwrap()
+            .contains("Final edit")
+    );
+    let archive_bytes = std::fs::read(&saved).unwrap();
+    let reopened = workflow
+        .open_archive(finished.generation, saved.clone())
+        .await
+        .unwrap();
+    assert_ne!(reopened.generation, finished.generation);
+    assert_eq!(reopened.phase, ViewPhase::Done);
+    assert_eq!(reopened.lines[0].text, "Final edit");
+    assert!(reopened.archive.transcript.is_none());
+    assert!(reopened.lines.iter().all(|line| {
+        line.line
+            .words
+            .iter()
+            .all(|word| word.t0 == line.line.start && word.t1 == line.line.start)
+    }));
+    let invalid = root.path().join("not-transcript.md");
+    std::fs::write(&invalid, "# summary only").unwrap();
+    assert_eq!(
+        workflow
+            .open_archive(reopened.generation, invalid)
+            .await
+            .unwrap()
+            .generation,
+        reopened.generation
+    );
+    assert_eq!(
+        workflow
+            .open_archive(finished.generation, readonly)
+            .await
+            .unwrap()
+            .generation,
+        reopened.generation
+    );
+    let refused = workflow
+        .start(
+            original.clone(),
+            FileSettings::default(),
+            Some("admission fixture".into()),
+        )
+        .await
+        .unwrap();
+    assert!(refused.archive.transcript.is_none());
+    assert_eq!(refused.lines[0].text, "Final edit");
+    // A subsequent actual session allocates a fresh path instead of acquiring
+    // the reopened archive as its writable checkpoint target.
+    workflow
+        .start(original, FileSettings::default(), None)
+        .await
+        .unwrap();
+    let next = state_when(&workflow, |state| state.phase == ViewPhase::Done).await;
+    let new_path = next.archive.transcript.unwrap();
+    assert_ne!(new_path, saved);
+    assert_eq!(std::fs::read(&saved).unwrap(), archive_bytes);
+    assert!(
+        std::fs::read_to_string(new_path)
+            .unwrap()
+            .contains("Hello world.")
+    );
+    workflow.shutdown().await.unwrap();
+    cleaned(root.path()).await;
+}
+
+#[tokio::test]
+async fn failed_transcription_saves_partial_and_archive_failure_does_not_replace_phase() {
+    for blocked in [false, true] {
+        let (root, configuration, original) = fixture("", &format!("{WORDS}\nsys.exit(7)"));
+        let folder = root.path().join("archive");
+        if blocked {
+            std::fs::write(&folder, "foreign file").unwrap();
+        }
+        let workflow = FileWorkflow::with_archive(
+            configuration,
+            Some(ArchiveSettings {
+                enabled: true,
+                folder: folder.clone(),
+            }),
+            |_| {},
+        )
+        .unwrap();
+        workflow
+            .start(original, FileSettings::default(), None)
+            .await
+            .unwrap();
+        let ended = state_when(&workflow, |state| {
+            matches!(state.phase, ViewPhase::Error { .. }) && !state.lines.is_empty()
+        })
+        .await;
+        assert!(matches!(ended.phase,ViewPhase::Error {message} if message.contains("코드 7")));
+        if blocked {
+            assert!(ended.archive.transcript.is_none() && ended.archive.error.is_some());
+            assert_eq!(std::fs::read_to_string(folder).unwrap(), "foreign file");
+        } else {
+            assert!(ended.archive.error.is_none());
+            let path = ended.archive.transcript.unwrap();
+            assert!(
+                std::fs::read_to_string(path)
+                    .unwrap()
+                    .contains("Hello world.")
+            );
+        }
+        let reset = workflow.reset(ended.generation).await.unwrap();
+        assert!(reset.archive.transcript.is_none() && reset.archive.error.is_none());
+        assert!(reset.archive.enabled);
+        workflow.shutdown().await.unwrap();
+        cleaned(root.path()).await;
+    }
+}
+
+#[tokio::test]
+async fn disabled_archive_does_not_create_folder_and_reopen_preserves_imported_translations() {
+    let (root, configuration, original) = fixture("", WORDS);
+    let folder = root.path().join("must-not-create");
+    let workflow = FileWorkflow::with_archive(
+        configuration,
+        Some(ArchiveSettings {
+            enabled: false,
+            folder: folder.clone(),
+        }),
+        |_| {},
+    )
+    .unwrap();
+    workflow
+        .start(original, FileSettings::default(), None)
+        .await
+        .unwrap();
+    let done = state_when(&workflow, |state| state.phase == ViewPhase::Done).await;
+    assert!(!folder.exists());
+    assert!(done.archive.transcript.is_none());
+    let archived = root.path().join("import.md");
+    std::fs::write(
+        &archived,
+        "- **[00:01] Ada** *low* next\n  - [번역:ko] 가져온 번역\n- **[00:02] 미확인** unknown\n",
+    )
+    .unwrap();
+    let reopened = workflow
+        .open_archive(done.generation, archived)
+        .await
+        .unwrap();
+    assert_eq!(
+        reopened.speaker_names.get(&0).map(String::as_str),
+        Some("Ada")
+    );
+    assert_eq!(reopened.lines[1].line.speaker, 255);
+    assert_eq!(reopened.lines[0].line.words[0].conf, 0.3);
+    assert!(reopened.lines[0].line.edited_translations.contains("ko"));
+    assert_eq!(
+        reopened.lines[0]
+            .line
+            .translations
+            .get("ko")
+            .map(String::as_str),
+        Some("가져온 번역")
+    );
+    assert!(reopened.archive.transcript.is_none());
+    workflow.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn publishes_stream_edits_and_speaker_fixes_then_finalizes_after_cleanup() {
     let engine = format!(
         r#"{WORDS}

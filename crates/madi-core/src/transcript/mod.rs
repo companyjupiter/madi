@@ -1,4 +1,5 @@
 //! Native transcript assembly and identity, ported from the shipping Swift store.
+pub mod archive;
 mod line;
 mod speakers;
 mod store;

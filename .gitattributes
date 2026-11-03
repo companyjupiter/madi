@@ -5,6 +5,7 @@ apps/macos/Sovereign/Engine/*.swift text eol=lf
 apps/macos/Sovereign/Transcript/*.swift text eol=lf
 web/fixtures/*.events.jsonl text eol=lf
 apps/macos/Sovereign/SessionController.swift text eol=lf
+apps/macos/Sovereign/Session/SessionArchiveWriter.swift text eol=lf
 apps/macos/Sovereign/Model/AssetManifest.swift text eol=lf
 apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift text eol=lf
 apps/macos/Sovereign/UI/ModelGateView.swift text eol=lf
