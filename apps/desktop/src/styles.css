@@ -10,13 +10,13 @@ h1, p { margin: 0; }
 .setup-centering { min-height: 100%; display: flex; align-items: center; justify-content: center; }
 .setup-content { width: 915px; padding: 40px 0 100px; }
 .wordmark { width: 126px; height: 38px; background: var(--text-primary); mask: url('/assets/logo_madi.png') center / contain no-repeat; }
-.tagline { margin-top: 12px; width: 380px; font: 500 13px/1.6 var(--rounded); color: var(--text-secondary); }
+.tagline { margin-top: 12px; width: 380px; font: 500 13px var(--rounded); color: var(--text-secondary); }
 .setup-columns { display: grid; grid-template-columns: 380px 1px 380px; column-gap: 77px; margin-top: 110px; }
 .column-divider { background: var(--surface-sunken); }
-h1 { font: 700 17px/1.25 var(--rounded); }
-.section-description { margin-top: 10px; color: var(--text-secondary); font: 500 12px/1.4 var(--rounded); }
+h1 { font: 700 17px var(--rounded); }
+.section-description { margin-top: 10px; color: var(--text-secondary); font: 500 12px var(--rounded); }
 .meeting-controls { display: flex; flex-direction: column; gap: 20px; margin-top: 22px; }
-.field-title { margin: 0 3px 8px; line-height: 16px; }
+.field-title { margin: 0 3px 8px; }
 .language-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .picker { position: relative; min-width: 0; }
 .pill { border-radius: 999px; border: 1px solid var(--surface-sunken); background: var(--surface); }
@@ -30,8 +30,8 @@ h1 { font: 700 17px/1.25 var(--rounded); }
 .check { width: 15px; height: 15px; border-radius: 6px; border: .75px solid var(--separator); display: grid; place-items: center; font-size: 8px; font-weight: 700; }
 .check.checked { background: var(--ink-strong); color: var(--ink-strong-on); border-color: var(--ink-strong); }
 .chips { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
-.chip { white-space: nowrap; flex-shrink: 0; border: 1px solid var(--surface-sunken); border-radius: 999px; padding: 7px 14px; line-height: 16px; background: var(--surface); }
-.chip.selected { border-color: var(--ink-strong); }
+.chip { white-space: nowrap; flex-shrink: 0; border-radius: 999px; padding: 7px 14px; background: var(--surface); --chip-outline: var(--surface-sunken); box-shadow: inset 0 0 0 1px var(--chip-outline); }
+.chip.selected { --chip-outline: var(--ink-strong); }
 .speaker-title { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 .toggle { width: 28px; height: 16px; border-radius: 999px; background: var(--switch-off-track); padding: 2px; flex-shrink: 0; }
 .toggle > span { display: block; width: 12px; height: 12px; background: white; border-radius: 50%; transition: transform .18s ease; }

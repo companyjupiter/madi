@@ -1,8 +1,10 @@
 # UI/UX reference inventory
 
 Baseline source: `c1390c750f2506e556a277421e146d80195ab797` (Madi 0.4.1 source).
-**No approved native screenshot baseline exists yet.** Do not call the browser
-candidate a golden image, and do not update expected images to make a diff pass.
+Native dark Korean first-run/setup captures now exist, with provenance in
+`../../docs/evidence/macos-native-baseline-2026-11-04.json`. They are comparison
+evidence, not an approved full golden matrix. Do not call the browser candidate a
+golden image, and do not update expected images to make a diff pass.
 
 `theme-reference.json` resolves the unmodified shipping Theme.swift with AppKit
 in aqua/darkAqua. It contains the OS and source checksum. The generated CSS uses
@@ -18,9 +20,9 @@ because a test fails.
 
 | Reference area | Source | Required capture/action states | Status |
 |---|---|---|---|
-| Model gate | ModelGateView.swift, FirstRunModelSetupPolicy.swift | New install; required-only/recommended; download/check/cancel/error/retry; existing models | Source inspected; capture pending |
-| Start | ContentView.swift `setToStartCard` | ko/en/ja, light/dark; 1150×710 and 980×640 content; resizing | Initial Tauri candidate; native comparison pending |
-| Setup selections | `languageRow`, `meetingChips`, `speakerBlock`, `micPicker` | Language self-exclusion; max 3 outputs; no translation; mode preset then override; system/mic/both | Rust rules tested; native UX pending |
+| Model gate | ModelGateView.swift, FirstRunModelSetupPolicy.swift | New install; required-only/recommended; download/check/cancel/error/retry; existing models | Native first-run/recommended download captured; other states pending |
+| Start | ContentView.swift `setToStartCard` | ko/en/ja, light/dark; 1150×710 and 980×640 outer frame on the observed Mac; resizing | Dark Korean native comparison corrected frame and spacing; parity open |
+| Setup selections | `languageRow`, `meetingChips`, `speakerBlock`, `micPicker` | Language self-exclusion; max 3 outputs; no translation; mode preset then override; system/mic/both | Rust rules tested; native Korean/Lecture IPC verified; full UX pending |
 | File staging | `setupDropZone`, `setupCTA` | First valid dropped file; Unicode/truncated name; bytes/k/M; remove; mutual exclusion of start buttons | Pending |
 | Session controls | `sidePanel`, `bigControlButton`; SessionCoordinator | Countdown, preparing, recording, pause/resume, stop confirm, tail/flush, timeout/EOF/recovery | Pending |
 | Transcript | TranscriptView.swift, TranscriptFollowModel.swift | Content/detailed/conditional chat; partial/final; speaker fix/overlap; translations; find/edit/cancel/copy/scroll anchor | Pending |
@@ -35,9 +37,13 @@ size, theme, UI language and fixture ID. A clean-install reference and an
 existing-user reference are separate. No production preferences are changed by
 the current Tauri harness.
 
-The actual start content size is `min(1150, visibleWidth - 60)` by
-`min(710, visibleHeight - 60)`; Swift converts the content rectangle to a window
-frame. Setup minimum content size is 980×640; work minimum is 760×520.
+The Swift source requests `min(1150, visibleWidth - 60)` by
+`min(710, visibleHeight - 60)` and converts with `frameRect(forContentRect:)`.
+Its SwiftUI window actually captures at 1150×710 **outer** points on this Mac.
+Tauri Transparent initially produced 1150×743; the macOS host now measures native
+chrome and subtracts it from the requested inner height. Setup minimum is
+980×640 in the same observed frame convention; the work minimum is 760×520 in
+the source and still needs its own native measurement.
 Staging a file does not leave setup. Idle plus no display lines defines setup.
 
 Preserve existing disabled defaults: dictation, voiceprints, editor analytics,
@@ -47,9 +53,10 @@ the default product exposes them.
 
 ## Open visual/interaction gaps
 
-- The Tauri candidate is not compared to the native app yet. macOS is locked;
-  native capture cannot be used. Full baseline build also needs the missing
-  Metal toolchain and Xcode first-launch administrator authentication.
+- The Mac is unlocked and Xcode/Metal setup is complete. Strict-asset native
+  baseline and packaged Tauri debug builds pass. Dark Korean setup has been
+  compared and its outer frame/major spacing corrected; remaining native
+  titlebar appearance, font widths and other screen/state coverage are open.
 - CSS `ui-rounded`/system font stacks and the current chevron/check glyphs have
   not proven identical to SwiftUI or licensed equivalents on Windows.
 - The ready-model start fixture has no real device enumeration or model gate.

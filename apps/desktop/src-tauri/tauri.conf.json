@@ -18,6 +18,7 @@
       "minWidth": 980,
       "minHeight": 640,
       "center": true,
+      "visible": false,
       "resizable": true,
       "titleBarStyle": "Transparent",
       "hiddenTitle": true,
@@ -30,6 +31,6 @@
   },
   "bundle": {
     "active": false,
-    "icon": ["../../macos/Sovereign/Resources/icon_app_madi.png", "icons/icon.ico"]
+    "icon": ["../../macos/Sovereign/Resources/AppIcon.icns", "../../macos/Sovereign/Resources/icon_app_madi.png", "icons/icon.ico"]
   }
 }

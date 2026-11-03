@@ -11,6 +11,51 @@ compile_error!(
 
 use madi_core::setup::{SetupCommand, SetupState};
 use std::sync::Mutex;
+use tauri::Manager;
+
+#[cfg(target_os = "macos")]
+fn configure_macos_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    // SwiftUI's reference window measures 1150x710 points including its titlebar.
+    // Tauri Transparent uses a separate content rectangle. Measure the native
+    // chrome instead of baking in this Mac's observed 33-point titlebar.
+    let scale = window.scale_factor()?;
+    let outer = window.outer_size()?;
+    let inner = window.inner_size()?;
+    let chrome_height = outer.height.saturating_sub(inner.height) as f64 / scale;
+    let (width, height) = window
+        .current_monitor()?
+        .map(|monitor| {
+            let visible = monitor
+                .work_area()
+                .size
+                .to_logical::<f64>(monitor.scale_factor());
+            (
+                1150.0_f64.min(visible.width - 60.0),
+                710.0_f64.min(visible.height - 60.0),
+            )
+        })
+        .unwrap_or((1150.0, 710.0));
+    window.set_min_size(Some(tauri::LogicalSize::new(980.0, 640.0 - chrome_height)))?;
+    window.set_size(tauri::LogicalSize::new(width, height - chrome_height))?;
+    window.center()?;
+    set_macos_background(window, window.theme()?)?;
+    let themed = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::ThemeChanged(theme) = event
+            && let Err(error) = set_macos_background(&themed, *theme)
+        {
+            eprintln!("failed to update window background: {error}");
+        }
+    });
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn set_macos_background(window: &tauri::WebviewWindow, theme: tauri::Theme) -> tauri::Result<()> {
+    // AppKit controlBackgroundColor values captured by ThemeOracle.swift.
+    let channel = if theme == tauri::Theme::Dark { 30 } else { 255 };
+    window.set_background_color(Some(tauri::window::Color(channel, channel, channel, 255)))
+}
 
 #[tauri::command]
 fn setup_snapshot(
@@ -45,6 +90,15 @@ fn setup_command(
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(SetupState::default()))
+        .setup(|app| {
+            let window = app
+                .get_webview_window("main")
+                .ok_or("main window missing")?;
+            #[cfg(target_os = "macos")]
+            configure_macos_window(&window)?;
+            window.show()?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![setup_snapshot, setup_command])
         .run(tauri::generate_context!())
         .expect("failed to run Madi parity harness");

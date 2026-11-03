@@ -1,13 +1,14 @@
 # Tauri migration status
 
 Updated 2026-11-04. **Migration is active, not complete.** macOS and Windows are
-the initial targets. The source baseline is Madi `c1390c7` / 0.4.1.
+the initial targets; the user has prioritized macOS and deferred Windows GPU
+hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 | Gate | Current evidence | Still required |
 |---|---|---|
-| G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; existing Swift tests pass | Native screenshot and action baseline, deployment-version match, fonts/SF Symbols and Windows exceptions |
-| G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Native IPC/UI interaction, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
-| G2 UI | Initial start-screen candidate, ko/en/ja static text, two themes, setup commands owned by Rust | Native visual/UX comparison, real devices/models, file staging, model gate, transcript/settings/workspace/AI/overlays |
+| G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
+| G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
+| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja static text, two themes | Complete native visual/UX comparison, real devices/models, file staging, model gate, transcript/settings/workspace/AI/overlays |
 | G3 macOS core | Translation/stdout/JSONL parsers, ordered stdout/JSONL barriers and EOF drain, deterministic session lifecycle, initial setup rules | Production lifecycle executor, storage/migration, audio capture, engine supervisor, AI policy and real end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
@@ -51,7 +52,9 @@ the initial targets. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/desktop && npm run build`: TypeScript and Vite build pass.
 - `cargo build --locked -p madi-desktop --features custom-protocol`: macOS
   standalone debug host builds. `npm run tauri dev -- --no-watch` also starts the
-  native process. A process start is not a UI interaction pass.
+  native process. The packaged debug `.app` also builds and launches after adding
+  the original ICNS. Native input-language and meeting-mode clicks exercised Rust
+  IPC: Korean plus Lecture disables speaker separation/count controls as expected.
 - Browser-only setup fixture was viewed at 1150×710 in light/dark. Local images:
   `out/desktop-parity/setup-{light,dark}-browser.jpg`. These are candidate renders,
   not the native golden images. Browser fixture selection does not emulate IPC.
@@ -92,8 +95,13 @@ translation/stdout reference checks and standalone debug Tauri builds. Windows
 reported generated permission files changed during the build; provenance now
 includes paths, and the next revision fixes their checkout line endings and
 retains the exact build diff. Do not describe that historical tree as clean.
-The new structured/stream checks are locally green; their next-revision CI is
-pending. No UI, audio or inference gate is closed by these build results.
+[Run 41694353597](https://github.com/companyjupiter/madi/actions/runs/41694353597)
+at `689b897` passed both platforms with 17 tests and the JSONL/process comparisons.
+[Run 41695232216](https://github.com/companyjupiter/madi/actions/runs/41695232216)
+at `675ceec` passed both platforms with 24 tests, including the session lifecycle.
+Downloaded executables match each report's size/hash; both revisions have clean
+source trees and empty retained build diffs. The corresponding evidence JSON
+files preserve these results. No UI, audio or inference gate is closed by them.
 
 The host currently assumes a ready-model setup fixture and holds choices in
 memory. File/start buttons emit a harness intent only. No recording, model
@@ -118,24 +126,36 @@ establish GPU inference, full-model tokenizer parity, numerical/translation/
 summary quality, latency, VRAM usage, Windows 11 UI or concurrent ASR. No Windows
 runner has been copied into Madi's release prebuilt directory.
 
-## Environment dependencies and next work
+## Native macOS baseline and next work
 
-1. Native UI capture is waiting for the Mac to be unlocked. The computer-use
-   tool reported a locked Mac; no native screenshot or click test was attempted
-   past that boundary.
-2. Full native baseline build failed because the Metal toolchain is absent.
-   `xcodebuild -downloadComponent MetalToolchain` also found a missing
-   CoreSimulator framework. `xcodebuild -runFirstLaunch` is waiting in
-   `AuthorizationCopyRights` for administrator authentication. User input is
-   pending; do not classify this as an application-code failure.
-3. Windows NVIDIA hardware/runner details are pending. Continue CPU, protocol
-   and product-core work while awaiting hardware; do not substitute compilation
-   for the GPU gate.
-4. Verify the structured/stream checks on both CI hosts, then continue the
-   session lifecycle and production process supervision ports with real-process
-   fixtures and Swift comparison.
-5. Once the native environment is ready, capture the actual baseline and
-   correct the initial screen against it before closing any UI gate.
+The user unlocked the Mac and completed Xcode authentication. First-launch setup
+and the official Metal Toolchain 27B47 download succeeded. `make_app.sh` now
+builds the original Metal engine and Swift app. The pinned runtime-asset archive
+installed all seven files with checksum verification; `STRICT_ASSETS=1` produces
+`out/parity-baseline-full/Madi.app`, and strict ad-hoc signature verification
+passes. This is a local comparison build, not a signed/notarized release.
+
+The original first-run UI downloaded and verified Whisper Q8 and DNA3.0-4B
+Q4_K_M, then reached setup. Both native apps were captured in dark Korean mode.
+The comparison exposed a 33-point extra Tauri titlebar height and inflated chip/
+text spacing. The host now measures native chrome and sets the outer setup frame
+to 1150×710 points, matching the observed Swift frame; CSS uses normal system
+font metrics and non-layout inset chip outlines. Major block positions now align.
+Titlebar appearance, glyph/width details and real-device labels still differ;
+**this is not a pixel-parity pass**. Capture hashes, bundle/model provenance and
+limits are in `evidence/macos-native-baseline-2026-11-04.json`.
+
+1. Finish native setup behavior: real device selection, popup placement, keyboard
+   behavior and file staging. Compare each with the original app.
+2. Capture first-run/model lifecycle and remaining product screens, then implement
+   them with the same state transitions and layout.
+3. Connect the session effect executor and engine process supervisor, first using
+   public file fixtures on this Mac; preserve the original user's data.
+4. Validate light/dark, ko/en/ja, resizing, fonts and system dialogs on native
+   windows. Keep visual gates open until measured.
+5. Preserve the Windows CPU/PTX/build evidence; perform GPU/model and Windows 11
+   device validation when the user provides the machine. Hardware is explicitly
+   deferred, not a current macOS work blocker.
 
 Madi work is in [draft PR #49](https://github.com/companyjupiter/madi/pull/49).
 The working feature branches are `codex/tauri-ui-parity` (Madi) and
