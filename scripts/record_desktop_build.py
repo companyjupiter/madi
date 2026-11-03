@@ -9,10 +9,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 binary = ROOT / "target/debug" / ("madi-desktop.exe" if sys.platform == "win32" else "madi-desktop")
+source_status = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).splitlines()
 report = {
     "schemaVersion": 1,
     "sourceHead": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-    "sourceDirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT)),
+    "sourceDirty": bool(source_status),
+    "sourceStatus": source_status,
     "host": platform.platform(),
     "binary": str(binary.relative_to(ROOT)),
     "bytes": binary.stat().st_size,

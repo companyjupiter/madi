@@ -1691,6 +1691,9 @@ dependencies = [
 [[package]]
 name = "madi-protocol"
 version = "0.1.0"
+dependencies = [
+ "unicode-segmentation",
+]
 
 [[package]]
 name = "markup5ever"

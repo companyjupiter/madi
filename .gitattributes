@@ -1,2 +1,4 @@
 # prebuilt engine executables: never diff, merge, or normalize line endings
 engine/prebuilt/translate-engine-* binary
+# Pinned parser source hashes must be identical in Windows and macOS checkouts.
+apps/macos/Sovereign/Engine/*.swift text eol=lf

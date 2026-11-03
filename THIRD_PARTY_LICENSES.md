@@ -7,6 +7,8 @@ license texts are reproduced below; a summary of components and changes is in [`
 The experimental Tauri migration in `apps/desktop` additionally depends on React
 and React DOM 19.3.1 (MIT) and Tauri 2.12.5 (MIT OR Apache-2.0). Their direct
 runtime MIT notices are retained in [`apps/desktop/licenses`](apps/desktop/licenses).
+The Rust protocol compatibility layer also uses unicode-segmentation 1.13.3
+(MIT OR Apache-2.0); its MIT license and copyright attribution are retained there.
 `Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
 The complete transitive binary notice bundle is still a migration release gate;
 the current parity harness is debug-only and not a product distribution.

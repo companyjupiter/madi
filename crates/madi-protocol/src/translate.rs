@@ -17,11 +17,29 @@ enum State {
     AfterReplyNewline,
 }
 
+/// Foundation changed String(data:encoding:.utf8) between macOS releases.
+/// Keep the compatibility choice explicit instead of changing golden events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Utf8BomPolicy {
+    Preserve,
+    StripLeading,
+}
+
+impl Utf8BomPolicy {
+    fn apply(self, text: &str) -> &str {
+        match self {
+            Self::Preserve => text,
+            Self::StripLeading => text.strip_prefix('\u{feff}').unwrap_or(text),
+        }
+    }
+}
+
 pub struct TranslateStreamParser {
     buffer: Vec<u8>,
     reply: Vec<u8>,
     state: State,
     preserve_newlines: bool,
+    bom_policy: Utf8BomPolicy,
 }
 
 impl Default for TranslateStreamParser {
@@ -34,11 +52,16 @@ impl TranslateStreamParser {
     const GENERATION_MARKER: &'static [u8] = b"[perf] generation";
 
     pub fn new(preserve_newlines: bool) -> Self {
+        Self::with_bom_policy(preserve_newlines, Utf8BomPolicy::StripLeading)
+    }
+
+    pub fn with_bom_policy(preserve_newlines: bool, bom_policy: Utf8BomPolicy) -> Self {
         Self {
             buffer: Vec::new(),
             reply: Vec::new(),
             state: State::Control,
             preserve_newlines,
+            bom_policy,
         }
     }
 
@@ -66,7 +89,8 @@ impl TranslateStreamParser {
                             break;
                         }
                         self.reply.append(&mut self.buffer);
-                        if let Some(text) = decode_stable_prefix(&self.reply)
+                        if let Some(text) =
+                            decode_stable_prefix_with_policy(&self.reply, self.bom_policy)
                             && !text.is_empty()
                         {
                             events.push(Event::ReplyDelta(text.to_owned()));
@@ -100,7 +124,7 @@ impl TranslateStreamParser {
 
     fn handle_control(&mut self, line: &[u8]) -> Option<Event> {
         let decoded = std::str::from_utf8(line).ok()?;
-        let mut text = decoded.strip_prefix('\u{feff}').unwrap_or(decoded);
+        let mut text = self.bom_policy.apply(decoded);
         while let Some(rest) = text.strip_prefix('>') {
             text = rest.trim_matches(foundation_whitespace);
         }
@@ -125,7 +149,7 @@ impl TranslateStreamParser {
             self.state = State::Reply;
             self.reply.clear();
         } else if text.starts_with("[perf] generation") {
-            let text = decode_stable_prefix(&self.reply)
+            let text = decode_stable_prefix_with_policy(&self.reply, self.bom_policy)
                 .unwrap_or("")
                 .trim_matches(foundation_whitespace_and_newline)
                 .to_owned();
@@ -136,7 +160,7 @@ impl TranslateStreamParser {
     }
 }
 
-fn foundation_whitespace(c: char) -> bool {
+pub(crate) fn foundation_whitespace(c: char) -> bool {
     matches!(
         c,
         '\t' | ' ' | '\u{00a0}' | '\u{1680}' | '\u{2000}'
@@ -144,7 +168,7 @@ fn foundation_whitespace(c: char) -> bool {
     )
 }
 
-fn foundation_whitespace_and_newline(c: char) -> bool {
+pub(crate) fn foundation_whitespace_and_newline(c: char) -> bool {
     foundation_whitespace(c)
         || matches!(
             c,
@@ -153,13 +177,16 @@ fn foundation_whitespace_and_newline(c: char) -> bool {
 }
 
 pub fn decode_stable_prefix(bytes: &[u8]) -> Option<&str> {
+    decode_stable_prefix_with_policy(bytes, Utf8BomPolicy::StripLeading)
+}
+
+fn decode_stable_prefix_with_policy(bytes: &[u8], policy: Utf8BomPolicy) -> Option<&str> {
     if let Ok(text) = std::str::from_utf8(bytes) {
-        // Foundation's String(data:encoding:.utf8) consumes one leading BOM.
-        return Some(text.strip_prefix('\u{feff}').unwrap_or(text));
+        return Some(policy.apply(text));
     }
     for back in 1..=3.min(bytes.len()) {
         if let Ok(text) = std::str::from_utf8(&bytes[..bytes.len() - back]) {
-            return Some(text.strip_prefix('\u{feff}').unwrap_or(text));
+            return Some(policy.apply(text));
         }
     }
     None
@@ -168,6 +195,21 @@ pub fn decode_stable_prefix(bytes: &[u8]) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn foundation_bom_compatibility_is_explicit_and_never_strips_a_trailing_bom() {
+        for policy in [Utf8BomPolicy::Preserve, Utf8BomPolicy::StripLeading] {
+            let mut parser = TranslateStreamParser::with_bom_policy(true, policy);
+            let bytes = "[perf] prefill\n\u{feff}한글\u{feff}\n[perf] generation\n";
+            let events = parser.ingest(bytes.as_bytes());
+            let expected = if policy == Utf8BomPolicy::Preserve {
+                "\u{feff}한글\u{feff}"
+            } else {
+                "한글\u{feff}"
+            };
+            assert_eq!(events.last(), Some(&Event::TurnComplete(expected.into())));
+        }
+    }
 
     #[test]
     fn capabilities_prefix_and_split_unicode_stream() {

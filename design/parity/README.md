@@ -8,6 +8,14 @@ candidate a golden image, and do not update expected images to make a diff pass.
 in aqua/darkAqua. It contains the OS and source checksum. The generated CSS uses
 explicit theme selectors. `asset-reference.json` records unchanged copied art.
 
+`translate-reference.json` and `transcribe-reference.json` pin protocol corpus,
+source and output hashes obtained from the unmodified Swift implementation on
+macOS 27.2. These are behavior references, not visual baselines. macOS 15's
+Foundation BOM preservation differs from 27.2; live native comparisons record
+the selected compatibility policy while a separate canonical hash check keeps
+the cross-platform default fixed. Do not regenerate either reference merely
+because a test fails.
+
 | Reference area | Source | Required capture/action states | Status |
 |---|---|---|---|
 | Model gate | ModelGateView.swift, FirstRunModelSetupPolicy.swift | New install; required-only/recommended; download/check/cancel/error/retry; existing models | Source inspected; capture pending |

@@ -11,11 +11,18 @@ on:
       - 'scripts/*parity.py'
       - 'tests/parity/**'
       - 'apps/macos/Sovereign/Engine/TranslateStreamParser.swift'
+      - 'apps/macos/Sovereign/Engine/EngineProtocol.swift'
+      - 'design/parity/*reference.json'
       - '.github/workflows/desktop-parity.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    # Fail at the first failing native command on Windows as well as macOS.
+    shell: bash
 
 jobs:
   desktop:
@@ -48,7 +55,14 @@ jobs:
           cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Compare against the shipping Swift parser
         if: runner.os == 'macOS'
-        run: python3 scripts/check_translate_parser_parity.py
+        run: |
+          python3 scripts/check_translate_parser_parity.py
+          python3 scripts/check_transcribe_parser_parity.py
+      - name: Compare Windows parser to pinned Swift reference
+        if: runner.os == 'Windows'
+        run: |
+          python scripts/check_translate_parser_parity.py --rust-only
+          python scripts/check_transcribe_parser_parity.py --rust-only
       - name: Build the standalone debug parity host
         run: cargo build --locked -p madi-desktop --features custom-protocol
       - name: Record build provenance
@@ -61,6 +75,7 @@ jobs:
           path: |
             out/desktop-build/report.json
             out/translate-parser-parity/report.json
+            out/transcribe-parser-parity/report.json
             target/debug/madi-desktop
             target/debug/madi-desktop.exe
           if-no-files-found: error

@@ -4,6 +4,11 @@ import Foundation
 @main
 enum TranslateOracle {
     static func main() {
+        if CommandLine.arguments.contains("--foundation-profile") {
+            let decoded = String(data: Data([0xef, 0xbb, 0xbf, 0x61]), encoding: .utf8)!
+            print(decoded == "a" ? "strip-leading-bom" : "preserve-bom")
+            return
+        }
         let input = [UInt8](FileHandle.standardInput.readDataToEndOfFile())
         var offset = 0
         func word() -> Int {

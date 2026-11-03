@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compare Rust events against the unmodified shipping Swift parser."""
 import hashlib
+import argparse
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import shutil
 import struct
 import subprocess
 import time
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "out" / "translate-parser-parity"
@@ -16,10 +18,15 @@ SWIFT = ROOT / "apps/macos/Sovereign/Engine/TranslateStreamParser.swift"
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rust-only", action="store_true", help="Validate pinned Swift reference hashes without a local Swift runtime")
+    args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "report.json").write_text('{"status":"running"}\n')
     cargo = os.environ.get("CARGO") or shutil.which("cargo") or str(Path.home() / ".cargo/bin/cargo")
-    subprocess.run(["swiftc", "-O", str(SWIFT), str(ROOT / "tests/parity/TranslateOracle.swift"),
-                    "-o", str(OUT / "swift-oracle")], check=True, cwd=ROOT)
+    if not args.rust_only:
+        subprocess.run(["swiftc", "-O", str(SWIFT), str(ROOT / "tests/parity/TranslateOracle.swift"),
+                        "-o", str(OUT / "swift-oracle")], check=True, cwd=ROOT)
     subprocess.run([cargo, "build", "-p", "madi-protocol", "--example", "translate_oracle"], check=True, cwd=ROOT)
     streams = [
         b"Loading\n[caps] pfxcache fp max\nREADY\n> PFX_OK 2 40\n",
@@ -61,22 +68,38 @@ def main():
             payload.extend(struct.pack("<I", len(chunk)))
             payload.extend(chunk)
     started = time.monotonic()
-    def run(path):
-        return subprocess.run([str(path)], input=payload, stdout=subprocess.PIPE,
+    profile = "strip-leading-bom" if args.rust_only else subprocess.check_output([str(OUT / "swift-oracle"), "--foundation-profile"], text=True).strip()
+    assert profile in ("preserve-bom", "strip-leading-bom"), profile
+    def run(path, arguments=()):
+        return subprocess.run([str(path), *arguments], input=payload, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, check=True, timeout=60).stdout
-    expected = run(OUT / "swift-oracle")
-    actual = run(ROOT / "target/debug/examples/translate_oracle")
-    (OUT / "swift.events").write_bytes(expected)
+    rust_path = ROOT / "target/debug/examples" / ("translate_oracle.exe" if sys.platform == "win32" else "translate_oracle")
+    expected = None if args.rust_only else run(OUT / "swift-oracle")
+    actual = run(rust_path, ["--preserve-bom"] if profile == "preserve-bom" else [])
+    if expected is not None:
+        (OUT / "swift.events").write_bytes(expected)
     (OUT / "rust.events").write_bytes(actual)
     report = {
         "cases": len(cases), "modes": ["translation", "summary"],
+        "foundationUTF8Profile": None if args.rust_only else profile,
+        "swiftComparison": "not-run" if args.rust_only else "live-unmodified-source",
+        "canonicalDefaultMatchesHost": None if args.rust_only else profile == "strip-leading-bom",
+        "corpusSha256": hashlib.sha256(payload).hexdigest(),
         "swiftSourceSha256": hashlib.sha256(SWIFT.read_bytes()).hexdigest(),
-        "eventStreamSha256": hashlib.sha256(expected).hexdigest(),
-        "status": "pass" if actual == expected else "fail",
+        "eventStreamSha256": hashlib.sha256(actual).hexdigest(),
+        "status": "pass" if expected is None or actual == expected else "fail",
         "seconds": round(time.monotonic() - started, 3),
     }
+    canonical = actual if profile == "strip-leading-bom" else run(rust_path)
+    report["canonicalEventStreamSha256"] = hashlib.sha256(canonical).hexdigest()
+    reference = ROOT / "design/parity/translate-reference.json"
+    pinned = json.loads(reference.read_text())
+    if report["corpusSha256"] != pinned["corpusSha256"] or report["canonicalEventStreamSha256"] != pinned["eventStreamSha256"] or report["swiftSourceSha256"] != pinned["swiftSourceSha256"]:
+        report["status"] = "fail"
+        (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        raise SystemExit("canonical macOS 27.2 parser reference changed; investigate before updating it")
     (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-    if actual != expected:
+    if expected is not None and actual != expected:
         import difflib
         print("".join(list(difflib.unified_diff(expected.decode().splitlines(True),
                                               actual.decode().splitlines(True)))[:100]))

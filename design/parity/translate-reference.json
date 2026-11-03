@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "reference": "Unmodified Swift TranslateStreamParser on macOS 27.2, Swift 6.4.2",
+  "sourceCommit": "c1390c750f2506e556a277421e146d80195ab797",
+  "swiftSourceSha256": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6",
+  "foundationUTF8Profile": "strip-leading-bom",
+  "cases": 5082,
+  "corpusSha256": "1098414d9a4b122821672ea979d1320617efa037fdd57a523ca7abc6379b2dca",
+  "eventStreamSha256": "8c6f39fb05bf1701bd090fb244a42cfca7ba4ed112d9a8bf1b3083e9ae128d39"
+}
