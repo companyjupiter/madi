@@ -20,6 +20,7 @@ For an executable with embedded frontend assets (no Vite server):
 
 ```sh
 npm run build
+npm run prepare-native
 cd ../..
 cargo build --locked -p madi-desktop --features custom-protocol
 ```
@@ -29,6 +30,11 @@ implemented. The debug executable has no recording, transcription,
 model downloader, saving or updater. Start buttons currently emit a
 `madi-parity-intent` DOM event for the visual harness only; they do not pretend to
 start an inference session. Do not distribute this as a working Madi release.
+
+macOS dev/build hooks stage the Cargo-built audio decoder as a native sidecar.
+The debug `.app` is ad-hoc signed and requires macOS 14+. Installed lookup uses
+only the helper beside the executable. The headless relocation/package check
+is documented in `docs/runtime/NATIVE_DECODER_PACKAGE.md`.
 
 Language, translation-target, meeting-mode, diarization and capture-source and microphone-device
 selection commands go through the real Rust `madi-core` state in the native host.

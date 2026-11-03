@@ -35,8 +35,8 @@ late successful imports rejected by the session generation.
 
 The Cargo build script compiles the helper for macOS 14+ on arm64/x86_64 using
 Xcode's Swift compiler. `development_helper()` returns the local build artifact
-for tests/probes only. Tauri still needs to bundle/sign the helper and resolve it
-through the installed application's resource directory. Windows decoding is not
+for tests/probes only. Tauri now bundles/ad-hoc signs the helper and resolves it
+beside the executable; see [native decoder package](NATIVE_DECODER_PACKAGE.md). Windows decoding is not
 implemented; no Windows codec support is implied by cross-platform compilation.
 
 Five native Rust regressions cover concurrent non-silent stereo conversion,

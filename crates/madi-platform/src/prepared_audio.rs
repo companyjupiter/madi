@@ -43,6 +43,37 @@ pub struct PreparedAudio {
     directory: TempDir,
     path: PathBuf,
 }
+
+/// Installed sidecar only. Never fall back to a Cargo output directory or PATH.
+pub fn bundled_helper() -> io::Result<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let executable = std::env::current_exe()?;
+        let directory = executable
+            .parent()
+            .ok_or_else(|| io::Error::other("missing executable directory"))?
+            .canonicalize()?;
+        let helper = directory.join("madi-audio-decode").canonicalize()?;
+        if helper.parent() != Some(directory.as_path()) || !helper.is_file() {
+            return Err(io::Error::other(
+                "native decoder is not beside the installed executable",
+            ));
+        }
+        if helper.metadata()?.permissions().mode() & 0o111 == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "native decoder is not executable",
+            ));
+        }
+        Ok(helper)
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "bundled audio decoding is currently macOS-only",
+    ))
+}
 impl PreparedAudio {
     pub fn path(&self) -> &Path {
         &self.path

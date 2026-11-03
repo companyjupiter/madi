@@ -20,8 +20,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
 - `cargo test -p madi-core -p madi-protocol -p madi-platform`: 46 tests on macOS
   (11 core, 14 protocol, 21 adapter/configuration/executor tests; Windows has 40).
-  The current local set passes; `cfdeecb` CI passed the previous 39/33-test set.
-  Current-revision CI remains required.
+  The current set passes locally and in `af3f203` macOS/Windows CI. The decoder
+  packaging revision adds checks that still require its own CI result.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -126,6 +126,11 @@ keys used Windows backslashes, while the pinned reference uses repository-style
 slashes. The report now serializes those keys with `as_posix()`. Reference hashes
 and configuration behavior are unchanged. A corrected Windows CI run is still
 required; the failed attempt is not counted as a green gate.
+The correction passed [run 41707901563](https://github.com/companyjupiter/madi/actions/runs/41707901563)
+at `8589468` on both hosts (40/34 tests and unchanged 601-case configuration hash).
+[Run 41708512521](https://github.com/companyjupiter/madi/actions/runs/41708512521)
+at `af3f203` then passed 46/40 tests including the six file-executor regressions.
+Both revisions have downloaded, hash-verified artifacts and clean source trees.
 
 The host currently assumes a ready-model setup fixture and holds choices in
 memory. Native macOS file selection/drop now stages a file; start buttons still
@@ -225,6 +230,15 @@ the real JFK clip produces Processing → Done with exactly one completion and n
 owned scratch remaining. See `runtime/FILE_SESSION_EXECUTOR.md` and
 `evidence/macos-file-session-2026-11-04.json`. Live capture effects, model admission,
 storage/translation and desktop transcript UI remain open.
+
+The native decoder is now bundled beside the Tauri executable and ad-hoc signed.
+A copied `.app` outside the repository resolves and runs that helper with only
+system tools on PATH, preserves the original synthetic input, and fails closed
+when its copied helper is absent. Deep/strict signature verification passes.
+The candidate is macOS arm64/14+ and is not notarized or released. See
+`runtime/NATIVE_DECODER_PACKAGE.md` and `evidence/macos-desktop-package-2026-11-04.json`.
+CI packaging checks are added; ASR/LLM assets, model admission and product UI wiring
+remain open.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.

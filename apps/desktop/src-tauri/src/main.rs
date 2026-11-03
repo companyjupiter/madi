@@ -100,6 +100,18 @@ fn audio_inputs(
 }
 
 fn main() {
+    // Headless package check: resolve exactly what the installed runtime will
+    // launch, without creating an AppKit application or reading any user data.
+    if std::env::args_os().skip(1).eq(["--native-helper-path"]) {
+        match madi_platform::prepared_audio::bundled_helper() {
+            Ok(path) => println!("{}", path.display()),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     tauri::Builder::default()
         .manage(Mutex::new(SetupHost::default()))
         .on_webview_event(setup_host::handle_drop)
@@ -108,7 +120,10 @@ fn main() {
                 .get_webview_window("main")
                 .ok_or("main window missing")?;
             #[cfg(target_os = "macos")]
-            configure_macos_window(&window)?;
+            {
+                madi_platform::prepared_audio::bundled_helper()?;
+                configure_macos_window(&window)?;
+            }
             window.show()?;
             Ok(())
         })
