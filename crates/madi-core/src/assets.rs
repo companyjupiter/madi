@@ -1,5 +1,5 @@
 //! Shipping AssetManifest values and deterministic model-selection policy.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,7 +34,7 @@ pub const TRANSLATION_2B: RemoteAsset = RemoteAsset {
 };
 pub const TRANSLATION_TIER_THRESHOLD: u64 = 12 * (1 << 30);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TranslationVariant {
     #[serde(rename = "quality4B")]
     Quality4B,

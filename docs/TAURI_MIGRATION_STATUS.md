@@ -254,6 +254,13 @@ install/reuse verification. See `runtime/MODEL_ASSET_INTEGRITY.md` and
 `evidence/macos-model-integrity-2026-11-04.json`. Desktop admission and download
 lifecycle are not connected by this layer.
 
+The pure first-run policy is also ported: an existing Whisper installation enters
+without a first-run choice; explicitly recommended setup waits for DNA only when
+its engine is present. All 48 readiness/choice/variant combinations match the
+unchanged Swift policy, including missing-only download totals. The original five
+Swift policy tests pass. See `runtime/FIRST_RUN_MODEL_POLICY.md`; this does not
+yet connect the native installer, first-run UI or app entry gate.
+
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.
 2. Capture first-run/model lifecycle and remaining product screens, then implement
