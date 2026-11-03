@@ -5,6 +5,9 @@ fn main() {
             "setup_command",
             "audio_inputs",
             "choose_file",
+            "models_snapshot",
+            "models_command",
+            "models_artwork",
         ]));
     tauri_build::try_build(attributes).expect("failed to build the parity host");
 }

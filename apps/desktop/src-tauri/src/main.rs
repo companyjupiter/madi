@@ -12,7 +12,9 @@ compile_error!(
 use madi_core::setup::{SetupCommand, SetupState};
 use std::sync::Mutex;
 use tauri::Manager;
+mod models_host;
 mod setup_host;
+use models_host::{models_artwork, models_command, models_snapshot};
 use setup_host::{SetupHost, choose_file};
 
 #[cfg(target_os = "macos")]
@@ -130,6 +132,7 @@ fn main() {
         .manage(Mutex::new(SetupHost::default()))
         .on_webview_event(setup_host::handle_drop)
         .setup(|app| {
+            models_host::install(app)?;
             let window = app
                 .get_webview_window("main")
                 .ok_or("main window missing")?;
@@ -145,8 +148,12 @@ fn main() {
             setup_snapshot,
             setup_command,
             audio_inputs,
-            choose_file
+            choose_file,
+            models_snapshot,
+            models_command,
+            models_artwork
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Madi parity harness");
+        .build(tauri::generate_context!())
+        .expect("failed to build Madi parity harness")
+        .run(|app, event| models_host::on_run_event(app, &event));
 }

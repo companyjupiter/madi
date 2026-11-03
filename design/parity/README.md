@@ -53,7 +53,8 @@ the default product exposes them.
 
 ## Open visual/interaction gaps
 
-- The Mac is unlocked and Xcode/Metal setup is complete. Strict-asset native
+- Xcode/Metal setup is complete. The Mac relocked after the baseline captures;
+  renewed native interaction/capture is waiting for unlock. Strict-asset native
   baseline and packaged Tauri debug builds pass. Dark Korean setup has been
   compared and its outer frame/major spacing corrected; remaining native
   titlebar appearance, font widths and other screen/state coverage are open.
@@ -61,7 +62,9 @@ the default product exposes them.
   not proven identical to SwiftUI or licensed equivalents on Windows.
 - Read-only macOS device enumeration now matches the native five-device list and
   default. New Tauri selection/popup placement is built but awaiting unlocked
-  native verification. The ready-model fixture still has no actual model gate.
+  native verification. The macOS model gate is now connected to native readiness
+  and explicit downloads, with source-derived copy and native symbol generation;
+  its full native visual/interaction comparison remains open.
 - Popup positioning, keyboard focus, IME, file staging and transition behavior
   still need native-oracle scenarios. No generic screenshot tolerance is approved.
 - Windows titlebar/buttons, system dialogs and platform wording remain open;

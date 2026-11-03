@@ -3,7 +3,8 @@
 This is an **isolated, debug-only UI parity harness**, not the Madi product.
 The existing `apps/macos` app remains the shipping implementation.
 The host has its own `tv.devart.madi.parity` identifier and only in-memory setup
-state. It does not read or migrate the user's settings, models or meetings.
+state. On macOS it now reads the original model locations and exposes explicit
+model downloads. It does not migrate settings or read/write meetings.
 
 ## Run
 
@@ -37,8 +38,8 @@ cargo build --locked -p madi-desktop --features custom-protocol
 ```
 
 Release builds deliberately fail until product runtime and migration gates are
-implemented. The debug executable has no recording, transcription,
-model downloader, saving or updater. Start buttons currently emit a
+implemented. The debug executable has no connected recording, transcription,
+saving or updater. Start buttons currently emit a
 `madi-parity-intent` DOM event for the visual harness only; they do not pretend to
 start an inference session. Do not distribute this as a working Madi release.
 
@@ -65,6 +66,17 @@ CTA availability are implemented, with native interaction/visual validation
 pending. Windows selection is not implemented. See
 `docs/runtime/NATIVE_FILE_STAGING.md` for scope and the live Swift comparison.
 
+The macOS first-run guide now uses the original model size gate and hardware
+selection, with native `ByteCountFormatter` labels and runtime SF Symbols. It
+appears only when required by the original entry policy. Choosing a setup is an
+explicit download action: Rust downloads only pinned manifest assets, verifies
+size/SHA-256, then publishes them in `~/Library/Application Support/Madi`.
+Cancel/retry, transcription-first continuation and quit cleanup are connected.
+No network starts during initialization. Existing valid-size models are reused;
+startup size checks are not full integrity verification. See
+`docs/runtime/NATIVE_MODEL_SETUP.md` for behavior, tests and remaining parity gaps.
+Windows retains the ready-model setup harness; no macOS model downloads run there.
+
 ## Visual reference and limits
 
 The start screen is derived from `ContentView.setToStartCard` at `c1390c7`.
@@ -87,9 +99,10 @@ Rust command behavior. Native WebView checks remain required.
 
 Open differences: fonts and SF Symbols, native window chrome, exact line
 metrics, native validation of microphone selection/overflow, translation availability
-and keyboard focus, staged file interaction/geometry, model gate and all working screens.
-The current start fixture assumes the models are ready; it does not infer that
-from this machine. These are migration tasks, not approved parity exceptions.
+and keyboard focus, staged file interaction/geometry, model-gate visual/interaction
+parity and all working screens. The browser fixture assumes models are ready;
+the macOS host reads native model readiness. These are migration tasks, not
+approved parity exceptions.
 
 See `docs/TAURI_MIGRATION_PLAN.md`, `docs/TAURI_MIGRATION_STATUS.md` and
 `design/parity/README.md` at the repository root for gates and evidence.

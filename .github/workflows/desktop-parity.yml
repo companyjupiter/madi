@@ -11,6 +11,7 @@ on:
       - 'scripts/*parity.py'
       - 'scripts/prepare_desktop_native.mjs'
       - 'scripts/prepare_desktop_runtime.mjs'
+      - 'scripts/sync_desktop_resources.py'
       - 'engine/**'
       - 'apps/macos/scripts/build_engine.sh'
       - 'tests/parity/**'
@@ -28,6 +29,9 @@ on:
       - 'apps/macos/Sovereign/SessionController.swift'
       - 'apps/macos/Sovereign/Model/AssetManifest.swift'
       - 'apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift'
+      - 'apps/macos/Sovereign/UI/ModelGateView.swift'
+      - 'apps/macos/Sovereign/Model/ModelDownloader.swift'
+      - 'apps/macos/Sovereign/Model/TranslateModelDownloader.swift'
       - 'web/fixtures/*.events.jsonl'
       - 'design/parity/*reference.json'
       - '.github/workflows/desktop-parity.yml'
@@ -77,6 +81,8 @@ jobs:
           npm run build
       - name: Check formatting and shared behavior
         run: |
+          python scripts/sync_desktop_resources.py
+          git diff --exit-code -- apps/desktop/public/assets apps/desktop/src/strings.generated.json apps/desktop/src/model-strings.generated.json design/parity/asset-reference.json
           cargo fmt --all --check
           cargo test --locked -p madi-core -p madi-protocol -p madi-platform
           cargo clippy --locked --workspace --all-targets -- -D warnings
@@ -92,6 +98,8 @@ jobs:
           python3 scripts/check_asr_config_parity.py
           python3 scripts/check_asset_manifest_parity.py
           python3 scripts/check_model_setup_parity.py
+          python3 scripts/check_model_gate_parity.py
+          python3 scripts/check_model_presentation_parity.py
           swiftc -parse-as-library apps/macos/Sovereign/Audio/AudioDecode.swift apps/macos/Sovereign/Audio/Resampler.swift apps/macos/Sovereign/Audio/WavWriter.swift apps/macos/Tests/AudioDecodeLimitTests.swift -o "$RUNNER_TEMP/madi-audio-decode-parity"
           "$RUNNER_TEMP/madi-audio-decode-parity"
       - name: Compare Windows parser to pinned Swift reference
@@ -104,6 +112,7 @@ jobs:
           python scripts/check_asr_config_parity.py --rust-only
           python scripts/check_asset_manifest_parity.py --rust-only
           python scripts/check_model_setup_parity.py --rust-only
+          python scripts/check_model_gate_parity.py --rust-only
       - name: Build the standalone debug parity host
         run: cargo build --locked -p madi-desktop --features custom-protocol
       - name: Verify the relocated macOS app and native decoder
@@ -130,6 +139,8 @@ jobs:
             out/asr-config-parity/report.json
             out/asset-manifest-parity/report.json
             out/model-setup-parity/report.json
+            out/model-gate-parity/report.json
+            out/model-presentation-parity/report.json
             out/desktop-package/report.json
             out/desktop-package/Madi-UI-Parity.app.zip
             target/debug/madi-desktop

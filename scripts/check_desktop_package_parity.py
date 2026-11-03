@@ -45,6 +45,12 @@ def main():
                          (ROOT / "engine/prebuilt/LICENSE.md", "TRANSLATE_ENGINE_LICENSE.md")]:
         assert digest(bundle / "Contents/Resources" / name) == digest(source)
     engines = {}
+    direct_notices = {}
+    for source in sorted((ROOT / "apps/desktop/licenses").iterdir()):
+        assert source.is_file()
+        path = bundle / "Contents/Resources/apps/desktop/licenses" / source.name
+        assert digest(path) == digest(source)
+        direct_notices[source.name] = digest(path)
     for name in ("transcribe", "translate-engine-2b", "translate-engine-4b"):
         path = bundle / "Contents/MacOS" / name
         subprocess.run(["codesign", "--verify", "--strict", str(path)], check=True, capture_output=True)
@@ -124,6 +130,7 @@ def main():
         "missingOrLinkedRuntimeFilesRejected": len(required),
         "runtimeAssets": runtime_assets["files"], "engines": engines,
         "runtimeNoticesPreserved": True,
+        "directRuntimeNotices": direct_notices,
         "helperSHA256": digest(original_helper), "helperBytes": original_helper.stat().st_size,
         "archive": str(archive.relative_to(ROOT)), "archiveSHA256": digest(archive),
         "productRelease": False, "notarized": False,

@@ -8,8 +8,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 |---|---|---|
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
-| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja static text, two themes | Complete native visual/UX comparison, full native device interaction/models, file staging, model gate, transcript/settings/workspace/AI/overlays |
-| G3 macOS core | Translation/stdout/JSONL parsers, ordered delivery, deterministic lifecycle, typed file configuration, file effect executor with real native decode/ASR smoke, initial setup rules | Live lifecycle executor, storage/migration, audio capture, model admission, AI policy and product end-to-end |
+| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model-guide component connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, transcript/settings/workspace/AI/overlays |
+| G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, file executor with native decode/ASR smoke, explicit verified model downloads and first-run admission | Live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
@@ -18,11 +18,15 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
-- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 49 tests pass
-  locally on macOS (11 core, 14 protocol, 24 platform tests). The last committed
-  model revision `3954f46` passed 49/43 macOS/Windows tests and package checks.
-  First-run policy revision `a882fbd` also passed both platforms. The later
-  inference runtime package still requires its own CI result.
+- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 57 tests pass
+  locally on macOS (11 core, 14 protocol, 32 platform tests), including eight
+  model transfer/service tests. Previous runtime package `fb67b46` passed both
+  CI platforms with clean, hash-verified artifacts. The new download/UI revision
+  still requires its own CI result.
+- Model guide: 210 action-visibility cases match extracted unchanged Swift view
+  rules. Nine byte-count cases and five native symbol dimensions match live
+  Foundation/AppKit; generated owned PNGs contain visible/transparent pixels.
+  These checks do not establish native UI pixel or interaction parity.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -144,10 +148,16 @@ at `a882fbd` passed the 48-case first-run policy comparison too. Downloaded
 executables match their reports, with clean source trees. Dedicated receipts
 record the source/corpus/result hashes and limits.
 
-The host currently assumes a ready-model setup fixture and holds choices in
-memory. Native macOS file selection/drop now stages a file; start buttons still
-emit a harness intent only. No recording, model
-download, inference, file writing, data migration or updater is connected yet.
+[Run 41713919046](https://github.com/companyjupiter/madi/actions/runs/41713919046)
+at `fb67b46` passed both hosts and the full relocated macOS inference package
+check. Downloaded binaries/archive, inner decoder, three engines and seven assets
+match their reports; clean trees and empty build diffs are verified in
+`evidence/desktop-ci-fb67b46-2026-11-04.json`.
+
+The macOS host now reads real model readiness and connects explicit first-run
+downloads. Setup choices remain in memory. Native file selection/drop stages a
+file; recording/transcription start buttons still emit a harness intent only.
+Meeting saving, preference/data migration and updater remain unconnected.
 
 ## SovereignLLM Windows engine
 
@@ -265,8 +275,8 @@ The pure first-run policy is also ported: an existing Whisper installation enter
 without a first-run choice; explicitly recommended setup waits for DNA only when
 its engine is present. All 48 readiness/choice/variant combinations match the
 unchanged Swift policy, including missing-only download totals. The original five
-Swift policy tests pass. See `runtime/FIRST_RUN_MODEL_POLICY.md`; this does not
-yet connect the native installer, first-run UI or app entry gate.
+Swift policy tests pass. See `runtime/FIRST_RUN_MODEL_POLICY.md`; the native guide
+and download service are now connected as described below.
 
 The next local package now includes the original rebuilt ASR engine, verified
 DNA2B/4B executables, seven pinned runtime assets and their notices. The relocated
@@ -276,7 +286,20 @@ bundled decoder/ASR/assets produces 22 words and 26 JSONL events with one comple
 no failures and clean owned scratch; the original is preserved. See
 `runtime/NATIVE_RUNTIME_PACKAGE.md`, `evidence/macos-runtime-package-2026-11-04.json`
 and `evidence/macos-bundled-asr-2026-11-04.json`. This is local package/runtime
-evidence, not connected desktop transcription or full UI parity; its CI is pending.
+evidence, not connected desktop transcription or full UI parity. Its CI passed
+on both platforms at `fb67b46`.
+
+The macOS model guide now uses native readiness, byte-count formatting, lazily
+generated SF Symbols and 26 original ko/en/ja string triples. Explicit actions
+start pinned HTTPS downloads, verify complete size/SHA-256, preserve previous
+files on failure, and atomically publish verified files. Cancel/retry, continuing
+with Whisper while DNA downloads, duplicate starts and exit cleanup have real
+HTTP/filesystem tests. The new `.app` builds, relocates and passes package checks;
+it also retains all 12 direct-runtime notice files. See
+`runtime/NATIVE_MODEL_SETUP.md` and `evidence/macos-model-setup-2026-11-04.json`.
+Native click/visual validation is still waiting for Mac unlock; no actual user
+model was re-downloaded or replaced for these tests. Network error text, exact
+controls, settings model lifecycle and all product end-to-end gates remain open.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.

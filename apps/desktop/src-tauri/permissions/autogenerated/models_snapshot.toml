@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-models-snapshot"
+description = "Enables the models_snapshot command without any pre-configured scope."
+commands.allow = ["models_snapshot"]
+
+[[permission]]
+identifier = "deny-models-snapshot"
+description = "Denies the models_snapshot command without any pre-configured scope."
+commands.deny = ["models_snapshot"]

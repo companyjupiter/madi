@@ -2,7 +2,7 @@
 // No model download, user-data access or release publication is performed.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,6 +52,11 @@ export function prepareRuntime(target) {
   stage(join(root, 'engine/metal/whisper.metallib'), join(resources, 'whisper.metallib'));
   for (const name of ['LICENSE', 'NOTICE', 'THIRD_PARTY_LICENSES.md']) stage(join(root, name), join(resources, name));
   stage(join(root, 'engine/prebuilt/LICENSE.md'), join(resources, 'TRANSLATE_ENGINE_LICENSE.md'));
+  // Preserve the relative notice links from THIRD_PARTY_LICENSES.md inside the
+  // app, including direct Rust/React notices retained during the migration.
+  for (const name of readdirSync(join(root, 'apps/desktop/licenses')).sort()) {
+    stage(join(root, 'apps/desktop/licenses', name), join(resources, 'apps/desktop/licenses', name));
+  }
   const report = { schemaVersion: 1, target, records, runtimeAssetsArchiveSHA256: assets.archiveSHA256, productRelease: false };
   writeFileSync(join(out, 'runtime.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(`Staged ${records.length} inference runtime files and notices for ${target}`);

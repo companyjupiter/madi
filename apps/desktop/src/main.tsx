@@ -2,6 +2,8 @@ import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type ReactNod
 import { createRoot } from 'react-dom/client';
 import { audioInputs, browserFixture, chooseFile, command, snapshot, watchSetup, type InputDevices, type Language, type MeetingMode, type SetupCommand, type SetupState } from './bridge';
 import { MiddleText } from './MiddleText';
+import { ModelGate } from './ModelGate';
+import { modelArtwork, modelCommand, modelSnapshot, watchModels, type ModelArtwork, type ModelCommand, type ModelSnapshot } from './models';
 import strings from './strings.generated.json';
 import './theme.generated.css';
 import './styles.css';
@@ -28,6 +30,49 @@ function Icon({ name, size }: { name: string; size: number }) {
 }
 
 function App() {
+  const [models, setModels] = useState<ModelSnapshot | null | undefined>(undefined);
+  const [artwork, setArtwork] = useState<ModelArtwork | null>(null);
+  const [error, setError] = useState('');
+  const queue = useRef(Promise.resolve());
+  useEffect(() => {
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    const receive = (value: ModelSnapshot | null) => {
+      if (active) setModels(previous => previous && value && previous.revision > value.revision ? previous : value);
+    };
+    // Subscribe before reading readiness; a completed download cannot be lost
+    // between a snapshot response and installation of the event listener.
+    void watchModels(receive).then(async cleanup => {
+      if (!active) { cleanup(); return; }
+      unlisten = cleanup;
+      receive(await modelSnapshot());
+    }).catch(reason => { if (active) setError(String(reason)); });
+    return () => { active = false; unlisten?.(); };
+  }, []);
+  const needsGuide = Boolean(models && !models.canEnterApp);
+  useEffect(() => {
+    if (!needsGuide || artwork) return;
+    let active = true;
+    void modelArtwork().then(value => {
+      if (!value) throw new Error('native model artwork unavailable');
+      if (active) setArtwork(value);
+    }).catch(reason => { if (active) setError(String(reason)); });
+    return () => { active = false; };
+  }, [needsGuide, artwork]);
+  function send(command: ModelCommand) {
+    queue.current = queue.current.then(async () => {
+      const value = await modelCommand(command);
+      setModels(previous => previous && previous.revision > value.revision ? previous : value);
+    }).catch(reason => setError(String(reason)));
+  }
+  if (error) return <pre role="alert" className="harness-error">{error}</pre>;
+  if (models === undefined) return null;
+  if (models && !models.canEnterApp) return artwork
+    ? <ModelGate snapshot={models} artwork={artwork} language={uiLanguage} send={send} /> : null;
+  return <SetupScreen />;
+}
+
+function SetupScreen() {
   const [state, setState] = useState<SetupState | null>(null);
   const [inputs, setInputs] = useState<InputDevices>({ supported: false, devices: [], defaultInputId: null });
   const [open, setOpen] = useState<string | null>(null);
