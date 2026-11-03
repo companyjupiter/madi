@@ -114,7 +114,7 @@ struct Case: Decodable {
     report = {
         "schemaVersion": 1, "status": "passed", "cases": len(cases),
         "swiftComparison": "not-run" if args.rust_only else "live-extracted-unmodified-source",
-        "sources": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in (ENGINE, SESSION)},
+        "sources": {path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in (ENGINE, SESSION)},
         "extractedSourceSHA256": hashlib.sha256((config + launch + properties + token_table).encode()).hexdigest(),
         "corpusSHA256": hashlib.sha256(payload).hexdigest(),
         "resultSHA256": hashlib.sha256(json.dumps(rust, ensure_ascii=False, sort_keys=True).encode()).hexdigest(),
@@ -124,7 +124,7 @@ struct Case: Decodable {
     reference = json.loads((ROOT / "design/parity/asr-config-reference.json").read_text(encoding="utf-8"))
     for key in ("cases", "sources", "extractedSourceSHA256", "corpusSHA256", "resultSHA256"):
         if reference[key] != report[key]:
-            raise SystemExit(f"ASR configuration reference differs: {key}")
+            raise SystemExit(f"ASR configuration reference differs: {key}\n" + json.dumps({"expected": reference[key], "actual": report[key]}, indent=2))
     (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
 

@@ -120,6 +120,13 @@ at `cfdeecb` also passed both hosts with the macOS 39-case media staging differe
 and clean hash-verified artifacts. No complete UI, audio or
 inference gate is closed by these build results.
 
+[Run 41706943657](https://github.com/companyjupiter/madi/actions/runs/41706943657)
+at `2b5515a` failed the new Windows ASR configuration reference check: report source
+keys used Windows backslashes, while the pinned reference uses repository-style
+slashes. The report now serializes those keys with `as_posix()`. Reference hashes
+and configuration behavior are unchanged. A corrected Windows CI run is still
+required; the failed attempt is not counted as a green gate.
+
 The host currently assumes a ready-model setup fixture and holds choices in
 memory. Native macOS file selection/drop now stages a file; start buttons still
 emit a harness intent only. No recording, model
