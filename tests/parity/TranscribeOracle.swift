@@ -31,6 +31,12 @@ struct TranscribeOracle {
         }
     }
     static func main() {
+        if CommandLine.arguments.contains("--float-profile") {
+            let upper = Double("0X1p2") != nil
+            let symbolic = Double("nan(foo)") != nil
+            print(upper && symbolic ? "legacy" : (!upper && !symbolic ? "current" : "unknown"))
+            return
+        }
         let data = FileHandle.standardInput.readDataToEndOfFile()
         var cursor = 0
         func word() -> Int {

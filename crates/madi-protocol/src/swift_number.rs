@@ -1,6 +1,13 @@
 //! Swift Double accepts C-style hexadecimal floats and numeric NaN payloads.
 //! This small compatibility boundary keeps locale out of the engine protocol.
-pub(crate) fn double(text: &str) -> Option<f64> {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FloatSyntax {
+    #[default]
+    CurrentSwift,
+    LegacySwift,
+}
+
+pub(crate) fn double_with_syntax(text: &str, syntax: FloatSyntax) -> Option<f64> {
     if let Ok(value) = text.parse() {
         return Some(value);
     }
@@ -25,6 +32,13 @@ pub(crate) fn double(text: &str) -> Option<f64> {
                 c.is_ascii_digit()
             }
         }) {
+            if syntax == FloatSyntax::LegacySwift
+                && digits
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                return Some(f64::from_bits(sign | 0x7ff8_0000_0000_0000));
+            }
             return None;
         }
         // Swift's payload parser wraps at UInt64 then masks off the quiet bit.
@@ -36,7 +50,11 @@ pub(crate) fn double(text: &str) -> Option<f64> {
             sign | 0x7ff8_0000_0000_0000 | (bits & 0x0007_ffff_ffff_ffff),
         ));
     }
-    let hex = unsigned.strip_prefix("0x")?;
+    let hex = unsigned.strip_prefix("0x").or_else(|| {
+        (syntax == FloatSyntax::LegacySwift)
+            .then(|| unsigned.strip_prefix("0X"))
+            .flatten()
+    })?;
     let (mantissa, exponent) = if let Some(index) = hex.find(['p', 'P']) {
         let exponent = &hex[index + 1..];
         let (minus, digits) = if let Some(rest) = exponent.strip_prefix('-') {
@@ -124,6 +142,25 @@ fn round_shift(value: u64, shift: i64, sticky: bool) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn double(text: &str) -> Option<f64> {
+        double_with_syntax(text, FloatSyntax::CurrentSwift)
+    }
+
+    #[test]
+    fn legacy_syntax_is_explicit_and_keeps_current_default() {
+        assert_eq!(
+            double_with_syntax("0X1p2", FloatSyntax::LegacySwift),
+            Some(4.0)
+        );
+        assert_eq!(
+            double_with_syntax("nan(foo)", FloatSyntax::LegacySwift)
+                .unwrap()
+                .to_bits(),
+            0x7ff8_0000_0000_0000
+        );
+        assert_eq!(double("0X1p2"), None);
+        assert_eq!(double("nan(foo)"), None);
+    }
 
     #[test]
     fn hex_rounds_half_even_and_preserves_subnormal_boundaries() {

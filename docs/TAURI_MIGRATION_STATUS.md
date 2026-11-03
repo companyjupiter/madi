@@ -60,7 +60,13 @@ decisions; they are not silently inferred from the build host.
 
 The stdout line corpus is also pinned in `transcribe-reference.json` and runs
 on Windows without requiring Swift (`--rust-only`, explicitly reported as no
-live Swift execution). The corrected revision's CI is still pending.
+live Swift execution). The second run [41692423592](https://github.com/companyjupiter/madi/actions/runs/41692423592)
+at `fe714b9` passed the translation comparison on macOS 15, then found a separate
+stdout numeric syntax difference: its Swift runtime accepts uppercase `0X` and
+symbolic `nan(foo)`, whereas Swift 6.4.2 on macOS 27.2 rejects them. The stdout
+parser now exposes an explicit legacy float-syntax policy; its live comparison
+probes that runtime and still checks the unchanged canonical default hash
+independently. The follow-up revision's CI remains pending.
 
 The host currently assumes a ready-model setup fixture and holds choices in
 memory. File/start buttons emit a harness intent only. No recording, model

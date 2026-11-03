@@ -1,4 +1,4 @@
-use madi_protocol::transcribe::{Decoder, Event, SpeakerLabel};
+use madi_protocol::transcribe::{Decoder, Event, FloatSyntax, SpeakerLabel};
 use std::io::{self, Read, Write};
 
 fn word(cursor: &mut io::Cursor<Vec<u8>>) -> io::Result<u32> {
@@ -63,7 +63,12 @@ fn main() -> io::Result<()> {
     let mut input = io::Cursor::new(input);
     let mut output = io::BufWriter::new(io::stdout().lock());
     for case in 0..word(&mut input)? {
-        let mut decoder = Decoder::default();
+        let syntax = if std::env::args().any(|arg| arg == "--legacy-float-syntax") {
+            FloatSyntax::LegacySwift
+        } else {
+            FloatSyntax::CurrentSwift
+        };
+        let mut decoder = Decoder::with_float_syntax(syntax);
         for line in 0..word(&mut input)? {
             let mut bytes = vec![0; word(&mut input)? as usize];
             input.read_exact(&mut bytes)?;

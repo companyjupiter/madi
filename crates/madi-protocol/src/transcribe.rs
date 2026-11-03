@@ -1,6 +1,7 @@
 //! Stateful stdout line contract from the shipping EngineProtocol.swift.
 //! Framing, stdout/JSONL barriers and process lifetime are separate adapters.
-use crate::swift_number::double;
+pub use crate::swift_number::FloatSyntax;
+use crate::swift_number::double_with_syntax;
 use crate::translate::{foundation_whitespace, foundation_whitespace_and_newline};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -54,9 +55,17 @@ pub enum Event {
 pub struct Decoder {
     in_words: bool,
     in_preview: bool,
+    float_syntax: FloatSyntax,
 }
 
 impl Decoder {
+    pub fn with_float_syntax(float_syntax: FloatSyntax) -> Self {
+        Self {
+            float_syntax,
+            ..Self::default()
+        }
+    }
+
     pub fn decode(&mut self, raw: &str) -> Event {
         let line = raw.trim_matches(foundation_whitespace_and_newline);
         if line == "<<PREVIEW_BEGIN>>" {
@@ -71,7 +80,7 @@ impl Decoder {
         }
         let partial = line.strip_prefix("«partial ").and_then(|rest| {
             let (time, text) = rest.split_once("» ")?;
-            Some((double(time)?, text))
+            Some((double_with_syntax(time, self.float_syntax)?, text))
         });
         if self.in_preview {
             if line.starts_with("=== WORD TIMESTAMPS") {
@@ -82,7 +91,8 @@ impl Decoder {
                 return Event::PreviewPartial(text.into());
             } else if self.in_words
                 && line.starts_with('[')
-                && let Some(Event::Word { t0, t1, text, .. }) = parse_word(line)
+                && let Some(Event::Word { t0, t1, text, .. }) =
+                    parse_word_with_syntax(line, self.float_syntax)
             {
                 return Event::PreviewWord { t0, t1, text };
             }
@@ -143,18 +153,18 @@ impl Decoder {
                 text: text.into(),
             };
         }
-        if let Some(label) = parse_speaker(line, "SPKFIX") {
+        if let Some(label) = parse_speaker_with_syntax(line, "SPKFIX", self.float_syntax) {
             return Event::SpeakerFix(label);
         }
-        if let Some(label) = parse_speaker(line, "SPKOV") {
+        if let Some(label) = parse_speaker_with_syntax(line, "SPKOV", self.float_syntax) {
             return Event::SpeakerOverlap(label);
         }
-        if let Some(label) = parse_speaker(line, "SPK") {
+        if let Some(label) = parse_speaker_with_syntax(line, "SPK", self.float_syntax) {
             return Event::Speaker(label);
         }
         if self.in_words
             && line.starts_with('[')
-            && let Some(word) = parse_word(line)
+            && let Some(word) = parse_word_with_syntax(line, self.float_syntax)
         {
             return word;
         }
@@ -174,6 +184,10 @@ fn integer_prefix(text: &str) -> Option<i64> {
 }
 
 pub fn parse_speaker(line: &str, tag: &str) -> Option<SpeakerLabel> {
+    parse_speaker_with_syntax(line, tag, FloatSyntax::CurrentSwift)
+}
+fn parse_speaker_with_syntax(line: &str, tag: &str, syntax: FloatSyntax) -> Option<SpeakerLabel> {
+    let double = |text| double_with_syntax(text, syntax);
     let mut parts = line
         .strip_prefix(tag)?
         .strip_prefix(' ')?
@@ -188,6 +202,10 @@ pub fn parse_speaker(line: &str, tag: &str) -> Option<SpeakerLabel> {
 }
 
 pub fn parse_word(line: &str) -> Option<Event> {
+    parse_word_with_syntax(line, FloatSyntax::CurrentSwift)
+}
+fn parse_word_with_syntax(line: &str, syntax: FloatSyntax) -> Option<Event> {
+    let double = |text| double_with_syntax(text, syntax);
     let (bracket, tail) = line.strip_prefix('[')?.split_once(']')?;
     let mut body = tail.trim_matches(foundation_whitespace);
     let mut confidence = 1.0;

@@ -64,10 +64,14 @@ def main():
             raw = line.encode()
             payload.extend(struct.pack("<I", len(raw)))
             payload.extend(raw)
-    def run(path):
-        return subprocess.run([str(path)], input=payload, stdout=subprocess.PIPE, check=True).stdout
+    profile = "current" if args.rust_only else subprocess.check_output([str(OUT / "swift-oracle"), "--float-profile"], text=True).strip()
+    assert profile in ("current", "legacy"), profile
+    def run(path, arguments=()):
+        return subprocess.run([str(path), *arguments], input=payload, stdout=subprocess.PIPE, check=True).stdout
     swift = None if args.rust_only else run(OUT / "swift-oracle")
-    rust = run(ROOT / "target/debug/examples" / ("transcribe_oracle.exe" if sys.platform == "win32" else "transcribe_oracle"))
+    rust_path = ROOT / "target/debug/examples" / ("transcribe_oracle.exe" if sys.platform == "win32" else "transcribe_oracle")
+    rust = run(rust_path, ["--legacy-float-syntax"] if profile == "legacy" else [])
+    canonical = rust if profile == "current" else run(rust_path)
     if swift is not None:
         (OUT / "swift.events").write_bytes(swift)
     (OUT / "rust.events").write_bytes(rust)
@@ -75,14 +79,18 @@ def main():
               "swiftComparison": "not-run" if args.rust_only else "live-unmodified-source",
               "corpusSha256": hashlib.sha256(payload).hexdigest(),
               "swiftSourceSha256": hashlib.sha256(SWIFT.read_bytes()).hexdigest(),
-              "eventStreamSha256": hashlib.sha256(rust).hexdigest()}
+              "eventStreamSha256": hashlib.sha256(rust).hexdigest(),
+              "floatSyntaxProfile": None if args.rust_only else profile,
+              "canonicalDefaultMatchesHost": None if args.rust_only else profile == "current",
+              "canonicalEventStreamSha256": hashlib.sha256(canonical).hexdigest()}
     reference = ROOT / "design/parity/transcribe-reference.json"
     if not reference.exists():
         report["status"] = "fail"
         report["error"] = "pinned Swift reference is required"
     else:
         pinned = json.loads(reference.read_text())
-        if any(report[key] != pinned[key] for key in ("corpusSha256", "swiftSourceSha256", "eventStreamSha256")):
+        if (any(report[key] != pinned[key] for key in ("corpusSha256", "swiftSourceSha256"))
+                or report["canonicalEventStreamSha256"] != pinned["eventStreamSha256"]):
             report["status"] = "fail"
     (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     if swift is not None and swift != rust:
