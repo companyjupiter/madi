@@ -1,10 +1,11 @@
 //! Explicit local file-mode probe for the native supervisor. This does not
 //! connect the desktop UI, copy/delete the input WAV or run the session executor.
 use madi_core::session::Session;
-use madi_platform::engine_process::{EngineProcess, Event, Launch};
+use madi_platform::asr_config::{FileSettings, Resources};
+use madi_platform::engine_process::{EngineProcess, Event};
 use madi_protocol::{stream::Output, structured, transcribe};
 use serde_json::json;
-use std::{collections::BTreeMap, io, path::PathBuf, time::Duration};
+use std::{io, path::PathBuf, time::Duration};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
@@ -49,26 +50,19 @@ async fn main() -> io::Result<()> {
     let mut session = Session::default();
     session.begin_live(); // Allocates only an identity for this transport probe.
     let token = session.engine_token().unwrap();
-    let launch = Launch {
+    let resources = Resources {
         executable: PathBuf::from(&args[1]),
-        arguments: vec![
-            args[2].clone(),
-            prepared_path
-                .as_ref()
-                .map(|path| path.as_os_str().to_owned())
-                .unwrap_or_else(|| args[4].clone()),
-            assets.join("WHISPER_BPE.bin").into(),
-        ],
-        working_directory: assets,
-        environment: BTreeMap::from([
-            ("APP_FILE".into(), Some("1".into())),
-            ("DIAR".into(), Some("1".into())),
-            ("OSD".into(), Some("1".into())),
-            ("CONF".into(), Some("1".into())),
-            ("DIAR_MAXK".into(), Some("8".into())),
-            ("STREAM".into(), None),
-        ]),
+        model: PathBuf::from(&args[2]),
+        bpe: assets.join("WHISPER_BPE.bin"),
+        assets,
     };
+    let original = PathBuf::from(&args[4]);
+    let launch = resources
+        .file_launch(
+            prepared_path.as_deref().unwrap_or(&original),
+            &FileSettings::default(),
+        )
+        .map_err(io::Error::other)?;
     let mut engine = EngineProcess::spawn(launch, token, &PathBuf::from(&args[5]))?;
     engine.close_input();
     let mut words = 0;
@@ -124,6 +118,7 @@ async fn main() -> io::Result<()> {
             "wordEvents": words, "structuredEvents": structured_count, "segments": segments,
             "flushBeforeExit": flushed, "exitCode": exit_code, "faults": faults, "ownedScratchRemoved": cleaned,
             "decodedInput": prepared_path.is_some(), "preparedWavRemoved": prepared_removed,
+            "typedFileConfiguration": true,
         }))?
     );
     if !passed {

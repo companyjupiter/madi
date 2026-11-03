@@ -18,9 +18,10 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
-- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 39 tests on macOS
-  (11 core, 14 protocol, fourteen native adapter tests; Windows has 33). All pass
-  locally and at `e5110db` in macOS/Windows CI.
+- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 40 tests on macOS
+  (11 core, 14 protocol, fifteen native adapter/configuration tests; Windows has 34).
+  The configuration regression passes locally; `e5110db` CI passed the previous
+  39/33-test set. Current-revision CI remains required.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -113,7 +114,10 @@ comparison on macOS and clean verified build artifacts. [Run 41702228682](https:
 at `484bd23` passed both hosts with 34/33 tests, the supervisor Swift differential
 and clean verified artifacts. [Run 41704044238](https://github.com/companyjupiter/madi/actions/runs/41704044238)
 at `e5110db` passed both platforms with 39/33 tests and the extended Swift decode
-tests; downloaded executable hashes and clean source trees are verified. No complete UI, audio or
+tests; downloaded executable hashes and clean source trees are verified.
+[Run 41705997661](https://github.com/companyjupiter/madi/actions/runs/41705997661)
+at `cfdeecb` also passed both hosts with the macOS 39-case media staging differential
+and clean hash-verified artifacts. No complete UI, audio or
 inference gate is closed by these build results.
 
 The host currently assumes a ready-model setup fixture and holds choices in
@@ -202,6 +206,13 @@ comparison passes, including Korean filename normalization and byte-size roundin
 The staged card, CTA state and middle truncation are implemented but their native
 interaction/visual verification awaits Mac unlock. See
 `runtime/NATIVE_FILE_STAGING.md`; this is not an end-to-end file transcription pass.
+
+Typed file ASR configuration now matches the unchanged Swift launch construction
+across 601 cases, with a pinned reference also checked on Windows. A real public
+JFK decode/transcription/cleanup smoke passes even with conflicting engine options
+in the parent shell. File-mode settings explicitly clear unset engine-owned flags;
+this intentional isolation difference is documented in `runtime/FILE_ASR_CONFIGURATION.md`.
+The complete session executor and model admission remain open.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.
