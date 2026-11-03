@@ -1,5 +1,6 @@
 //! Real native decode/ASR probe through the serialized file-session executor.
 use madi_core::session::Phase;
+use madi_core::transcript::TranscriptStore;
 use madi_platform::{
     asr_config::{FileSettings, Resources},
     file_session::{Configuration, FileSession, UpdateKind},
@@ -54,12 +55,18 @@ async fn main() -> io::Result<()> {
     let mut finished = 0;
     let mut failed = 0;
     let mut faults = Vec::new();
+    let mut transcript = TranscriptStore::default();
     let execution = async {
         while let Some(update) = session.next().await {
             assert_eq!(update.run, run);
             match update.kind {
                 UpdateKind::Phase(phase) => phases.push(phase),
-                UpdateKind::Output(Output::Stdout(transcribe::Event::Word { .. })) => words += 1,
+                UpdateKind::Output(Output::Stdout(event)) => {
+                    if matches!(event, transcribe::Event::Word { .. }) {
+                        words += 1;
+                    }
+                    transcript.ingest(&event);
+                }
                 UpdateKind::Output(Output::Structured(event)) => {
                     structured += 1;
                     if let structured::Event::Segment(segment) = event {
@@ -67,6 +74,8 @@ async fn main() -> io::Result<()> {
                     }
                 }
                 UpdateKind::Finished => {
+                    transcript.flush_pending_speaker_fix_rebuild();
+                    transcript.finalize();
                     finished += 1;
                     break;
                 }
@@ -97,6 +106,8 @@ async fn main() -> io::Result<()> {
         && failed == 0
         && faults.is_empty()
         && words > 0
+        && !transcript.lines().is_empty()
+        && transcript.lines() == transcript.display_lines()
         && !segments.is_empty()
         && clean_at_completion
         && clean_at_shutdown;
@@ -104,9 +115,11 @@ async fn main() -> io::Result<()> {
         "{}",
         serde_json::to_string_pretty(&json!({
             "schemaVersion":1,"status":if passed { "passed" } else { "failed" },
-            "scope":"Rust file-session effect executor with real native decode and Metal ASR; no desktop UI, archive or live capture integration",
+            "scope":"Rust file-session effect executor and transcript store with real native decode and Metal ASR; speaker-fix work explicitly flushed at finish, no desktop UI, wall-clock display scheduling, archive or live capture integration",
             "phases":phases.iter().map(|phase|format!("{phase:?}")).collect::<Vec<_>>(),
             "wordEvents":words,"structuredEvents":structured,"segments":segments,
+            "transcript":transcript.lines(),"transcriptText":transcript.lines().iter().map(|line|line.text()).collect::<Vec<_>>(),
+            "speakerNumbers":transcript.speaker_numbers.numbers,
             "finishedCallbacks":finished,"failedCallbacks":failed,"faults":faults,"timedOut":timed_out,
             "ownedScratchEmptyWhenFinishedReceived":clean_at_completion,"ownedScratchEmptyAfterShutdown":clean_at_shutdown,
         }))?

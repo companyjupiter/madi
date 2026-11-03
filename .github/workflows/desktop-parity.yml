@@ -20,6 +20,7 @@ on:
       - 'apps/macos/Sovereign/Engine/EngineEvents.swift'
       - 'apps/macos/Sovereign/Engine/EngineProcess.swift'
       - 'apps/macos/Sovereign/Engine/EnginePathPolicy.swift'
+      - 'apps/macos/Sovereign/Transcript/**'
       - 'apps/macos/Sovereign/Audio/AudioDevices.swift'
       - 'apps/macos/Sovereign/Audio/AudioDecode.swift'
       - 'apps/macos/Sovereign/Audio/Resampler.swift'
@@ -100,6 +101,8 @@ jobs:
           python3 scripts/check_model_setup_parity.py
           python3 scripts/check_model_gate_parity.py
           python3 scripts/check_model_presentation_parity.py
+          python3 scripts/check_word_merger_parity.py
+          python3 scripts/check_transcript_store_parity.py
           swiftc -parse-as-library apps/macos/Sovereign/Audio/AudioDecode.swift apps/macos/Sovereign/Audio/Resampler.swift apps/macos/Sovereign/Audio/WavWriter.swift apps/macos/Tests/AudioDecodeLimitTests.swift -o "$RUNNER_TEMP/madi-audio-decode-parity"
           "$RUNNER_TEMP/madi-audio-decode-parity"
       - name: Compare Windows parser to pinned Swift reference
@@ -113,6 +116,8 @@ jobs:
           python scripts/check_asset_manifest_parity.py --rust-only
           python scripts/check_model_setup_parity.py --rust-only
           python scripts/check_model_gate_parity.py --rust-only
+          python scripts/check_word_merger_parity.py --rust-only
+          python scripts/check_transcript_store_parity.py --rust-only
       - name: Build the standalone debug parity host
         run: cargo build --locked -p madi-desktop --features custom-protocol
       - name: Verify the relocated macOS app and native decoder
@@ -141,6 +146,8 @@ jobs:
             out/model-setup-parity/report.json
             out/model-gate-parity/report.json
             out/model-presentation-parity/report.json
+            out/word-merger-parity/report.json
+            out/transcript-store-parity/report.json
             out/desktop-package/report.json
             out/desktop-package/Madi-UI-Parity.app.zip
             target/debug/madi-desktop

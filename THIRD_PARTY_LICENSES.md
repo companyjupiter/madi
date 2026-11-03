@@ -23,6 +23,10 @@ Read-only model integrity verification uses sha2 0.10.9 (MIT OR Apache-2.0);
 its MIT copyright and license are retained in `apps/desktop/licenses/Sha2-MIT.txt`.
 Explicit model downloads use reqwest 0.13.5 (MIT OR Apache-2.0) with native OS TLS;
 its MIT notice is retained in `apps/desktop/licenses/Reqwest-MIT.txt`.
+The transcript model uses uuid 1.29.0 and unicode-normalization 0.1.25
+(MIT OR Apache-2.0) for stable identities and Swift-compatible canonical text
+comparison. Their MIT notices and Unicode normalization copyright attribution
+are retained in the same directory; stored and displayed text is not normalized.
 `Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
 The complete transitive binary notice bundle is still a migration release gate;
 the current parity harness is debug-only and not a product distribution.

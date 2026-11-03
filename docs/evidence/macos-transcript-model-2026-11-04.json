@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "local uncommitted candidate on cf259db; committed cross-platform CI still required",
+  "sourceSHA256": {
+    "crates/madi-core/src/transcript/line.rs": "33ccfd6c8184d81c61c1d3c1bd4ed0b3b92b8b378eed4217a3b850bb405ff517",
+    "crates/madi-core/src/transcript/mod.rs": "4d21bf0eeab7a79df36d3098ecd9b8eb381164c8af9d9391880ed37987e1fe3e",
+    "crates/madi-core/src/transcript/speakers.rs": "df16b33d27d755d39241fa1bd2c611451890b0b32ab1a235b8a86b57998d00c1",
+    "crates/madi-core/src/transcript/store/grouping.rs": "f6388dcd469f1ac4b0f7815adca0b1c08cb4d22412287e7bbcbc65fac4055da0",
+    "crates/madi-core/src/transcript/store.rs": "927f05084f40c9a3904fb9ca5bb95c10b6d474368ccaaeb630c6b8d685a3209a",
+    "crates/madi-core/src/transcript/word_merger.rs": "eb8ce261ea5bfafaee92ee499c03a2f7cf1119e87df69b56fb4c04f873f1c9af",
+    "crates/madi-platform/examples/transcript_store_oracle.rs": "6d3f9e5743569534f7021cf3324651f4cf3d9da97fe79977207a2808b9622eae",
+    "crates/madi-platform/examples/word_merger_oracle.rs": "9e54f56df35a468a5de8640aee007e49e869b672618fb93c85a3ab0efe13862e",
+    "crates/madi-platform/examples/file_session_smoke.rs": "8812f944790a60e4f2d68f422adc1fb1ba3f7443e166b8e420068f527aea9434",
+    "scripts/check_word_merger_parity.py": "87828d2b70c961ec35d1299ec9a04115be64441883ed5e35f1b50c303419a54f",
+    "scripts/check_transcript_store_parity.py": "bfbca14c5db25c1a83d19beb8a1f014423f943f59c14a41c36f1de3deac8bc66",
+    "tests/parity/WordMergerOracle.swift": "49dcebfb5c072545eb02a699a13df71c727b2792f46001ed87b5f1faf897e809",
+    "tests/parity/TranscriptStoreOracle.swift": "10ce36637abe574eb8603239cb2593cf1165e2eb8349ae1aed2f71a984174599"
+  },
+  "wordMerger": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 301,
+    "snapshots": 1974,
+    "fixtureWords": 1566,
+    "swiftComparison": "live-unmodified-merger-and-word-source",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+      "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+      "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+      "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+      "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+    },
+    "corpusSHA256": "c2e22d8ebd0b9bdc185ff09803ba643d4758a6aa5908df627e92ba2101a16b5c",
+    "resultSHA256": "f1600b4aff5fa0b11e7c17cb0053481f6ecc06c88cbcf6cdf82f4de91f0f7c36",
+    "scope": "Finite word inputs: committed/display/suffix/since snapshots, exact times/confidence/text/UUID identity, held word, watermark and duplicate counters; not full transcript grouping or UI"
+  },
+  "transcriptStore": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 309,
+    "snapshots": 5947,
+    "fixtureWords": 1566,
+    "swiftComparison": "live-unmodified-model-bodies-with-deterministic-ID-and-render-delivery-hooks",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+      "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+      "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+      "apps/macos/Sovereign/Transcript/SpeakerDisplayNumber.swift": "aed03483b387f644d426a6b66b291424d413e397c4555179a096912d448f3c1b",
+      "apps/macos/Sovereign/Transcript/LiveFeatureWiring.swift": "fb10adb3a626e5e6a3b9105ef2754b5fe52b307d7cd8c6648e3844bdccd4b956",
+      "apps/macos/Sovereign/Transcript/EnergyArc.swift": "7183d8bd405404abf47e51f58df1bb4a7e93f0bf9ed417ed9b60dfcc6d31fcc7",
+      "apps/macos/Sovereign/Engine/EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+      "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+      "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+      "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+    },
+    "corpusSHA256": "9a309537a98266d1420094e7080d1fa5796dea1555cd262619aa46326f24337e",
+    "resultSHA256": "627a8270f0b91ca4df4ed4d471063fbe755c9d5a78ab7612aca99a80f55fe0c3",
+    "scope": "Finite transcript inputs plus 1566 fixture word payloads (not full stdout replay): exact line/word identity, text bytes, times/confidence, grouping, speaker fixes/numbers, overlap, edits, translation provenance, suppression, reload/reset and explicit display delivery. No wall-clock scheduling, UI pixels, translation generation or archive serialization."
+  },
+  "nativeFile": {
+    "failedCallbacks": 0,
+    "faults": [],
+    "finishedCallbacks": 1,
+    "ownedScratchEmptyAfterShutdown": true,
+    "ownedScratchEmptyWhenFinishedReceived": true,
+    "phases": [
+      "Processing",
+      "Done"
+    ],
+    "schemaVersion": 1,
+    "scope": "Rust file-session effect executor and transcript store with real native decode and Metal ASR; speaker-fix work explicitly flushed at finish, no desktop UI, wall-clock display scheduling, archive or live capture integration",
+    "segments": [
+      "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    ],
+    "speakerNumbers": {
+      "0": 1
+    },
+    "status": "passed",
+    "structuredEvents": 26,
+    "timedOut": false,
+    "transcript": [
+      {
+        "editedText": null,
+        "editedTranslations": [],
+        "end": 10.35,
+        "id": "309cfd42-5566-413e-841f-dd22d4caa419",
+        "overlapSpeakers": [],
+        "speaker": 0,
+        "speakerMargin": 1.0,
+        "staleTranslations": {},
+        "start": 0.33,
+        "suppressedTranslations": [],
+        "translations": {},
+        "words": [
+          {
+            "conf": 1.0,
+            "id": "309cfd42-5566-413e-841f-dd22d4caa419",
+            "t0": 0.33,
+            "t1": 0.5,
+            "text": "And"
+          },
+          {
+            "conf": 0.6,
+            "id": "b717192a-9307-41df-a8d7-eccbbb3711fe",
+            "t0": 0.5,
+            "t1": 0.58,
+            "text": "so,"
+          },
+          {
+            "conf": 1.0,
+            "id": "f0889531-8d4d-40cf-a497-62936855d107",
+            "t0": 0.69,
+            "t1": 1.2,
+            "text": "my"
+          },
+          {
+            "conf": 1.0,
+            "id": "0c536f8d-0c51-4ae9-9ae6-27a95b532839",
+            "t0": 1.2,
+            "t1": 1.28,
+            "text": "fellow"
+          },
+          {
+            "conf": 0.86,
+            "id": "e3ee6f55-d3bd-472d-a417-e2d432dbc665",
+            "t0": 1.37,
+            "t1": 2.11,
+            "text": "Americans,"
+          },
+          {
+            "conf": 0.98,
+            "id": "2d5bd7bb-89d0-4b3f-84d1-e1b2a0c29ae5",
+            "t0": 3.29,
+            "t1": 3.66,
+            "text": "ask"
+          },
+          {
+            "conf": 0.98,
+            "id": "28dabe15-8009-40bc-9192-6c261e40625b",
+            "t0": 4.03,
+            "t1": 4.29,
+            "text": "not"
+          },
+          {
+            "conf": 0.99,
+            "id": "854e849e-93b2-4c0d-8007-6cef09e524a8",
+            "t0": 4.54,
+            "t1": 5.56,
+            "text": "what"
+          },
+          {
+            "conf": 0.99,
+            "id": "64c1a3b6-ad0c-4db9-828a-80f6c9f48bbe",
+            "t0": 5.56,
+            "t1": 5.64,
+            "text": "your"
+          },
+          {
+            "conf": 1.0,
+            "id": "2d6834a8-1a06-4e3f-9d6f-288d2a0f7b10",
+            "t0": 5.66,
+            "t1": 6.42,
+            "text": "country"
+          },
+          {
+            "conf": 1.0,
+            "id": "28bec052-2c12-4a32-b462-b500fd730f77",
+            "t0": 6.51,
+            "t1": 6.6,
+            "text": "can"
+          },
+          {
+            "conf": 1.0,
+            "id": "62ddc12c-b702-4a7f-8e34-70335baacc12",
+            "t0": 6.6,
+            "t1": 6.68,
+            "text": "do"
+          },
+          {
+            "conf": 1.0,
+            "id": "c8a75da6-77aa-47da-8a4e-b6dedc4b71d9",
+            "t0": 6.71,
+            "t1": 6.91,
+            "text": "for"
+          },
+          {
+            "conf": 0.64,
+            "id": "83851dd8-5c79-4a76-8be6-6bc9048179d4",
+            "t0": 7.01,
+            "t1": 7.52,
+            "text": "you,"
+          },
+          {
+            "conf": 1.0,
+            "id": "1f8224e4-7647-4917-bf72-942865130c7e",
+            "t0": 8.2,
+            "t1": 8.48,
+            "text": "ask"
+          },
+          {
+            "conf": 1.0,
+            "id": "41cc0589-633a-4995-8d90-fcbcf13fa943",
+            "t0": 8.52,
+            "t1": 8.76,
+            "text": "what"
+          },
+          {
+            "conf": 1.0,
+            "id": "ce0f91bb-62af-4589-a53d-d7308c0cb26b",
+            "t0": 8.76,
+            "t1": 8.84,
+            "text": "you"
+          },
+          {
+            "conf": 1.0,
+            "id": "63d66680-c0b4-4baa-9d77-261139af2d77",
+            "t0": 8.92,
+            "t1": 9.33,
+            "text": "can"
+          },
+          {
+            "conf": 1.0,
+            "id": "cdb0f8ab-37d5-4820-b3f7-32572cf3ac4c",
+            "t0": 9.33,
+            "t1": 9.41,
+            "text": "do"
+          },
+          {
+            "conf": 1.0,
+            "id": "52248520-4791-431b-8ee9-cd12d8a25a42",
+            "t0": 9.45,
+            "t1": 9.76,
+            "text": "for"
+          },
+          {
+            "conf": 1.0,
+            "id": "0ae0caff-3e18-4f0b-9831-4bea3f4d5f2a",
+            "t0": 9.76,
+            "t1": 9.83,
+            "text": "your"
+          },
+          {
+            "conf": 0.95,
+            "id": "15130ccc-bf86-4b58-b8da-abf148c22844",
+            "t0": 9.83,
+            "t1": 10.35,
+            "text": "country."
+          }
+        ]
+      }
+    ],
+    "transcriptText": [
+      "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    ],
+    "wordEvents": 22,
+    "elapsedSeconds": 1.583,
+    "sourceSHA256Before": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "sourceSHA256After": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "existingModelSizeAndMtimeUnchanged": true,
+    "engineSHA256": "9edb8b1dbe0bf8b18a1364380dce92e7647e98bf62952bd04de65b56e346089d",
+    "decoderSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "relocatedOutsideRepository": true,
+    "sourceHead": "cf259db179f75b7e12fb0b69f22108f6c28279c7",
+    "sourceDirty": true,
+    "evidenceKind": "local uncommitted transcript port; separately verified existing runtime bundle; not a connected Tauri product flow"
+  },
+  "localChecks": {
+    "rustTests": 59,
+    "clippyAllTargets": "passed",
+    "formatting": "passed"
+  },
+  "limitations": [
+    "No native UI pixels or interaction validation",
+    "Explicit test render/fix delivery, no production session-host timers",
+    "No archive serializer, translation inference, glossary/session settings or derived energy/share/flagged caches ported"
+  ]
+}

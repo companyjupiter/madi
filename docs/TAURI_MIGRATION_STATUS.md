@@ -9,7 +9,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
 | G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model-guide component connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, transcript/settings/workspace/AI/overlays |
-| G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, file executor with native decode/ASR smoke, explicit verified model downloads and first-run admission | Live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
+| G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, file executor with native decode/ASR, transcript/edit model differentials, verified model downloads and first-run admission | Session-host/UI delivery, live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
@@ -20,13 +20,24 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
 - `cargo test -p madi-core -p madi-protocol -p madi-platform`: 59 tests pass
   locally on macOS (11 core, 14 protocol, 34 platform tests), including ten
-  model transfer/service tests. Previous runtime package `fb67b46` passed both
-  CI platforms with clean, hash-verified artifacts. The new download/UI revision
-  requires corrected CI: `17c84fc` passed Windows tests but failed clippy on a
+  model transfer/service tests. Download/UI revision `17c84fc` passed Windows tests but failed clippy on a
   Unix-only mutable binding; its macOS job passed in full with hash-verified
   artifacts (`evidence/desktop-ci-17c84fc-2026-11-04.json`). The correction also fixes interrupted-join ownership
   and explicit Unix lock release, with RED/GREEN regressions and three full local
-  parallel passes. This is not yet a green CI gate for the new model UI.
+  parallel passes. Corrected revision `cf259db` passed both CI jobs: 59 macOS /
+  52 Windows tests, all reference checks, builds and macOS package verification.
+  Both downloaded executables have verified hashes, clean source reports and
+  empty source diffs; the macOS archive and inner runtime/notices are also verified
+  (`evidence/desktop-ci-cf259db-2026-11-04.json`). These checks do not close native
+  model UI interaction/visual gates.
+- Transcript model: 301 word-merger cases / 1,974 snapshots and 309 store cases /
+  5,947 snapshots match live unchanged Swift method bodies. Both include 1,566
+  fixture word payloads. Exact identity, raw text, time/confidence, grouping,
+  speaker changes/numbers, edits and translation provenance match. Explicit
+  render delivery is compared; real timer scheduling and derived display caches
+  remain open. The actual native JFK probe now feeds the store and produces the
+  expected 22-word sentence with one completion and clean scratch. See
+  `runtime/TRANSCRIPT_MODEL.md` and `evidence/macos-transcript-model-2026-11-04.json`.
 - Model guide: 210 action-visibility cases match extracted unchanged Swift view
   rules. Nine byte-count cases and five native symbol dimensions match live
   Foundation/AppKit; generated owned PNGs contain visible/transparent pixels.
@@ -306,6 +317,13 @@ model was re-downloaded or replaced for these tests. Network error text, exact
 controls, settings model lifecycle and all product end-to-end gates remain open.
 Follow-up ownership/lock fixes and failed-attempt context are recorded in
 `evidence/macos-model-download-ownership-2026-11-04.json`.
+
+The Rust transcript model now preserves the original merge/group/edit policies
+and has live Swift differential evidence. Native file-executor output also passes
+through this model in the headless probe. This supplies the data layer for the
+transcript screen; the setup start button still emits a harness intent. The
+session host's actual timers, original processing/result view, display caches,
+glossary/translation policy and storage must be connected and compared next.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.
