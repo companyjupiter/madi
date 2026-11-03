@@ -16,6 +16,10 @@ on:
       - 'apps/macos/Sovereign/Engine/EngineProcess.swift'
       - 'apps/macos/Sovereign/Engine/EnginePathPolicy.swift'
       - 'apps/macos/Sovereign/Audio/AudioDevices.swift'
+      - 'apps/macos/Sovereign/Audio/AudioDecode.swift'
+      - 'apps/macos/Sovereign/Audio/Resampler.swift'
+      - 'apps/macos/Sovereign/Audio/WavWriter.swift'
+      - 'apps/macos/Tests/AudioDecodeLimitTests.swift'
       - 'web/fixtures/*.events.jsonl'
       - 'design/parity/*reference.json'
       - '.github/workflows/desktop-parity.yml'
@@ -66,6 +70,8 @@ jobs:
           python3 scripts/check_structured_parser_parity.py
           python3 scripts/check_stream_process_parity.py
           python3 scripts/check_audio_devices_parity.py
+          swiftc -parse-as-library apps/macos/Sovereign/Audio/AudioDecode.swift apps/macos/Sovereign/Audio/Resampler.swift apps/macos/Sovereign/Audio/WavWriter.swift apps/macos/Tests/AudioDecodeLimitTests.swift -o "$RUNNER_TEMP/madi-audio-decode-parity"
+          "$RUNNER_TEMP/madi-audio-decode-parity"
       - name: Compare Windows parser to pinned Swift reference
         if: runner.os == 'Windows'
         run: |

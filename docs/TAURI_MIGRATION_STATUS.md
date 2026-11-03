@@ -18,8 +18,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
-- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 34 tests on macOS
-  (11 core, 14 protocol, nine native adapter tests). New adapter tests pass locally;
+- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 39 tests on macOS
+  (11 core, 14 protocol, fourteen native adapter tests; Windows has 33). New adapter tests pass locally;
   the complete current set runs in the next CI revision.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
@@ -109,8 +109,9 @@ files preserve these results. [Run 41698389122](https://github.com/companyjupite
 at `3578632` also passed both platforms with verified clean-tree artifacts.
 [Run 41700106422](https://github.com/companyjupiter/madi/actions/runs/41700106422)
 at `5af3c19` passed macOS/Windows with 26/25 tests, read-only native discovery
-comparison on macOS and clean verified build artifacts. The new process supervisor
-revision is awaiting its own CI. No complete UI, audio or
+comparison on macOS and clean verified build artifacts. [Run 41702228682](https://github.com/companyjupiter/madi/actions/runs/41702228682)
+at `484bd23` passed both hosts with 34/33 tests, the supervisor Swift differential
+and clean verified artifacts. The native decoder revision awaits its own CI. No complete UI, audio or
 inference gate is closed by these build results.
 
 The host currently assumes a ready-model setup fixture and holds choices in
@@ -180,6 +181,16 @@ explicit inherited-pipe drain timeout. The full 20-scenario Swift differential
 still matches the unchanged pinned hash. Details and limits are in
 `runtime/ENGINE_PROCESS_ADAPTER.md` and
 `evidence/macos-rust-supervisor-2026-11-04.json`.
+
+Owned native file preparation is also implemented. A small AVFoundation helper
+reuses the existing decoder/resampler; the Swift decoder gained an explicit
+scratch-directory argument with the original default preserved. Five native Rust
+tests and the extended Swift decode tests pass, including byte-identical PCM,
+concurrent imports, cancellation/failure cleanup and original-file preservation.
+The real JFK probe passed through decode → Rust ASR supervision → cleanup.
+See `runtime/NATIVE_AUDIO_DECODE.md` and
+`evidence/macos-owned-decode-2026-11-04.json`. Helper bundling/signing, the session
+effect executor and Tauri file-picker/UI integration remain open.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.

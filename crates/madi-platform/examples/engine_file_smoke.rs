@@ -9,11 +9,42 @@ use std::{collections::BTreeMap, io, path::PathBuf, time::Duration};
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
     let args: Vec<_> = std::env::args_os().collect();
-    if args.len() != 6 {
+    if args.len() != 6 && !(args.len() == 7 && args[6] == "--decode") {
         return Err(io::Error::other(
-            "usage: engine_file_smoke <binary> <model> <assets-directory> <wav> <scratch-parent>",
+            "usage: engine_file_smoke <binary> <model> <assets-directory> <wav> <scratch-parent> [--decode]",
         ));
     }
+    let prepared: Option<madi_platform::prepared_audio::PreparedAudio> = if args.len() == 7 {
+        #[cfg(target_os = "macos")]
+        {
+            use madi_platform::prepared_audio::{DecodeTask, development_helper};
+            let mut decode = DecodeTask::start(
+                development_helper(),
+                &PathBuf::from(&args[4]),
+                &PathBuf::from(&args[5]),
+            )
+            .map_err(io::Error::other)?;
+            match tokio::time::timeout(Duration::from_secs(120), decode.wait()).await {
+                Ok(result) => Some(result.map_err(io::Error::other)?),
+                Err(_) => {
+                    decode.cancel();
+                    let _ = decode.wait().await;
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "native decode timed out",
+                    ));
+                }
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "native file decoder is currently macOS-only",
+        ));
+    } else {
+        None
+    };
+    let prepared_path = prepared.as_ref().map(|audio| audio.path().to_path_buf());
     let assets = PathBuf::from(&args[3]);
     let mut session = Session::default();
     session.begin_live(); // Allocates only an identity for this transport probe.
@@ -22,7 +53,10 @@ async fn main() -> io::Result<()> {
         executable: PathBuf::from(&args[1]),
         arguments: vec![
             args[2].clone(),
-            args[4].clone(),
+            prepared_path
+                .as_ref()
+                .map(|path| path.as_os_str().to_owned())
+                .unwrap_or_else(|| args[4].clone()),
             assets.join("WHISPER_BPE.bin").into(),
         ],
         working_directory: assets,
@@ -76,15 +110,20 @@ async fn main() -> io::Result<()> {
         }
     }
     let cleaned = !engine.events_path().parent().unwrap().exists();
+    if let Some(prepared) = prepared {
+        prepared.dispose()?;
+    }
+    let prepared_removed = prepared_path.as_ref().map(|path| !path.exists());
     let passed =
         exit_code == Some(0) && flushed && !segments.is_empty() && faults.is_empty() && cleaned;
     println!(
         "{}",
         serde_json::to_string_pretty(&json!({
             "schemaVersion": 1, "status": if passed { "passed" } else { "failed" },
-            "scope": "Rust native ASR supervisor with real model and file input; desktop and session executor not connected",
+            "scope": "Rust native ASR supervisor with real model and optional native decoding; desktop and session executor not connected",
             "wordEvents": words, "structuredEvents": structured_count, "segments": segments,
             "flushBeforeExit": flushed, "exitCode": exit_code, "faults": faults, "ownedScratchRemoved": cleaned,
+            "decodedInput": prepared_path.is_some(), "preparedWavRemoved": prepared_removed,
         }))?
     );
     if !passed {
