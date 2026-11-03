@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "os": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "source": "apps/macos/Sovereign/Audio/AudioDevices.swift",
+  "sourceSHA256": "66dda50a292dbcf50f67d034252194e9fed079cc0bdf5509ea7cbe1b008fa6fe",
+  "deviceCount": 5,
+  "defaultPresent": true,
+  "snapshotSHA256": "df84a4b752f41bebd8df1731cfb39ff0d6b6cde013a7e8666abbb81c41f40dc1",
+  "scope": "Live read-only enumeration and default input only; no capture, hot-swap or permission validation",
+  "date": "2026-11-04",
+  "nativeMenuCapture": {
+    "path": "out/desktop-parity/mic-menu-dark-native-swift.jpg",
+    "sha256": "f25547f3b7b9ecb7d7567d719b943fbc9d6634a323f896114299526fb7285148"
+  },
+  "tauriMenuVerification": "pending: Mac locked again before relaunching the new device adapter build",
+  "windowsAdapter": "not-implemented"
+}

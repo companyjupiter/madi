@@ -1,0 +1,17 @@
+[package]
+name = "madi-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-core-audio = { version = "=0.3.2", default-features = false, features = ["std", "AudioHardware"] }
+objc2-core-audio-types = { version = "=0.3.2", default-features = false, features = ["std", "CoreAudioBaseTypes"] }
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFString"] }
+
+[dev-dependencies]
+serde_json = "1"

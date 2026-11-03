@@ -59,7 +59,9 @@ the default product exposes them.
   titlebar appearance, font widths and other screen/state coverage are open.
 - CSS `ui-rounded`/system font stacks and the current chevron/check glyphs have
   not proven identical to SwiftUI or licensed equivalents on Windows.
-- The ready-model start fixture has no real device enumeration or model gate.
+- Read-only macOS device enumeration now matches the native five-device list and
+  default. New Tauri selection/popup placement is built but awaiting unlocked
+  native verification. The ready-model fixture still has no actual model gate.
 - Popup positioning, keyboard focus, IME, file staging and transition behavior
   still need native-oracle scenarios. No generic screenshot tolerance is approved.
 - Windows titlebar/buttons, system dialogs and platform wording remain open;

@@ -11,6 +11,10 @@ The Rust protocol compatibility layer also uses unicode-segmentation 1.13.3
 (MIT OR Apache-2.0); its MIT license and copyright attribution are retained there.
 Serde 1.0.229 and serde_json 1.0.154 (MIT OR Apache-2.0) provide the Rust state
 and structured event serialization; their MIT notices are retained there too.
+The read-only macOS device adapter uses objc2-core-audio, objc2-core-audio-types
+and objc2-core-foundation 0.3.2 (Zlib OR Apache-2.0 OR MIT). Their upstream licensing
+statement, including the Apple SDK note, is retained in
+`apps/desktop/licenses/Objc2-LICENSE.md`; the full distribution audit remains open.
 `Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
 The complete transitive binary notice bundle is still a migration release gate;
 the current parity harness is debug-only and not a product distribution.

@@ -30,9 +30,14 @@ model downloader, saving or updater. Start/file buttons currently emit a
 `madi-parity-intent` DOM event for the visual harness only; they do not pretend to
 start an inference session. Do not distribute this as a working Madi release.
 
-Language, translation-target, meeting-mode, diarization and capture-source
+Language, translation-target, meeting-mode, diarization and capture-source and microphone-device
 selection commands go through the real Rust `madi-core` state in the native host.
-Only the main local WebView has the two setup command permissions. There are no
+The main local WebView has setup commands plus read-only native device discovery.
+On macOS, Core Audio supplies the original device order, names and system default;
+picking a microphone leaves system-only mode but preserves mixed mode. Discovery
+refreshes on focus and when opening the picker, and never opens an audio stream or
+requests permission. The Windows discovery adapter is explicitly unsupported.
+There are no
 shell/filesystem/remote-origin capability grants or production mock fallbacks.
 
 ## Visual reference and limits
@@ -56,7 +61,7 @@ A read-only browser fixture is available only in the Vite dev server at
 Rust command behavior. Native WebView checks remain required.
 
 Open differences: fonts and SF Symbols, native window chrome, exact line
-metrics, real microphone/device list, translation availability, picker overflow
+metrics, native validation of microphone selection/overflow, translation availability
 and keyboard focus, staged file state, model gate and all working screens.
 The current start fixture assumes the models are ready; it does not infer that
 from this machine. These are migration tasks, not approved parity exceptions.

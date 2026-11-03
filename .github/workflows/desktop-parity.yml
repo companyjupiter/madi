@@ -15,6 +15,7 @@ on:
       - 'apps/macos/Sovereign/Engine/EngineEvents.swift'
       - 'apps/macos/Sovereign/Engine/EngineProcess.swift'
       - 'apps/macos/Sovereign/Engine/EnginePathPolicy.swift'
+      - 'apps/macos/Sovereign/Audio/AudioDevices.swift'
       - 'web/fixtures/*.events.jsonl'
       - 'design/parity/*reference.json'
       - '.github/workflows/desktop-parity.yml'
@@ -55,7 +56,7 @@ jobs:
       - name: Check formatting and shared behavior
         run: |
           cargo fmt --all --check
-          cargo test --locked -p madi-core -p madi-protocol
+          cargo test --locked -p madi-core -p madi-protocol -p madi-platform
           cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Compare against the shipping Swift parser
         if: runner.os == 'macOS'
@@ -64,6 +65,7 @@ jobs:
           python3 scripts/check_transcribe_parser_parity.py
           python3 scripts/check_structured_parser_parity.py
           python3 scripts/check_stream_process_parity.py
+          python3 scripts/check_audio_devices_parity.py
       - name: Compare Windows parser to pinned Swift reference
         if: runner.os == 'Windows'
         run: |
@@ -87,6 +89,7 @@ jobs:
             out/transcribe-parser-parity/report.json
             out/structured-parser-parity/report.json
             out/stream-process-parity/report.json
+            out/audio-devices-parity/report.json
             target/debug/madi-desktop
             target/debug/madi-desktop.exe
           if-no-files-found: error

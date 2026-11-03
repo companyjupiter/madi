@@ -25,7 +25,11 @@ h1 { font: 700 17px var(--rounded); }
 .chevron { width: 6px; height: 6px; border-right: 1.5px solid var(--text-secondary); border-bottom: 1.5px solid var(--text-secondary); transform: translateY(-2px) rotate(45deg); }
 .chevron.up { transform: translateY(2px) rotate(225deg); }
 .dropdown { position: absolute; z-index: 10; top: calc(100% + 4px); width: 100%; background: var(--surface-raised); border: 1px solid var(--hairline); box-shadow: 0 2px 5px rgb(0 0 0 / .05); border-radius: 12px; padding: 6px 0; }
-.option { width: 100%; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; text-align: left; }
+.dropdown { overflow-y: auto; scrollbar-width: none; }
+.dropdown[data-direction="up"] { top: auto; bottom: calc(100% + 4px); }
+.option { width: 100%; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
+.device-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-check { font-size: 10px; font-weight: 600; }
 .option:disabled { opacity: .4; }
 .check { width: 15px; height: 15px; border-radius: 6px; border: .75px solid var(--separator); display: grid; place-items: center; font-size: 8px; font-weight: 700; }
 .check.checked { background: var(--ink-strong); color: var(--ink-strong-on); border-color: var(--ink-strong); }

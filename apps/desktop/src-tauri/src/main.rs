@@ -87,6 +87,16 @@ fn setup_command(
     Ok(state.clone())
 }
 
+#[tauri::command]
+fn audio_inputs(
+    window: tauri::WebviewWindow,
+) -> Result<madi_platform::audio_devices::InputDevices, String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    Ok(madi_platform::audio_devices::snapshot())
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(SetupState::default()))
@@ -99,7 +109,11 @@ fn main() {
             window.show()?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![setup_snapshot, setup_command])
+        .invoke_handler(tauri::generate_handler![
+            setup_snapshot,
+            setup_command,
+            audio_inputs
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run Madi parity harness");
 }

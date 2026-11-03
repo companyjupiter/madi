@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/madi-protocol", "crates/madi-core", "apps/desktop/src-tauri"]
+members = ["crates/madi-protocol", "crates/madi-core", "crates/madi-platform", "apps/desktop/src-tauri"]
 default-members = ["crates/madi-protocol", "crates/madi-core"]
 resolver = "3"
 

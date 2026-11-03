@@ -42,6 +42,9 @@ pub struct SetupState {
     /// Existing persistence values: 0 (auto), 2, 3, 4, 5 (five or more).
     pub speaker_count: u8,
     pub audio_source: AudioSource,
+    /// Transient native adapter identity; None follows the system default.
+    /// Not persisted: Core Audio IDs can change when a device reconnects.
+    pub input_device_id: Option<String>,
 }
 
 impl Default for SetupState {
@@ -54,6 +57,7 @@ impl Default for SetupState {
             diarize: true,
             speaker_count: 0,
             audio_source: AudioSource::Mic,
+            input_device_id: None,
         }
     }
 }
@@ -68,6 +72,7 @@ pub enum SetupCommand {
     Diarize(bool),
     SpeakerCount(u8),
     AudioSource(AudioSource),
+    InputDevice(Option<String>),
 }
 
 impl SetupState {
@@ -104,6 +109,13 @@ impl SetupState {
                 self.speaker_count = count;
             }
             SetupCommand::AudioSource(source) => self.audio_source = source,
+            SetupCommand::InputDevice(id) => {
+                self.input_device_id = id;
+                // Selecting a mic exits system-only, but keeps mixed capture.
+                if self.audio_source == AudioSource::System {
+                    self.audio_source = AudioSource::Mic;
+                }
+            }
         }
         self.revision += 1;
         Ok(())
@@ -123,6 +135,30 @@ impl SetupState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mic_selection_exits_system_only_but_preserves_mixed_capture() {
+        let mut state = SetupState::default();
+        state
+            .apply(SetupCommand::AudioSource(AudioSource::System))
+            .unwrap();
+        state
+            .apply(SetupCommand::InputDevice(Some("coreaudio:83".into())))
+            .unwrap();
+        assert_eq!(state.audio_source, AudioSource::Mic);
+        assert_eq!(state.input_device_id.as_deref(), Some("coreaudio:83"));
+        state
+            .apply(SetupCommand::AudioSource(AudioSource::Both))
+            .unwrap();
+        state.apply(SetupCommand::InputDevice(None)).unwrap();
+        assert_eq!(state.audio_source, AudioSource::Both);
+        assert_eq!(state.input_device_id, None);
+        state
+            .apply(SetupCommand::AudioSource(AudioSource::System))
+            .unwrap();
+        state.apply(SetupCommand::InputDevice(None)).unwrap();
+        assert_eq!(state.audio_source, AudioSource::Mic);
+    }
 
     #[test]
     fn language_change_removes_self_translation_and_cap_is_three() {

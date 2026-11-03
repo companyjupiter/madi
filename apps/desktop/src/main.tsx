@@ -1,6 +1,6 @@
-import { StrictMode, useEffect, useRef, useState, type ReactNode } from 'react';
+import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { browserFixture, command, snapshot, type Language, type MeetingMode, type SetupCommand, type SetupState } from './bridge';
+import { audioInputs, browserFixture, command, snapshot, type InputDevices, type Language, type MeetingMode, type SetupCommand, type SetupState } from './bridge';
 import strings from './strings.generated.json';
 import './theme.generated.css';
 import './styles.css';
@@ -28,6 +28,7 @@ function Icon({ name, size }: { name: string; size: number }) {
 
 function App() {
   const [state, setState] = useState<SetupState | null>(null);
+  const [inputs, setInputs] = useState<InputDevices>({ supported: false, devices: [], defaultInputId: null });
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState('');
   const queue = useRef(Promise.resolve());
@@ -35,8 +36,35 @@ function App() {
   useEffect(() => {
     let active = true;
     snapshot().then(value => { if (active) setState(value); }).catch(value => { if (active) setError(String(value)); });
+    audioInputs().then(value => { if (active) setInputs(value); }).catch(value => { if (active) setError(String(value)); });
     return () => { active = false; };
   }, []);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => audioInputs().then(value => { if (active) setInputs(value); }).catch(value => { if (active) setError(String(value)); });
+    // Refresh at the same visible interaction boundary, and when returning to
+    // the app after a device/default-input change in another application.
+    if (open === 'mic') void refresh();
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.removeEventListener('focus', refresh); };
+  }, [open]);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const position = () => {
+      const trigger = root.current?.querySelector<HTMLElement>(`[data-trigger="${open}"]`);
+      const panel = root.current?.querySelector<HTMLElement>(`#picker-${open}`);
+      if (!trigger || !panel) return;
+      const frame = trigger.getBoundingClientRect();
+      const below = innerHeight - frame.bottom - 16;
+      const natural = panel.scrollHeight + 2;
+      const flipUp = open === 'mic' && natural > below && frame.top - 8 > natural;
+      panel.dataset.direction = flipUp ? 'up' : 'down';
+      panel.style.maxHeight = `${flipUp ? frame.top - 16 : Math.max(120, below)}px`;
+    };
+    position();
+    window.addEventListener('resize', position);
+    return () => window.removeEventListener('resize', position);
+  }, [open, inputs]);
   useEffect(() => {
     const close = (event: PointerEvent) => {
       if (!(event.target instanceof Element) || !event.target.closest('[data-picker]')) setOpen(null);
@@ -77,8 +105,10 @@ function App() {
   const outputLabel = picked.length === 0 ? text('No translation') : picked.length === 1 ? picked[0]
     : picked.length === 2 ? picked.join(' · ') : uiLanguage === 'ko' ? `${picked[0]} 외 ${picked.length - 1}`
     : uiLanguage === 'ja' ? `${picked[0]} 他${picked.length - 1}` : `${picked[0]} +${picked.length - 1}`;
+  const micDeviceLabel = inputs.devices.find(device => device.id === state.inputDeviceId)?.name
+    ?? inputs.devices.find(device => device.id === inputs.defaultInputId)?.name ?? text('System default');
   const micLabel = state.audioSource === 'system' ? text('System audio') : state.audioSource === 'both'
-    ? `${text('System default')} + ${uiLanguage === 'ko' ? '시스템' : uiLanguage === 'ja' ? 'システム' : 'system'}` : text('System default');
+    ? `${micDeviceLabel} + ${uiLanguage === 'ko' ? '시스템' : uiLanguage === 'ja' ? 'システム' : 'system'}` : micDeviceLabel;
 
   return <main ref={root} className="setup-viewport" data-revision={state.revision}>
     <div className="setup-centering"><div className="setup-content">
@@ -138,9 +168,15 @@ function App() {
             <div className="or-divider"><span /><span>or</span><span /></div>
             <div className="record-row">
               {picker('mic', micLabel, <>
-                <button className="option" onClick={() => { send({ type: 'audioSource', value: 'mic' }); setOpen(null); }}>{text('System default')}<span>{state.audioSource === 'mic' ? '✓' : ''}</span></button>
+                {[{ id: null, name: text('System default') }, ...inputs.devices].map(device => {
+                  const selected = state.audioSource !== 'system' && state.inputDeviceId === device.id;
+                  return <button key={device.id ?? 'default'} className="option" aria-pressed={selected}
+                    onClick={() => { send({ type: 'inputDevice', value: device.id }); setOpen(null); }}>
+                    <span className="device-name">{device.name}</span><span className="menu-check" aria-hidden>{selected ? '✓' : ''}</span>
+                  </button>;
+                })}
                 <hr />
-                {(['system', 'both'] as const).map(value => <button key={value} className="option" onClick={() => { send({ type: 'audioSource', value }); setOpen(null); }}>{text(value === 'system' ? 'System audio' : 'Mic + system')}<span>{state.audioSource === value ? '✓' : ''}</span></button>)}
+                {(['system', 'both'] as const).map(value => <button key={value} className="option" aria-pressed={state.audioSource === value} onClick={() => { send({ type: 'audioSource', value }); setOpen(null); }}>{text(value === 'system' ? 'System audio' : 'Mic + system')}<span className="menu-check" aria-hidden>{state.audioSource === value ? '✓' : ''}</span></button>)}
               </>, true)}
               <button className="cta" onClick={() => window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'start-recording' }))}>{text('Start recording now')}</button>
             </div>

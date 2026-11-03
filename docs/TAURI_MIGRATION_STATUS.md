@@ -8,7 +8,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 |---|---|---|
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
-| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja static text, two themes | Complete native visual/UX comparison, real devices/models, file staging, model gate, transcript/settings/workspace/AI/overlays |
+| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja static text, two themes | Complete native visual/UX comparison, full native device interaction/models, file staging, model gate, transcript/settings/workspace/AI/overlays |
 | G3 macOS core | Translation/stdout/JSONL parsers, ordered stdout/JSONL barriers and EOF drain, deterministic session lifecycle, initial setup rules | Production lifecycle executor, storage/migration, audio capture, engine supervisor, AI policy and real end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
@@ -18,7 +18,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
-- `cargo test -p madi-core -p madi-protocol`: 24 unit tests pass.
+- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 26 tests on macOS
+  (11 core, 14 protocol, one native buffer-layout validation). The two new tests
+  and unchanged core tests passed locally; the complete current set runs in CI.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -101,7 +103,10 @@ at `689b897` passed both platforms with 17 tests and the JSONL/process compariso
 at `675ceec` passed both platforms with 24 tests, including the session lifecycle.
 Downloaded executables match each report's size/hash; both revisions have clean
 source trees and empty retained build diffs. The corresponding evidence JSON
-files preserve these results. No UI, audio or inference gate is closed by them.
+files preserve these results. [Run 41698389122](https://github.com/companyjupiter/madi/actions/runs/41698389122)
+at `3578632` also passed both platforms with verified clean-tree artifacts.
+The new native-device revision is awaiting its own CI. No complete UI, audio or
+inference gate is closed by these build results.
 
 The host currently assumes a ready-model setup fixture and holds choices in
 memory. File/start buttons emit a harness intent only. No recording, model
@@ -141,11 +146,27 @@ The comparison exposed a 33-point extra Tauri titlebar height and inflated chip/
 text spacing. The host now measures native chrome and sets the outer setup frame
 to 1150×710 points, matching the observed Swift frame; CSS uses normal system
 font metrics and non-layout inset chip outlines. Major block positions now align.
-Titlebar appearance, glyph/width details and real-device labels still differ;
+Titlebar appearance and glyph/width details still differ;
 **this is not a pixel-parity pass**. Capture hashes, bundle/model provenance and
 limits are in `evidence/macos-native-baseline-2026-11-04.json`.
 
-1. Finish native setup behavior: real device selection, popup placement, keyboard
+Core Audio enumeration is now implemented in `madi-platform`: on this Mac its
+five devices, their order/names and the default input exactly match unmodified
+`AudioDevices.swift`. Rust selection preserves system-only-to-mic switching and
+mixed-mode retention. The frontend resolves the real default name, refreshes on
+focus/open, and flips a long microphone menu above the trigger. The packaged host
+build and clippy pass, but the Mac locked again before the new menu could be
+checked; this UI validation remains pending. No recording permission is requested.
+
+The original strict-asset bundle also completed real Metal inference: the public
+11-second whisper.cpp JFK clip transcribed successfully with diarization and
+`FLUSH_END`, and DNA4B translated an authored Korean sentence to English. Captured
+stdout/JSONL and the translated reply match original Swift vs Rust decoding,
+including four translation chunk sizes. See
+`evidence/macos-real-engine-smoke-2026-11-04.json`. This is a small engine smoke,
+not a quality/performance benchmark or Tauri product integration.
+
+1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.
 2. Capture first-run/model lifecycle and remaining product screens, then implement
    them with the same state transitions and layout.

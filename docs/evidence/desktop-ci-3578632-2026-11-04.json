@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41698389122",
+  "head": "3578632f931c05f0d46389016e7829a68a79119e",
+  "conclusion": "success",
+  "unitTests": 24,
+  "records": [
+    {
+      "schemaVersion": 1,
+      "sourceHead": "3578632f931c05f0d46389016e7829a68a79119e",
+      "sourceDirty": false,
+      "sourceStatus": [],
+      "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+      "binary": "target/debug/madi-desktop",
+      "bytes": 32596320,
+      "sha256": "03baa9c5ef5dd05d1a091bf5f8020de456f1176af341f04c7f0b6a19c922ea90",
+      "productRelease": false,
+      "nativeUIParity": "not-verified",
+      "recordingAndInference": "not-connected"
+    },
+    {
+      "schemaVersion": 1,
+      "sourceHead": "3578632f931c05f0d46389016e7829a68a79119e",
+      "sourceDirty": false,
+      "sourceStatus": [],
+      "host": "Windows-2022Server-10.0.20348-SP0",
+      "binary": "target\\debug\\madi-desktop.exe",
+      "bytes": 12488704,
+      "sha256": "0ebfdc48698827dd072a6edd86759d08cc751295dc18ae3338b6d086569a4b10",
+      "productRelease": false,
+      "nativeUIParity": "not-verified",
+      "recordingAndInference": "not-connected"
+    }
+  ],
+  "downloadedBinariesVerified": true,
+  "limitations": [
+    "This revision precedes the native audio device adapter",
+    "No full native UI parity or Tauri recording/inference validation"
+  ]
+}

@@ -142,3 +142,6 @@ The standard Madi application bundle is therefore a mixed-license aggregate, not
 a wholly open-source artifact. Set MADI_BUNDLE_TRANSLATE_ENGINES=0 when building
 to omit those source-unavailable executables; the resulting bundle retains the
 AGPL application and transcription engine but not translation/summary/Q&A.
+
+The experimental macOS device adapter uses objc2 Core Audio/Core Audio Types/Core Foundation
+bindings (Zlib OR Apache-2.0 OR MIT); the upstream licensing statement is in apps/desktop/licenses.
