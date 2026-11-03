@@ -38,6 +38,21 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   remain open. The actual native JFK probe now feeds the store and produces the
   expected 22-word sentence with one completion and clean scratch. See
   `runtime/TRANSCRIPT_MODEL.md` and `evidence/macos-transcript-model-2026-11-04.json`.
+  Committed revision `4f8e4de` also passed the complete desktop workflow on both
+  platforms (59 macOS / 52 Windows tests, live Swift/pinned Windows comparisons,
+  standalone executable builds and macOS relocation/package checks). Downloaded
+  executable/archive/runtime hashes and all 15 direct notice files match, and
+  both build source trees/diffs are clean. Evidence:
+  `evidence/desktop-ci-4f8e4de-2026-11-04.json`. The clean local app package is
+  separately recorded in `evidence/macos-transcript-package-2026-11-04.json`.
+- The separate [dependency-review job](https://github.com/companyjupiter/madi/actions/runs/41725769189)
+  fails for Tauri's Linux GTK dependency `glib 0.18.5`
+  ([GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g)).
+  Target-specific workspace dependency graphs select it on Linux and not on
+  macOS arm64 or Windows x64. The advisory's fixed series is 0.20; 0.18.6 is
+  unavailable in the registry. No allow-list or workflow bypass was added.
+  This remains an unresolved PR check even if the desktop build jobs pass;
+  see `evidence/dependency-review-4f8e4de-2026-11-04.json`.
 - Model guide: 210 action-visibility cases match extracted unchanged Swift view
   rules. Nine byte-count cases and five native symbol dimensions match live
   Foundation/AppKit; generated owned PNGs contain visible/transparent pixels.
