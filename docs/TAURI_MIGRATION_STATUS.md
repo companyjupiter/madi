@@ -18,11 +18,15 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
-- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 57 tests pass
-  locally on macOS (11 core, 14 protocol, 32 platform tests), including eight
+- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 59 tests pass
+  locally on macOS (11 core, 14 protocol, 34 platform tests), including ten
   model transfer/service tests. Previous runtime package `fb67b46` passed both
   CI platforms with clean, hash-verified artifacts. The new download/UI revision
-  still requires its own CI result.
+  requires corrected CI: `17c84fc` passed Windows tests but failed clippy on a
+  Unix-only mutable binding; its macOS job passed in full with hash-verified
+  artifacts (`evidence/desktop-ci-17c84fc-2026-11-04.json`). The correction also fixes interrupted-join ownership
+  and explicit Unix lock release, with RED/GREEN regressions and three full local
+  parallel passes. This is not yet a green CI gate for the new model UI.
 - Model guide: 210 action-visibility cases match extracted unchanged Swift view
   rules. Nine byte-count cases and five native symbol dimensions match live
   Foundation/AppKit; generated owned PNGs contain visible/transparent pixels.
@@ -300,6 +304,8 @@ it also retains all 12 direct-runtime notice files. See
 Native click/visual validation is still waiting for Mac unlock; no actual user
 model was re-downloaded or replaced for these tests. Network error text, exact
 controls, settings model lifecycle and all product end-to-end gates remain open.
+Follow-up ownership/lock fixes and failed-attempt context are recorded in
+`evidence/macos-model-download-ownership-2026-11-04.json`.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.

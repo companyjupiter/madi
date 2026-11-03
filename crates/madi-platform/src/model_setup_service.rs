@@ -40,6 +40,7 @@ pub struct ModelSetupService {
 
 struct Active {
     task: DownloadTask,
+    cancelling: bool,
 }
 struct Inner {
     state: ModelSetupState,
@@ -214,17 +215,27 @@ impl ModelSetupService {
                         DownloadState::Idle
                     };
                     inner.set_download_state(index, cancelled);
-                    if let Some(active) = inner.jobs[index].take() {
+                    if let Some(active) = inner.jobs[index].as_mut() {
+                        active.cancelling = true;
                         active.task.request_cancel();
-                        cancelled_jobs.push((index, active));
+                        cancelled_jobs.push(index);
                     }
                 }
                 (self.changed)(inner.snapshot());
-                for (index, mut active) in cancelled_jobs {
+                for index in cancelled_jobs {
                     // Holding the command mutex serializes a following Retry
                     // until the old file/OS lock has been released. Workers
                     // never acquire this mutex during transfer or cleanup.
-                    match active.task.wait().await {
+                    // Keep ownership in the service across await. If the IPC
+                    // future itself is dropped, Retry/quit can still join it.
+                    let result = inner.jobs[index]
+                        .as_mut()
+                        .expect("cancelled job")
+                        .task
+                        .wait()
+                        .await;
+                    inner.jobs[index].take();
+                    match result {
                         Ok(DownloadState::Ready) => {
                             inner.set_download_state(index, DownloadState::Ready)
                         }
@@ -248,15 +259,24 @@ impl ModelSetupService {
         if let Some(job) = &mut inner.jobs[index] {
             // A terminal watch update can arrive just before the worker returns.
             // Await that final join so a rapid Retry is never silently ignored.
-            if matches!(
-                job.task.state(),
-                DownloadState::Downloading(_) | DownloadState::Verifying
-            ) {
+            if !job.cancelling
+                && matches!(
+                    job.task.state(),
+                    DownloadState::Downloading(_) | DownloadState::Verifying
+                )
+            {
                 return;
             }
-            if let Err(error) = job.task.wait().await {
-                inner.set_download_state(index, DownloadState::Failed(error.to_string()));
-                return;
+            match job.task.wait().await {
+                Ok(DownloadState::Ready) => {
+                    inner.set_download_state(index, DownloadState::Ready);
+                    return;
+                }
+                Err(error) => {
+                    inner.set_download_state(index, DownloadState::Failed(error.to_string()));
+                    return;
+                }
+                _ => (),
             }
         }
         if inner.downloader.is_none() {
@@ -290,7 +310,10 @@ impl ModelSetupService {
         inner.generations[index] += 1;
         let generation = inner.generations[index];
         inner.set_download_state(index, DownloadState::Downloading(0.0));
-        inner.jobs[index] = Some(Active { task });
+        inner.jobs[index] = Some(Active {
+            task,
+            cancelling: false,
+        });
         let state = Arc::downgrade(&self.inner);
         let changed = self.changed.clone();
         tokio::spawn(observe(state, changed, index, generation, receiver));
@@ -299,17 +322,19 @@ impl ModelSetupService {
     pub async fn shutdown(&self) -> Result<(), String> {
         let mut inner = self.inner.lock().await;
         inner.closing = true;
-        for job in inner.jobs.iter().flatten() {
+        for job in inner.jobs.iter_mut().flatten() {
+            job.cancelling = true;
             job.task.request_cancel();
         }
         let mut errors = Vec::new();
         for slot in &mut inner.jobs {
-            if let Some(mut job) = slot.take() {
+            if let Some(job) = slot.as_mut() {
                 match job.task.wait().await {
                     Err(error) => errors.push(error.to_string()),
                     Ok(DownloadState::Failed(message)) => errors.push(message),
                     _ => (),
                 }
+                slot.take();
             }
         }
         if errors.is_empty() {

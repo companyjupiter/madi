@@ -246,7 +246,18 @@ struct Stage {
     path: PathBuf,
     destination: PathBuf,
     file: Option<File>,
-    _lock: File,
+    _lock: DownloadLock,
+}
+
+struct DownloadLock(File);
+impl Drop for DownloadLock {
+    fn drop(&mut self) {
+        // flock is tied to the open-file description, which can briefly be
+        // inherited by a concurrently spawned child even with CLOEXEC. Closing
+        // only our descriptor need not release it yet. Explicitly unlock after
+        // the stage's file operations, before publishing terminal completion.
+        let _ = self.0.unlock();
+    }
 }
 
 impl Stage {
@@ -258,7 +269,7 @@ impl Stage {
         std::fs::create_dir_all(support)?;
         let support = support.canonicalize()?;
         let folder = support.join(".madi-downloads");
-        let mut builder = std::fs::DirBuilder::new();
+        let builder = &mut std::fs::DirBuilder::new();
         #[cfg(unix)]
         {
             use std::os::unix::fs::DirBuilderExt;
@@ -278,6 +289,7 @@ impl Stage {
                 "model download already active or lock unavailable: {error}"
             ))
         })?;
+        let lock = DownloadLock(lock);
         let path = folder.join(format!("{name}.partial"));
         let file = regular_writer(&path)?;
         file.set_len(0)?;

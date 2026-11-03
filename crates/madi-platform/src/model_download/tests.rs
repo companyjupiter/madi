@@ -125,6 +125,12 @@ async fn installs_only_verified_bytes_and_preserves_previous_model_on_corruption
         let mut job = client.start_url(ASSET, support.clone(), url);
         let outcome = finish(&mut job).await;
         assert_eq!(outcome == DownloadState::Ready, expected, "{outcome:?}");
+        if !expected {
+            assert_eq!(
+                outcome,
+                DownloadState::Failed("SHA-256 mismatch — re-download".into())
+            );
+        }
         server.join().unwrap();
         assert_eq!(std::fs::read(support.join(ASSET.name)).unwrap(), b"abc");
         no_partial(&support);
@@ -210,4 +216,18 @@ fn stage_recovers_its_interrupted_partial_and_rejects_links_without_touching_tar
     assert!(Stage::open(root.path(), ASSET.name).is_err());
     assert_eq!(std::fs::read(&original).unwrap(), b"must not change");
     assert!(partial.is_symlink());
+}
+
+#[cfg(unix)]
+#[test]
+fn completion_explicitly_unlocks_even_with_an_inherited_open_file_description() {
+    let root = tempfile::tempdir().unwrap();
+    let stage = Stage::open(root.path(), ASSET.name).unwrap();
+    // dup shares the same open-file description, as an inherited fork handle
+    // does before CLOEXEC closes it. Keep it alive across cleanup and retry.
+    let inherited = stage._lock.0.try_clone().unwrap();
+    stage.cleanup().unwrap();
+    let retry = Stage::open(root.path(), ASSET.name).expect("completion must release the lock");
+    retry.cleanup().unwrap();
+    drop(inherited);
 }

@@ -1,4 +1,6 @@
 use super::*;
+#[path = "tests_cancellation.rs"]
+mod cancellation;
 use madi_core::assets::RemoteAsset;
 use std::{
     io::{Read, Write},
@@ -112,7 +114,7 @@ async fn until(
     service: &ModelSetupService,
     condition: impl Fn(&ModelSnapshot) -> bool,
 ) -> ModelSnapshot {
-    tokio::time::timeout(Duration::from_secs(5), async {
+    let result = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let state = service.snapshot().await;
             if condition(&state) {
@@ -121,8 +123,11 @@ async fn until(
             tokio::time::sleep(Duration::from_millis(2)).await;
         }
     })
-    .await
-    .unwrap()
+    .await;
+    match result {
+        Ok(snapshot) => snapshot,
+        Err(error) => panic!("{error}: {:?}", service.snapshot().await),
+    }
 }
 fn receiving(state: &DownloadState) -> bool {
     matches!(state, DownloadState::Downloading(p) if *p > 0.0)
