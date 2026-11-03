@@ -9,7 +9,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
 | G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja static text, two themes | Complete native visual/UX comparison, full native device interaction/models, file staging, model gate, transcript/settings/workspace/AI/overlays |
-| G3 macOS core | Translation/stdout/JSONL parsers, ordered stdout/JSONL barriers and EOF drain, deterministic session lifecycle, real native engine supervision/file smoke, initial setup rules | Production lifecycle executor, storage/migration, audio capture, typed engine configuration, AI policy and real end-to-end |
+| G3 macOS core | Translation/stdout/JSONL parsers, ordered delivery, deterministic lifecycle, typed file configuration, file effect executor with real native decode/ASR smoke, initial setup rules | Live lifecycle executor, storage/migration, audio capture, model admission, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
@@ -18,10 +18,10 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
-- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 40 tests on macOS
-  (11 core, 14 protocol, fifteen native adapter/configuration tests; Windows has 34).
-  The configuration regression passes locally; `e5110db` CI passed the previous
-  39/33-test set. Current-revision CI remains required.
+- `cargo test -p madi-core -p madi-protocol -p madi-platform`: 46 tests on macOS
+  (11 core, 14 protocol, 21 adapter/configuration/executor tests; Windows has 40).
+  The current local set passes; `cfdeecb` CI passed the previous 39/33-test set.
+  Current-revision CI remains required.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -219,7 +219,12 @@ across 601 cases, with a pinned reference also checked on Windows. A real public
 JFK decode/transcription/cleanup smoke passes even with conflicting engine options
 in the parent shell. File-mode settings explicitly clear unset engine-owned flags;
 this intentional isolation difference is documented in `runtime/FILE_ASR_CONFIGURATION.md`.
-The complete session executor and model admission remain open.
+The file effect executor now connects native decoding, typed launch and ordered
+engine/temporary-file teardown. Six real-process regressions pass locally, and
+the real JFK clip produces Processing → Done with exactly one completion and no
+owned scratch remaining. See `runtime/FILE_SESSION_EXECUTOR.md` and
+`evidence/macos-file-session-2026-11-04.json`. Live capture effects, model admission,
+storage/translation and desktop transcript UI remain open.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.

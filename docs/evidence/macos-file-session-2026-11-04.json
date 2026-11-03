@@ -1,0 +1,29 @@
+{
+  "failedCallbacks": 0,
+  "faults": [],
+  "finishedCallbacks": 1,
+  "ownedScratchEmptyAfterShutdown": true,
+  "ownedScratchEmptyWhenFinishedReceived": true,
+  "phases": [
+    "Processing",
+    "Done"
+  ],
+  "schemaVersion": 1,
+  "scope": "Rust file-session effect executor with real native decode and Metal ASR; no desktop UI, archive or live capture integration",
+  "segments": [
+    "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+  ],
+  "status": "passed",
+  "structuredEvents": 26,
+  "timedOut": false,
+  "wordEvents": 22,
+  "date": "2026-11-04",
+  "realProcessRegressionTests": 6,
+  "sourceSHA256": "d754bac7153406fb9f77bebcc505b4874d19c5e598a9d9a6c152b43fcdf4cb71",
+  "originalFixtureSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "limits": [
+    "Headless file executor only; Tauri transcript view is not connected",
+    "Native helper bundling/model admission, live capture, storage and translation remain open",
+    "Windows ASR/GPU validation remains deferred"
+  ]
+}

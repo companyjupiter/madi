@@ -59,4 +59,6 @@ capture test; those remain necessary with the production adapters.
 The [native process adapter](ENGINE_PROCESS_ADAPTER.md) now implements tagged
 child supervision, ordered output, cancellation and owned JSONL cleanup. Its
 20-scenario Swift differential and real Metal file smoke are separate evidence;
-the session effect executor and capture/storage wiring are still open.
+the [file effect executor](FILE_SESSION_EXECUTOR.md) now connects preparation,
+native engine lifetime and owned-file cleanup. Live capture effects and
+storage/UI wiring remain open.
