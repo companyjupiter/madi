@@ -15,6 +15,11 @@ fn main() {
             "file_edit",
             "file_copy_line",
             "file_rename_speaker",
+            "workspace_snapshot",
+            "workspace_command",
+            "workspace_choose_folder",
+            "workspace_open",
+            "workspace_export",
         ]));
     tauri_build::try_build(attributes).expect("failed to build the parity host");
 }

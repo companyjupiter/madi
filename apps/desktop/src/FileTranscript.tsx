@@ -1,10 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { FileArtwork, FileEdit, FileSnapshot, TranscriptLine } from './files';
 import { MiddleText } from './MiddleText';
 import { useTranscriptFollow } from './useTranscriptFollow';
 import './transcript.css';
 
-type Props = { snapshot: FileSnapshot; artwork: FileArtwork | null; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
+type Props = { workspace: ReactNode; snapshot: FileSnapshot; artwork: FileArtwork | null; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
   return <span aria-hidden className="asset-icon" style={{ width: size, height: size, maskImage: `url(/assets/${name}.svg)` }} />;
 }
@@ -14,9 +14,9 @@ function timecode(seconds: number, hours = false) {
 }
 function speakerColor(speaker: number) { return `var(--speaker-${((speaker % 8) + 8) % 8})`; }
 
-// This is the connected file-view candidate. Workspace, AI tools, playback,
+// This is the connected file-view candidate. AI tools, playback,
 // confidence review and native visual parity remain separate migration gates.
-export function FileTranscript({ snapshot: state, artwork, language, text, reset, edit, copy, rename }: Props) {
+export function FileTranscript({ workspace, snapshot: state, artwork, language, text, reset, edit, copy, rename }: Props) {
   const [content, setContent] = useState(true);
   const [fontSize, setFontSize] = useState(16);
   const [editing, setEditing] = useState<string | null>(null);
@@ -125,5 +125,6 @@ export function FileTranscript({ snapshot: state, artwork, language, text, reset
       </button>
       </div>
     </section>
+    {workspace}
   </main>;
 }

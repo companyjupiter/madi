@@ -1785,6 +1785,7 @@ dependencies = [
  "madi-protocol",
  "regex",
  "serde",
+ "serde_json",
  "unicode-normalization",
  "unicode-segmentation",
  "uuid",

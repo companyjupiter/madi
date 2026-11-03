@@ -110,6 +110,83 @@ async fn main() -> io::Result<()> {
                 "inline edit unexpectedly changed the saved file",
             ));
         }
+        // Traverse only the owned temporary archive, using the production
+        // workspace scanner/owner and its generation-bound row authorization.
+        use madi_platform::{
+            transcript_export::Format,
+            workspace_preferences::{Preferences, Store},
+            workspace_service::{Change, Workspace},
+        };
+        let prefs_path = archive_directory.path().join("workspace.json");
+        let fallback =
+            Preferences::from_legacy(Default::default(), archive_directory.path().to_owned());
+        let workspace = Workspace::new(Store::load(prefs_path.clone(), fallback.clone())?, |_| {});
+        while workspace.snapshot().loading {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let list = workspace.snapshot();
+        if list.entries.len() != 1 {
+            return Err(io::Error::other("saved meeting missing from workspace"));
+        }
+        let path = workspace
+            .resolve(list.generation, &list.entries[0].id)
+            .ok_or_else(|| io::Error::other("workspace row could not resolve"))?;
+        if path.canonicalize()? != saved.canonicalize()?
+            || workspace
+                .resolve(list.generation + 1, &list.entries[0].id)
+                .is_some()
+        {
+            return Err(io::Error::other("workspace path authority failed"));
+        }
+        workspace.show_stats(true)?;
+        while workspace.snapshot().stats.meeting_count != 1 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let stats = workspace.snapshot();
+        let mut exports = Vec::new();
+        let export_folder = tempfile::Builder::new()
+            .prefix("madi-export-probe-")
+            .tempdir_in(&args[5])?;
+        for format in [
+            Format::Md,
+            Format::Srt,
+            Format::Vtt,
+            Format::Txt,
+            Format::Json,
+        ] {
+            let path = export_folder
+                .path()
+                .join(format!("transcript.{}", format.extension()));
+            workflow
+                .export_to(done.generation, path.clone(), format, Default::default())
+                .await?;
+            let bytes = std::fs::read(&path)?;
+            if bytes.is_empty() {
+                return Err(io::Error::other("manual export was empty"));
+            }
+            if matches!(format, Format::Json) {
+                let value: serde_json::Value = serde_json::from_slice(&bytes)?;
+                if value["segments"][0]["text"] != changed_text {
+                    return Err(io::Error::other("manual export missed edit"));
+                }
+            }
+            exports.push(json!({"format":format,"bytes":bytes.len(),"sha256":format!("{:x}",Sha256::digest(&bytes))}));
+        }
+        workspace
+            .change(
+                None,
+                Change {
+                    auto_save: Some(false),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        workspace.shutdown().await?;
+        if Store::load(prefs_path, fallback)?.value().auto_save {
+            return Err(io::Error::other(
+                "isolated workspace preference did not persist",
+            ));
+        }
         let reopened = workflow
             .open_archive(done.generation, saved.clone())
             .await?;
@@ -146,6 +223,7 @@ async fn main() -> io::Result<()> {
         }
         Ok(
             json!({"observations":observations,"completed":done,"edited":edited,"reset":reset,"staleEditIgnored":true,"cleanAtCompletion":true,
+                "workspace":{"entries":list.entries.len(),"stats":stats.stats,"staleRowRejected":true,"isolatedPreferencePersisted":true,"exports":exports},
                 "archive":{"bytes":archive_bytes.len(),"sha256":archive_sha,"reopened":reopened,"sourcePreserved":true,"inlineEditDidNotAutosave":true,"reopenDidNotClaimWritableTarget":true}}),
         )
     };

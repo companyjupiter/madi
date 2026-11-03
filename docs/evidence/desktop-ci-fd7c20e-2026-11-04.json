@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41736625183",
+  "head": "fd7c20e97713ad49fc638fa0ecf628467ce1f610",
+  "conclusion": "success",
+  "unitTests": {
+    "macos-15": [
+      11,
+      46,
+      14
+    ],
+    "windows-2022": [
+      11,
+      39,
+      14
+    ]
+  },
+  "records": [
+    {
+      "platform": "macos-15",
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "fd7c20e97713ad49fc638fa0ecf628467ce1f610",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "binary": "target/debug/madi-desktop",
+        "bytes": 55148128,
+        "sha256": "fd1653a6a60ee78a98328a1e44dfc07299d537b702928853d353ae6525ea847e",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "fileTranscription": "native timed owner connected; native screen interaction not verified",
+        "recording": "not-connected"
+      },
+      "binaryHashAndSizeVerified": true,
+      "retainedSourceDiffEmpty": true,
+      "word-merger": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 301,
+        "snapshots": 1974,
+        "fixtureWords": 1566,
+        "swiftComparison": "live-unmodified-merger-and-word-source",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+          "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+          "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+          "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+          "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+        },
+        "corpusSHA256": "c2e22d8ebd0b9bdc185ff09803ba643d4758a6aa5908df627e92ba2101a16b5c",
+        "resultSHA256": "f1600b4aff5fa0b11e7c17cb0053481f6ecc06c88cbcf6cdf82f4de91f0f7c36",
+        "scope": "Finite word inputs: committed/display/suffix/since snapshots, exact times/confidence/text/UUID identity, held word, watermark and duplicate counters; not full transcript grouping or UI"
+      },
+      "transcript-store": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 309,
+        "snapshots": 5947,
+        "fixtureWords": 1566,
+        "swiftComparison": "live-unmodified-model-bodies-with-deterministic-ID-and-render-delivery-hooks",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+          "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+          "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+          "apps/macos/Sovereign/Transcript/SpeakerDisplayNumber.swift": "aed03483b387f644d426a6b66b291424d413e397c4555179a096912d448f3c1b",
+          "apps/macos/Sovereign/Transcript/LiveFeatureWiring.swift": "fb10adb3a626e5e6a3b9105ef2754b5fe52b307d7cd8c6648e3844bdccd4b956",
+          "apps/macos/Sovereign/Transcript/EnergyArc.swift": "7183d8bd405404abf47e51f58df1bb4a7e93f0bf9ed417ed9b60dfcc6d31fcc7",
+          "apps/macos/Sovereign/Engine/EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+          "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+          "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+          "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+        },
+        "corpusSHA256": "9a309537a98266d1420094e7080d1fa5796dea1555cd262619aa46326f24337e",
+        "resultSHA256": "627a8270f0b91ca4df4ed4d471063fbe755c9d5a78ab7612aca99a80f55fe0c3",
+        "scope": "Finite transcript inputs plus 1566 fixture word payloads (not full stdout replay): exact line/word identity, text bytes, times/confidence, grouping, speaker fixes/numbers, overlap, edits, translation provenance, suppression, reload/reset and explicit display delivery. No wall-clock scheduling, UI pixels, translation generation or archive serialization."
+      },
+      "transcript-follow": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 287,
+        "snapshots": 13294,
+        "swiftComparison": "live-unmodified-follow-model",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/TranscriptFollowModel.swift": "f8c199b85e9a0abf12ff7cc1d1b8a499f00dfbd8501ed3928776592b28bf7a82"
+        },
+        "corpusSHA256": "856d8990ab4791d0ddcb763e92b662ffa363ae4484bfee66e16d73fb75c6fedf",
+        "resultSHA256": "7653ace387745e286dbfcd8649f1244b2ead5dff185cc8f45e5e7fe096cb8713",
+        "scope": "Pure state/action parity: live/static geometry, wheel intent, merge identity/time, unseen count, pill, reset and threshold boundaries. No native wheel/scrollbar events, layout or animation comparison."
+      },
+      "archive": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 284,
+        "fixtureWords": 1566,
+        "swiftComparison": "live-unmodified-export-methods-and-archive-source",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+          "apps/macos/Sovereign/Transcript/Exporters.swift": "4db520162040d8913b0680f5488943e311d875d41010544831cca0392d58e94d",
+          "apps/macos/Sovereign/Transcript/TranscriptArchive.swift": "2269fe85512b93689067c5b5db6dcbed58532daf5d6ed93b5356f04f2e10c298",
+          "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+          "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+          "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+          "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+        },
+        "corpusSHA256": "f13b67077dc5bb353fdd68cc343c68bba385204207ef4c09508ba15dcc9914c8",
+        "resultSHA256": "f02c75aa96b59c86cb78b60ac1e6723e53ab44d6a9b10b05d5ef938b790e5197",
+        "scope": "Exact UTF-8 Markdown/plain export; reopened names, word times/confidence, translations and identity invariants. Fresh UUID values differ intentionally. Does not verify native UI, file writes, SRT/VTT/JSON export or invalid Swift-trapping numeric inputs."
+      },
+      "archive-writer": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 48,
+        "snapshots": 825,
+        "swiftComparison": "live-unmodified-writer-source",
+        "sources": {
+          "apps/macos/Sovereign/Session/SessionArchiveWriter.swift": "4f87bc3a69241235fb7371931ee5bef664eb77d50428c324cc7399740d1f7161"
+        },
+        "corpusSHA256": "91f414ae928df0856a17b49f3771a5081514a981daa7562edb53b8b1f694d810",
+        "resultSHA256": "11ec8b889910ce34ec67b2fe70aad6b98a8738ef0e74fe347a9abe8e50bd6c94",
+        "scope": "Real temporary files: pointer/error presence, canonical names and contents after checkpoint, reset, rename, summary and I/O failure. Live macOS compares full file bytes exactly; portable reference additionally compares filename-derived summary headings canonically, with body bytes exact. Error wording, cross-volume moves, crash durability and native UI are not compared. Concurrent allocation is verified separately in Rust."
+      },
+      "package": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "bundleIdentifier": "tv.devart.madi.parity",
+        "minimumSystemVersion": "14.0",
+        "signature": "ad-hoc; deep strict verification passed",
+        "relocatedLookup": "passed",
+        "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+        "missingHelperFailsClosed": true,
+        "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+        "missingOrLinkedRuntimeFilesRejected": 11,
+        "runtimeAssets": [
+          {
+            "name": "WHISPER_BPE.bin",
+            "bytes": 514525,
+            "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+          },
+          {
+            "name": "kaldi_melbank.bin",
+            "bytes": 82240,
+            "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+          },
+          {
+            "name": "mel_filters.bin",
+            "bytes": 102912,
+            "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+          },
+          {
+            "name": "pyannote_osd.bin",
+            "bytes": 5973428,
+            "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+          },
+          {
+            "name": "resnet34_diar.bin",
+            "bytes": 26522076,
+            "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+          },
+          {
+            "name": "silero_vad.bin",
+            "bytes": 1238776,
+            "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+          },
+          {
+            "name": "suppress_tokens.bin",
+            "bytes": 352,
+            "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+          }
+        ],
+        "engines": {
+          "transcribe": {
+            "bytes": 912720,
+            "sha256": "c6a0269cc27fe0804a9010f468dab64ce4743aaffafec31d6ba63fcf37cfdbc0"
+          },
+          "translate-engine-2b": {
+            "bytes": 1602944,
+            "sha256": "2e2a7a526db96f48c9c62f6ce6911d2992453481e3d2b52a48874d8ffd07d33a"
+          },
+          "translate-engine-4b": {
+            "bytes": 1602800,
+            "sha256": "282af3ea81e94619bc26b9801a89c90e12a6a6ca00ceed899e1caed4c529f463"
+          }
+        },
+        "runtimeNoticesPreserved": true,
+        "directRuntimeNotices": {
+          "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+          "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+          "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+          "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+          "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+          "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+          "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+          "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+          "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+          "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+          "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+          "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+          "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+        },
+        "helperSHA256": "b8a5b37227a639793c1ef57990b62ded6e250c14a70f560ab036225f14dcda45",
+        "helperBytes": 145024,
+        "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+        "archiveSHA256": "be42b668b99e7d4220b118ee4ac39e851dff1aa497ecbf424700b041d4acebcf",
+        "productRelease": false,
+        "notarized": false,
+        "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+      },
+      "archiveAndInnerRuntimeVerified": true
+    },
+    {
+      "platform": "windows-2022",
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "fd7c20e97713ad49fc638fa0ecf628467ce1f610",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "binary": "target\\debug\\madi-desktop.exe",
+        "bytes": 17474048,
+        "sha256": "b45f522f824783aaf8391867019b9ccd53ebcfb53038531e7759d20c68c7030a",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "fileTranscription": "native timed owner connected; native screen interaction not verified",
+        "recording": "not-connected"
+      },
+      "binaryHashAndSizeVerified": true,
+      "retainedSourceDiffEmpty": true,
+      "word-merger": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 301,
+        "snapshots": 1974,
+        "fixtureWords": 1566,
+        "swiftComparison": "not-run",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+          "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+          "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+          "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+          "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+        },
+        "corpusSHA256": "c2e22d8ebd0b9bdc185ff09803ba643d4758a6aa5908df627e92ba2101a16b5c",
+        "resultSHA256": "f1600b4aff5fa0b11e7c17cb0053481f6ecc06c88cbcf6cdf82f4de91f0f7c36",
+        "scope": "Finite word inputs: committed/display/suffix/since snapshots, exact times/confidence/text/UUID identity, held word, watermark and duplicate counters; not full transcript grouping or UI"
+      },
+      "transcript-store": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 309,
+        "snapshots": 5947,
+        "fixtureWords": 1566,
+        "swiftComparison": "not-run",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+          "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+          "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+          "apps/macos/Sovereign/Transcript/SpeakerDisplayNumber.swift": "aed03483b387f644d426a6b66b291424d413e397c4555179a096912d448f3c1b",
+          "apps/macos/Sovereign/Transcript/LiveFeatureWiring.swift": "fb10adb3a626e5e6a3b9105ef2754b5fe52b307d7cd8c6648e3844bdccd4b956",
+          "apps/macos/Sovereign/Transcript/EnergyArc.swift": "7183d8bd405404abf47e51f58df1bb4a7e93f0bf9ed417ed9b60dfcc6d31fcc7",
+          "apps/macos/Sovereign/Engine/EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+          "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+          "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+          "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+        },
+        "corpusSHA256": "9a309537a98266d1420094e7080d1fa5796dea1555cd262619aa46326f24337e",
+        "resultSHA256": "627a8270f0b91ca4df4ed4d471063fbe755c9d5a78ab7612aca99a80f55fe0c3",
+        "scope": "Finite transcript inputs plus 1566 fixture word payloads (not full stdout replay): exact line/word identity, text bytes, times/confidence, grouping, speaker fixes/numbers, overlap, edits, translation provenance, suppression, reload/reset and explicit display delivery. No wall-clock scheduling, UI pixels, translation generation or archive serialization."
+      },
+      "transcript-follow": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 287,
+        "snapshots": 13294,
+        "swiftComparison": "not-run",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/TranscriptFollowModel.swift": "f8c199b85e9a0abf12ff7cc1d1b8a499f00dfbd8501ed3928776592b28bf7a82"
+        },
+        "corpusSHA256": "856d8990ab4791d0ddcb763e92b662ffa363ae4484bfee66e16d73fb75c6fedf",
+        "resultSHA256": "7653ace387745e286dbfcd8649f1244b2ead5dff185cc8f45e5e7fe096cb8713",
+        "scope": "Pure state/action parity: live/static geometry, wheel intent, merge identity/time, unseen count, pill, reset and threshold boundaries. No native wheel/scrollbar events, layout or animation comparison."
+      },
+      "archive": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 284,
+        "fixtureWords": 1566,
+        "swiftComparison": "not-run",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+          "apps/macos/Sovereign/Transcript/Exporters.swift": "4db520162040d8913b0680f5488943e311d875d41010544831cca0392d58e94d",
+          "apps/macos/Sovereign/Transcript/TranscriptArchive.swift": "2269fe85512b93689067c5b5db6dcbed58532daf5d6ed93b5356f04f2e10c298",
+          "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+          "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+          "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+          "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+        },
+        "corpusSHA256": "f13b67077dc5bb353fdd68cc343c68bba385204207ef4c09508ba15dcc9914c8",
+        "resultSHA256": "f02c75aa96b59c86cb78b60ac1e6723e53ab44d6a9b10b05d5ef938b790e5197",
+        "scope": "Exact UTF-8 Markdown/plain export; reopened names, word times/confidence, translations and identity invariants. Fresh UUID values differ intentionally. Does not verify native UI, file writes, SRT/VTT/JSON export or invalid Swift-trapping numeric inputs."
+      },
+      "archive-writer": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 48,
+        "snapshots": 825,
+        "swiftComparison": "not-run",
+        "sources": {
+          "apps/macos/Sovereign/Session/SessionArchiveWriter.swift": "4f87bc3a69241235fb7371931ee5bef664eb77d50428c324cc7399740d1f7161"
+        },
+        "corpusSHA256": "91f414ae928df0856a17b49f3771a5081514a981daa7562edb53b8b1f694d810",
+        "resultSHA256": "11ec8b889910ce34ec67b2fe70aad6b98a8738ef0e74fe347a9abe8e50bd6c94",
+        "scope": "Real temporary files: pointer/error presence, canonical names and contents after checkpoint, reset, rename, summary and I/O failure. Live macOS compares full file bytes exactly; portable reference additionally compares filename-derived summary headings canonically, with body bytes exact. Error wording, cross-volume moves, crash durability and native UI are not compared. Concurrent allocation is verified separately in Rust."
+      }
+    }
+  ],
+  "limitations": [
+    "Desktop workflow passed; separate dependency-review check remains failed for Linux glib 0.18.5",
+    "Debug experimental package, no product release or notarization",
+    "Native UI pixel and interaction parity not verified",
+    "File button and timed owner are connected; native file-screen interaction, live capture, storage and AI product parity remain unverified/incomplete"
+  ]
+}

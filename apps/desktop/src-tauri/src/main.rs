@@ -15,12 +15,17 @@ use tauri::Manager;
 mod files_host;
 mod models_host;
 mod setup_host;
+mod workspace_host;
 use files_host::{
     FilesHost, file_artwork, file_copy_line, file_edit, file_rename_speaker, file_reset,
     file_snapshot, file_start,
 };
 use models_host::{models_artwork, models_command, models_snapshot};
 use setup_host::{SetupHost, choose_file};
+use workspace_host::{
+    WorkspaceHost, workspace_choose_folder, workspace_command, workspace_export, workspace_open,
+    workspace_snapshot,
+};
 
 #[cfg(target_os = "macos")]
 fn configure_macos_window(window: &tauri::WebviewWindow, setup: bool) -> tauri::Result<()> {
@@ -136,6 +141,7 @@ fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(SetupHost::default()))
         .manage(FilesHost::default())
+        .manage(WorkspaceHost::default())
         .on_webview_event(setup_host::handle_drop)
         .setup(|app| {
             models_host::install(app)?;
@@ -172,7 +178,12 @@ fn main() {
             file_reset,
             file_edit,
             file_copy_line,
-            file_rename_speaker
+            file_rename_speaker,
+            workspace_snapshot,
+            workspace_command,
+            workspace_choose_folder,
+            workspace_open,
+            workspace_export
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Madi parity harness")

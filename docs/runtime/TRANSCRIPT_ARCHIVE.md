@@ -5,11 +5,12 @@ Markdown using the original `TranscriptArchive.swift` rules. The platform writer
 owns the checkpoint filename, and `FileWorkflow::with_archive` connects it to the
 30-second timer and successful/failed file-session completion.
 
-**The Tauri host still constructs the persistence-disabled workflow.** Native
-workspace selection, preference migration, the save toggle, explorer/reopen
-commands and export dialogs remain to be connected together. This stage verifies
-the reusable owner with temporary folders; it does not silently start writing to
-the user's Documents directory or change existing preferences.
+The macOS Tauri host now constructs the persistence-enabled workflow from its
+isolated workspace preferences. The native panel, save toggle, folder selection,
+archive opening and five manual export formats are connected. See
+[Workspace and exports](WORKSPACE_AND_EXPORTS.md) for the ownership boundary and
+remaining native UI acceptance. Tests use temporary folders; real-user settings
+and native save/reopen interaction have not been exercised.
 
 ## Preserved behavior
 
@@ -82,7 +83,8 @@ failure, disabled persistence, reopen, admission failure and a fresh colliding
 session. The native smoke probe uses the bundled decoder/ASR and a public JFK
 recording with a temporary archive folder.
 
-SRT/VTT/JSON export, workspace scanning, summary generation, product preference
-migration, actual native save/reopen interactions and full UI/UX equivalence remain
-open. Refer to `docs/evidence/macos-transcript-archive-2026-11-04.json` for the
-specific local candidate, checks and limitations.
+SRT/VTT/JSON export and workspace scanning/selection are connected in the next
+candidate described in `WORKSPACE_AND_EXPORTS.md`. Summary generation, complete
+product preference migration, actual native save/reopen interactions and full
+UI/UX equivalence remain open. The archive foundation evidence is retained in
+`docs/evidence/macos-transcript-archive-2026-11-04.json`.

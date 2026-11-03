@@ -19,6 +19,11 @@
     "ja": "AI が話者と言語を確認中",
     "ko": "AI가 화자·언어를 검토하는 중"
   },
+  "Activity stats build up as you save meetings": {
+    "en": "Activity stats build up as you save meetings",
+    "ja": "会議を保存すると活動統計がたまります",
+    "ko": "회의를 저장하면 활동 통계가 쌓입니다"
+  },
   "Applies to all of this speaker’s lines and exports.": {
     "en": "Applies to all of this speaker’s lines and exports.",
     "ja": "この話者のすべての発言とエクスポートに適用されます。",
@@ -54,6 +59,11 @@
     "ja": "自動検出",
     "ko": "자동 감지"
   },
+  "Auto-save": {
+    "en": "Auto-save",
+    "ja": "自動保存",
+    "ko": "자동저장"
+  },
   "Auto-save is off, so closing discards this transcript. You can Export to save it first.": {
     "en": "Auto-save is off, so closing discards this transcript. You can Export to save it first.",
     "ja": "自動保存がオフのため、閉じるとこの文字起こしは破棄されます。先にエクスポートで保存できます。",
@@ -63,6 +73,16 @@
     "en": "Auto-save is off, so leaving discards this transcript. You can Export to save it first.",
     "ja": "自動保存がオフのため、終了するとこの文字起こしは破棄されます。先にエクスポートで保存できます。",
     "ko": "자동저장이 꺼져 있어 나가면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요."
+  },
+  "Avg length": {
+    "en": "Avg length",
+    "ja": "平均の長さ",
+    "ko": "평균 길이"
+  },
+  "Avg speakers": {
+    "en": "Avg speakers",
+    "ja": "平均話者数",
+    "ko": "평균 화자"
   },
   "Back to start": {
     "en": "Back to start",
@@ -83,6 +103,11 @@
     "en": "Caption overlay — a floating live-translation window",
     "ja": "字幕オーバーレイ — リアルタイム翻訳のフローティングウィンドウ",
     "ko": "자막 오버레이 — 화면 위 실시간 번역 자막 창"
+  },
+  "Change working folder…": {
+    "en": "Change working folder…",
+    "ja": "作業フォルダを変更…",
+    "ko": "작업 폴더 변경…"
   },
   "Choose file": {
     "en": "Choose file",
@@ -108,6 +133,11 @@
     "en": "Close (Esc)",
     "ja": "閉じる (Esc)",
     "ko": "닫기 (Esc)"
+  },
+  "Close explorer": {
+    "en": "Close explorer",
+    "ja": "エクスプローラを閉じる",
+    "ko": "탐색기 닫기"
   },
   "Connecting microphone…": {
     "en": "Connecting microphone…",
@@ -189,15 +219,30 @@
     "ja": "エクスポート",
     "ko": "내보내기"
   },
+  "Export format": {
+    "en": "Export format",
+    "ja": "エクスポート形式",
+    "ko": "내보내기 형식"
+  },
   "Export…": {
     "en": "Export…",
     "ja": "エクスポート…",
     "ko": "내보내기…"
   },
+  "Files": {
+    "en": "Files",
+    "ja": "ファイル",
+    "ko": "파일"
+  },
   "Find in transcript": {
     "en": "Find in transcript",
     "ja": "文字起こしを検索",
     "ko": "전사문에서 찾기"
+  },
+  "Folder": {
+    "en": "Folder",
+    "ja": "フォルダ",
+    "ko": "폴더"
   },
   "General": {
     "en": "General",
@@ -294,6 +339,11 @@
     "ja": "会議の要約 — ローカル LLM が要約とアクション項目を作成（デバイスから出ません）",
     "ko": "회의 요약 — 로컬 LLM으로 요약·액션아이템 생성 (기기 밖으로 안 나감)"
   },
+  "Meetings": {
+    "en": "Meetings",
+    "ja": "会議",
+    "ko": "회의"
+  },
   "Mic + system": {
     "en": "Mic + system",
     "ja": "マイク＋システム",
@@ -333,6 +383,16 @@
     "en": "Next flagged word",
     "ja": "次の要確認語",
     "ko": "다음 검토 단어"
+  },
+  "No meetings saved in this folder": {
+    "en": "No meetings saved in this folder",
+    "ja": "このフォルダに保存された会議記録はありません",
+    "ko": "이 폴더에 저장된 회의록이 없습니다"
+  },
+  "No saved meetings": {
+    "en": "No saved meetings",
+    "ja": "保存された会議がありません",
+    "ko": "저장된 회의가 없습니다"
   },
   "No sound detected — check your microphone": {
     "en": "No sound detected — check your microphone",
@@ -389,6 +449,21 @@
     "ja": "ファイルを開く",
     "ko": "파일 열기"
   },
+  "Open items": {
+    "en": "Open items",
+    "ja": "未対応項目",
+    "ko": "열린 항목"
+  },
+  "Open meeting": {
+    "en": "Open meeting",
+    "ja": "会議記録を開く",
+    "ko": "회의록 열기"
+  },
+  "Open this folder (as working folder)": {
+    "en": "Open this folder (as working folder)",
+    "ja": "このフォルダを開く（作業フォルダに）",
+    "ko": "이 폴더 열기 (작업 폴더로)"
+  },
   "Output language": {
     "en": "Output language",
     "ja": "出力言語",
@@ -408,6 +483,11 @@
     "en": "Paused",
     "ja": "一時停止中",
     "ko": "일시정지"
+  },
+  "People": {
+    "en": "People",
+    "ja": "人物",
+    "ko": "사람"
   },
   "Pick an audio or video file, or start recording now.": {
     "en": "Pick an audio or video file, or start recording now.",
@@ -434,6 +514,11 @@
     "ja": "次の確定までの進捗",
     "ko": "다음 확정까지 진행도"
   },
+  "Reading folder…": {
+    "en": "Reading folder…",
+    "ja": "フォルダを読み込み中…",
+    "ko": "폴더를 읽는 중…"
+  },
   "Ready": {
     "en": "Ready",
     "ja": "準備完了",
@@ -458,6 +543,11 @@
     "en": "Recording in progress",
     "ja": "録音中",
     "ko": "녹음이 진행 중이에요"
+  },
+  "Refresh": {
+    "en": "Refresh",
+    "ja": "更新",
+    "ko": "새로고침"
   },
   "Regenerate": {
     "en": "Regenerate",
@@ -564,6 +654,11 @@
     "ja": "今すぐ録音開始",
     "ko": "지금 녹음 시작"
   },
+  "Stats": {
+    "en": "Stats",
+    "ja": "統計",
+    "ko": "통계"
+  },
   "Stop": {
     "en": "Stop",
     "ja": "停止",
@@ -609,10 +704,20 @@
     "ja": "この会議",
     "ko": "이 회의"
   },
+  "To parent folder": {
+    "en": "To parent folder",
+    "ja": "親フォルダへ",
+    "ko": "상위 폴더로"
+  },
   "Total time": {
     "en": "Total time",
     "ja": "合計時間",
     "ko": "총 시간"
+  },
+  "Total words": {
+    "en": "Total words",
+    "ja": "総単語数",
+    "ko": "총 단어"
   },
   "Transcribing": {
     "en": "Transcribing",

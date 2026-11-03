@@ -4,6 +4,8 @@ import { audioInputs, browserFixture, chooseFile, command, snapshot, watchSetup,
 import { MiddleText } from './MiddleText';
 import { ModelGate } from './ModelGate';
 import { FileTranscript } from './FileTranscript';
+import { WorkspacePanel } from './WorkspacePanel';
+import { workspaceSnapshot, watchWorkspace, workspaceCommand, chooseWorkspaceFolder, openWorkspaceEntry, exportWorkspace, type WorkspaceSnapshot } from './workspace';
 import { copyLine, renameSpeaker, editFile, fileArtwork, fileSnapshot, resetFile, startFile, watchFile, type FileArtwork, type FileEdit, type FileSnapshot } from './files';
 import { modelArtwork, modelCommand, modelSnapshot, watchModels, type ModelArtwork, type ModelCommand, type ModelSnapshot } from './models';
 import strings from './strings.generated.json';
@@ -77,8 +79,10 @@ function App() {
 function FileSessionScreen() {
   const [state, setState] = useState<FileSnapshot | null>(null);
   const [artwork, setArtwork] = useState<FileArtwork | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
   const [error, setError] = useState('');
   const queue = useRef(Promise.resolve());
+  const workspaceQueue = useRef(Promise.resolve());
   const receive = (value: FileSnapshot) => setState(previous => previous && previous.revision > value.revision ? previous : value);
   useEffect(() => {
     let active = true;
@@ -90,6 +94,24 @@ function FileSessionScreen() {
     }).catch(reason => { if (active) setError(String(reason)); });
     return () => { active = false; unlisten?.(); };
   }, []);
+  useEffect(() => {
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    const receive = (value: WorkspaceSnapshot | null) => {
+      if (active) setWorkspace(previous => previous && value && previous.revision > value.revision ? previous : value);
+    };
+    void watchWorkspace(receive).then(async cleanup => {
+      if (!active) { cleanup(); return; }
+      unlisten = cleanup; receive(await workspaceSnapshot());
+    }).catch(reason => { if (active) setError(String(reason)); });
+    return () => { active = false; unlisten?.(); };
+  }, []);
+  function changeWorkspace(action: () => Promise<WorkspaceSnapshot>) {
+    workspaceQueue.current = workspaceQueue.current.then(async () => {
+      const value = await action();
+      setWorkspace(previous => previous && previous.revision > value.revision ? previous : value);
+    }).catch(reason => setError(String(reason)));
+  }
   const hasFile = Boolean(state && state.phase.kind !== 'idle');
   useEffect(() => {
     if (!hasFile || artwork) return;
@@ -104,6 +126,12 @@ function FileSessionScreen() {
   if (!state) return null;
   if (state.phase.kind === 'idle' && !state.lines.length) return <SetupScreen start={() => perform(startFile)} />;
   return <FileTranscript snapshot={state} artwork={artwork} language={uiLanguage} text={text}
+    workspace={workspace && <WorkspacePanel state={workspace} artwork={artwork} language={uiLanguage} text={text} hasLines={state.lines.length > 0}
+      open={id => perform(() => openWorkspaceEntry(workspace.generation, id, state.generation))}
+      setAutoSave={value => changeWorkspace(() => workspaceCommand({ type: 'autoSave', value }))}
+      showStats={value => changeWorkspace(() => workspaceCommand({ type: 'showStats', value }))}
+      chooseFolder={() => changeWorkspace(chooseWorkspaceFolder)}
+      exportFile={format => { void exportWorkspace(format, state.generation).catch(reason => setError(String(reason))); }} />}
     reset={() => perform(() => resetFile(state.generation))}
     copy={id => { void copyLine(state.generation, id).catch(reason => setError(String(reason))); }}
     rename={speaker => perform(() => renameSpeaker(state.generation, speaker, text))}

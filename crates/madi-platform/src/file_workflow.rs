@@ -63,6 +63,8 @@ pub struct ArchiveSettings {
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArchiveSnapshot {
+    #[serde(skip)]
+    pub write_revision: u64,
     pub enabled: bool,
     pub folder: Option<PathBuf>,
     pub transcript: Option<PathBuf>,
@@ -114,6 +116,23 @@ pub enum Edit {
     },
 }
 enum Command {
+    Export {
+        generation: u64,
+        path: PathBuf,
+        format: crate::transcript_export::Format,
+        settings: madi_core::transcript::export::EditorSettings,
+        reply: oneshot::Sender<io::Result<()>>,
+    },
+    RenderExport {
+        generation: u64,
+        format: crate::transcript_export::Format,
+        settings: madi_core::transcript::export::EditorSettings,
+        reply: oneshot::Sender<io::Result<Option<String>>>,
+    },
+    ArchiveSettings {
+        settings: ArchiveSettings,
+        reply: oneshot::Sender<io::Result<Snapshot>>,
+    },
     OpenArchive {
         generation: u64,
         path: PathBuf,
@@ -203,6 +222,62 @@ impl FileWorkflow {
     }
     pub fn snapshot(&self) -> Snapshot {
         self.owner.snapshot.borrow().clone()
+    }
+    /// Queue a persisted setting change without creating a detached async task.
+    pub fn archive_settings_changed(&self, settings: ArchiveSettings) -> io::Result<()> {
+        let (reply, _) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::ArchiveSettings { settings, reply })
+            .map_err(|_| closed())
+    }
+    pub async fn set_archive_settings(&self, settings: ArchiveSettings) -> io::Result<Snapshot> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::ArchiveSettings { settings, reply })
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
+    }
+    /// The native save panel owns path selection and overwrite confirmation.
+    /// Once queued, serialization and atomic writing are joined by shutdown.
+    pub async fn export_to(
+        &self,
+        generation: u64,
+        path: PathBuf,
+        format: crate::transcript_export::Format,
+        settings: madi_core::transcript::export::EditorSettings,
+    ) -> io::Result<()> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::Export {
+                generation,
+                path,
+                format,
+                settings,
+                reply,
+            })
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
+    }
+    pub async fn render_export(
+        &self,
+        generation: u64,
+        format: crate::transcript_export::Format,
+        settings: madi_core::transcript::export::EditorSettings,
+    ) -> io::Result<Option<String>> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::RenderExport {
+                generation,
+                format,
+                settings,
+                reply,
+            })
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
     }
     pub async fn open_archive(&self, generation: u64, path: PathBuf) -> io::Result<Snapshot> {
         let (reply, result) = oneshot::channel();
@@ -388,6 +463,10 @@ impl Worker {
         .await;
         match saved {
             Ok(Ok((path, error))) => {
+                if error.is_none() && path.is_some() {
+                    self.state.archive.write_revision =
+                        self.state.archive.write_revision.wrapping_add(1);
+                }
                 self.state.archive.transcript = path;
                 self.state.archive.error = error;
             }
@@ -433,6 +512,32 @@ impl Worker {
         loop {
             tokio::select! {
                 command=self.input.recv()=>match command {
+                    Some(Command::Export {generation,path,format,settings,reply})=>{
+                        let result=if generation!=self.state.generation || self.store.lines().is_empty(){Ok(())}else{
+                            let lines=self.store.lines().to_vec();let names=self.state.speaker_names.clone();
+                            tokio::task::spawn_blocking(move ||{
+                                let content=crate::transcript_export::render(format,&lines,&names,&settings)?;
+                                crate::transcript_export::write_selected(&path,&content)
+                            }).await.map_err(io::Error::other).and_then(|result|result)
+                        };
+                        let _=reply.send(result);
+                    },
+                    Some(Command::RenderExport {generation,format,settings,reply})=>{
+                        let result=if generation!=self.state.generation || self.store.lines().is_empty(){Ok(None)}else{
+                            let lines=self.store.lines().to_vec();let names=self.state.speaker_names.clone();
+                            tokio::task::spawn_blocking(move ||crate::transcript_export::render(format,&lines,&names,&settings)).await.map_err(io::Error::other).and_then(|result|result.map(Some))
+                        };
+                        let _=reply.send(result);
+                    },
+                    Some(Command::ArchiveSettings {settings,reply})=>{
+                        if self.state.archive.enabled!=settings.enabled || self.state.archive.folder.as_ref()!=Some(&settings.folder) {
+                            self.state.archive.enabled=settings.enabled;
+                            self.state.archive.folder=Some(settings.folder.clone());
+                            self.archive_settings=Some(settings);
+                            self.publish();
+                        }
+                        let _=reply.send(Ok(self.state.clone()));
+                    },
                     Some(Command::OpenArchive {generation,path,reply})=>{
                         let result=self.open_archive(generation,path).await;
                         let _=reply.send(result);

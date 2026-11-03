@@ -17,7 +17,7 @@ export interface FileSnapshot {
   speakerNames: Record<string, string>; partial: string; speakerIslandAbsorption: boolean;
   archive: { enabled: boolean; folder: string | null; transcript: string | null; error: string | null };
 }
-export type FileArtwork = Record<'follow', { dataUrl: string; width: number; height: number }>;
+export type FileArtwork = Record<'follow' | 'folder' | 'export', { dataUrl: string; width: number; height: number }>;
 export const fileArtwork = () => invoke<FileArtwork | null>('file_artwork');
 export type FileEdit =
   | { type: 'line'; id: string; text: string }

@@ -14,4 +14,8 @@ pub mod prepared_audio;
 #[cfg(target_os = "macos")]
 pub mod runtime_bundle;
 pub mod session_archive;
+pub mod transcript_export;
 pub mod transcript_native;
+pub mod workspace_preferences;
+pub mod workspace_scan;
+pub mod workspace_service;

@@ -107,6 +107,24 @@ async fn archive_checkpoints_finish_and_reopen_keep_session_ownership() {
         .unwrap();
     // An inline edit alone does not invent a new native autosave trigger.
     assert_eq!(std::fs::read_to_string(&saved).unwrap(), before);
+    // A folder switch applies to the next session, not to this already-owned
+    // checkpoint. Rapid opposite toggle changes preserve their queue order.
+    let next_folder = root.path().join("next-archives");
+    workflow
+        .archive_settings_changed(ArchiveSettings {
+            enabled: false,
+            folder: next_folder.clone(),
+        })
+        .unwrap();
+    let updated = workflow
+        .set_archive_settings(ArchiveSettings {
+            enabled: true,
+            folder: next_folder.clone(),
+        })
+        .await
+        .unwrap();
+    assert!(updated.archive.enabled);
+    assert_eq!(updated.archive.folder, Some(next_folder.clone()));
     std::fs::write(root.path().join("finish"), "finish").unwrap();
     let finished = state_when(&workflow, |state| state.phase == ViewPhase::Done).await;
     assert_eq!(
@@ -169,6 +187,7 @@ async fn archive_checkpoints_finish_and_reopen_keep_session_ownership() {
         .unwrap();
     let next = state_when(&workflow, |state| state.phase == ViewPhase::Done).await;
     let new_path = next.archive.transcript.unwrap();
+    assert_eq!(new_path.parent(), Some(next_folder.as_path()));
     assert_ne!(new_path, saved);
     assert_eq!(std::fs::read(&saved).unwrap(), archive_bytes);
     assert!(
@@ -568,4 +587,108 @@ print('<<FLUSH_END>>',flush=True)
     assert!(done.generation > failed.generation);
     workflow.shutdown().await.unwrap();
     assert_eq!(scratch_count(root.path()), 0);
+}
+
+#[tokio::test]
+async fn manual_export_uses_authoritative_edits_and_remains_owned_after_caller_cancellation() {
+    use crate::transcript_export::Format;
+    let (root, configuration, _) = fixture("", "");
+    let source = root.path().join("source.md");
+    let original = "- **[00:01] Ada** old text\n  > ko: 원문\n";
+    std::fs::write(&source, original).unwrap();
+    let workflow = FileWorkflow::new(configuration, |_| {}).unwrap();
+    let opened = workflow.open_archive(0, source.clone()).await.unwrap();
+    workflow
+        .edit(
+            opened.generation,
+            Edit::Line {
+                id: opened.lines[0].line.id.to_string(),
+                text: "Latest edited words".into(),
+            },
+        )
+        .await
+        .unwrap();
+    // Display publication is coalesced. Export must read the store immediately,
+    // including user edits, rather than wait for that publication timer.
+    let text = workflow
+        .render_export(opened.generation, Format::Txt, Default::default())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(text.contains("Latest edited words"));
+    assert!(!text.contains("old text"));
+    for format in [
+        Format::Md,
+        Format::Srt,
+        Format::Vtt,
+        Format::Txt,
+        Format::Json,
+    ] {
+        let path = root.path().join(format!("selected.{}", format.extension()));
+        std::fs::write(&path, "confirmed overwrite").unwrap();
+        workflow
+            .export_to(opened.generation, path.clone(), format, Default::default())
+            .await
+            .unwrap();
+        let result = std::fs::read_to_string(path).unwrap();
+        assert!(result.contains("Latest edited words"));
+        assert!(!result.contains("confirmed overwrite"));
+    }
+    let blocked = root.path().join("selected-directory");
+    std::fs::create_dir(&blocked).unwrap();
+    std::fs::write(blocked.join("keep"), "foreign").unwrap();
+    assert!(
+        workflow
+            .export_to(
+                opened.generation,
+                blocked.clone(),
+                Format::Txt,
+                Default::default()
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read_to_string(blocked.join("keep")).unwrap(),
+        "foreign"
+    );
+    let stale = root.path().join("stale.txt");
+    std::fs::write(&stale, "keep").unwrap();
+    workflow
+        .export_to(
+            opened.generation + 1,
+            stale.clone(),
+            Format::Txt,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read_to_string(&stale).unwrap(), "keep");
+    let final_path = root.path().join("cancelled-caller.txt");
+    let mut pending = Box::pin(workflow.export_to(
+        opened.generation,
+        final_path.clone(),
+        Format::Txt,
+        Default::default(),
+    ));
+    std::future::poll_fn(|context| {
+        assert!(pending.as_mut().poll(context).is_pending());
+        std::task::Poll::Ready(())
+    })
+    .await;
+    drop(pending);
+    workflow.shutdown().await.unwrap();
+    assert!(
+        std::fs::read_to_string(final_path)
+            .unwrap()
+            .contains("Latest edited words")
+    );
+    assert_eq!(std::fs::read_to_string(source).unwrap(), original);
+    assert!(!std::fs::read_dir(root.path()).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".madi-export-")
+    }));
 }

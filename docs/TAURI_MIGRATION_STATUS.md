@@ -8,22 +8,39 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 |---|---|---|
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
-| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide and file transcript candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, complete transcript/settings/workspace/AI/overlays |
+| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file transcript and workspace/export candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, complete transcript/settings/workspace/AI/overlays |
 | G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, native decode/ASR, transcript/edit differentials, timed file workflow, verified model downloads and first-run admission | Native file-screen delivery/interaction evidence, live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
 
+- Workspace/export candidate: the macOS file screen now connects the fixed right
+  panel, native folder selection, generation-bound saved meeting opening,
+  isolated auto-save preferences and five manual export formats. Live Swift
+  comparison passes 610 export cases / 3,502 cues, including 373 exact native
+  JSON formatting cases; workspace comparison covers 2,017 nodes / 57 calendar
+  cases. Actual native interaction/pixels and the export-format popover remain
+  unverified. Local checks pass 78 Rust tests (11/53/14), clippy, frontend build,
+  eight-symbol native metadata, debug app and strict relocated-package checks.
+  The actual decoder/Metal engine yields 22 JFK words, then passes temporary
+  workspace/statistics, isolated preference persistence and all five exports;
+  source/model data and owned temporary cleanup are verified. The local receipt
+  is `evidence/macos-workspace-exports-2026-11-04.json`; CI for this candidate
+  is pending. See `runtime/WORKSPACE_AND_EXPORTS.md`.
 - Archive foundation: Markdown/plain export and lossy reopen match unchanged
   Swift in 284 cases including 1,566 real fixture words. The session writer matches
   48 real-file sequences / 825 states; concurrency checks preserve 12 simultaneous
   writers. The optional workflow persistence now uses the production 30-second
   timer, final/failure checkpoints and generation-protected reopen. Local Rust
-  checks pass 71 tests (11 core / 46 platform / 14 protocol). The Tauri host's
-  workspace/settings boundary is still unconnected and persistence remains
-  disabled there; no existing user preferences or archive data were migrated.
-  See `runtime/TRANSCRIPT_ARCHIVE.md` for scope and remaining product work.
+  checks passed 71 tests (11 core / 46 platform / 14 protocol) at `fd7c20e`.
+  That revision passed desktop CI `41736625183` on macOS 15 / Windows Server
+  2022 with 71/64 tests. Downloaded binaries, package, inner runtime and all 16
+  direct notices match their recorded hashes; both source trees/diffs are clean.
+  The separate dependency-review check still fails for Linux glib 0.18.5.
+  The new workspace candidate connects persistence; actual user settings/archive
+  migration acceptance is still open. See `runtime/TRANSCRIPT_ARCHIVE.md` and
+  `evidence/desktop-ci-fd7c20e-2026-11-04.json`.
 - Transcript reading/follow candidate: the production TypeScript model matches
   unchanged Swift in 287 cases / 13,294 intermediate states. File transcription
   now uses the original top anchor; recording-only follow remains distinct from

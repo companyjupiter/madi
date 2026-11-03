@@ -150,6 +150,23 @@ pub async fn file_rename_speaker(
         .ok_or("speaker dialog closed without a result")?
 }
 impl FilesHost {
+    #[cfg(target_os = "macos")]
+    pub fn workspace_changed(
+        &self,
+        state: &madi_platform::workspace_service::Snapshot,
+    ) -> Result<(), String> {
+        let slot = self.service.lock().map_err(|_| "file state unavailable")?;
+        if let Some(service) = slot.as_ref() {
+            service
+                .archive_settings_changed(madi_platform::file_workflow::ArchiveSettings {
+                    enabled: state.auto_save,
+                    folder: state.folder.clone(),
+                })
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
     pub fn snapshot(&self) -> Snapshot {
         self.service
             .lock()
@@ -173,7 +190,7 @@ impl FilesHost {
         Ok(())
     }
 }
-fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
+pub(crate) fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
     let host = app.state::<FilesHost>();
     let mut slot = host.service.lock().map_err(|_| "file state unavailable")?;
     if host.closed.load(Ordering::Acquire) {
@@ -189,7 +206,10 @@ fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
         let locations = model_locations(app)?;
         let events = app.clone();
         let setup_mode = AtomicBool::new(true);
-        let worker = FileWorkflow::new(
+        let workspace = crate::workspace_host::service(app)?;
+        let preferences = workspace.snapshot();
+        let saved_revision = Mutex::new(None);
+        let worker = FileWorkflow::with_archive(
             madi_platform::file_session::Configuration {
                 resources: madi_platform::asr_config::Resources {
                     executable: runtime.transcribe,
@@ -200,7 +220,20 @@ fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
                 decoder: runtime.decoder,
                 scratch_parent: std::env::temp_dir(),
             },
+            Some(madi_platform::file_workflow::ArchiveSettings {
+                enabled: preferences.auto_save,
+                folder: preferences.folder,
+            }),
             move |snapshot| {
+                if let Some(path) = &snapshot.archive.transcript {
+                    let key = (snapshot.generation, snapshot.archive.write_revision);
+                    if let Ok(mut previous) = saved_revision.lock()
+                        && previous.as_ref() != Some(&key)
+                    {
+                        *previous = Some(key);
+                        let _ = workspace.note_saved(path);
+                    }
+                }
                 let setup = snapshot.phase == madi_platform::file_workflow::ViewPhase::Idle
                     && snapshot.lines.is_empty();
                 if setup_mode.swap(setup, Ordering::AcqRel) != setup {

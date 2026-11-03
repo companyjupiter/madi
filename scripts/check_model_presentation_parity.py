@@ -51,7 +51,7 @@ let bytes: [Int64] = [0, 1, 999, 1000, 867485320, 1312165344, 2783447424, 217965
 let specs: [(String, String, CGFloat, NSFont.Weight)] = [
     ("header", "waveform", 36, .light), ("required", "waveform", 18, .semibold),
     ("translation", "character.bubble", 18, .semibold), ("privacy", "lock.shield", 11, .regular),
-    ("error", "exclamationmark.triangle.fill", 11, .regular), ("follow", "arrow.down", 11, .semibold)]
+    ("error", "exclamationmark.triangle.fill", 11, .regular), ("follow", "arrow.down", 11, .semibold), ("folder", "folder", 26, .light), ("export", "square.and.arrow.up", 12, .semibold)]
 let symbols = Dictionary(uniqueKeysWithValues: specs.map { key, name, points, weight in
     let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)!.withSymbolConfiguration(.init(pointSize: points, weight: weight))!
     return (key, ["width": image.size.width, "height": image.size.height])
@@ -77,7 +77,7 @@ FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: resul
         assert result['pixelHeight'] == math.ceil(art['height'] * 2)
         symbols[key] = dict(width=art['width'], height=art['height'], **result)
     report = dict(schemaVersion=1, status='passed', physicalMemory=actual['physicalMemory'],
-                  sizes=actual['sizes'], symbols=symbols, byteCountCases=9, symbolCases=6,
+                  sizes=actual['sizes'], symbols=symbols, byteCountCases=9, symbolCases=8,
                   scope='Live native Foundation formatting and NSImage symbol dimensions plus nonempty transparent owned PNGs; no SwiftUI/WebView pixel or interaction comparison')
     (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

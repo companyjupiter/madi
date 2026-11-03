@@ -23,6 +23,7 @@ report = {
     "nativeUIParity": "not-verified",
     "fileTranscription": "native timed owner connected; native screen interaction not verified",
     "recording": "not-connected",
+    "workspace": "macOS panel, isolated preferences, native scan/open/export connected; native UI not verified",
 }
 out = ROOT / "out/desktop-build/report.json"
 out.parent.mkdir(parents=True, exist_ok=True)

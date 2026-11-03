@@ -64,10 +64,20 @@ pub fn artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
 }
 
 pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
-    Ok(BTreeMap::from([(
-        "follow".into(),
-        render_symbol("arrow.down", 11.0, unsafe { NSFontWeightSemibold })?,
-    )]))
+    Ok(BTreeMap::from([
+        (
+            "follow".into(),
+            render_symbol("arrow.down", 11.0, unsafe { NSFontWeightSemibold })?,
+        ),
+        (
+            "folder".into(),
+            render_symbol("folder", 26.0, unsafe { NSFontWeightLight })?,
+        ),
+        (
+            "export".into(),
+            render_symbol("square.and.arrow.up", 12.0, unsafe { NSFontWeightSemibold })?,
+        ),
+    ]))
 }
 
 fn render_symbol(name: &str, points: f64, weight: f64) -> Result<SymbolImage, &'static str> {

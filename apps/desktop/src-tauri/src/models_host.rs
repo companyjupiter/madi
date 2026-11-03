@@ -147,6 +147,13 @@ pub fn on_run_event(app: &tauri::AppHandle, event: &tauri::RunEvent) {
         if let Err(error) = app.state::<crate::files_host::FilesHost>().shutdown().await {
             eprintln!("file shutdown: {error}");
         }
+        if let Err(error) = app
+            .state::<crate::workspace_host::WorkspaceHost>()
+            .shutdown()
+            .await
+        {
+            eprintln!("workspace shutdown: {error}");
+        }
         if let Err(error) = service.shutdown().await {
             eprintln!("model shutdown: {error}");
         }

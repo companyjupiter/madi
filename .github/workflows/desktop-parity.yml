@@ -32,6 +32,9 @@ on:
       - 'apps/macos/Sovereign/Model/AssetManifest.swift'
       - 'apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift'
       - 'apps/macos/Sovereign/UI/ModelGateView.swift'
+      - 'apps/macos/Sovereign/UI/WorkspaceExplorer.swift'
+      - 'apps/macos/Sovereign/UI/WorkspaceStatsView.swift'
+      - 'apps/macos/Sovereign/Model/WorkspaceTree.swift'
       - 'apps/macos/Sovereign/Model/ModelDownloader.swift'
       - 'apps/macos/Sovereign/Model/TranslateModelDownloader.swift'
       - 'web/fixtures/*.events.jsonl'
@@ -107,6 +110,8 @@ jobs:
           python3 scripts/check_transcript_follow_parity.py
           python3 scripts/check_archive_parity.py
           python3 scripts/check_archive_writer_parity.py
+          python3 scripts/check_workspace_parity.py
+          python3 scripts/check_export_parity.py
           swiftc -parse-as-library apps/macos/Sovereign/Audio/AudioDecode.swift apps/macos/Sovereign/Audio/Resampler.swift apps/macos/Sovereign/Audio/WavWriter.swift apps/macos/Tests/AudioDecodeLimitTests.swift -o "$RUNNER_TEMP/madi-audio-decode-parity"
           "$RUNNER_TEMP/madi-audio-decode-parity"
       - name: Compare Windows parser to pinned Swift reference
@@ -125,6 +130,7 @@ jobs:
           python scripts/check_transcript_follow_parity.py --frontend-only
           python scripts/check_archive_parity.py --rust-only
           python scripts/check_archive_writer_parity.py --rust-only
+          python scripts/check_export_parity.py --rust-only
       - name: Build the standalone debug parity host
         run: cargo build --locked -p madi-desktop --features custom-protocol
       - name: Verify the relocated macOS app and native decoder
@@ -158,6 +164,8 @@ jobs:
             out/transcript-follow-parity/report.json
             out/archive-parity/report.json
             out/archive-writer-parity/report.json
+            out/workspace-parity/report.json
+            out/export-parity/report.json
             out/desktop-package/report.json
             out/desktop-package/Madi-UI-Parity.app.zip
             target/debug/madi-desktop
