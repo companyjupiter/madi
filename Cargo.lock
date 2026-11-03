@@ -1721,6 +1721,7 @@ dependencies = [
  "objc2-uniform-type-identifiers",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "tokio",
 ]

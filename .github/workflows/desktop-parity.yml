@@ -23,6 +23,7 @@ on:
       - 'apps/macos/Tests/AudioDecodeLimitTests.swift'
       - 'apps/macos/Sovereign/UI/ContentView.swift'
       - 'apps/macos/Sovereign/SessionController.swift'
+      - 'apps/macos/Sovereign/Model/AssetManifest.swift'
       - 'web/fixtures/*.events.jsonl'
       - 'design/parity/*reference.json'
       - '.github/workflows/desktop-parity.yml'
@@ -76,6 +77,7 @@ jobs:
           python3 scripts/check_audio_devices_parity.py
           python3 scripts/check_media_file_parity.py
           python3 scripts/check_asr_config_parity.py
+          python3 scripts/check_asset_manifest_parity.py
           swiftc -parse-as-library apps/macos/Sovereign/Audio/AudioDecode.swift apps/macos/Sovereign/Audio/Resampler.swift apps/macos/Sovereign/Audio/WavWriter.swift apps/macos/Tests/AudioDecodeLimitTests.swift -o "$RUNNER_TEMP/madi-audio-decode-parity"
           "$RUNNER_TEMP/madi-audio-decode-parity"
       - name: Compare Windows parser to pinned Swift reference
@@ -86,6 +88,7 @@ jobs:
           python scripts/check_structured_parser_parity.py --rust-only
           python scripts/check_stream_process_parity.py --rust-only
           python scripts/check_asr_config_parity.py --rust-only
+          python scripts/check_asset_manifest_parity.py --rust-only
       - name: Build the standalone debug parity host
         run: cargo build --locked -p madi-desktop --features custom-protocol
       - name: Verify the relocated macOS app and native decoder
@@ -110,6 +113,7 @@ jobs:
             out/audio-devices-parity/report.json
             out/media-file-parity/report.json
             out/asr-config-parity/report.json
+            out/asset-manifest-parity/report.json
             out/desktop-package/report.json
             out/desktop-package/Madi-UI-Parity.app.zip
             target/debug/madi-desktop

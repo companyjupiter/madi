@@ -19,6 +19,8 @@ statement, including the Apple SDK note, is retained in
 `apps/desktop/licenses/Objc2-LICENSE.md`; the full distribution audit remains open.
 The native process supervisor uses Tokio 1.54.1 (MIT), tempfile 3.27.0
 and libc (MIT OR Apache-2.0); their MIT notices are retained in the same directory.
+Read-only model integrity verification uses sha2 0.10.9 (MIT OR Apache-2.0);
+its MIT copyright and license are retained in `apps/desktop/licenses/Sha2-MIT.txt`.
 `Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
 The complete transitive binary notice bundle is still a migration release gate;
 the current parity harness is debug-only and not a product distribution.
