@@ -20,13 +20,17 @@ pub(crate) fn fixture(
         }
     });
     let output = std::process::Command::new(python_name)
-        .args(["-c", "import sys;print(sys.executable)"])
+        .args([
+            "-c",
+            "import sys;sys.stdout.reconfigure(encoding='utf-8');print(sys.executable)",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());
     let python = PathBuf::from(String::from_utf8(output.stdout).unwrap().trim());
     let decoder = root.path().join("original decoder fixture.py");
     std::fs::write(&decoder, format!(r#"import json,os,pathlib,sys,time,wave
+sys.stdout.reconfigure(encoding='utf-8')
 root=pathlib.Path(__file__).parent
 scratch=pathlib.Path(sys.argv[1])
 {decoder_extra}
@@ -40,6 +44,10 @@ print(json.dumps({{'status':'ok','path':str(path)}}),flush=True)
         &model,
         format!(
             r#"import json,os,pathlib,signal,subprocess,sys,time
+# The real engine writes UTF-8 bytes regardless of the host console code page.
+# Python's Windows pipe default can neither encode the arrow nor preserve conf
+# markers as UTF-8; give the fixture the engine's actual wire contract.
+sys.stdout.reconfigure(encoding='utf-8')
 root=pathlib.Path(__file__).parent
 wav=pathlib.Path(sys.argv[1])
 assert wav.exists() and wav.read_bytes()[:4]==b'RIFF'

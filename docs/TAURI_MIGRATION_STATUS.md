@@ -27,7 +27,12 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   The short real recording publishes its words at Done; pre-completion word/fix
   scheduling is separately verified with held real-child fixtures. The debug app
   and strict relocation/package checks pass. Local candidate evidence:
-  `evidence/macos-file-workflow-2026-11-04.json`. Committed cross-platform CI is pending.
+  `evidence/macos-file-workflow-2026-11-04.json`. Initial Windows CI at `fe0e71e`
+  failed five workflow tests: Python fixture stdout used its host pipe code page,
+  unlike the real engine's UTF-8 output. Forced ASCII locally reproduces the
+  failure. Explicit fixture UTF-8 gives six passing workflow tests under the same
+  restriction; production process behavior is unchanged. Windows rerun is pending.
+  See `evidence/file-workflow-fixture-encoding-2026-11-04.json`.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
