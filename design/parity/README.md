@@ -60,3 +60,21 @@ the default product exposes them.
 
 Every item stays open until there is a measured pass or a user-approved change
 to the requirement. Browser rendering alone never closes G0/G2.
+
+## Structured events and process ordering
+
+`structured-reference.json` pins 2,945 `EngineEvents.swift` inputs, including
+1,707 actual checked-in transcript fixture lines. Duplicate-key selection is an
+explicit compatibility option; the live oracle probes its runtime while an
+independent canonical hash check protects the shared default. Very large
+arbitrary-precision Foundation numeric coercions are outside the bounded engine
+contract and remain unsupported; this is not a complete Foundation replacement.
+
+`stream-reference.json` records 20 actual child-process comparisons against
+unmodified `EngineProcess.swift`. Only the disabled debug logger is stubbed.
+The fake child writes real stdout and EVENTS_FILE bytes, uses stdin acknowledgments
+to order partial writes, and exits with buffered tail output. Rust must deliver
+complete JSONL records before the associated stdout barrier and termination
+after the last stdout event. Incomplete JSONL without a later barrier stays
+uncommitted, matching the source. This does not validate a real inference engine
+or replace production lifecycle/cancellation tests.

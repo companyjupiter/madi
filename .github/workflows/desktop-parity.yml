@@ -12,6 +12,10 @@ on:
       - 'tests/parity/**'
       - 'apps/macos/Sovereign/Engine/TranslateStreamParser.swift'
       - 'apps/macos/Sovereign/Engine/EngineProtocol.swift'
+      - 'apps/macos/Sovereign/Engine/EngineEvents.swift'
+      - 'apps/macos/Sovereign/Engine/EngineProcess.swift'
+      - 'apps/macos/Sovereign/Engine/EnginePathPolicy.swift'
+      - 'web/fixtures/*.events.jsonl'
       - 'design/parity/*reference.json'
       - '.github/workflows/desktop-parity.yml'
   workflow_dispatch:
@@ -58,11 +62,15 @@ jobs:
         run: |
           python3 scripts/check_translate_parser_parity.py
           python3 scripts/check_transcribe_parser_parity.py
+          python3 scripts/check_structured_parser_parity.py
+          python3 scripts/check_stream_process_parity.py
       - name: Compare Windows parser to pinned Swift reference
         if: runner.os == 'Windows'
         run: |
           python scripts/check_translate_parser_parity.py --rust-only
           python scripts/check_transcribe_parser_parity.py --rust-only
+          python scripts/check_structured_parser_parity.py --rust-only
+          python scripts/check_stream_process_parity.py --rust-only
       - name: Build the standalone debug parity host
         run: cargo build --locked -p madi-desktop --features custom-protocol
       - name: Record build provenance
@@ -74,8 +82,11 @@ jobs:
           name: desktop-parity-${{ matrix.os }}
           path: |
             out/desktop-build/report.json
+            out/desktop-build/source.diff
             out/translate-parser-parity/report.json
             out/transcribe-parser-parity/report.json
+            out/structured-parser-parity/report.json
+            out/stream-process-parity/report.json
             target/debug/madi-desktop
             target/debug/madi-desktop.exe
           if-no-files-found: error

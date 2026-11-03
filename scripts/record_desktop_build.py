@@ -25,5 +25,6 @@ report = {
 }
 out = ROOT / "out/desktop-build/report.json"
 out.parent.mkdir(parents=True, exist_ok=True)
+(out.parent / "source.diff").write_bytes(subprocess.check_output(["git", "diff", "--no-ext-diff"], cwd=ROOT))
 out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 print(json.dumps(report, indent=2))

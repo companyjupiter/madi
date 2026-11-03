@@ -26,7 +26,7 @@ pub enum Utf8BomPolicy {
 }
 
 impl Utf8BomPolicy {
-    fn apply(self, text: &str) -> &str {
+    pub(crate) fn apply(self, text: &str) -> &str {
         match self {
             Self::Preserve => text,
             Self::StripLeading => text.strip_prefix('\u{feff}').unwrap_or(text),

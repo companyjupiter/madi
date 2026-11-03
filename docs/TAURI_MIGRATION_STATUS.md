@@ -6,9 +6,9 @@ the initial targets. The source baseline is Madi `c1390c7` / 0.4.1.
 | Gate | Current evidence | Still required |
 |---|---|---|
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; existing Swift tests pass | Native screenshot and action baseline, deployment-version match, fonts/SF Symbols and Windows exceptions |
-| G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Native IPC/UI interaction, full desktop CI green, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
+| G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Native IPC/UI interaction, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
 | G2 UI | Initial start-screen candidate, ko/en/ja static text, two themes, setup commands owned by Rust | Native visual/UX comparison, real devices/models, file staging, model gate, transcript/settings/workspace/AI/overlays |
-| G3 macOS core | Translation stream parser, stdout line decoder, initial setup rules | Session lifecycle, stdout/JSONL merge, storage/migration, audio capture, engine supervisor, AI policy and real end-to-end |
+| G3 macOS core | Translation/stdout/JSONL parsers, ordered stdout/JSONL barriers and EOF drain, initial setup rules | Session lifecycle, storage/migration, audio capture, engine supervisor, AI policy and real end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
@@ -17,7 +17,7 @@ the initial targets. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
-- `cargo test -p madi-core -p madi-protocol`: 12 unit tests pass.
+- `cargo test -p madi-core -p madi-protocol`: 17 unit tests pass.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -28,7 +28,17 @@ the initial targets. The source baseline is Madi `c1390c7` / 0.4.1.
   10,424 events** match unmodified `EngineProtocol.swift`. Includes preview
   quarantine, both language lock versions, progress, speaker corrections,
   Unicode/grapheme boundaries and Swift-compatible hexadecimal/NaN parsing.
-  This is line decoding; stdout framing and JSONL synchronization remain open.
+- `python3 scripts/check_structured_parser_parity.py`: **2,945** inputs match
+  unmodified `EngineEvents.swift`, including **1,707** checked-in real transcript
+  fixture lines, missing/wrong-type fields, defaults, Unicode, unknown events,
+  trailing commas and duplicate keys. Arbitrary-precision `NSNumber` coercions
+  outside the finite bounded engine contract are explicitly not reproduced.
+- `python3 scripts/check_stream_process_parity.py`: **20** real-child-process
+  scenarios match unmodified Swift `EngineProcess` delivery exactly: stdout
+  fragmentation, UTF-8 splits, partial JSONL retained across barriers, JSONL
+  before segment/flush callbacks, preview isolation and 1,000-segment immediate
+  exit with an unterminated tail. The child is a fixture, not an inference
+  engine; product process supervision is still pending.
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed with the explicit capability manifest. CI on the committed revision
   must confirm the other platform.
 - `cd apps/desktop && npm run build`: TypeScript and Vite build pass.
@@ -66,7 +76,17 @@ stdout numeric syntax difference: its Swift runtime accepts uppercase `0X` and
 symbolic `nan(foo)`, whereas Swift 6.4.2 on macOS 27.2 rejects them. The stdout
 parser now exposes an explicit legacy float-syntax policy; its live comparison
 probes that runtime and still checks the unchanged canonical default hash
-independently. The follow-up revision's CI remains pending.
+independently.
+
+[Run 41693205029](https://github.com/companyjupiter/madi/actions/runs/41693205029)
+at `810ee299a4a28ec3f4d6e24c327382a44afc312d` passed **both macOS 15 and Windows
+Server 2022**: formatting, 13 then-current Rust tests, clippy, frontend build,
+translation/stdout reference checks and standalone debug Tauri builds. Windows
+reported generated permission files changed during the build; provenance now
+includes paths, and the next revision fixes their checkout line endings and
+retains the exact build diff. Do not describe that historical tree as clean.
+The new structured/stream checks are locally green; their next-revision CI is
+pending. No UI, audio or inference gate is closed by these build results.
 
 The host currently assumes a ready-model setup fixture and holds choices in
 memory. File/start buttons emit a harness intent only. No recording, model
@@ -104,9 +124,9 @@ runner has been copied into Madi's release prebuilt directory.
 3. Windows NVIDIA hardware/runner details are pending. Continue CPU, protocol
    and product-core work while awaiting hardware; do not substitute compilation
    for the GPU gate.
-4. Run the new macOS/Windows desktop workflow on the committed branch, then
-   continue the original stdout/JSONL parser and session lifecycle ports with
-   Swift differential fixtures.
+4. Verify the structured/stream checks on both CI hosts, then continue the
+   session lifecycle and production process supervision ports with real-process
+   fixtures and Swift comparison.
 5. Once the native environment is ready, capture the actual baseline and
    correct the initial screen against it before closing any UI gate.
 

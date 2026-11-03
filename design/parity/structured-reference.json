@@ -1,0 +1,20 @@
+{
+  "status": "pass",
+  "cases": 2945,
+  "fixtures": {
+    "web/fixtures/devops_ko.events.jsonl": 844,
+    "web/fixtures/devops_ko_biased.events.jsonl": 792,
+    "web/fixtures/jfk3.events.jsonl": 71
+  },
+  "swiftComparison": "live-unmodified-source",
+  "corpusSha256": "66728d0c6e6332f5304d71f8742fb8032b6b598d1ae5a89b2cc21b7c00a2a5b8",
+  "swiftSourceSha256": "075b00249483183ce5abee33650fd21a8f05b5683238f6365bc40fe772f05c1f",
+  "eventStreamSha256": "a693bd4b3c5ec1976fbd570075435851a11c3997d53e6a32c7550bf63c6b456c",
+  "scope": "Engine contract fields; arbitrary-precision NSNumber coercions outside the bounded engine contract are not reproduced",
+  "duplicateKeyProfile": "first",
+  "canonicalEventStreamSha256": "a693bd4b3c5ec1976fbd570075435851a11c3997d53e6a32c7550bf63c6b456c",
+  "canonicalDefaultMatchesHost": true,
+  "referenceSourceCommit": "c1390c750f2506e556a277421e146d80195ab797",
+  "referenceHost": "macOS 27.2 arm64; Swift 6.4.2",
+  "policy": "Captured from an unmodified Swift implementation after exact event comparison. Do not update to make a failing test pass."
+}

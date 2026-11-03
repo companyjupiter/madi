@@ -9,6 +9,8 @@ and React DOM 19.3.1 (MIT) and Tauri 2.12.5 (MIT OR Apache-2.0). Their direct
 runtime MIT notices are retained in [`apps/desktop/licenses`](apps/desktop/licenses).
 The Rust protocol compatibility layer also uses unicode-segmentation 1.13.3
 (MIT OR Apache-2.0); its MIT license and copyright attribution are retained there.
+Serde 1.0.229 and serde_json 1.0.154 (MIT OR Apache-2.0) provide the Rust state
+and structured event serialization; their MIT notices are retained there too.
 `Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
 The complete transitive binary notice bundle is still a migration release gate;
 the current parity harness is debug-only and not a product distribution.

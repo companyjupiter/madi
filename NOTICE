@@ -6,6 +6,7 @@ Experimental desktop migration: apps/desktop additionally uses React/React DOM
 Commons Conservancy, MIT OR Apache-2.0). Direct runtime license texts are in
 apps/desktop/licenses, including unicode-segmentation (The Rust Project
 Developers, MIT OR Apache-2.0) used by the Rust protocol compatibility layer.
+Serde and serde_json (MIT OR Apache-2.0) notices are retained there as well.
 The complete locked transitive dependency inventory and
 binary notice bundle remain a release gate; this debug harness is not a release.
 

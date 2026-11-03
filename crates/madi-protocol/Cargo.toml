@@ -7,3 +7,5 @@ license.workspace = true
 
 [dependencies]
 unicode-segmentation = "1.13.3"
+serde = "1"
+serde_json = { version = "1", features = ["float_roundtrip", "arbitrary_precision", "raw_value"] }
