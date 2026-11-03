@@ -8,7 +8,7 @@ the initial targets. The source baseline is Madi `c1390c7` / 0.4.1.
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; existing Swift tests pass | Native screenshot and action baseline, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Native IPC/UI interaction, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
 | G2 UI | Initial start-screen candidate, ko/en/ja static text, two themes, setup commands owned by Rust | Native visual/UX comparison, real devices/models, file staging, model gate, transcript/settings/workspace/AI/overlays |
-| G3 macOS core | Translation/stdout/JSONL parsers, ordered stdout/JSONL barriers and EOF drain, initial setup rules | Session lifecycle, storage/migration, audio capture, engine supervisor, AI policy and real end-to-end |
+| G3 macOS core | Translation/stdout/JSONL parsers, ordered stdout/JSONL barriers and EOF drain, deterministic session lifecycle, initial setup rules | Production lifecycle executor, storage/migration, audio capture, engine supervisor, AI policy and real end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
@@ -17,7 +17,7 @@ the initial targets. The source baseline is Madi `c1390c7` / 0.4.1.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
-- `cargo test -p madi-core -p madi-protocol`: 17 unit tests pass.
+- `cargo test -p madi-core -p madi-protocol`: 24 unit tests pass.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -39,6 +39,13 @@ the initial targets. The source baseline is Madi `c1390c7` / 0.4.1.
   before segment/flush callbacks, preview isolation and 1,000-segment immediate
   exit with an unterminated tail. The child is a fixture, not an inference
   engine; product process supervision is still pending.
+- Session lifecycle: seven Rust regressions preserve the existing Swift tests'
+  tail-before-FLUSH ordering, exactly-once finish, generation/engine identity,
+  cancelled imports, startup/flush deadlines, countdown and elapsed time.
+  [Effect executor contract](runtime/SESSION_PORT_CONTRACT.md) records the
+  asynchronous capture-stop acknowledgment and owned-temp-file requirements.
+  No filesystem deletion, microphone or process executor is connected yet;
+  live Swift/Rust lifecycle comparison remains open.
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed with the explicit capability manifest. CI on the committed revision
   must confirm the other platform.
 - `cd apps/desktop && npm run build`: TypeScript and Vite build pass.
