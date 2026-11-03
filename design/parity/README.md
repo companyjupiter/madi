@@ -85,5 +85,7 @@ The fake child writes real stdout and EVENTS_FILE bytes, uses stdin acknowledgme
 to order partial writes, and exits with buffered tail output. Rust must deliver
 complete JSONL records before the associated stdout barrier and termination
 after the last stdout event. Incomplete JSONL without a later barrier stays
-uncommitted, matching the source. This does not validate a real inference engine
-or replace production lifecycle/cancellation tests.
+uncommitted, matching the source. The driver now exercises the native supervisor with these same fixtures,
+without changing the pinned event hash. Separate local real-engine evidence exists
+for the JFK file smoke; neither result replaces complete product lifecycle/audio
+validation.

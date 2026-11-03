@@ -55,3 +55,8 @@ refresh, cancelled imports, failures, countdown and paused elapsed time. They
 port the observable expectations of the existing Swift coordinator tests. This
 is not yet an independent live Swift/Rust lifecycle differential or a real audio
 capture test; those remain necessary with the production adapters.
+
+The [native process adapter](ENGINE_PROCESS_ADAPTER.md) now implements tagged
+child supervision, ordered output, cancellation and owned JSONL cleanup. Its
+20-scenario Swift differential and real Metal file smoke are separate evidence;
+the session effect executor and capture/storage wiring are still open.

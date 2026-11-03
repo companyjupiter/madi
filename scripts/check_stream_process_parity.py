@@ -27,7 +27,7 @@ def main():
     if not args.rust_only:
         subprocess.run(['swiftc','-O',*[str(p) for p in sources],str(ROOT/'tests/parity/StreamProcessOracle.swift'),'-o',str(OUT/'swift-oracle')],check=True)
     cargo=os.environ.get('CARGO') or shutil.which('cargo') or str(Path.home()/'.cargo/bin/cargo')
-    subprocess.run([cargo,'build','-p','madi-protocol','--example','stream_process_oracle'],cwd=ROOT,check=True)
+    subprocess.run([cargo,'build','-p','madi-platform','--example','stream_process_oracle'],cwd=ROOT,check=True)
     def batch(stdout,json=b'',ack=False):
         return {'stdout':stdout.hex(),'json':json.hex(),'ack':ack}
     partial='{"t":"partial","t0":1,"text":"안녕"}\n'.encode()
@@ -49,7 +49,12 @@ def main():
         for index,case in enumerate(cases):
             case_path.write_text(json.dumps(case),encoding='utf-8')
             def run(exe):
-                return subprocess.run([str(exe),sys.executable,str(fixture),str(case_path),str(root)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=15,check=True).stdout
+                result=subprocess.run([str(exe),sys.executable,str(fixture),str(case_path),str(root)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=15)
+                if result.returncode:
+                    (OUT/'process-error.log').write_bytes(result.stderr)
+                    (OUT/'report.json').write_text(json.dumps({'status':'fail','case':index,'executable':str(exe),'exitCode':result.returncode})+'\n')
+                    raise SystemExit(f'process driver failed in case {index}: {result.stderr.decode(errors="replace")}')
+                return result.stdout
             expected=None if args.rust_only else run(OUT/'swift-oracle')
             actual=run(executable)
             if expected is not None and expected!=actual:
@@ -57,7 +62,7 @@ def main():
                 (OUT/'report.json').write_text(json.dumps({'status':'fail','case':index})+'\n')
                 raise SystemExit(f'process stream mismatch in case {index}: see {OUT}')
             all_output.extend(str(index).encode()+b'\n'+actual)
-    report={'status':'pass','cases':len(cases),'swiftComparison':'not-run' if args.rust_only else 'live-unmodified-EngineProcess','sources':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},'corpusSha256':hashlib.sha256(json.dumps(cases,sort_keys=True).encode()).hexdigest(),'eventStreamSha256':hashlib.sha256(all_output).hexdigest(),'scope':'Real child pipes and JSONL barriers; fixture engine, no recording or inference'}
+    report={'status':'pass','cases':len(cases),'swiftComparison':'not-run' if args.rust_only else 'live-unmodified-EngineProcess','sources':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},'corpusSha256':hashlib.sha256(json.dumps(cases,sort_keys=True).encode()).hexdigest(),'eventStreamSha256':hashlib.sha256(all_output).hexdigest(),'scope':'Production process supervisor with real child pipes, JSONL barriers and owned-temp cleanup; fixture engine, no recording or inference'}
     if not args.bootstrap_reference:
         pinned=json.loads((ROOT/'design/parity/stream-reference.json').read_text())
         if any(report[k]!=pinned[k] for k in ['sources','corpusSha256','eventStreamSha256']): report['status']='fail'

@@ -15,6 +15,8 @@ The read-only macOS device adapter uses objc2-core-audio, objc2-core-audio-types
 and objc2-core-foundation 0.3.2 (Zlib OR Apache-2.0 OR MIT). Their upstream licensing
 statement, including the Apple SDK note, is retained in
 `apps/desktop/licenses/Objc2-LICENSE.md`; the full distribution audit remains open.
+The native process supervisor uses Tokio 1.54.1 (MIT), tempfile 3.27.0
+and libc (MIT OR Apache-2.0); their MIT notices are retained in the same directory.
 `Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
 The complete transitive binary notice bundle is still a migration release gate;
 the current parity harness is debug-only and not a product distribution.

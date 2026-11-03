@@ -145,3 +145,6 @@ AGPL application and transcription engine but not translation/summary/Q&A.
 
 The experimental macOS device adapter uses objc2 Core Audio/Core Audio Types/Core Foundation
 bindings (Zlib OR Apache-2.0 OR MIT); the upstream licensing statement is in apps/desktop/licenses.
+
+The experimental native process supervisor uses Tokio, tempfile and libc;
+their MIT notices are retained in apps/desktop/licenses.
