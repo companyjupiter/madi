@@ -36,6 +36,10 @@ pub(crate) fn whitespace_and_newline(c: char) -> bool {
         '\u{2000}'..='\u{200b}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}')
 }
 
+pub fn trim_whitespace_and_newlines(text: &str) -> &str {
+    text.trim_matches(whitespace_and_newline)
+}
+
 /// Swift's default lowercased() uses noncontextual scalar mappings. Rust's
 /// str::to_lowercase applies the final-sigma rule (ΟΣ -> ος), which would turn
 /// two distinct source seam keys into a duplicate. Keep οσ like the native oracle.

@@ -144,6 +144,9 @@ pub fn on_run_event(app: &tauri::AppHandle, event: &tauri::RunEvent) {
     let app = app.clone();
     let code = code.unwrap_or(0);
     tauri::async_runtime::spawn(async move {
+        if let Err(error) = app.state::<crate::files_host::FilesHost>().shutdown().await {
+            eprintln!("file shutdown: {error}");
+        }
         if let Err(error) = service.shutdown().await {
             eprintln!("model shutdown: {error}");
         }

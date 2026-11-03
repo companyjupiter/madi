@@ -26,7 +26,7 @@ def main():
             ja[json.loads('"' + key + '"')] = json.loads('"' + value + '"')
     strings = {}
     pattern = r'(?:uiLang|lang)\(\s*' + STRING + r'\s*,\s*' + STRING + r'(?:\s*,\s*' + STRING + r')?\s*\)'
-    for rel in ["UI/ContentView.swift", "Transcript/MeetingMode.swift", "Audio/AudioSource.swift"]:
+    for rel in ["UI/ContentView.swift", "UI/TranscriptView.swift", "Transcript/MeetingMode.swift", "Audio/AudioSource.swift"]:
         for match in re.finditer(pattern, (SWIFT / rel).read_text(encoding="utf-8")):
             ko, en, inline_ja = match.groups()
             if "\\(" in ko + en + (inline_ja or ""):

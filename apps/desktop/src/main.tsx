@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { audioInputs, browserFixture, chooseFile, command, snapshot, watchSetup, type InputDevices, type Language, type MeetingMode, type SetupCommand, type SetupState } from './bridge';
 import { MiddleText } from './MiddleText';
 import { ModelGate } from './ModelGate';
+import { FileTranscript } from './FileTranscript';
+import { copyLine, renameSpeaker, editFile, fileSnapshot, resetFile, startFile, watchFile, type FileEdit, type FileSnapshot } from './files';
 import { modelArtwork, modelCommand, modelSnapshot, watchModels, type ModelArtwork, type ModelCommand, type ModelSnapshot } from './models';
 import strings from './strings.generated.json';
 import './theme.generated.css';
@@ -69,10 +71,38 @@ function App() {
   if (models === undefined) return null;
   if (models && !models.canEnterApp) return artwork
     ? <ModelGate snapshot={models} artwork={artwork} language={uiLanguage} send={send} /> : null;
-  return <SetupScreen />;
+  return <FileSessionScreen />;
 }
 
-function SetupScreen() {
+function FileSessionScreen() {
+  const [state, setState] = useState<FileSnapshot | null>(null);
+  const [error, setError] = useState('');
+  const queue = useRef(Promise.resolve());
+  const receive = (value: FileSnapshot) => setState(previous => previous && previous.revision > value.revision ? previous : value);
+  useEffect(() => {
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    const changed = (value: FileSnapshot) => { if (active) receive(value); };
+    void watchFile(changed).then(async cleanup => {
+      if (!active) { cleanup(); return; }
+      unlisten = cleanup; changed(await fileSnapshot());
+    }).catch(reason => { if (active) setError(String(reason)); });
+    return () => { active = false; unlisten?.(); };
+  }, []);
+  function perform(action: () => Promise<FileSnapshot>) {
+    queue.current = queue.current.then(async () => receive(await action())).catch(reason => setError(String(reason)));
+  }
+  if (error) return <pre className="harness-error" role="alert">{error}</pre>;
+  if (!state) return null;
+  if (state.phase.kind === 'idle' && !state.lines.length) return <SetupScreen start={() => perform(startFile)} />;
+  return <FileTranscript snapshot={state} language={uiLanguage} text={text}
+    reset={() => perform(() => resetFile(state.generation))}
+    copy={id => { void copyLine(state.generation, id).catch(reason => setError(String(reason))); }}
+    rename={speaker => perform(() => renameSpeaker(state.generation, speaker, text))}
+    edit={(edit: FileEdit) => perform(() => editFile(state.generation, edit))} />;
+}
+
+function SetupScreen({ start }: { start: () => void }) {
   const [state, setState] = useState<SetupState | null>(null);
   const [inputs, setInputs] = useState<InputDevices>({ supported: false, devices: [], defaultInputId: null });
   const [open, setOpen] = useState<string | null>(null);
@@ -234,7 +264,7 @@ function SetupScreen() {
               <Icon name="folder-plus" size={24} /><span>{text('Choose file or drag & drop')}</span>
             </button>}
             <button className={`cta ${state.stagedFile ? '' : 'unavailable'}`} aria-disabled={!state.stagedFile}
-              onClick={() => { if (state.stagedFile) window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'start-file' })); }}>{text('Start from file')}</button>
+              onClick={() => { if (state.stagedFile) start(); }}>{text('Start from file')}</button>
             <div className="or-divider"><span /><span>or</span><span /></div>
             <div className="record-row">
               {picker('mic', micLabel, <>

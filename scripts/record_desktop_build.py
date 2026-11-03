@@ -21,7 +21,8 @@ report = {
     "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
     "productRelease": False,
     "nativeUIParity": "not-verified",
-    "recordingAndInference": "not-connected",
+    "fileTranscription": "native timed owner connected; native screen interaction not verified",
+    "recording": "not-connected",
 }
 out = ROOT / "out/desktop-build/report.json"
 out.parent.mkdir(parents=True, exist_ok=True)

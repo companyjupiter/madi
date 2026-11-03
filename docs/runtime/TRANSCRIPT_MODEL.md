@@ -12,13 +12,14 @@ provenance; material edits retain older text as stale display content. User
 translation edits resist guard suppression. Removing a translation target,
 reopening already parsed lines, resetting a session and finalizing retain the
 original policies. This does not implement translation inference, queues,
-archive parsing/writing, autosave or the transcript UI.
+archive parsing/writing or autosave. The separate file-workflow candidate now
+connects this model to the desktop transcript view.
 
 The store is synchronous and has no runtime or OS dependencies. It marks render
-and speaker-fix work pending; the future session host must deliver the original
-33 ms / 50 ms callbacks and publish snapshots. Reset, archive load and finalize
+and speaker-fix work pending; `madi-platform::file_workflow` now delivers the original
+33 ms / 50 ms callbacks and publishes snapshots. Reset, archive load and finalize
 publish immediately without cancelling an already scheduled render, as Swift
-does. Explicit delivery is verified; actual timer scheduling is still open.
+does. Explicit model delivery and real workflow timer publication are tested.
 Energy/speaker-share/flagged-word display caches are not ported by this change.
 
 Text bytes are preserved. Comparison keys use Foundation whitespace rules,
@@ -76,6 +77,39 @@ cargo run --locked -p madi-platform --example file_session_smoke -- \
 ```
 
 See [`macos-transcript-model-2026-11-04.json`](../evidence/macos-transcript-model-2026-11-04.json).
-Native pixel/interaction parity, session-host delivery, settings/glossary policy,
+Native pixel/interaction parity, settings/glossary policy,
 translation and persistence remain required before the file-start product flow
 can be considered migrated.
+
+## Connected file owner
+
+`FileWorkflow` serializes start, reset and identity-scoped edits around
+`FileSession`. A generation prevents an old screen's reset/edit from changing a
+replacement session. Duplicate starts while processing are ignored. A cancelled
+request does not cancel the owner; shutdown retains its task until child cleanup
+finishes. A transport fault retires and replaces the executor before retry.
+Terminal snapshots include finalized text and arrive after owned WAV cleanup.
+Native decode failures retain the original `AudioDecode.reason` product message.
+
+Six real-child fixture tests cover streaming publication, delayed speaker fixes,
+stable identity through edits, revision-bound translations, Foundation name
+trimming, duplicate starts, reset/cancellation, stale generations, decode/engine
+errors, transport-fault retry, dropped owners and interrupted shutdown waits.
+These are process fixtures, not inference-quality or UI claims.
+
+The Tauri setup file button now consumes its native selection and starts this
+owner. The working view receives progress and transcript snapshots; back/close
+reset it, detail edits target line identities, and copy/name actions dispatch to
+AppKit. Working-screen native file selections start immediately when allowed;
+processing rejects replacements. The content/detail candidate includes bounded
+paragraphs, conditional speaker-island folding and source text from the original
+catalog. Native alert geometry, clipboard clicks, scroll/focus behavior, resizing,
+typography and pixels remain unverified. No capture, settings migration, archive
+autosave, workspace, playback, glossary, AI postprocessing, translation generation,
+derived statistics or full follow/low-confidence review has been completed.
+
+`file_workflow_smoke` runs the timed owner using explicitly supplied native engine,
+decoder, assets and a public source fixture. It verifies the completed transcript,
+edit identity, reset, rejection of a stale edit, source hash preservation, model
+size/mtime preservation and empty scratch. It does not create a native window or
+exercise web IPC, AppKit dialogs or the clipboard.

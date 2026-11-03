@@ -12,13 +12,18 @@ compile_error!(
 use madi_core::setup::{SetupCommand, SetupState};
 use std::sync::Mutex;
 use tauri::Manager;
+mod files_host;
 mod models_host;
 mod setup_host;
+use files_host::{
+    FilesHost, file_copy_line, file_edit, file_rename_speaker, file_reset, file_snapshot,
+    file_start,
+};
 use models_host::{models_artwork, models_command, models_snapshot};
 use setup_host::{SetupHost, choose_file};
 
 #[cfg(target_os = "macos")]
-fn configure_macos_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+fn configure_macos_window(window: &tauri::WebviewWindow, setup: bool) -> tauri::Result<()> {
     // SwiftUI's reference window measures 1150x710 points including its titlebar.
     // Tauri Transparent uses a separate content rectangle. Measure the native
     // chrome instead of baking in this Mac's observed 33-point titlebar.
@@ -39,18 +44,18 @@ fn configure_macos_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
             )
         })
         .unwrap_or((1150.0, 710.0));
-    window.set_min_size(Some(tauri::LogicalSize::new(980.0, 640.0 - chrome_height)))?;
+    let (min_width, min_height) = if setup {
+        (980.0, 640.0)
+    } else {
+        (760.0, 520.0)
+    };
+    window.set_min_size(Some(tauri::LogicalSize::new(
+        min_width,
+        min_height - chrome_height,
+    )))?;
     window.set_size(tauri::LogicalSize::new(width, height - chrome_height))?;
     window.center()?;
     set_macos_background(window, window.theme()?)?;
-    let themed = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::ThemeChanged(theme) = event
-            && let Err(error) = set_macos_background(&themed, *theme)
-        {
-            eprintln!("failed to update window background: {error}");
-        }
-    });
     Ok(())
 }
 
@@ -130,6 +135,7 @@ fn main() {
     }
     tauri::Builder::default()
         .manage(Mutex::new(SetupHost::default()))
+        .manage(FilesHost::default())
         .on_webview_event(setup_host::handle_drop)
         .setup(|app| {
             models_host::install(app)?;
@@ -139,7 +145,15 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 madi_platform::prepared_audio::bundled_helper()?;
-                configure_macos_window(&window)?;
+                configure_macos_window(&window, true)?;
+                let themed = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::ThemeChanged(theme) = event
+                        && let Err(error) = set_macos_background(&themed, *theme)
+                    {
+                        eprintln!("failed to update window background: {error}");
+                    }
+                });
             }
             window.show()?;
             Ok(())
@@ -151,7 +165,13 @@ fn main() {
             choose_file,
             models_snapshot,
             models_command,
-            models_artwork
+            models_artwork,
+            file_snapshot,
+            file_start,
+            file_reset,
+            file_edit,
+            file_copy_line,
+            file_rename_speaker
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Madi parity harness")

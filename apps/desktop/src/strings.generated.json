@@ -19,6 +19,16 @@
     "ja": "AI が話者と言語を確認中",
     "ko": "AI가 화자·언어를 검토하는 중"
   },
+  "Applies to all of this speaker’s lines and exports.": {
+    "en": "Applies to all of this speaker’s lines and exports.",
+    "ja": "この話者のすべての発言とエクスポートに適用されます。",
+    "ko": "이 화자의 모든 발언과 내보내기에 적용됩니다."
+  },
+  "Apply & next": {
+    "en": "Apply & next",
+    "ja": "適用して次へ",
+    "ko": "적용 후 다음"
+  },
   "Ask the transcript": {
     "en": "Ask the transcript",
     "ja": "議事録に質問",
@@ -84,6 +94,11 @@
     "ja": "ファイルを選択またはドラッグ＆ドロップ",
     "ko": "파일 선택 or 드래그 앤 드롭"
   },
+  "Click to name": {
+    "en": "Click to name",
+    "ja": "クリックで名前を指定",
+    "ko": "클릭하여 이름 지정"
+  },
   "Close": {
     "en": "Close",
     "ja": "閉じる",
@@ -119,6 +134,16 @@
     "ja": "コピー",
     "ko": "복사"
   },
+  "Copy this line": {
+    "en": "Copy this line",
+    "ja": "この行をコピー",
+    "ko": "이 문장 복사"
+  },
+  "Correct translation": {
+    "en": "Correct translation",
+    "ja": "翻訳を修正",
+    "ko": "번역 교정"
+  },
   "Default · auto-detect speakers": {
     "en": "Default · auto-detect speakers",
     "ja": "デフォルト · 話者を自動検出",
@@ -148,6 +173,16 @@
     "en": "Drop to transcribe",
     "ja": "ドロップで文字起こし",
     "ko": "드롭하여 전사"
+  },
+  "Edit this line": {
+    "en": "Edit this line",
+    "ja": "この行を編集",
+    "ko": "이 문장 편집"
+  },
+  "Edited": {
+    "en": "Edited",
+    "ja": "編集済み",
+    "ko": "편집됨"
   },
   "Export": {
     "en": "Export",
@@ -269,6 +304,11 @@
     "ja": "マイク",
     "ko": "마이크"
   },
+  "Name (e.g. Alex)": {
+    "en": "Name (e.g. Alex)",
+    "ja": "名前（例: Alex）",
+    "ko": "이름 (예: 김부장)"
+  },
   "Needs the translation model — Settings › Translation": {
     "en": "Needs the translation model — Settings › Translation",
     "ja": "翻訳モデルが必要です — 設定 › 翻訳",
@@ -278,6 +318,11 @@
     "en": "New recording",
     "ja": "新規録音",
     "ko": "새 기록 시작"
+  },
+  "Next": {
+    "en": "Next",
+    "ja": "次へ",
+    "ko": "다음"
   },
   "Next (↩)": {
     "en": "Next (↩)",
@@ -369,6 +414,11 @@
     "ja": "音声・動画ファイルを選ぶか、今すぐ録音を始めましょう。",
     "ko": "오디오, 비디오 파일을 선택하거나 지금 바로 녹음을 시작해 보세요"
   },
+  "Play this segment’s audio": {
+    "en": "Play this segment’s audio",
+    "ja": "この区間の音声を再生",
+    "ko": "이 구간 오디오 재생"
+  },
   "Previous": {
     "en": "Previous",
     "ja": "前へ",
@@ -424,6 +474,11 @@
     "ja": "再開",
     "ko": "재개"
   },
+  "Save": {
+    "en": "Save",
+    "ja": "保存",
+    "ko": "저장"
+  },
   "Save the filler + silence cut list via the export menu’s ‘Tighten cut list (.csv)’": {
     "en": "Save the filler + silence cut list via the export menu’s ‘Tighten cut list (.csv)’",
     "ja": "フィラー＋無音のカットリストをエクスポートメニューの「タイトンカットリスト (.csv)」で保存",
@@ -463,6 +518,11 @@
     "en": "Smaller text",
     "ja": "文字を小さく",
     "ko": "글자 작게"
+  },
+  "Speaker name": {
+    "en": "Speaker name",
+    "ja": "話者名",
+    "ko": "화자 이름"
   },
   "Speaker separation": {
     "en": "Speaker separation",
@@ -589,10 +649,30 @@
     "ja": "話者修正を元に戻す",
     "ko": "화자 교정 되돌리기"
   },
+  "User-corrected translation": {
+    "en": "User-corrected translation",
+    "ja": "ユーザーが修正した翻訳",
+    "ko": "사용자 교정 번역"
+  },
+  "Voice matched": {
+    "en": "Voice matched",
+    "ja": "音声一致",
+    "ko": "음성 인식됨"
+  },
+  "Voice matched — matches a registered voice": {
+    "en": "Voice matched — matches a registered voice",
+    "ja": "音声一致 — 登録済みの声と一致",
+    "ko": "음성 인식됨 — 등록된 목소리와 일치"
+  },
   "Whole workspace": {
     "en": "Whole workspace",
     "ja": "ワークスペース全体",
     "ko": "전체 워크스페이스"
+  },
+  "Word to fix": {
+    "en": "Word to fix",
+    "ja": "修正する語",
+    "ko": "수정할 단어"
   },
   "Wrapping up…": {
     "en": "Wrapping up…",

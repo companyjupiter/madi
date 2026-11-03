@@ -7,7 +7,10 @@ use tokio::time::{sleep, timeout};
 
 // These are real child processes with synthetic audio, not inference claims.
 // Python occupies the decoder and engine executable slots on both CI platforms.
-fn fixture(decoder_extra: &str, engine_extra: &str) -> (tempfile::TempDir, Configuration, PathBuf) {
+pub(crate) fn fixture(
+    decoder_extra: &str,
+    engine_extra: &str,
+) -> (tempfile::TempDir, Configuration, PathBuf) {
     let root = tempfile::tempdir().unwrap();
     let python_name = std::env::var_os("MADI_TEST_PYTHON").unwrap_or_else(|| {
         if cfg!(windows) {
@@ -67,7 +70,7 @@ print('<<SEG_END>>',flush=True)
 print('<<FLUSH_END>>',flush=True)
 "#;
 
-fn scratch_count(root: &Path) -> usize {
+pub(crate) fn scratch_count(root: &Path) -> usize {
     std::fs::read_dir(root)
         .unwrap()
         .filter_map(Result::ok)
@@ -75,7 +78,7 @@ fn scratch_count(root: &Path) -> usize {
         .count()
 }
 
-async fn marker(path: &Path) {
+pub(crate) async fn marker(path: &Path) {
     timeout(Duration::from_secs(8), async {
         while !path.exists() {
             sleep(Duration::from_millis(10)).await;

@@ -1,7 +1,25 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Local parity window with setup, pinned native model installation, media selection, device discovery and host events. No arbitrary path/URL, capture, shell, filesystem plugin or remote-origin grants.",
-  "windows": ["main"],
-  "permissions": ["allow-setup-snapshot", "allow-setup-command", "allow-audio-inputs", "allow-choose-file", "allow-models-snapshot", "allow-models-command", "allow-models-artwork", "core:event:allow-listen", "core:event:allow-unlisten"]
+  "description": "Local parity window with setup, pinned native model installation, native media selection, file transcription, transcript edits/copy/name dialog, device discovery and host events. No arbitrary path/URL, capture, shell, filesystem plugin or remote-origin grants.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-setup-snapshot",
+    "allow-setup-command",
+    "allow-audio-inputs",
+    "allow-choose-file",
+    "allow-models-snapshot",
+    "allow-models-command",
+    "allow-models-artwork",
+    "allow-file-snapshot",
+    "allow-file-start",
+    "allow-file-reset",
+    "allow-file-edit",
+    "allow-file-copy-line",
+    "allow-file-rename-speaker",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
 }

@@ -39,6 +39,20 @@ impl fmt::Display for DecodeError {
 }
 impl std::error::Error for DecodeError {}
 
+impl DecodeError {
+    /// The shipping controller uses AudioDecode.reason, not NSError's debug
+    /// description. The helper carries that exact localized reason separately.
+    pub fn presentation_reason(&self) -> &str {
+        match self {
+            Self::Native {
+                reason: Some(reason),
+                ..
+            } => reason,
+            _ => "지원하지 않는 형식이거나 손상된 파일입니다",
+        }
+    }
+}
+
 pub struct PreparedAudio {
     directory: TempDir,
     path: PathBuf,

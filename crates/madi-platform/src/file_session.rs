@@ -34,6 +34,7 @@ pub struct Update {
     pub kind: UpdateKind,
 }
 
+#[derive(Clone)]
 pub struct Configuration {
     pub resources: Resources,
     pub decoder: PathBuf,
@@ -217,7 +218,7 @@ impl Worker {
                     (*token, task.wait().await)
                 }, if preparing => {
                     self.preparation.take();
-                    let result = decoded.1.map(|audio| self.prepared.insert(audio)).map_err(|error| error.to_string());
+                    let result = decoded.1.map(|audio| self.prepared.insert(audio)).map_err(|error| error.presentation_reason().to_owned());
                     let effects = self.core.file_prepared(decoded.0, result, self.now());
                     self.effects(effects).await?;
                     self.phase_changed();
@@ -294,7 +295,7 @@ impl Worker {
                         Ok(task) => self.preparation = Some((token, task)),
                         Err(error) => pending.extend(self.core.file_prepared(
                             token,
-                            Err(error.to_string()),
+                            Err(error.presentation_reason().to_owned()),
                             self.now(),
                         )),
                     }
@@ -398,4 +399,4 @@ impl Worker {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

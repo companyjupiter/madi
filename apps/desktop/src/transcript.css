@@ -1,0 +1,52 @@
+/* ContentView.sidePanel/transcriptPane and TranscriptView, pending native comparison. */
+.file-workspace { height: 100vh; display: flex; background: var(--surface); overflow: hidden; }
+.file-side-panel { flex: 0 0 267px; margin: 13px 0 13px 13px; border: 1px solid var(--surface-sunken); border-radius: 17px; background: var(--surface-raised); box-shadow: 4px 4px 9px #00000008; overflow: hidden; }
+.file-side-header { display: flex; justify-content: space-between; align-items: center; margin: 18px 16px 0; }
+.file-side-header .wordmark { width: 64px; height: 20px; }
+.file-side-header button { display: flex; }
+.file-source-card { position: relative; height: 118px; margin: 16px 16px 0; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; background: var(--surface-elevated); box-shadow: 0 1px 1px #0000001a; }
+.file-source-name { margin-top: 4px; max-width: 100%; font-size: 12px; font-weight: 600; }
+.file-source-size { margin-top: 1px; font-size: 10px; font-weight: 500; color: var(--text-secondary); }
+.file-source-close { position: absolute; top: 9px; right: 11px; display: flex; }
+.file-side-rule { margin: 22px 16px 0; height: 1px; background: var(--surface-sunken); }
+.file-total { display: flex; gap: 10px; align-items: baseline; margin: 18px 16px 0; }
+.file-total > span { font-size: 30px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.file-total > b { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.transcript-pane { min-width: 0; flex: 1; display: flex; flex-direction: column; padding-top: 20px; }
+.transcript-toolbar { display: flex; gap: 10px; align-items: center; padding: 13px 16px 8px 21px; }
+.font-smaller { font-size: 11px; font-weight: 400; }
+.font-larger { font-size: 17px; font-weight: 400; }
+.font-size { font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.transcript-mode { display: flex; width: 99px; gap: 1px; margin-left: auto; padding: 3px; border-radius: 99px; background: var(--surface-sunken); }
+.transcript-mode button { flex: 1; padding: 4px 10px; white-space: nowrap; font-size: 10px; font-weight: 600; border-radius: 99px; color: var(--text-secondary); }
+.transcript-mode button[aria-pressed=true] { background: var(--segment-selected); box-shadow: 0 2px 1px #0000000f; color: var(--text-primary); }
+.transcript-scroll { overflow: auto; flex: 1; padding: 20px; min-height: 0; }
+.transcript-blocks { display: flex; flex-direction: column; gap: 30px; }
+.transcript-block, .transcript-row { display: flex; flex-direction: column; gap: 9px; position: relative; }
+.transcript-body, .transcript-row textarea { font-size: var(--transcript-font-size); line-height: 1.5; font-weight: 400; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.transcript-speaker { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: 14px; font-weight: 700; }
+.transcript-speaker i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+.transcript-row { margin-top: 30px; }
+.transcript-row:first-child { margin-top: 0; }
+.transcript-row.continuation { margin-top: 12px; }
+.transcript-row-header { display: flex; align-items: center; gap: 6px; min-height: 17px; }
+.transcript-row-header time { font-size: 12px; font-weight: 500; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.transcript-edited { font-size: 10px; color: var(--text-tertiary); }
+.transcript-actions { display: flex; gap: 16px; margin-left: auto; color: var(--text-secondary); }
+.transcript-actions button { display: flex; }
+.continuation .transcript-row-header { position: absolute; right: 0; top: 0; z-index: 1; opacity: 0; background: var(--surface); }
+.continuation:hover .transcript-row-header, .continuation:focus-within .transcript-row-header { opacity: 1; }
+.transcript-row textarea { width: 100%; resize: none; border: 0; outline: 0; background: transparent; color: inherit; font-family: inherit; min-height: 1.8em; padding: 2px 0; }
+.transcript-edit-actions { display: flex; gap: 6px; }
+.transcript-edit-actions button { border: 1px solid var(--separator); border-radius: 5px; padding: 2px 8px; background: var(--surface-raised); }
+.transcript-translation { font-size: calc(var(--transcript-font-size) * .875); color: var(--text-primary); opacity: .85; letter-spacing: -.2px; white-space: pre-wrap; }
+.transcript-translation.stale { color: var(--text-tertiary); }
+.transcript-status { display: flex; align-items: center; gap: 5px; color: var(--text-tertiary); font-size: 14px; font-weight: 400; letter-spacing: -.28px; min-height: 21px; }
+.transcript-tail-status { margin-top: 30px; }
+.loading-dots { letter-spacing: 2px; padding-top: 4px; animation: transcript-loading 1s ease-in-out infinite alternate; }
+@keyframes transcript-loading { from { opacity: .35; } to { opacity: 1; } }
+.transcript-empty { display: flex; flex-direction: column; gap: 6px; justify-content: center; align-items: center; height: 100%; text-align: center; }
+.transcript-empty strong { font-size: 15px; font-weight: 600; font-family: var(--rounded); color: var(--text-secondary); }
+.transcript-empty span { font-size: 12px; color: var(--text-tertiary); }
+.transcript-error { padding: 20px; color: var(--text-secondary); }
+.transcript-tail-clearance { height: 60px; }

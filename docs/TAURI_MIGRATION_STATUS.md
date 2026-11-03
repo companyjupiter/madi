@@ -8,13 +8,26 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 |---|---|---|
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
-| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model-guide component connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, transcript/settings/workspace/AI/overlays |
-| G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, file executor with native decode/ASR, transcript/edit model differentials, verified model downloads and first-run admission | Session-host/UI delivery, live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
+| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide and file transcript candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, complete transcript/settings/workspace/AI/overlays |
+| G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, native decode/ASR, transcript/edit differentials, timed file workflow, verified model downloads and first-run admission | Native file-screen delivery/interaction evidence, live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
 
+- Connected file workflow candidate: 65 local macOS Rust tests pass (11 core,
+  14 protocol, 40 platform), including six new real-child workflow cases for
+  stream/edit/fix delivery, cancellation/generation isolation, errors/retry and
+  owned shutdown. Live Swift store comparison remains 309 cases / 5,947 exact
+  snapshots. These are model/process checks; native file-screen interaction and
+  visual parity remain unverified. See `runtime/TRANSCRIPT_MODEL.md`.
+  The relocated app's actual decoder/Metal ASR also passes through this owner:
+  22 expected JFK words at completion, timed edit publication with stable identity,
+  reset/stale-edit rejection, preserved source hash/model metadata and clean scratch.
+  The short real recording publishes its words at Done; pre-completion word/fix
+  scheduling is separately verified with held real-child fixtures. The debug app
+  and strict relocation/package checks pass. Local candidate evidence:
+  `evidence/macos-file-workflow-2026-11-04.json`. Committed cross-platform CI is pending.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
@@ -185,8 +198,9 @@ match their reports; clean trees and empty build diffs are verified in
 `evidence/desktop-ci-fb67b46-2026-11-04.json`.
 
 The macOS host now reads real model readiness and connects explicit first-run
-downloads. Setup choices remain in memory. Native file selection/drop stages a
-file; recording/transcription start buttons still emit a harness intent only.
+downloads. Setup choices remain in memory. Native setup selection/drop stages a
+file; file start now connects to the timed workflow and transcript candidate.
+The recording start button still emits a harness intent only.
 Meeting saving, preference/data migration and updater remain unconnected.
 
 ## SovereignLLM Windows engine
@@ -333,12 +347,13 @@ controls, settings model lifecycle and all product end-to-end gates remain open.
 Follow-up ownership/lock fixes and failed-attempt context are recorded in
 `evidence/macos-model-download-ownership-2026-11-04.json`.
 
-The Rust transcript model now preserves the original merge/group/edit policies
-and has live Swift differential evidence. Native file-executor output also passes
-through this model in the headless probe. This supplies the data layer for the
-transcript screen; the setup start button still emits a harness intent. The
-session host's actual timers, original processing/result view, display caches,
-glossary/translation policy and storage must be connected and compared next.
+The Rust transcript model preserves the original merge/group/edit policies with
+live Swift differential evidence. The timed file owner now connects native
+selection/start, progress, transcript/edit state, back/close cancellation and
+AppKit copy/name commands to the file-screen candidate. Native click/visual
+validation remains open; the candidate does not complete display caches,
+follow/low-confidence review, settings/glossary/AI policy, playback, workspace
+or persistence. The recording start action still emits a harness intent.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.
