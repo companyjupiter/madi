@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { audioInputs, browserFixture, command, snapshot, type InputDevices, type Language, type MeetingMode, type SetupCommand, type SetupState } from './bridge';
+import { audioInputs, browserFixture, chooseFile, command, snapshot, watchSetup, type InputDevices, type Language, type MeetingMode, type SetupCommand, type SetupState } from './bridge';
+import { MiddleText } from './MiddleText';
 import strings from './strings.generated.json';
 import './theme.generated.css';
 import './styles.css';
@@ -31,13 +32,21 @@ function App() {
   const [inputs, setInputs] = useState<InputDevices>({ supported: false, devices: [], defaultInputId: null });
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [picking, setPicking] = useState(false);
+  const [dropTargeted, setDropTargeted] = useState(false);
   const queue = useRef(Promise.resolve());
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
     let active = true;
-    snapshot().then(value => { if (active) setState(value); }).catch(value => { if (active) setError(String(value)); });
+    let unlisten: (() => void) | undefined;
+    const receive = (value: SetupState) => { if (active) setState(previous => previous && previous.revision > value.revision ? previous : value); };
+    void watchSetup(receive, value => { if (active) setDropTargeted(value); }).then(async cleanup => {
+      if (!active) { cleanup(); return; }
+      unlisten = cleanup;
+      receive(await snapshot());
+    }).catch(value => { if (active) setError(String(value)); });
     audioInputs().then(value => { if (active) setInputs(value); }).catch(value => { if (active) setError(String(value)); });
-    return () => { active = false; };
+    return () => { active = false; unlisten?.(); };
   }, []);
   useEffect(() => {
     let active = true;
@@ -87,6 +96,15 @@ function App() {
       const next = await command(intent);
       setState(previous => previous && previous.revision > next.revision ? previous : next);
     }).catch(reason => setError(String(reason)));
+  }
+
+  function pickFile() {
+    if (browserFixture || picking) return;
+    setOpen(null); setPicking(true);
+    queue.current = queue.current.then(async () => {
+      const next = await chooseFile();
+      setState(previous => previous && previous.revision > next.revision ? previous : next);
+    }).catch(reason => setError(String(reason))).finally(() => setPicking(false));
   }
 
   function picker(id: string, label: string, children: ReactNode, mic = false) {
@@ -161,10 +179,17 @@ function App() {
           <h1 id="start-heading">{text('Get started')}</h1>
           <p className="section-description">{text('Pick an audio or video file, or start recording now.')}</p>
           <div className="start-controls">
-            <button className="drop-zone" onClick={() => window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'choose-file' }))}>
+            {state.stagedFile ? <div className="staged-file">
+              <div className="staged-details"><Icon name="content" size={20} />
+                <div className="staged-labels"><MiddleText className="staged-name">{state.stagedFile.name}</MiddleText>
+                  <span className="staged-size">{state.stagedFile.sizeLabel}</span></div>
+              </div>
+              <button className="clear-file" aria-label={text('Close')} onClick={() => send({ type: 'clearStagedFile' })}><Icon name="close" size={13} /></button>
+            </div> : <button className={`drop-zone ${dropTargeted ? 'targeted' : ''}`} disabled={picking} onClick={pickFile}>
               <Icon name="folder-plus" size={24} /><span>{text('Choose file or drag & drop')}</span>
-            </button>
-            <button className="cta unavailable" aria-disabled="true">{text('Start from file')}</button>
+            </button>}
+            <button className={`cta ${state.stagedFile ? '' : 'unavailable'}`} aria-disabled={!state.stagedFile}
+              onClick={() => { if (state.stagedFile) window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'start-file' })); }}>{text('Start from file')}</button>
             <div className="or-divider"><span /><span>or</span><span /></div>
             <div className="record-row">
               {picker('mic', micLabel, <>
@@ -172,13 +197,14 @@ function App() {
                   const selected = state.audioSource !== 'system' && state.inputDeviceId === device.id;
                   return <button key={device.id ?? 'default'} className="option" aria-pressed={selected}
                     onClick={() => { send({ type: 'inputDevice', value: device.id }); setOpen(null); }}>
-                    <span className="device-name">{device.name}</span><span className="menu-check" aria-hidden>{selected ? '✓' : ''}</span>
+                    <MiddleText className="device-name">{device.name}</MiddleText><span className="menu-check" aria-hidden>{selected ? '✓' : ''}</span>
                   </button>;
                 })}
                 <hr />
                 {(['system', 'both'] as const).map(value => <button key={value} className="option" aria-pressed={state.audioSource === value} onClick={() => { send({ type: 'audioSource', value }); setOpen(null); }}>{text(value === 'system' ? 'System audio' : 'Mic + system')}<span className="menu-check" aria-hidden>{state.audioSource === value ? '✓' : ''}</span></button>)}
               </>, true)}
-              <button className="cta" onClick={() => window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'start-recording' }))}>{text('Start recording now')}</button>
+              <button className={`cta ${state.stagedFile ? 'unavailable' : ''}`} aria-disabled={!!state.stagedFile}
+                onClick={() => { if (!state.stagedFile) window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'start-recording' })); }}>{text('Start recording now')}</button>
             </div>
           </div>
         </section>

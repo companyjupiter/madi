@@ -31,6 +31,14 @@ pub enum AudioSource {
     Both,
 }
 
+/// Display metadata only; the selected filesystem path stays in the native host.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StagedFile {
+    pub name: String,
+    pub size_label: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupState {
@@ -45,6 +53,7 @@ pub struct SetupState {
     /// Transient native adapter identity; None follows the system default.
     /// Not persisted: Core Audio IDs can change when a device reconnects.
     pub input_device_id: Option<String>,
+    pub staged_file: Option<StagedFile>,
 }
 
 impl Default for SetupState {
@@ -58,6 +67,7 @@ impl Default for SetupState {
             speaker_count: 0,
             audio_source: AudioSource::Mic,
             input_device_id: None,
+            staged_file: None,
         }
     }
 }
@@ -73,11 +83,13 @@ pub enum SetupCommand {
     SpeakerCount(u8),
     AudioSource(AudioSource),
     InputDevice(Option<String>),
+    ClearStagedFile,
 }
 
 impl SetupState {
     pub fn apply(&mut self, command: SetupCommand) -> Result<(), &'static str> {
         match command {
+            SetupCommand::ClearStagedFile => self.staged_file = None,
             SetupCommand::InputLanguage(language) => {
                 self.input_language = language;
                 if let Some(language) = language {

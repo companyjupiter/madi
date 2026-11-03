@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Local parity window with setup commands and read-only audio device discovery. No capture, shell, filesystem, network or remote-origin grants.",
+  "description": "Local parity window with setup, native media selection, read-only device discovery and host event subscriptions. No arbitrary path, capture, shell, filesystem, network or remote-origin grants.",
   "windows": ["main"],
-  "permissions": ["allow-setup-snapshot", "allow-setup-command", "allow-audio-inputs"]
+  "permissions": ["allow-setup-snapshot", "allow-setup-command", "allow-audio-inputs", "allow-choose-file", "core:event:allow-listen", "core:event:allow-unlisten"]
 }

@@ -19,8 +19,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
 - `cargo test -p madi-core -p madi-protocol -p madi-platform`: 39 tests on macOS
-  (11 core, 14 protocol, fourteen native adapter tests; Windows has 33). New adapter tests pass locally;
-  the complete current set runs in the next CI revision.
+  (11 core, 14 protocol, fourteen native adapter tests; Windows has 33). All pass
+  locally and at `e5110db` in macOS/Windows CI.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -111,11 +111,14 @@ at `3578632` also passed both platforms with verified clean-tree artifacts.
 at `5af3c19` passed macOS/Windows with 26/25 tests, read-only native discovery
 comparison on macOS and clean verified build artifacts. [Run 41702228682](https://github.com/companyjupiter/madi/actions/runs/41702228682)
 at `484bd23` passed both hosts with 34/33 tests, the supervisor Swift differential
-and clean verified artifacts. The native decoder revision awaits its own CI. No complete UI, audio or
+and clean verified artifacts. [Run 41704044238](https://github.com/companyjupiter/madi/actions/runs/41704044238)
+at `e5110db` passed both platforms with 39/33 tests and the extended Swift decode
+tests; downloaded executable hashes and clean source trees are verified. No complete UI, audio or
 inference gate is closed by these build results.
 
 The host currently assumes a ready-model setup fixture and holds choices in
-memory. File/start buttons emit a harness intent only. No recording, model
+memory. Native macOS file selection/drop now stages a file; start buttons still
+emit a harness intent only. No recording, model
 download, inference, file writing, data migration or updater is connected yet.
 
 ## SovereignLLM Windows engine
@@ -190,7 +193,15 @@ concurrent imports, cancellation/failure cleanup and original-file preservation.
 The real JFK probe passed through decode → Rust ASR supervision → cleanup.
 See `runtime/NATIVE_AUDIO_DECODE.md` and
 `evidence/macos-owned-decode-2026-11-04.json`. Helper bundling/signing, the session
-effect executor and Tauri file-picker/UI integration remain open.
+effect executor and Tauri inference UI integration remain open.
+
+Native file staging now uses the same AppKit chooser and UTType drop policy as
+the original. Rust retains paths; the UI sees name/size and sends no arbitrary
+filesystem paths. Selection clearing preserves originals. A 39-case live Swift
+comparison passes, including Korean filename normalization and byte-size rounding.
+The staged card, CTA state and middle truncation are implemented but their native
+interaction/visual verification awaits Mac unlock. See
+`runtime/NATIVE_FILE_STAGING.md`; this is not an end-to-end file transcription pass.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.

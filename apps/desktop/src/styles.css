@@ -29,6 +29,8 @@ h1 { font: 700 17px var(--rounded); }
 .dropdown[data-direction="up"] { top: auto; bottom: calc(100% + 4px); }
 .option { width: 100%; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
 .device-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.middle-text { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+.device-name { flex: 1; }
 .menu-check { font-size: 10px; font-weight: 600; }
 .option:disabled { opacity: .4; }
 .check { width: 15px; height: 15px; border-radius: 6px; border: .75px solid var(--separator); display: grid; place-items: center; font-size: 8px; font-weight: 700; }
@@ -47,6 +49,13 @@ h1 { font: 700 17px var(--rounded); }
 .drop-zone { border: 1px dashed var(--separator); border-radius: 12px; min-height: 85px; flex: 1; width: 100%; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; font-weight: 600; }
 .asset-icon { display: inline-block; background: currentColor; mask-position: center; mask-repeat: no-repeat; mask-size: contain; }
 .drop-zone .asset-icon { opacity: .6; }
+.drop-zone.targeted { border-color: var(--accent); }
+.staged-file { position: relative; min-height: 85px; flex: 1; border-radius: 8px; background: var(--surface-elevated); box-shadow: 0 1px 1px rgb(0 0 0 / .1); }
+.staged-details { position: absolute; inset: 0; padding: 0 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.staged-labels { width: 100%; text-align: center; display: flex; flex-direction: column; gap: 1px; }
+.staged-name { font-weight: 600; }
+.staged-size { font-size: 10px; color: var(--text-secondary); }
+.clear-file { position: absolute; top: 9px; right: 11px; width: 13px; height: 13px; }
 .cta { border-radius: 999px; background: var(--ink-strong); color: var(--ink-strong-on); height: 40px; font: 600 12px var(--rounded); width: 100%; }
 .cta.unavailable { background: var(--meter-track); }
 .or-divider { display: flex; align-items: center; gap: 10px; padding: 2px; font-size: 11px; line-height: 14px; }

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41704044238",
+  "head": "e5110db337583a25c60741ff770f42954f073059",
+  "conclusion": "success",
+  "unitTests": {
+    "macOS": 39,
+    "Windows": 33
+  },
+  "records": [
+    {
+      "schemaVersion": 1,
+      "sourceHead": "e5110db337583a25c60741ff770f42954f073059",
+      "sourceDirty": false,
+      "sourceStatus": [],
+      "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+      "binary": "target/debug/madi-desktop",
+      "bytes": 33662816,
+      "sha256": "0e99e8d9bf13fc75bff852b9924d7c67fc9660724fc722879b7d81c93f1fa75c",
+      "productRelease": false,
+      "nativeUIParity": "not-verified",
+      "recordingAndInference": "not-connected"
+    },
+    {
+      "schemaVersion": 1,
+      "sourceHead": "e5110db337583a25c60741ff770f42954f073059",
+      "sourceDirty": false,
+      "sourceStatus": [],
+      "host": "Windows-2022Server-10.0.20348-SP0",
+      "binary": "target\\debug\\madi-desktop.exe",
+      "bytes": 12763136,
+      "sha256": "eb8a33d02f9b2ef5358472bdcfb05d987cc0fd7d1f1c8877031a441ece7c6ee0",
+      "productRelease": false,
+      "nativeUIParity": "not-verified",
+      "recordingAndInference": "not-connected"
+    }
+  ],
+  "downloadedBinariesVerified": true,
+  "limitations": [
+    "Native audio decode helper tested but not bundled into the host",
+    "Complete session executor and inference UI not connected",
+    "Full native UI parity remains open"
+  ]
+}

@@ -11,8 +11,10 @@ The Rust protocol compatibility layer also uses unicode-segmentation 1.13.3
 (MIT OR Apache-2.0); its MIT license and copyright attribution are retained there.
 Serde 1.0.229 and serde_json 1.0.154 (MIT OR Apache-2.0) provide the Rust state
 and structured event serialization; their MIT notices are retained there too.
-The read-only macOS device adapter uses objc2-core-audio, objc2-core-audio-types
-and objc2-core-foundation 0.3.2 (Zlib OR Apache-2.0 OR MIT). Their upstream licensing
+The macOS device and file-selection adapters use objc2 0.6.5, objc2-app-kit,
+objc2-foundation, objc2-uniform-type-identifiers, objc2-core-audio,
+objc2-core-audio-types and objc2-core-foundation 0.3.2
+(Zlib OR Apache-2.0 OR MIT). Their upstream licensing
 statement, including the Apple SDK note, is retained in
 `apps/desktop/licenses/Objc2-LICENSE.md`; the full distribution audit remains open.
 The native process supervisor uses Tokio 1.54.1 (MIT), tempfile 3.27.0

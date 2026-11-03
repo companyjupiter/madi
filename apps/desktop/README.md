@@ -25,8 +25,8 @@ cargo build --locked -p madi-desktop --features custom-protocol
 ```
 
 Release builds deliberately fail until product runtime and migration gates are
-implemented. The debug executable has no recording, transcription, file picker,
-model downloader, saving or updater. Start/file buttons currently emit a
+implemented. The debug executable has no recording, transcription,
+model downloader, saving or updater. Start buttons currently emit a
 `madi-parity-intent` DOM event for the visual harness only; they do not pretend to
 start an inference session. Do not distribute this as a working Madi release.
 
@@ -39,6 +39,13 @@ refreshes on focus and when opening the picker, and never opens an audio stream 
 requests permission. The Windows discovery adapter is explicitly unsupported.
 There are no
 shell/filesystem/remote-origin capability grants or production mock fallbacks.
+
+The macOS file chooser uses the original NSOpenPanel/UTType behavior. Native
+drop events and the chooser stage a path in Rust; the UI receives only name and
+size. Clearing selection does not delete the original file. The staged card and
+CTA availability are implemented, with native interaction/visual validation
+pending. Windows selection is not implemented. See
+`docs/runtime/NATIVE_FILE_STAGING.md` for scope and the live Swift comparison.
 
 ## Visual reference and limits
 
@@ -62,7 +69,7 @@ Rust command behavior. Native WebView checks remain required.
 
 Open differences: fonts and SF Symbols, native window chrome, exact line
 metrics, native validation of microphone selection/overflow, translation availability
-and keyboard focus, staged file state, model gate and all working screens.
+and keyboard focus, staged file interaction/geometry, model gate and all working screens.
 The current start fixture assumes the models are ready; it does not infer that
 from this machine. These are migration tasks, not approved parity exceptions.
 

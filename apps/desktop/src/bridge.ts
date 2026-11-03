@@ -1,4 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 export type Language = 'Chinese' | 'English' | 'Japanese' | 'Korean';
 export type MeetingMode = 'general' | 'oneOnOne' | 'standup' | 'interview' | 'lecture';
@@ -17,11 +18,13 @@ export interface SetupState {
   speakerCount: number;
   audioSource: AudioSource;
   inputDeviceId: string | null;
+  stagedFile: { name: string; sizeLabel: string } | null;
 }
 export type SetupCommand =
   | { type: 'inputLanguage'; value: Language | null }
   | { type: 'toggleTarget'; value: Language }
   | { type: 'clearTargets' }
+  | { type: 'clearStagedFile' }
   | { type: 'meetingMode'; value: MeetingMode }
   | { type: 'diarize'; value: boolean }
   | { type: 'speakerCount'; value: number }
@@ -37,7 +40,7 @@ export async function snapshot(): Promise<SetupState> {
   if (browserFixture) {
     return {
       revision: 0, inputLanguage: null, translateTargets: [], meetingMode: 'general',
-      diarize: true, speakerCount: 0, audioSource: 'mic', inputDeviceId: null,
+      diarize: true, speakerCount: 0, audioSource: 'mic', inputDeviceId: null, stagedFile: null,
     };
   }
   return invoke<SetupState>('setup_snapshot');
@@ -50,4 +53,18 @@ export async function audioInputs(): Promise<InputDevices> {
 
 export function command(command: SetupCommand): Promise<SetupState> {
   return invoke<SetupState>('setup_command', { command });
+}
+
+export function chooseFile(): Promise<SetupState> {
+  return invoke<SetupState>('choose_file');
+}
+
+export async function watchSetup(changed: (state: SetupState) => void, dragged: (targeted: boolean) => void) {
+  if (browserFixture) return () => {};
+  const window = getCurrentWebviewWindow();
+  const unlistenState = await window.listen<SetupState>('setup-changed', event => changed(event.payload));
+  try {
+    const unlistenDrag = await window.listen<boolean>('media-drag-target', event => dragged(event.payload));
+    return () => { unlistenState(); unlistenDrag(); };
+  } catch (error) { unlistenState(); throw error; }
 }

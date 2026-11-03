@@ -12,6 +12,8 @@ compile_error!(
 use madi_core::setup::{SetupCommand, SetupState};
 use std::sync::Mutex;
 use tauri::Manager;
+mod setup_host;
+use setup_host::{SetupHost, choose_file};
 
 #[cfg(target_os = "macos")]
 fn configure_macos_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
@@ -60,14 +62,14 @@ fn set_macos_background(window: &tauri::WebviewWindow, theme: tauri::Theme) -> t
 #[tauri::command]
 fn setup_snapshot(
     window: tauri::WebviewWindow,
-    state: tauri::State<'_, Mutex<SetupState>>,
+    state: tauri::State<'_, Mutex<SetupHost>>,
 ) -> Result<SetupState, String> {
     if window.label() != "main" {
         return Err("unsupported window".into());
     }
     state
         .lock()
-        .map(|state| state.clone())
+        .map(|state| state.snapshot.clone())
         .map_err(|_| "setup state unavailable".into())
 }
 
@@ -75,7 +77,7 @@ fn setup_snapshot(
 fn setup_command(
     window: tauri::WebviewWindow,
     command: SetupCommand,
-    state: tauri::State<'_, Mutex<SetupState>>,
+    state: tauri::State<'_, Mutex<SetupHost>>,
 ) -> Result<SetupState, String> {
     if window.label() != "main" {
         return Err("unsupported window".into());
@@ -84,7 +86,7 @@ fn setup_command(
         .lock()
         .map_err(|_| "setup state unavailable".to_owned())?;
     state.apply(command)?;
-    Ok(state.clone())
+    Ok(state.snapshot.clone())
 }
 
 #[tauri::command]
@@ -99,7 +101,8 @@ fn audio_inputs(
 
 fn main() {
     tauri::Builder::default()
-        .manage(Mutex::new(SetupState::default()))
+        .manage(Mutex::new(SetupHost::default()))
+        .on_webview_event(setup_host::handle_drop)
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -112,7 +115,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             setup_snapshot,
             setup_command,
-            audio_inputs
+            audio_inputs,
+            choose_file
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Madi parity harness");
