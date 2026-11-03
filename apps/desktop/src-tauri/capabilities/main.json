@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Local parity window with setup commands only. No shell, filesystem, network or remote-origin grants.",
+  "windows": ["main"],
+  "permissions": ["allow-setup-snapshot", "allow-setup-command"]
+}

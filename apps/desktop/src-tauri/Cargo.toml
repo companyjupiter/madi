@@ -1,0 +1,19 @@
+[package]
+name = "madi-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# This first host is an isolated parity harness, never a releasable product.
+default = ["parity-harness"]
+parity-harness = []
+custom-protocol = ["tauri/custom-protocol"]
+
+[dependencies]
+madi-core = { path = "../../../crates/madi-core" }
+tauri = { version = "=2.12.5", default-features = false, features = ["wry", "compression", "common-controls-v6"] }
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }

@@ -1,0 +1,632 @@
+{
+  "*Optional": {
+    "en": "*Optional",
+    "ja": "*任意",
+    "ko": "*선택"
+  },
+  "2 speakers · emphasize decisions & follow-ups": {
+    "en": "2 speakers · emphasize decisions & follow-ups",
+    "ja": "話者2名 · 決定と後続対応を重視",
+    "ko": "발화자 2명 · 결정과 후속 조치 강조"
+  },
+  "2 speakers · preserve question-answer flow": {
+    "en": "2 speakers · preserve question-answer flow",
+    "ja": "話者2名 · 質疑応答の流れを保持",
+    "ko": "발화자 2명 · 질문·답변 흐름 보존"
+  },
+  "AI is reviewing speakers & language": {
+    "en": "AI is reviewing speakers & language",
+    "ja": "AI が話者と言語を確認中",
+    "ko": "AI가 화자·언어를 검토하는 중"
+  },
+  "Ask the transcript": {
+    "en": "Ask the transcript",
+    "ja": "議事録に質問",
+    "ko": "회의록에 물어보기"
+  },
+  "Audio · video files\nDrag & drop": {
+    "en": "Audio · video files\nDrag & drop",
+    "ja": "音声・動画ファイル\nドラッグ＆ドロップ",
+    "ko": "오디오 영상 파일\n드래그 앤 드롭"
+  },
+  "Auto": {
+    "en": "Auto",
+    "ja": "自動",
+    "ko": "자동"
+  },
+  "Auto speakers · emphasize actions & blockers": {
+    "en": "Auto speakers · emphasize actions & blockers",
+    "ja": "話者自動 · アクションとブロッカーを重視",
+    "ko": "발화자 자동 · 액션과 블로커 강조"
+  },
+  "Auto-detect": {
+    "en": "Auto-detect",
+    "ja": "自動検出",
+    "ko": "자동 감지"
+  },
+  "Auto-save is off, so closing discards this transcript. You can Export to save it first.": {
+    "en": "Auto-save is off, so closing discards this transcript. You can Export to save it first.",
+    "ja": "自動保存がオフのため、閉じるとこの文字起こしは破棄されます。先にエクスポートで保存できます。",
+    "ko": "자동저장이 꺼져 있어 닫으면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요."
+  },
+  "Auto-save is off, so leaving discards this transcript. You can Export to save it first.": {
+    "en": "Auto-save is off, so leaving discards this transcript. You can Export to save it first.",
+    "ja": "自動保存がオフのため、終了するとこの文字起こしは破棄されます。先にエクスポートで保存できます。",
+    "ko": "자동저장이 꺼져 있어 나가면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요."
+  },
+  "Back to start": {
+    "en": "Back to start",
+    "ja": "最初に戻る",
+    "ko": "시작 화면으로"
+  },
+  "By speaker": {
+    "en": "By speaker",
+    "ja": "話者別",
+    "ko": "화자별"
+  },
+  "Cancel": {
+    "en": "Cancel",
+    "ja": "キャンセル",
+    "ko": "취소"
+  },
+  "Caption overlay — a floating live-translation window": {
+    "en": "Caption overlay — a floating live-translation window",
+    "ja": "字幕オーバーレイ — リアルタイム翻訳のフローティングウィンドウ",
+    "ko": "자막 오버레이 — 화면 위 실시간 번역 자막 창"
+  },
+  "Choose file": {
+    "en": "Choose file",
+    "ja": "ファイルを選択",
+    "ko": "파일 선택"
+  },
+  "Choose file or drag & drop": {
+    "en": "Choose file or drag & drop",
+    "ja": "ファイルを選択またはドラッグ＆ドロップ",
+    "ko": "파일 선택 or 드래그 앤 드롭"
+  },
+  "Close": {
+    "en": "Close",
+    "ja": "閉じる",
+    "ko": "닫기"
+  },
+  "Close (Esc)": {
+    "en": "Close (Esc)",
+    "ja": "閉じる (Esc)",
+    "ko": "닫기 (Esc)"
+  },
+  "Connecting microphone…": {
+    "en": "Connecting microphone…",
+    "ja": "マイクに接続中…",
+    "ko": "마이크 연결 중…"
+  },
+  "Connecting system audio…": {
+    "en": "Connecting system audio…",
+    "ja": "システムオーディオに接続中…",
+    "ko": "시스템 오디오 연결 중…"
+  },
+  "Content": {
+    "en": "Content",
+    "ja": "内容",
+    "ko": "내용"
+  },
+  "Content: clean transcript · Detail: timecodes, confidence, overlap": {
+    "en": "Content: clean transcript · Detail: timecodes, confidence, overlap",
+    "ja": "内容: すっきりした文字起こし · 詳細: タイムコード・信頼度・重なり",
+    "ko": "내용: 깨끗한 회의록 보기 · 상세: 시각·신뢰도·겹침 표시"
+  },
+  "Copy": {
+    "en": "Copy",
+    "ja": "コピー",
+    "ko": "복사"
+  },
+  "Default · auto-detect speakers": {
+    "en": "Default · auto-detect speakers",
+    "ja": "デフォルト · 話者を自動検出",
+    "ko": "기본 설정 · 발화자 자동 감지"
+  },
+  "Detail": {
+    "en": "Detail",
+    "ja": "詳細",
+    "ko": "상세"
+  },
+  "Discard and close": {
+    "en": "Discard and close",
+    "ja": "破棄して閉じる",
+    "ko": "삭제하고 닫기"
+  },
+  "Discard and leave": {
+    "en": "Discard and leave",
+    "ja": "破棄して終了",
+    "ko": "삭제하고 나가기"
+  },
+  "Done": {
+    "en": "Done",
+    "ja": "完了",
+    "ko": "완료"
+  },
+  "Drop to transcribe": {
+    "en": "Drop to transcribe",
+    "ja": "ドロップで文字起こし",
+    "ko": "드롭하여 전사"
+  },
+  "Export": {
+    "en": "Export",
+    "ja": "エクスポート",
+    "ko": "내보내기"
+  },
+  "Export…": {
+    "en": "Export…",
+    "ja": "エクスポート…",
+    "ko": "내보내기…"
+  },
+  "Find in transcript": {
+    "en": "Find in transcript",
+    "ja": "文字起こしを検索",
+    "ko": "전사문에서 찾기"
+  },
+  "General": {
+    "en": "General",
+    "ja": "一般",
+    "ko": "일반"
+  },
+  "Get started": {
+    "en": "Get started",
+    "ja": "始める",
+    "ko": "시작하기"
+  },
+  "Input language": {
+    "en": "Input language",
+    "ja": "入力言語",
+    "ko": "입력 언어"
+  },
+  "Input level": {
+    "en": "Input level",
+    "ja": "入力レベル",
+    "ko": "입력 레벨"
+  },
+  "Input mic": {
+    "en": "Input mic",
+    "ja": "入力マイク",
+    "ko": "입력 마이크"
+  },
+  "Input to record — a microphone, or system audio (Teams·Zoom·YouTube … whatever plays on the Mac). System audio asks for ‘Screen Recording’ permission on first use (audio only).": {
+    "en": "Input to record — a microphone, or system audio (Teams·Zoom·YouTube … whatever plays on the Mac). System audio asks for ‘Screen Recording’ permission on first use (audio only).",
+    "ja": "録音する入力 — マイク、またはシステム音声（Teams・Zoom・YouTube … Mac で再生される音声）。システム音声は初回に「画面収録」の許可を求めます（音声のみ）。",
+    "ko": "녹음에 사용할 입력 — 마이크, 또는 시스템 오디오(Teams·Zoom·YouTube 등 Mac에서 재생되는 소리). 시스템 오디오는 첫 사용 시 ‘화면 기록’ 권한을 요청합니다 (오디오 전용)."
+  },
+  "Interview": {
+    "en": "Interview",
+    "ja": "面談",
+    "ko": "인터뷰"
+  },
+  "Keep recording": {
+    "en": "Keep recording",
+    "ja": "録音を続ける",
+    "ko": "계속 녹음"
+  },
+  "Korean": {
+    "en": "Korean",
+    "ja": "韓国語",
+    "ko": "한국어"
+  },
+  "Larger text": {
+    "en": "Larger text",
+    "ja": "文字を大きく",
+    "ko": "글자 크게"
+  },
+  "Lecture": {
+    "en": "Lecture",
+    "ja": "講義",
+    "ko": "강의"
+  },
+  "Listening": {
+    "en": "Listening",
+    "ja": "リスニング中",
+    "ko": "듣는 중"
+  },
+  "Loading model…": {
+    "en": "Loading model…",
+    "ja": "モデルを読み込み中…",
+    "ko": "모델 로딩…"
+  },
+  "Meeting info": {
+    "en": "Meeting info",
+    "ja": "会議情報",
+    "ko": "회의 정보"
+  },
+  "Meeting mode": {
+    "en": "Meeting mode",
+    "ja": "会議モード",
+    "ko": "회의 모드"
+  },
+  "Meeting record": {
+    "en": "Meeting record",
+    "ja": "会議記録",
+    "ko": "회의 기록"
+  },
+  "Meeting saved automatically": {
+    "en": "Meeting saved automatically",
+    "ja": "会議を自動保存しました",
+    "ko": "회의록이 자동 저장되었어요"
+  },
+  "Meeting summary": {
+    "en": "Meeting summary",
+    "ja": "会議の要約",
+    "ko": "회의 요약"
+  },
+  "Meeting summary — the local LLM makes a summary + action items (never leaves the device)": {
+    "en": "Meeting summary — the local LLM makes a summary + action items (never leaves the device)",
+    "ja": "会議の要約 — ローカル LLM が要約とアクション項目を作成（デバイスから出ません）",
+    "ko": "회의 요약 — 로컬 LLM으로 요약·액션아이템 생성 (기기 밖으로 안 나감)"
+  },
+  "Mic + system": {
+    "en": "Mic + system",
+    "ja": "マイク＋システム",
+    "ko": "마이크+시스템"
+  },
+  "Microphone": {
+    "en": "Microphone",
+    "ja": "マイク",
+    "ko": "마이크"
+  },
+  "Needs the translation model — Settings › Translation": {
+    "en": "Needs the translation model — Settings › Translation",
+    "ja": "翻訳モデルが必要です — 設定 › 翻訳",
+    "ko": "번역 모델이 필요해요 — 설정 › 번역"
+  },
+  "New recording": {
+    "en": "New recording",
+    "ja": "新規録音",
+    "ko": "새 기록 시작"
+  },
+  "Next (↩)": {
+    "en": "Next (↩)",
+    "ja": "次へ (↩)",
+    "ko": "다음 (↩)"
+  },
+  "Next flagged word": {
+    "en": "Next flagged word",
+    "ja": "次の要確認語",
+    "ko": "다음 검토 단어"
+  },
+  "No sound detected — check your microphone": {
+    "en": "No sound detected — check your microphone",
+    "ja": "音声が検出されません — マイクを確認してください",
+    "ko": "소리가 감지되지 않아요 — 마이크를 확인해주세요"
+  },
+  "No speech": {
+    "en": "No speech",
+    "ja": "発言なし",
+    "ko": "발언 없음"
+  },
+  "No speech was recognized. Go back with ‹ and try again.": {
+    "en": "No speech was recognized. Go back with ‹ and try again.",
+    "ja": "No speech was recognized. Go back with ‹ and try again.",
+    "ko": "음성이 인식되지 않았어요. ‹ 로 돌아가 다시 시도해 보세요."
+  },
+  "No translation": {
+    "en": "No translation",
+    "ja": "翻訳なし",
+    "ko": "번역 안 함"
+  },
+  "None": {
+    "en": "None",
+    "ja": "なし",
+    "ko": "없음"
+  },
+  "Nothing was transcribed": {
+    "en": "Nothing was transcribed",
+    "ja": "Nothing was transcribed",
+    "ko": "전사된 내용이 없습니다"
+  },
+  "Off = no speaker separation; everything is one speaker (faster, lighter).": {
+    "en": "Off = no speaker separation; everything is one speaker (faster, lighter).",
+    "ja": "オフにすると話者を分けず、すべて一人として処理します（より速く軽量）。",
+    "ko": "끄면 화자를 나누지 않고 전부 한 사람으로 처리합니다 (더 빠르고 가벼움)."
+  },
+  "On-device": {
+    "en": "On-device",
+    "ja": "オンデバイス",
+    "ko": "온디바이스"
+  },
+  "Open Settings": {
+    "en": "Open Settings",
+    "ja": "設定を開く",
+    "ko": "설정 열기"
+  },
+  "Open System Settings": {
+    "en": "Open System Settings",
+    "ja": "システム設定を開く",
+    "ko": "시스템 설정 열기"
+  },
+  "Open file": {
+    "en": "Open file",
+    "ja": "ファイルを開く",
+    "ko": "파일 열기"
+  },
+  "Output language": {
+    "en": "Output language",
+    "ja": "出力言語",
+    "ko": "출력 언어"
+  },
+  "Overall": {
+    "en": "Overall",
+    "ja": "全体",
+    "ko": "전체"
+  },
+  "Pause": {
+    "en": "Pause",
+    "ja": "一時停止",
+    "ko": "일시정지"
+  },
+  "Paused": {
+    "en": "Paused",
+    "ja": "一時停止中",
+    "ko": "일시정지"
+  },
+  "Pick an audio or video file, or start recording now.": {
+    "en": "Pick an audio or video file, or start recording now.",
+    "ja": "音声・動画ファイルを選ぶか、今すぐ録音を始めましょう。",
+    "ko": "오디오, 비디오 파일을 선택하거나 지금 바로 녹음을 시작해 보세요"
+  },
+  "Previous": {
+    "en": "Previous",
+    "ja": "前へ",
+    "ko": "이전"
+  },
+  "Previous flagged word": {
+    "en": "Previous flagged word",
+    "ja": "前の要確認語",
+    "ko": "이전 검토 단어"
+  },
+  "Progress to the next commit": {
+    "en": "Progress to the next commit",
+    "ja": "次の確定までの進捗",
+    "ko": "다음 확정까지 진행도"
+  },
+  "Ready": {
+    "en": "Ready",
+    "ja": "準備完了",
+    "ko": "준비됨"
+  },
+  "Recap card": {
+    "en": "Recap card",
+    "ja": "リキャップカード",
+    "ko": "리캡 카드"
+  },
+  "Record and your meeting becomes text, translated live — all on this Mac.": {
+    "en": "Record and your meeting becomes text, translated live — all on this Mac.",
+    "ja": "録音すれば会議が文字になり、リアルタイムで翻訳されます — すべてこの Mac の中で。",
+    "ko": "녹음하면 회의가 글이 되고, 실시간으로 번역돼요. 모두 이 Mac 안에서"
+  },
+  "Recording": {
+    "en": "Recording",
+    "ja": "録音中",
+    "ko": "녹음 중"
+  },
+  "Recording in progress": {
+    "en": "Recording in progress",
+    "ja": "録音中",
+    "ko": "녹음이 진행 중이에요"
+  },
+  "Regenerate": {
+    "en": "Regenerate",
+    "ja": "再生成",
+    "ko": "다시 생성"
+  },
+  "Restart Madi": {
+    "en": "Restart Madi",
+    "ja": "Madi を再起動",
+    "ko": "Madi 다시 시작"
+  },
+  "Resume": {
+    "en": "Resume",
+    "ja": "再開",
+    "ko": "재개"
+  },
+  "Save the filler + silence cut list via the export menu’s ‘Tighten cut list (.csv)’": {
+    "en": "Save the filler + silence cut list via the export menu’s ‘Tighten cut list (.csv)’",
+    "ja": "フィラー＋無音のカットリストをエクスポートメニューの「タイトンカットリスト (.csv)」で保存",
+    "ko": "필러 + 무음 컷 목록을 내보내기 메뉴의 ‘타이튼 컷 목록 (.csv)’로 저장"
+  },
+  "Search all meetings — e.g. What did we decide on security last month?": {
+    "en": "Search all meetings — e.g. What did we decide on security last month?",
+    "ja": "全会議を検索 — 例: 先月セキュリティについて何を決めた？",
+    "ko": "전체 회의록에서 검색 — 예: 지난달 보안 결정은?"
+  },
+  "Separating speakers…": {
+    "en": "Separating speakers…",
+    "ja": "話者分離中…",
+    "ko": "화자분리중…"
+  },
+  "Setting up the meeting gives more accurate results.": {
+    "en": "Setting up the meeting gives more accurate results.",
+    "ja": "会議情報を設定するとより正確な結果が得られます。",
+    "ko": "회의 정보를 설정하면 더 정확한 결과를 얻을 수 있어요"
+  },
+  "Settings (⌘,)": {
+    "en": "Settings (⌘,)",
+    "ja": "設定 (⌘,)",
+    "ko": "설정 (⌘,)"
+  },
+  "Show in Finder": {
+    "en": "Show in Finder",
+    "ja": "Finder で表示",
+    "ko": "Finder에서 보기"
+  },
+  "Slides (HTML)": {
+    "en": "Slides (HTML)",
+    "ja": "スライド（HTML）",
+    "ko": "슬라이드(HTML)"
+  },
+  "Smaller text": {
+    "en": "Smaller text",
+    "ja": "文字を小さく",
+    "ko": "글자 작게"
+  },
+  "Speaker separation": {
+    "en": "Speaker separation",
+    "ja": "話者分離",
+    "ko": "화자 분리"
+  },
+  "Speaker separation off · key takeaways": {
+    "en": "Speaker separation off · key takeaways",
+    "ja": "話者分離オフ · 要点中心にまとめる",
+    "ko": "화자 분리 끔 · 핵심 요점 위주 정리"
+  },
+  "Speaking share — by speaker": {
+    "en": "Speaking share — by speaker",
+    "ja": "発言割合 — 話者別",
+    "ko": "발언 비율 — 화자별 점유"
+  },
+  "Standup": {
+    "en": "Standup",
+    "ja": "スタンドアップ",
+    "ko": "스탠드업"
+  },
+  "Start from file": {
+    "en": "Start from file",
+    "ja": "ファイルから開始",
+    "ko": "파일로 시작하기"
+  },
+  "Start over": {
+    "en": "Start over",
+    "ja": "最初から",
+    "ko": "처음으로"
+  },
+  "Start recording": {
+    "en": "Start recording",
+    "ja": "録音開始",
+    "ko": "녹음 시작"
+  },
+  "Start recording now": {
+    "en": "Start recording now",
+    "ja": "今すぐ録音開始",
+    "ko": "지금 녹음 시작"
+  },
+  "Stop": {
+    "en": "Stop",
+    "ja": "停止",
+    "ko": "정지"
+  },
+  "Stopping wraps up what's captured so far. If auto-save is on, it's written to a file.": {
+    "en": "Stopping wraps up what's captured so far. If auto-save is on, it's written to a file.",
+    "ja": "停止するとここまでの内容をまとめます。自動保存がオンならファイルに書き出されます。",
+    "ko": "정지하면 여기까지의 기록이 정리돼요. 자동저장이 켜져 있으면 파일로 저장됩니다."
+  },
+  "Summary template — derived from the meeting mode; changing it here applies to this session only": {
+    "en": "Summary template — derived from the meeting mode; changing it here applies to this session only",
+    "ja": "要約テンプレート — 会議モードから自動的に決まり、ここで変更するとこのセッションにのみ適用されます",
+    "ko": "요약 템플릿 — 회의 모드에서 자동으로 정해지며, 여기서 바꾸면 이 세션에만 적용됩니다"
+  },
+  "Swap the input mic even while recording": {
+    "en": "Swap the input mic even while recording",
+    "ja": "録音中でも入力マイクを切り替え",
+    "ko": "녹음 중에도 입력 마이크를 바꿀 수 있어요"
+  },
+  "System audio": {
+    "en": "System audio",
+    "ja": "システム音声",
+    "ko": "시스템 오디오"
+  },
+  "System default": {
+    "en": "System default",
+    "ja": "システムデフォルト",
+    "ko": "시스템 기본"
+  },
+  "The local LLM is answering…": {
+    "en": "The local LLM is answering…",
+    "ja": "ローカル LLM が回答中…",
+    "ko": "로컬 LLM이 답하는 중…"
+  },
+  "The transcript never leaves this Mac.": {
+    "en": "The transcript never leaves this Mac.",
+    "ja": "文字起こしはこの Mac から外に出ません。",
+    "ko": "전사 내용은 이 Mac을 떠나지 않습니다."
+  },
+  "This meeting": {
+    "en": "This meeting",
+    "ja": "この会議",
+    "ko": "이 회의"
+  },
+  "Total time": {
+    "en": "Total time",
+    "ja": "合計時間",
+    "ko": "총 시간"
+  },
+  "Transcribing": {
+    "en": "Transcribing",
+    "ja": "文字起こし中",
+    "ko": "전사 중"
+  },
+  "Transcribing file": {
+    "en": "Transcribing file",
+    "ja": "ファイルを文字起こし中",
+    "ko": "파일 전사 중"
+  },
+  "Transcribing file…": {
+    "en": "Transcribing file…",
+    "ja": "ファイルを文字起こし中…",
+    "ko": "파일 전사 중…"
+  },
+  "Transcribing…": {
+    "en": "Transcribing…",
+    "ja": "文字起こし中…",
+    "ko": "전사 중…"
+  },
+  "Translation is behind fast speech · fills in after you stop": {
+    "en": "Translation is behind fast speech · fills in after you stop",
+    "ja": "翻訳が速い発話に追いついていません · 停止後に補完されます",
+    "ko": "말이 빨라 번역이 밀렸어요 · 정지 후 자동으로 채워요"
+  },
+  "Turn off caption overlay": {
+    "en": "Turn off caption overlay",
+    "ja": "字幕オーバーレイをオフ",
+    "ko": "자막 오버레이 끄기"
+  },
+  "Undo speaker correction": {
+    "en": "Undo speaker correction",
+    "ja": "話者修正を元に戻す",
+    "ko": "화자 교정 되돌리기"
+  },
+  "Whole workspace": {
+    "en": "Whole workspace",
+    "ja": "ワークスペース全体",
+    "ko": "전체 워크스페이스"
+  },
+  "Wrapping up…": {
+    "en": "Wrapping up…",
+    "ja": "仕上げ中…",
+    "ko": "마무리…"
+  },
+  "You have an unsaved transcript": {
+    "en": "You have an unsaved transcript",
+    "ja": "未保存の文字起こしがあります",
+    "ko": "저장되지 않은 기록이 있어요"
+  },
+  "Your transcript will appear here shortly.": {
+    "en": "Your transcript will appear here shortly.",
+    "ja": "まもなくここに文字起こしが表示されます。",
+    "ko": "전사 결과가 곧 여기에 표시됩니다"
+  },
+  "e.g. What did we decide? / What is Alex responsible for?": {
+    "en": "e.g. What did we decide? / What is Alex responsible for?",
+    "ja": "例: 何を決めましたか？ / Alex の担当は？",
+    "ko": "예: 무엇을 결정했나요? / 김부장이 맡은 일은?"
+  },
+  "good": {
+    "en": "good",
+    "ja": "良好",
+    "ko": "좋음"
+  },
+  "low · move closer": {
+    "en": "low · move closer",
+    "ja": "小さい · マイクを近づけて",
+    "ko": "작음 · 마이크를 가까이"
+  },
+  "ok": {
+    "en": "ok",
+    "ja": "普通",
+    "ko": "보통"
+  }
+}

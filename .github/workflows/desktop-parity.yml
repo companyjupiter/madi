@@ -1,0 +1,67 @@
+name: Desktop migration checks
+on:
+  push:
+    branches: [codex/tauri-ui-parity]
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'crates/**'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'scripts/*parity.py'
+      - 'tests/parity/**'
+      - 'apps/macos/Sovereign/Engine/TranslateStreamParser.swift'
+      - '.github/workflows/desktop-parity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Install pinned Rust components
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - name: Build the local frontend
+        working-directory: apps/desktop
+        run: |
+          npm ci
+          npm run build
+      - name: Check formatting and shared behavior
+        run: |
+          cargo fmt --all --check
+          cargo test --locked -p madi-core -p madi-protocol
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Compare against the shipping Swift parser
+        if: runner.os == 'macOS'
+        run: python3 scripts/check_translate_parser_parity.py
+      - name: Build the standalone debug parity host
+        run: cargo build --locked -p madi-desktop --features custom-protocol
+      - name: Record build provenance
+        run: python scripts/record_desktop_build.py
+      - name: Preserve evidence and experimental executable
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-parity-${{ matrix.os }}
+          path: |
+            out/desktop-build/report.json
+            out/translate-parser-parity/report.json
+            target/debug/madi-desktop
+            target/debug/madi-desktop.exe
+          if-no-files-found: error
+          retention-days: 14

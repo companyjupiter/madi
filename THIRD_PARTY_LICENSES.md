@@ -4,6 +4,13 @@ This project reuses the third-party machine-learning models listed below and emb
 the Sparkle update framework. The full
 license texts are reproduced below; a summary of components and changes is in [`NOTICE`](NOTICE).
 
+The experimental Tauri migration in `apps/desktop` additionally depends on React
+and React DOM 19.3.1 (MIT) and Tauri 2.12.5 (MIT OR Apache-2.0). Their direct
+runtime MIT notices are retained in [`apps/desktop/licenses`](apps/desktop/licenses).
+`Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
+The complete transitive binary notice bundle is still a migration release gate;
+the current parity harness is debug-only and not a product distribution.
+
 | Component | Use | License |
 |---|---|---|
 | **DNA3.0-2B / 4B** (dnotitia; Qwen3.5-2B / 4B base) — translation + summary/Q&A | downloaded GGUF · `Contents/MacOS/translate-engine-{2b,4b}` | Apache-2.0 (§A) |

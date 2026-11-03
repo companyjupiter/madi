@@ -4,6 +4,11 @@ Madi must support Windows, macOS, and Linux. The current product
 path is optimized for Apple Silicon macOS, so cross-platform support needs
 explicit platform boundaries instead of ad-hoc conditionals.
 
+The [Tauri migration plan](TAURI_MIGRATION_PLAN.md) defines the current migration
+sequence: preserve the existing product UI and UX, deliver macOS and Windows
+first, and retain Linux as a later target. It includes parity gates and the
+Windows engine dependencies that must be resolved before product completion.
+
 ## Current support
 
 | Layer | Current implementation | Portability status |
