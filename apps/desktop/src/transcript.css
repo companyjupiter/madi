@@ -20,7 +20,16 @@
 .transcript-mode { display: flex; width: 99px; gap: 1px; margin-left: auto; padding: 3px; border-radius: 99px; background: var(--surface-sunken); }
 .transcript-mode button { flex: 1; padding: 4px 10px; white-space: nowrap; font-size: 10px; font-weight: 600; border-radius: 99px; color: var(--text-secondary); }
 .transcript-mode button[aria-pressed=true] { background: var(--segment-selected); box-shadow: 0 2px 1px #0000000f; color: var(--text-primary); }
-.transcript-scroll { overflow: auto; flex: 1; padding: 20px; min-height: 0; }
+.transcript-reader { flex: 1; min-height: 0; position: relative; display: flex; width: 100%; align-self: center; }
+.transcript-reader.has-lines { max-width: 700px; }
+.transcript-reader.has-lines::after, .transcript-reader.has-lines.scrolled::before { content: ''; position: absolute; left: 0; right: 0; pointer-events: none; z-index: 2; }
+.transcript-reader.has-lines::after { bottom: 0; height: 60px; background: linear-gradient(transparent, var(--surface)); }
+.transcript-reader.has-lines.scrolled::before { top: 0; height: 36px; background: linear-gradient(var(--surface), transparent); }
+.transcript-scroll { overflow: auto; flex: 1; min-height: 0; overflow-anchor: none; }
+.transcript-scroll-content { padding: 20px 20px 0; min-height: 100%; }
+.transcript-scroll-content.empty-layout { height: 100%; }
+.transcript-follow-pill { position: absolute; z-index: 1; left: 50%; bottom: 14px; transform: translate(-50%, 16px); opacity: 0; visibility: hidden; transition: transform .2s ease-out, opacity .2s ease-out, visibility .2s; display: flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 99px; border: .5px solid var(--separator); background: var(--surface); box-shadow: 0 2px 6px #0000002e; color: var(--text-primary); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.transcript-follow-pill.shown { visibility: visible; opacity: 1; transform: translate(-50%, 0); }
 .transcript-blocks { display: flex; flex-direction: column; gap: 30px; }
 .transcript-block, .transcript-row { display: flex; flex-direction: column; gap: 9px; position: relative; }
 .transcript-body, .transcript-row textarea { font-size: var(--transcript-font-size); line-height: 1.5; font-weight: 400; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }

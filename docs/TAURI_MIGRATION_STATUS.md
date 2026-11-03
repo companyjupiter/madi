@@ -15,6 +15,15 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Transcript reading/follow candidate: the production TypeScript model matches
+  unchanged Swift in 287 cases / 13,294 intermediate states. File transcription
+  now uses the original top anchor; recording-only follow remains distinct from
+  processing. The DOM adapter, new-transcript pill, native arrow artwork, 700 pt
+  reading width and fade/inset values are connected. Native wheel/scrollbar,
+  geometry, animation and pixels remain unverified. Local frontend, clippy,
+  native symbol comparison and debug package checks pass; committed CI for this
+  follow change is pending. See `runtime/TRANSCRIPT_FOLLOW.md` and
+  `evidence/macos-transcript-follow-2026-11-04.json`.
 - Connected file workflow candidate: 65 local macOS Rust tests pass (11 core,
   14 protocol, 40 platform), including six new real-child workflow cases for
   stream/edit/fix delivery, cancellation/generation isolation, errors/retry and
@@ -31,7 +40,12 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   failed five workflow tests: Python fixture stdout used its host pipe code page,
   unlike the real engine's UTF-8 output. Forced ASCII locally reproduces the
   failure. Explicit fixture UTF-8 gives six passing workflow tests under the same
-  restriction; production process behavior is unchanged. Windows rerun is pending.
+  restriction; production process behavior is unchanged. Corrected `acd4f5c`
+  passed [CI 41731131476](https://github.com/companyjupiter/madi/actions/runs/41731131476)
+  on both macOS 15 and Windows Server 2022: 65/58 tests, all references,
+  clippy, frontend/standalone builds and macOS package checks. Downloaded binary,
+  archive, inner runtime and all 15 notice hashes match; both source trees and
+  retained diffs are clean (`evidence/desktop-ci-acd4f5c-2026-11-04.json`).
   See `evidence/file-workflow-fixture-encoding-2026-11-04.json`.
 - `cd apps/macos && swift test`: 718 tests, **2 skipped**, 0 failures on this Mac.
   The two capture-fragmentation tests need `MADI_EVENTS_JSONL` and
@@ -52,8 +66,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   5,947 snapshots match live unchanged Swift method bodies. Both include 1,566
   fixture word payloads. Exact identity, raw text, time/confidence, grouping,
   speaker changes/numbers, edits and translation provenance match. Explicit
-  render delivery is compared; real timer scheduling and derived display caches
-  remain open. The actual native JFK probe now feeds the store and produces the
+  render delivery is compared; this model gate excludes timer scheduling and
+  derived display caches. The timed workflow is tested separately above. The
+  actual native JFK probe now feeds the store and produces the
   expected 22-word sentence with one completion and clean scratch. See
   `runtime/TRANSCRIPT_MODEL.md` and `evidence/macos-transcript-model-2026-11-04.json`.
   Committed revision `4f8e4de` also passed the complete desktop workflow on both
@@ -357,7 +372,7 @@ live Swift differential evidence. The timed file owner now connects native
 selection/start, progress, transcript/edit state, back/close cancellation and
 AppKit copy/name commands to the file-screen candidate. Native click/visual
 validation remains open; the candidate does not complete display caches,
-follow/low-confidence review, settings/glossary/AI policy, playback, workspace
+native follow validation/low-confidence review, settings/glossary/AI policy, playback, workspace
 or persistence. The recording start action still emits a harness intent.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard

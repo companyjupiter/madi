@@ -23,6 +23,13 @@
     "asciiRed": "b994169d5cd8fc2f69c826d7c837b8fa2b8f17d0d9b127103a875d9f503ceee8",
     "asciiGreen": "9d9c542fbc6ce2ed5af63df6a3d175deaebd46fd2befe2f6f78e2df2049f6dd2"
   },
-  "windowsRerun": "pending",
+  "windowsRerun": {
+    "run": "https://github.com/companyjupiter/madi/actions/runs/41731131476",
+    "head": "acd4f5c86c0aad47f271e2ab2d9cfeb05cc15378",
+    "conclusion": "success",
+    "windowsTests": 58,
+    "macosTests": 65,
+    "receipt": "desktop-ci-acd4f5c-2026-11-04.json"
+  },
   "nativeUIParity": "not verified"
 }

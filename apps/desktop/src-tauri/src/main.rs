@@ -16,8 +16,8 @@ mod files_host;
 mod models_host;
 mod setup_host;
 use files_host::{
-    FilesHost, file_copy_line, file_edit, file_rename_speaker, file_reset, file_snapshot,
-    file_start,
+    FilesHost, file_artwork, file_copy_line, file_edit, file_rename_speaker, file_reset,
+    file_snapshot, file_start,
 };
 use models_host::{models_artwork, models_command, models_snapshot};
 use setup_host::{SetupHost, choose_file};
@@ -167,6 +167,7 @@ fn main() {
             models_command,
             models_artwork,
             file_snapshot,
+            file_artwork,
             file_start,
             file_reset,
             file_edit,

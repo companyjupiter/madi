@@ -11,6 +11,7 @@ fn main() {
             "physicalMemory": model_presentation::physical_memory(),
             "sizes": bytes.map(model_presentation::file_size),
             "artwork": model_presentation::artwork().expect("native system artwork"),
+            "transcriptArtwork": model_presentation::transcript_artwork().expect("native transcript artwork"),
         })
     );
 }

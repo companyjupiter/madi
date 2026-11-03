@@ -1,9 +1,10 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import type { FileEdit, FileSnapshot, TranscriptLine } from './files';
+import type { FileArtwork, FileEdit, FileSnapshot, TranscriptLine } from './files';
 import { MiddleText } from './MiddleText';
+import { useTranscriptFollow } from './useTranscriptFollow';
 import './transcript.css';
 
-type Props = { snapshot: FileSnapshot; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
+type Props = { snapshot: FileSnapshot; artwork: FileArtwork | null; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
   return <span aria-hidden className="asset-icon" style={{ width: size, height: size, maskImage: `url(/assets/${name}.svg)` }} />;
 }
@@ -15,14 +16,14 @@ function speakerColor(speaker: number) { return `var(--speaker-${((speaker % 8) 
 
 // This is the connected file-view candidate. Workspace, AI tools, playback,
 // confidence review and native visual parity remain separate migration gates.
-export function FileTranscript({ snapshot: state, language, text, reset, edit, copy, rename }: Props) {
+export function FileTranscript({ snapshot: state, artwork, language, text, reset, edit, copy, rename }: Props) {
   const [content, setContent] = useState(true);
   const [fontSize, setFontSize] = useState(16);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const scroll = useRef<HTMLDivElement>(null);
   const editor = useRef<HTMLTextAreaElement>(null);
-  const following = useRef(true);
+  // ContentView passes isLive only for recording/paused, never file processing.
+  const follow = useTranscriptFollow(state.lines, state.generation, false, editing !== null);
   const busy = state.phase.kind === 'processing';
   const progress = state.chunksTotal > 0 ? Math.trunc(state.chunksDone / state.chunksTotal * 100) : null;
   const activity = progress === null ? text('Transcribing file') : language === 'ko' ? `파일 전사 중 · ${progress}%` : language === 'ja' ? `ファイル文字起こし中 · ${progress}%` : `Transcribing file · ${progress}%`;
@@ -46,10 +47,7 @@ export function FileTranscript({ snapshot: state, language, text, reset, edit, c
     }
     return result;
   }, [state.lines, state.speakerNumbers, state.speakerIslandAbsorption]);
-  useLayoutEffect(() => { setEditing(null); following.current = true; }, [state.generation]);
-  useLayoutEffect(() => {
-    if (following.current && scroll.current && !editing) scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [state.revision, content, editing]);
+  useLayoutEffect(() => { setEditing(null); }, [state.generation]);
   useLayoutEffect(() => {
     if (editor.current) { editor.current.style.height = 'auto'; editor.current.style.height = `${editor.current.scrollHeight}px`; }
   }, [draft, editing, fontSize]);
@@ -86,9 +84,9 @@ export function FileTranscript({ snapshot: state, language, text, reset, edit, c
           <button aria-pressed={!content} onClick={() => setContent(false)}>{text('Detail')}</button>
         </div>
       </div>
-      <div className="transcript-scroll" ref={scroll} onScroll={() => {
-        const pane = scroll.current; if (pane) following.current = pane.scrollHeight - pane.clientHeight - pane.scrollTop < 40;
-      }}>
+      <div className={`transcript-reader${state.lines.length ? ' has-lines' : ''}${follow.badge.scrolled ? ' scrolled' : ''}`}>
+      <div className="transcript-scroll" ref={follow.viewport}>
+        <div className={`transcript-scroll-content${state.lines.length ? '' : ' empty-layout'}`} ref={follow.contents}>
         {state.lines.length === 0 ? state.phase.kind === 'error' ? <div className="transcript-error" role="alert">{state.phase.message}</div> : busy ? <div className="transcript-status">{text('Your transcript will appear here shortly.')}<span className="loading-dots" aria-hidden>•••</span></div> : <div className="transcript-empty"><strong>{text('Nothing was transcribed')}</strong><span>{text('No speech was recognized. Go back with ‹ and try again.')}</span></div> : <>
           {content ? <div className="transcript-blocks">{blocks.map(block => <article key={`block-${block.id}`} className="transcript-block">
             {multiSpeaker && speakerHeader(block.speaker)}
@@ -117,6 +115,14 @@ export function FileTranscript({ snapshot: state, language, text, reset, edit, c
           {state.phase.kind === 'error' && <div className="transcript-error" role="alert">{state.phase.message}</div>}
           <div className="transcript-tail-clearance" />
         </>}
+        </div>
+      </div>
+      <button className={`transcript-follow-pill${!follow.badge.atBottom && follow.badge.unseen > 0 ? ' shown' : ''}`}
+        tabIndex={!follow.badge.atBottom && follow.badge.unseen > 0 ? 0 : -1}
+        aria-hidden={follow.badge.atBottom || follow.badge.unseen === 0} onClick={follow.jumpToTail}>
+        {artwork && <span aria-hidden className="asset-icon" style={{ width: artwork.follow.width, height: artwork.follow.height, maskImage: `url(${artwork.follow.dataUrl})` }} />}
+        {language === 'ko' ? `새 전사 ${follow.badge.unseen}` : language === 'ja' ? `新規 ${follow.badge.unseen}` : `${follow.badge.unseen} new`}
+      </button>
       </div>
     </section>
   </main>;

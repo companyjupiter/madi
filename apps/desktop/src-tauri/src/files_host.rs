@@ -12,6 +12,46 @@ pub struct FilesHost {
     service: Mutex<Option<FileWorkflow>>,
     closed: AtomicBool,
     dialog_open: AtomicBool,
+    #[cfg(target_os = "macos")]
+    artwork: std::sync::OnceLock<serde_json::Value>,
+}
+
+#[tauri::command]
+pub async fn file_artwork(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(artwork) = app.state::<FilesHost>().artwork.get() {
+            return Ok(artwork.clone());
+        }
+        let (sender, mut receiver) = tauri::async_runtime::channel(1);
+        let owner = app.clone();
+        app.run_on_main_thread(move || {
+            let host = owner.state::<FilesHost>();
+            let result = (|| {
+                if let Some(artwork) = host.artwork.get() {
+                    return Ok(artwork.clone());
+                }
+                let symbols = madi_platform::model_presentation::transcript_artwork()?;
+                let value = serde_json::to_value(symbols).map_err(|error| error.to_string())?;
+                let _ = host.artwork.set(value.clone());
+                Ok(value)
+            })();
+            let _ = sender.try_send(result);
+        })
+        .map_err(|error| error.to_string())?;
+        receiver.recv().await.ok_or("artwork worker stopped")?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(serde_json::Value::Null)
+    }
 }
 
 #[tauri::command]

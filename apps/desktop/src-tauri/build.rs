@@ -9,6 +9,7 @@ fn main() {
             "models_command",
             "models_artwork",
             "file_snapshot",
+            "file_artwork",
             "file_start",
             "file_reset",
             "file_edit",

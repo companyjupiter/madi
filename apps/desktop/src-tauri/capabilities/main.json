@@ -14,6 +14,7 @@
     "allow-models-command",
     "allow-models-artwork",
     "allow-file-snapshot",
+    "allow-file-artwork",
     "allow-file-start",
     "allow-file-reset",
     "allow-file-edit",

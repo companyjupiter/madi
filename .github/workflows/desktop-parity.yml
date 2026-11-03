@@ -103,6 +103,7 @@ jobs:
           python3 scripts/check_model_presentation_parity.py
           python3 scripts/check_word_merger_parity.py
           python3 scripts/check_transcript_store_parity.py
+          python3 scripts/check_transcript_follow_parity.py
           swiftc -parse-as-library apps/macos/Sovereign/Audio/AudioDecode.swift apps/macos/Sovereign/Audio/Resampler.swift apps/macos/Sovereign/Audio/WavWriter.swift apps/macos/Tests/AudioDecodeLimitTests.swift -o "$RUNNER_TEMP/madi-audio-decode-parity"
           "$RUNNER_TEMP/madi-audio-decode-parity"
       - name: Compare Windows parser to pinned Swift reference
@@ -118,6 +119,7 @@ jobs:
           python scripts/check_model_gate_parity.py --rust-only
           python scripts/check_word_merger_parity.py --rust-only
           python scripts/check_transcript_store_parity.py --rust-only
+          python scripts/check_transcript_follow_parity.py --frontend-only
       - name: Build the standalone debug parity host
         run: cargo build --locked -p madi-desktop --features custom-protocol
       - name: Verify the relocated macOS app and native decoder
@@ -148,6 +150,7 @@ jobs:
             out/model-presentation-parity/report.json
             out/word-merger-parity/report.json
             out/transcript-store-parity/report.json
+            out/transcript-follow-parity/report.json
             out/desktop-package/report.json
             out/desktop-package/Madi-UI-Parity.app.zip
             target/debug/madi-desktop

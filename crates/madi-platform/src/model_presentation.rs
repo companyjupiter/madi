@@ -57,26 +57,57 @@ pub fn artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
             ),
         ]
     };
-    symbols.into_iter().map(|(key, name, points, weight)| {
-        let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None).ok_or("system symbol unavailable")?;
-        let config = NSImageSymbolConfiguration::configurationWithPointSize_weight(points, weight);
-        let image = image.imageWithSymbolConfiguration(&config).ok_or("system symbol configuration unavailable")?;
-        let size = image.size();
-        let width = (size.width * 2.0).ceil() as isize;
-        let height = (size.height * 2.0).ceil() as isize;
-        // Null planes ask AppKit to allocate and own the RGBA pixel storage.
-        let bitmap = unsafe { NSBitmapImageRep::initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel(
+    symbols
+        .into_iter()
+        .map(|(key, name, points, weight)| Ok((key.into(), render_symbol(name, points, weight)?)))
+        .collect()
+}
+
+pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
+    Ok(BTreeMap::from([(
+        "follow".into(),
+        render_symbol("arrow.down", 11.0, unsafe { NSFontWeightSemibold })?,
+    )]))
+}
+
+fn render_symbol(name: &str, points: f64, weight: f64) -> Result<SymbolImage, &'static str> {
+    let _main =
+        MainThreadMarker::new().ok_or("system artwork must be prepared on the main thread")?;
+    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+        &NSString::from_str(name),
+        None,
+    )
+    .ok_or("system symbol unavailable")?;
+    let config = NSImageSymbolConfiguration::configurationWithPointSize_weight(points, weight);
+    let image = image
+        .imageWithSymbolConfiguration(&config)
+        .ok_or("system symbol configuration unavailable")?;
+    let size = image.size();
+    let width = (size.width * 2.0).ceil() as isize;
+    let height = (size.height * 2.0).ceil() as isize;
+    // Null planes ask AppKit to allocate and own the RGBA pixel storage.
+    let bitmap = unsafe { NSBitmapImageRep::initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel(
             NSBitmapImageRep::alloc(), std::ptr::null_mut(), width, height, 8, 4, true, false,
             NSCalibratedRGBColorSpace, 0, 0,
         ) }.ok_or("symbol bitmap allocation failed")?;
-        let context = NSGraphicsContext::graphicsContextWithBitmapImageRep(&bitmap).ok_or("symbol bitmap context unavailable")?;
-        NSGraphicsContext::saveGraphicsState_class();
-        NSGraphicsContext::setCurrentContext(Some(&context));
-        image.drawInRect(NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64)));
-        NSGraphicsContext::restoreGraphicsState_class();
-        // The empty dictionary has no properties with mismatched value types.
-        let png = unsafe { bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new()) }.ok_or("symbol PNG encoding failed")?;
-        let base64 = png.base64EncodedStringWithOptions(NSDataBase64EncodingOptions::empty());
-        Ok((key.into(), SymbolImage { data_url: format!("data:image/png;base64,{base64}"), width: size.width, height: size.height }))
-    }).collect()
+    let context = NSGraphicsContext::graphicsContextWithBitmapImageRep(&bitmap)
+        .ok_or("symbol bitmap context unavailable")?;
+    NSGraphicsContext::saveGraphicsState_class();
+    NSGraphicsContext::setCurrentContext(Some(&context));
+    image.drawInRect(NSRect::new(
+        NSPoint::new(0.0, 0.0),
+        NSSize::new(width as f64, height as f64),
+    ));
+    NSGraphicsContext::restoreGraphicsState_class();
+    // The empty dictionary has no properties with mismatched value types.
+    let png = unsafe {
+        bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new())
+    }
+    .ok_or("symbol PNG encoding failed")?;
+    let base64 = png.base64EncodedStringWithOptions(NSDataBase64EncodingOptions::empty());
+    Ok(SymbolImage {
+        data_url: format!("data:image/png;base64,{base64}"),
+        width: size.width,
+        height: size.height,
+    })
 }

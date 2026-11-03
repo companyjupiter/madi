@@ -16,6 +16,8 @@ export interface FileSnapshot {
   lines: TranscriptLine[]; speakerNumbers: { numbers: Record<string, number> };
   speakerNames: Record<string, string>; partial: string; speakerIslandAbsorption: boolean;
 }
+export type FileArtwork = Record<'follow', { dataUrl: string; width: number; height: number }>;
+export const fileArtwork = () => invoke<FileArtwork | null>('file_artwork');
 export type FileEdit =
   | { type: 'line'; id: string; text: string }
   | { type: 'word'; id: string; index: number; text: string }

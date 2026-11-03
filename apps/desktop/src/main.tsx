@@ -4,7 +4,7 @@ import { audioInputs, browserFixture, chooseFile, command, snapshot, watchSetup,
 import { MiddleText } from './MiddleText';
 import { ModelGate } from './ModelGate';
 import { FileTranscript } from './FileTranscript';
-import { copyLine, renameSpeaker, editFile, fileSnapshot, resetFile, startFile, watchFile, type FileEdit, type FileSnapshot } from './files';
+import { copyLine, renameSpeaker, editFile, fileArtwork, fileSnapshot, resetFile, startFile, watchFile, type FileArtwork, type FileEdit, type FileSnapshot } from './files';
 import { modelArtwork, modelCommand, modelSnapshot, watchModels, type ModelArtwork, type ModelCommand, type ModelSnapshot } from './models';
 import strings from './strings.generated.json';
 import './theme.generated.css';
@@ -76,6 +76,7 @@ function App() {
 
 function FileSessionScreen() {
   const [state, setState] = useState<FileSnapshot | null>(null);
+  const [artwork, setArtwork] = useState<FileArtwork | null>(null);
   const [error, setError] = useState('');
   const queue = useRef(Promise.resolve());
   const receive = (value: FileSnapshot) => setState(previous => previous && previous.revision > value.revision ? previous : value);
@@ -89,13 +90,20 @@ function FileSessionScreen() {
     }).catch(reason => { if (active) setError(String(reason)); });
     return () => { active = false; unlisten?.(); };
   }, []);
+  const hasFile = Boolean(state && state.phase.kind !== 'idle');
+  useEffect(() => {
+    if (!hasFile || artwork) return;
+    let active = true;
+    void fileArtwork().then(value => { if (active) setArtwork(value); }).catch(reason => { if (active) setError(String(reason)); });
+    return () => { active = false; };
+  }, [hasFile, artwork]);
   function perform(action: () => Promise<FileSnapshot>) {
     queue.current = queue.current.then(async () => receive(await action())).catch(reason => setError(String(reason)));
   }
   if (error) return <pre className="harness-error" role="alert">{error}</pre>;
   if (!state) return null;
   if (state.phase.kind === 'idle' && !state.lines.length) return <SetupScreen start={() => perform(startFile)} />;
-  return <FileTranscript snapshot={state} language={uiLanguage} text={text}
+  return <FileTranscript snapshot={state} artwork={artwork} language={uiLanguage} text={text}
     reset={() => perform(() => resetFile(state.generation))}
     copy={id => { void copyLine(state.generation, id).catch(reason => setError(String(reason))); }}
     rename={speaker => perform(() => renameSpeaker(state.generation, speaker, text))}

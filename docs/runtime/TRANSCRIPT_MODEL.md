@@ -106,7 +106,10 @@ paragraphs, conditional speaker-island folding and source text from the original
 catalog. Native alert geometry, clipboard clicks, scroll/focus behavior, resizing,
 typography and pixels remain unverified. No capture, settings migration, archive
 autosave, workspace, playback, glossary, AI postprocessing, translation generation,
-derived statistics or full follow/low-confidence review has been completed.
+derived statistics or low-confidence review has been completed. The follow
+state model and DOM adapter are now connected separately; see
+[`TRANSCRIPT_FOLLOW.md`](TRANSCRIPT_FOLLOW.md) for exact model comparisons and
+the still-open native interaction/visual gates.
 
 `file_workflow_smoke` runs the timed owner using explicitly supplied native engine,
 decoder, assets and a public source fixture. It verifies the completed transcript,
