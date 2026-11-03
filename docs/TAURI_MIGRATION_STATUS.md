@@ -20,8 +20,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   `MADI_CAPTURE_STDOUT`; they are not counted as capture/inference validation.
 - `cargo test -p madi-core -p madi-protocol -p madi-platform`: 49 tests pass
   locally on macOS (11 core, 14 protocol, 24 platform tests). The last committed
-  packaging revision `f829c20` passed 46/40 macOS/Windows tests and package checks.
-  The three new model-integrity regressions still require their own CI result.
+  model revision `3954f46` passed 49/43 macOS/Windows tests and package checks.
+  First-run policy revision `a882fbd` also passed both platforms. The later
+  inference runtime package still requires its own CI result.
 - `python3 scripts/check_translate_parser_parity.py`: **5,082** chunked input
   cases match the unmodified shipping Swift parser, in translation and summary
   modes. Unicode, malformed bytes, markers, forced-prefix/capability lines and
@@ -136,6 +137,12 @@ at `f829c20` passed both hosts, including the relocated macOS `.app`/decoder che
 Downloaded executables, the app archive and its inner decoder match their reported
 hashes, with clean source trees and empty build diffs. See
 `evidence/desktop-ci-f829c20-2026-11-04.json`.
+[Run 41711822569](https://github.com/companyjupiter/madi/actions/runs/41711822569)
+at `3954f46` passed the model manifest/integrity checks on both hosts with 49/43
+tests; [run 41712443094](https://github.com/companyjupiter/madi/actions/runs/41712443094)
+at `a882fbd` passed the 48-case first-run policy comparison too. Downloaded
+executables match their reports, with clean source trees. Dedicated receipts
+record the source/corpus/result hashes and limits.
 
 The host currently assumes a ready-model setup fixture and holds choices in
 memory. Native macOS file selection/drop now stages a file; start buttons still
@@ -242,8 +249,8 @@ system tools on PATH, preserves the original synthetic input, and fails closed
 when its copied helper is absent. Deep/strict signature verification passes.
 The candidate is macOS arm64/14+ and is not notarized or released. See
 `runtime/NATIVE_DECODER_PACKAGE.md` and `evidence/macos-desktop-package-2026-11-04.json`.
-CI packaging checks pass on `f829c20`; ASR/LLM assets, model admission and product
-UI wiring remain open.
+CI decoder packaging checks pass on `f829c20`; the later inference runtime bundle
+is described below. Model admission and product UI wiring remain open.
 
 The Rust model catalog now preserves all three asset pins, the 12 GiB model
 recommendation and exact environment override behavior. Seventy selection and
@@ -260,6 +267,16 @@ its engine is present. All 48 readiness/choice/variant combinations match the
 unchanged Swift policy, including missing-only download totals. The original five
 Swift policy tests pass. See `runtime/FIRST_RUN_MODEL_POLICY.md`; this does not
 yet connect the native installer, first-run UI or app entry gate.
+
+The next local package now includes the original rebuilt ASR engine, verified
+DNA2B/4B executables, seven pinned runtime assets and their notices. The relocated
+app resolves all runtime files internally, rejects every missing/linked runtime
+file, and passes strict ad-hoc signature checks. A real JFK probe through its
+bundled decoder/ASR/assets produces 22 words and 26 JSONL events with one completion,
+no failures and clean owned scratch; the original is preserved. See
+`runtime/NATIVE_RUNTIME_PACKAGE.md`, `evidence/macos-runtime-package-2026-11-04.json`
+and `evidence/macos-bundled-asr-2026-11-04.json`. This is local package/runtime
+evidence, not connected desktop transcription or full UI parity; its CI is pending.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.

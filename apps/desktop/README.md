@@ -9,6 +9,17 @@ state. It does not read or migrate the user's settings, models or meetings.
 
 Install the Rust toolchain pinned at the repository root and Node 24 or newer.
 The native host also needs the platform's Tauri build prerequisites.
+The current macOS inference package is Apple Silicon/macOS 14+ only. It also
+requires Zig 0.14.1 on PATH and Xcode's Metal compiler. Before the first macOS
+build, fetch the same verified runtime assets as the original app:
+
+```sh
+apps/macos/scripts/fetch_runtime_assets.sh
+```
+
+The build checks the seven asset pins and rebuilds the original ASR engine;
+it never downloads user models. Windows still builds the isolated host without
+macOS inference executables or a native audio decoder.
 
 ```sh
 cd apps/desktop
@@ -31,10 +42,11 @@ model downloader, saving or updater. Start buttons currently emit a
 `madi-parity-intent` DOM event for the visual harness only; they do not pretend to
 start an inference session. Do not distribute this as a working Madi release.
 
-macOS dev/build hooks stage the Cargo-built audio decoder as a native sidecar.
-The debug `.app` is ad-hoc signed and requires macOS 14+. Installed lookup uses
-only the helper beside the executable. The headless relocation/package check
-is documented in `docs/runtime/NATIVE_DECODER_PACKAGE.md`.
+macOS dev/build hooks stage the Cargo-built decoder, original ASR engine,
+checksum-verified DNA2B/4B engines, seven runtime assets and their notices.
+The debug `.app` is ad-hoc signed and requires macOS 14+. Installed lookup has
+no checkout/PATH fallback. Headless relocation/package checks are documented in
+`docs/runtime/NATIVE_RUNTIME_PACKAGE.md` and `NATIVE_DECODER_PACKAGE.md`.
 
 Language, translation-target, meeting-mode, diarization and capture-source and microphone-device
 selection commands go through the real Rust `madi-core` state in the native host.

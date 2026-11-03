@@ -6,3 +6,5 @@ pub mod file_session;
 pub mod media_file;
 pub mod model_assets;
 pub mod prepared_audio;
+#[cfg(target_os = "macos")]
+pub mod runtime_bundle;

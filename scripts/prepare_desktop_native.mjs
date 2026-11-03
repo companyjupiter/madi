@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { prepareRuntime } from './prepare_desktop_runtime.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const cargo = process.env.CARGO || 'cargo';
@@ -42,3 +43,4 @@ const report = {
 };
 writeFileSync(`${staged}.json`, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));
+prepareRuntime(target);

@@ -1,0 +1,33 @@
+{
+  "failedCallbacks": 0,
+  "faults": [],
+  "finishedCallbacks": 1,
+  "ownedScratchEmptyAfterShutdown": true,
+  "ownedScratchEmptyWhenFinishedReceived": true,
+  "phases": [
+    "Processing",
+    "Done"
+  ],
+  "schemaVersion": 1,
+  "scope": "Rust file-session effect executor with real native decode and Metal ASR; no desktop UI, archive or live capture integration",
+  "segments": [
+    "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+  ],
+  "status": "passed",
+  "structuredEvents": 26,
+  "timedOut": false,
+  "wordEvents": 22,
+  "elapsedSeconds": 2.694,
+  "originalSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "originalPreserved": true,
+  "source": "public whisper.cpp JFK sample",
+  "relocatedBundle": true,
+  "decoderAndEngineFromRelocatedBundle": true,
+  "systemOnlyPATH": true,
+  "productUI": false,
+  "packageArchiveSHA256": "de1b2e056e8b8ad115f94d501743728b75403af98a38b8a6215fe16e11a796ef",
+  "probeBinarySHA256": "b8c610457e53a55438fc81e80940d1e3859dcb96b159b8729288320faf731422",
+  "probeSourceSHA256": "9b38cf21be79570305082b006a7e4b40dcffc0ce19dd4a9c3a4e0c2dad58e975",
+  "modelSHA256": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+  "modelIntegrityReceipt": "macos-model-integrity-2026-11-04.json"
+}

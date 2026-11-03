@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "bundleIdentifier": "tv.devart.madi.parity",
+  "minimumSystemVersion": "14.0",
+  "signature": "ad-hoc; deep strict verification passed",
+  "relocatedLookup": "passed",
+  "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+  "missingHelperFailsClosed": true,
+  "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+  "missingOrLinkedRuntimeFilesRejected": 11,
+  "runtimeAssets": [
+    {
+      "name": "WHISPER_BPE.bin",
+      "bytes": 514525,
+      "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+    },
+    {
+      "name": "kaldi_melbank.bin",
+      "bytes": 82240,
+      "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+    },
+    {
+      "name": "mel_filters.bin",
+      "bytes": 102912,
+      "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+    },
+    {
+      "name": "pyannote_osd.bin",
+      "bytes": 5973428,
+      "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+    },
+    {
+      "name": "resnet34_diar.bin",
+      "bytes": 26522076,
+      "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+    },
+    {
+      "name": "silero_vad.bin",
+      "bytes": 1238776,
+      "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+    },
+    {
+      "name": "suppress_tokens.bin",
+      "bytes": 352,
+      "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+    }
+  ],
+  "engines": {
+    "transcribe": {
+      "bytes": 957392,
+      "sha256": "6ae09a113d3d39d8bbbbee902e5229734674e7f1e668461dc12e5688681d29a2"
+    },
+    "translate-engine-2b": {
+      "bytes": 1575744,
+      "sha256": "34795c20da441bc7baf249f4a2ca12766e04016bad05fd7303b2da4356486de0"
+    },
+    "translate-engine-4b": {
+      "bytes": 1575600,
+      "sha256": "fc0c8687300de8dd51f7a67493a57090eb2a677a730395cbd0e95fe6c21e85eb"
+    }
+  },
+  "runtimeNoticesPreserved": true,
+  "helperSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+  "helperBytes": 150816,
+  "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+  "archiveSHA256": "de1b2e056e8b8ad115f94d501743728b75403af98a38b8a6215fe16e11a796ef",
+  "productRelease": false,
+  "notarized": false,
+  "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation",
+  "evidenceKind": "local uncommitted candidate; CI result required for committed source",
+  "staging": {
+    "schemaVersion": 1,
+    "target": "aarch64-apple-darwin",
+    "records": [
+      {
+        "source": "engine/metal/assets/WHISPER_BPE.bin",
+        "staged": "out/desktop-native/resources/assets-small/WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "source": "engine/metal/assets/kaldi_melbank.bin",
+        "staged": "out/desktop-native/resources/assets-small/kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "source": "engine/metal/assets/mel_filters.bin",
+        "staged": "out/desktop-native/resources/assets-small/mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "source": "engine/metal/assets/pyannote_osd.bin",
+        "staged": "out/desktop-native/resources/assets-small/pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "source": "engine/metal/assets/resnet34_diar.bin",
+        "staged": "out/desktop-native/resources/assets-small/resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "source": "engine/metal/assets/silero_vad.bin",
+        "staged": "out/desktop-native/resources/assets-small/silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "source": "engine/metal/assets/suppress_tokens.bin",
+        "staged": "out/desktop-native/resources/assets-small/suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      },
+      {
+        "source": "engine/prebuilt/translate-engine-2b",
+        "staged": "out/desktop-native/translate-engine-2b-aarch64-apple-darwin",
+        "bytes": 1584816,
+        "sha256": "a9f0525ca9c72174228bb0bab42496cccdc563766e7beea4928fcf9350c27017"
+      },
+      {
+        "source": "engine/prebuilt/translate-engine-4b",
+        "staged": "out/desktop-native/translate-engine-4b-aarch64-apple-darwin",
+        "bytes": 1584672,
+        "sha256": "64be74aed0e23a650ede70ae7951f131b44f0c229e82d2ee68a74d089ff78a0e"
+      },
+      {
+        "source": "engine/metal/out/transcribe",
+        "staged": "out/desktop-native/transcribe-aarch64-apple-darwin",
+        "bytes": 962840,
+        "sha256": "356bc06cc77066e496e5af345d9156c3e293e2715d26fdb6b06c3969aa58e266"
+      },
+      {
+        "source": "engine/metal/whisper.metallib",
+        "staged": "out/desktop-native/resources/whisper.metallib",
+        "bytes": 395108,
+        "sha256": "1a1ffb85c45a62f353712ff8399052929d8b3eddd049a89658f0bffb172a3083"
+      },
+      {
+        "source": "LICENSE",
+        "staged": "out/desktop-native/resources/LICENSE",
+        "bytes": 34524,
+        "sha256": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed"
+      },
+      {
+        "source": "NOTICE",
+        "staged": "out/desktop-native/resources/NOTICE",
+        "bytes": 9326,
+        "sha256": "2c20188789083f5ce6dee09666a95babdc2db9b03a68ee10cba93411753b7b92"
+      },
+      {
+        "source": "THIRD_PARTY_LICENSES.md",
+        "staged": "out/desktop-native/resources/THIRD_PARTY_LICENSES.md",
+        "bytes": 25594,
+        "sha256": "f55aa6aba41844aa3853783cd5d83f3edf38cdb6bf94a5e917a5185dd636e5bc"
+      },
+      {
+        "source": "engine/prebuilt/LICENSE.md",
+        "staged": "out/desktop-native/resources/TRANSLATE_ENGINE_LICENSE.md",
+        "bytes": 3146,
+        "sha256": "5bf7a81eb345bb6199265c024bc8cb49d53e5cf317a1da4fd8d43f1332b6580f"
+      }
+    ],
+    "runtimeAssetsArchiveSHA256": "f6dc4bb3d3402aaf95a36ce7c1a86d6fd7483a320c6312004d83133d1cf017e5",
+    "productRelease": false
+  }
+}

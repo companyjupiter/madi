@@ -11,13 +11,16 @@ use std::{io, path::PathBuf, time::Duration};
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
     let args: Vec<_> = std::env::args_os().collect();
-    if args.len() != 6 {
+    if !(6..=7).contains(&args.len()) {
         return Err(io::Error::other(
-            "usage: file_session_smoke <engine> <model> <assets> <source-media> <scratch-parent>",
+            "usage: file_session_smoke <engine> <model> <assets> <source-media> <scratch-parent> [decoder]",
         ));
     }
     #[cfg(target_os = "macos")]
-    let decoder = madi_platform::prepared_audio::development_helper().to_owned();
+    let decoder = args
+        .get(6)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| madi_platform::prepared_audio::development_helper().to_owned());
     #[cfg(not(target_os = "macos"))]
     let decoder = PathBuf::from("unsupported-native-decoder");
     if !cfg!(target_os = "macos") {

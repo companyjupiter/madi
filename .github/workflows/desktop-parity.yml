@@ -10,6 +10,9 @@ on:
       - 'rust-toolchain.toml'
       - 'scripts/*parity.py'
       - 'scripts/prepare_desktop_native.mjs'
+      - 'scripts/prepare_desktop_runtime.mjs'
+      - 'engine/**'
+      - 'apps/macos/scripts/build_engine.sh'
       - 'tests/parity/**'
       - 'apps/macos/Sovereign/Engine/TranslateStreamParser.swift'
       - 'apps/macos/Sovereign/Engine/EngineProtocol.swift'
@@ -57,6 +60,15 @@ jobs:
           cache-dependency-path: apps/desktop/package-lock.json
       - name: Install pinned Rust components
         run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - name: Prepare original macOS inference build inputs
+        if: runner.os == 'macOS'
+        run: |
+          [ "$(uname -m)" = arm64 ] || { echo 'Apple Silicon runner required' >&2; exit 1; }
+          curl --fail --location --retry 3 https://ziglang.org/download/0.14.1/zig-aarch64-macos-0.14.1.tar.xz --output "$RUNNER_TEMP/madi-zig.tar.xz"
+          echo "39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa  $RUNNER_TEMP/madi-zig.tar.xz" | shasum -a 256 -c -
+          tar -xf "$RUNNER_TEMP/madi-zig.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-aarch64-macos-0.14.1" >> "$GITHUB_PATH"
+          apps/macos/scripts/fetch_runtime_assets.sh
       - name: Build the local frontend
         working-directory: apps/desktop
         run: |

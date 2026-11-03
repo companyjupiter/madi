@@ -11,8 +11,8 @@ The macOS configuration uses Tauri's
 target-triple suffix, so the helper is copied beside the executable in both
 debug output and the `.app`. Minimum macOS is 14.0, matching the Swift package
 and helper deployment target. Signing is explicitly ad-hoc for this debug-only
-harness. Apple Silicon is locally exercised; Intel/universal packaging still
-needs its own build/device evidence. Windows has no native decoder and stages
+harness. The later inference package explicitly requires native Apple Silicon;
+Intel/universal packaging is unsupported. Windows has no native decoder and stages
 no fake helper.
 
 `prepared_audio::bundled_helper()` resolves only the executable's adjacent
@@ -29,9 +29,11 @@ PATH and unrelated cwd. A synthetic one-second input becomes valid 16 kHz mono
 PCM16 and the original bytes remain unchanged. Temporarily hiding only the copied
 helper makes resolution fail with ENOENT; restoring it restores signature validity.
 The script archives the candidate with `ditto` and records its hash. It does not
-open the UI or claim notarization, ASR-engine bundling or a product release.
+open the UI or claim notarization or a product release. The later
+[inference package](NATIVE_RUNTIME_PACKAGE.md) adds ASR/LLM executables and assets
+to the same check.
 
 CI now performs this macOS package check in addition to standalone executable
-checks. Models, actual ASR/LLM executables/assets, storage, live capture and the
-Tauri transcript view still require integration. This decoder package closes
-only the development-helper-path dependency.
+checks. Models, storage, live capture and the Tauri transcript view still require
+integration. This original decoder step closed the development-helper-path
+dependency; later runtime bundle evidence is recorded separately.

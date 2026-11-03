@@ -100,6 +100,20 @@ fn audio_inputs(
 }
 
 fn main() {
+    #[cfg(target_os = "macos")]
+    if std::env::args_os().skip(1).eq(["--runtime-layout"]) {
+        match madi_platform::runtime_bundle::bundled() {
+            Ok(layout) => println!(
+                "{}",
+                serde_json::to_string(&layout).expect("runtime path JSON")
+            ),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     // Headless package check: resolve exactly what the installed runtime will
     // launch, without creating an AppKit application or reading any user data.
     if std::env::args_os().skip(1).eq(["--native-helper-path"]) {

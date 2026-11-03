@@ -1701,6 +1701,7 @@ version = "0.1.0"
 dependencies = [
  "madi-core",
  "madi-platform",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]

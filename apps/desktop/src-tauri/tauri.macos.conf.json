@@ -1,7 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "externalBin": ["../../../out/desktop-native/madi-audio-decode"],
+    "externalBin": [
+      "../../../out/desktop-native/madi-audio-decode",
+      "../../../out/desktop-native/transcribe",
+      "../../../out/desktop-native/translate-engine-2b",
+      "../../../out/desktop-native/translate-engine-4b"
+    ],
+    "resources": { "../../../out/desktop-native/resources/": "" },
     "macOS": { "minimumSystemVersion": "14.0", "signingIdentity": "-" }
   }
 }

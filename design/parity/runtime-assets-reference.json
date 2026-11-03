@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "archiveURL": "https://madi.devart.tv/runtime-assets/v1/madi-runtime-assets-v1.tar.gz",
+  "archiveSHA256": "f6dc4bb3d3402aaf95a36ce7c1a86d6fd7483a320c6312004d83133d1cf017e5",
+  "provenance": "Verified original strict-asset native baseline; docs/evidence/macos-native-baseline-2026-11-04.json",
+  "files": [
+    {
+      "name": "WHISPER_BPE.bin",
+      "bytes": 514525,
+      "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+    },
+    {
+      "name": "kaldi_melbank.bin",
+      "bytes": 82240,
+      "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+    },
+    {
+      "name": "mel_filters.bin",
+      "bytes": 102912,
+      "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+    },
+    {
+      "name": "pyannote_osd.bin",
+      "bytes": 5973428,
+      "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+    },
+    {
+      "name": "resnet34_diar.bin",
+      "bytes": 26522076,
+      "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+    },
+    {
+      "name": "silero_vad.bin",
+      "bytes": 1238776,
+      "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+    },
+    {
+      "name": "suppress_tokens.bin",
+      "bytes": 352,
+      "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+    }
+  ]
+}
