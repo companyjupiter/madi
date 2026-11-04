@@ -33,7 +33,7 @@ def corpus():
     # Include every simple string literal used by the shipping guard tests,
     # including parser inputs and growth prefixes, without copying their code.
     for test in TESTS:
-        for index, text in enumerate(re.findall(r'"([^"\\]*)"', test.read_text())):
+        for index, text in enumerate(re.findall(r'"([^"\\]*)"', test.read_text(encoding="utf-8"))):
             add(test.stem + '-' + str(index), text)
     hard = ['년대', '개월', '시간', '년', '월', '일', '시', '분', '초']
     soft = ['퍼센트', '명', '원', '개', '％', '%', '세', '살', '호']
@@ -83,11 +83,11 @@ def main():
         assert not mismatches, f'{len(mismatches)} Korean number mismatches; first: {mismatches[:3]!r}; inspect out/korean-numbers-parity/{{swift,rust}}.json'
     report = dict(cases=len(cases), corpusSHA256=sha(payload), resultSHA256=sha(encoded(rust)),
                   sources={path.relative_to(ROOT).as_posix(): sha(path.read_bytes()) for path in [SOURCE, *TESTS]})
-    if args.write_reference: REFERENCE.write_text(json.dumps(report, indent=2) + '\n')
-    else: assert report == json.loads(REFERENCE.read_text()), 'Pinned Korean number reference changed'
+    if args.write_reference: REFERENCE.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    else: assert report == json.loads(REFERENCE.read_text(encoding="utf-8")), 'Pinned Korean number reference changed'
     report.update(status='passed', nativeSwiftRun=not args.rust_only,
                   scope='Counter formatting, repeated passes, Sino/native parsing and ambiguity guards; not rendered UI or inference accuracy.')
-    (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+    (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
 
 

@@ -91,7 +91,7 @@ def corpus():
 
 
 def swift_harness():
-    controller = CONTROLLER.read_text()
+    controller = CONTROLLER.read_text(encoding="utf-8")
     start = controller.index('    private func translateStableLines(')
     end = controller.index('        lines = transcript.lines   // a pass may have rewritten line text', start)
     stable = controller[start:end] + '    }\n'
@@ -129,11 +129,11 @@ def main():
     (OUT / 'rust.json').write_bytes(encoded(rust))
     if not args.rust_only:
         source = OUT / 'OriginalTranscriptStore.swift'
-        source.write_text(STORE_SOURCES[0].read_text() + HOOK)
-        harness = OUT / 'TextPassHarness.swift'; harness.write_text(swift_harness())
+        source.write_text(STORE_SOURCES[0].read_text(encoding="utf-8") + HOOK, encoding="utf-8")
+        harness = OUT / 'TextPassHarness.swift'; harness.write_text(swift_harness(), encoding="utf-8")
         stubs = OUT / 'Diagnostics.swift'
-        original = (ROOT / 'tests/parity/TranscriptStoreOracle.swift').read_text()
-        stubs.write_text(original[:original.index('struct InputWord:')])
+        original = (ROOT / 'tests/parity/TranscriptStoreOracle.swift').read_text(encoding="utf-8")
+        stubs.write_text(original[:original.index('struct InputWord:')], encoding='utf-8')
         executable = OUT / 'swift-oracle'
         subprocess.run(['swiftc', '-parse-as-library', str(source), *[str(path) for path in SOURCES[1:-1]],
                         str(harness), str(stubs), str(ROOT / 'tests/parity/TextPassesOracle.swift'), '-o', str(executable)], check=True)
@@ -144,11 +144,11 @@ def main():
                 assert a == b, f'Text pass mismatch {case["name"]} step {index} {case["steps"][index]}; inspect out/text-passes-parity/{{swift,rust}}.json'
     report = dict(cases=len(cases), snapshots=sum(map(len, rust)), corpusSHA256=sha(payload), resultSHA256=sha(encoded(rust)),
                   sources={path.relative_to(ROOT).as_posix(): sha(path.read_bytes()) for path in SOURCES})
-    if args.write_reference: REFERENCE.write_text(json.dumps(report, indent=2) + '\n')
-    else: assert report == json.loads(REFERENCE.read_text()), 'Pinned text-pass reference changed'
+    if args.write_reference: REFERENCE.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    else: assert report == json.loads(REFERENCE.read_text(encoding="utf-8")), 'Pinned text-pass reference changed'
     report.update(status='passed', nativeSwiftRun=not args.rust_only,
                   scope='Unchanged combined display pass and pre-translation stable scan with the original transcript store. Word/line identity, edits, target/cache/preview gates and reset; translation dispatch, clocks and UI excluded.')
-    (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+    (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
 
 
