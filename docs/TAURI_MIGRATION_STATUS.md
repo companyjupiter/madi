@@ -15,6 +15,24 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Live speech coverage now connects the original W1 queue rule to native owned
+  WAVs: one retry for an empty speech job when no later committed job is queued,
+  otherwise a suspected gap. Preview words/control markers and silent jobs do
+  not trigger coverage recovery. Authoritative pending counts keep preview
+  admission blocked through a retry; gap warnings survive completion and never
+  enter saved transcript text. Five process/PCM regressions cover recovery,
+  backlog, stop/reset/failure, FLUSH ordering, late output and audio cleanup.
+  The existing preview transport regression now holds the retry explicitly.
+  Five hundred unchanged Swift cases / 22,250 transitions match, and four
+  deliberate mutations are detected. Local validation passes 191 Rust tests
+  (31 core, 135 platform, 14 protocol, 11 desktop), strict clippy, five IPC checks,
+  native/portable oracles, app build and relocated package checks. CI for this
+  slice is pending. A retry queued behind FLUSH does not extend completion,
+  preserving the original behavior rather than guaranteeing final recovery.
+  Actual microphone recovery and native UI interaction remain NOT_RUN; W2 hang
+  recovery and remaining AI producers remain open. See `runtime/COVERAGE_RETRY.md`
+  and `evidence/macos-coverage-retry-2026-11-05.json`.
+
 - Transcript-tail status now uses a native derived pipeline projection, preserving
   the original priority and line-count semantics for file transcription, queued
   translation, shed backlog and stop-time backfill. Native committed-segment and
@@ -25,9 +43,13 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   A real owner/child-process test verifies silence without samples and recovery
   after input. Local validation passes 185 Rust tests, strict clippy, five IPC/
   queue checks, both status oracles and rebuilt app/relocated package checks.
-  Four deliberate policy/timer mutations are detected. CI for this slice is
-  pending. Native display and animation remain NOT_RUN. Coverage retry,
-  hang recovery and AI correction/reconcile producers remain unimplemented; their
+  Four deliberate policy/timer mutations are detected. Both push/PR CI at
+  `02255f3` pass macOS 15 and Windows 2022 (41926224601 / 41926233094).
+  Downloaded PR merge artifacts verify 185 Mac / 157 Windows tests, executable
+  and package hashes, pinned status results and native Swift equality; see
+  `evidence/desktop-ci-02255f3-2026-11-05.json`.
+  Native display and animation remain NOT_RUN. W1 coverage is connected by the
+  subsequent slice above. Hang recovery and AI correction/reconcile remain open; their
   presentation rules are tested but are not end-to-end features yet. See
   `runtime/PIPELINE_STATUS.md` and `evidence/macos-pipeline-status-2026-11-05.json`.
 

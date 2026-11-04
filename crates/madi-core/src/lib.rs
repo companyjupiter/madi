@@ -21,3 +21,5 @@ pub mod workspace;
 pub mod segmenter;
 
 pub mod pipeline_status;
+
+pub mod coverage;

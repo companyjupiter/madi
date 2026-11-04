@@ -278,6 +278,7 @@ impl FileWorkflow {
                 state,
                 source_media: None,
                 review_cache_key: None,
+                coverage_gaps: Vec::new(),
                 silence: None,
                 silence_tick: None,
                 store: TranscriptStore::default(),
@@ -529,6 +530,7 @@ struct Worker {
     state: Snapshot,
     source_media: Option<PathBuf>,
     review_cache_key: Option<(u64, u64)>,
+    coverage_gaps: Vec<f64>,
     silence: Option<madi_core::pipeline_status::SilenceWatch>,
     silence_tick: Option<Instant>,
     store: TranscriptStore,
@@ -606,8 +608,9 @@ impl Worker {
                 .live
                 .as_ref()
                 .and_then(|s| s.capture_ended_reason.clone()),
-            // Reconcile, forced-language correction and coverage/recovery
-            // producers remain separate migration work; never fabricate them.
+            coverage_gaps: self.coverage_gaps.clone(),
+            // Reconcile, forced-language correction and hang recovery remain
+            // separate migration work; never fabricate those producer signals.
             ..Default::default()
         };
         let language = self
@@ -679,6 +682,7 @@ impl Worker {
         self.archive_writer = Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default()));
         self.source_media = None;
         self.review_cache_key = None;
+        self.coverage_gaps.clear();
         self.silence = None;
         self.silence_tick = None;
         self.store.reset();
@@ -1232,9 +1236,13 @@ impl Worker {
     fn live_event(&mut self, event: crate::live_session::UpdateKind) {
         use crate::live_session::UpdateKind as Live;
         match event {
-            Live::Segment { .. } => {
+            Live::Coverage {
+                segments_in_flight,
+                gaps,
+            } => {
+                self.coverage_gaps = gaps;
                 if let Some(preview) = &mut self.live_preview {
-                    preview.segments_pending += 1;
+                    preview.segments_pending = segments_in_flight;
                 }
                 if self.render.is_none() {
                     self.render = Some(Instant::now() + Duration::from_millis(33));

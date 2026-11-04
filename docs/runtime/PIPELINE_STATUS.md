@@ -15,7 +15,9 @@ A completed ASR phase can still show translating while DNA owns queued work.
 Preference language changes update the projection without another ASR event.
 
 The connected producers are file phase/progress, committed translation queue and
-backfill, native live segment count, capture interruption and silence detection.
+backfill, native live segment/retry count, coverage gaps, capture interruption
+and silence detection. The coverage queue and retry integration are described
+in `COVERAGE_RETRY.md`.
 Native raw level strictly above 0.02 updates the audible timestamp; the original
 3-second polling rule reports silence only after strictly more than 15 seconds.
 As in Swift Date, elapsed silence uses wall time; the scheduler uses a monotonic
@@ -23,13 +25,12 @@ poll deadline. Paused polls reset the audible timestamp and clear silence. Stop/
 retire the timer; no renderer timer or microphone sample is needed to publish a
 silence warning. Peak-held meter levels do not feed the silence detector.
 
-The complete presentation policy also preserves the original coverage timestamps,
-recovery counts and correction/reconciliation priority. **Their production
-coverage-retry, hang-recovery and AI-correction producers are not connected yet.**
-Those inputs remain absent until the corresponding native owners are ported.
-The gap-expansion UI therefore has policy/renderer implementation but no current
-end-to-end coverage-recovery acceptance. This slice does not claim those engines
-are implemented or declare their absence to be successful recovery.
+The complete presentation policy also preserves the original recovery counts
+and correction/reconciliation priority. **Hang-recovery and AI-correction
+producers are not connected yet.** Those inputs remain absent until their native
+owners are ported. Coverage warning/gap timestamps now have a native producer
+and process-backed workflow validation. Actual gap-expansion interaction and
+microphone recovery remain separate end-to-end acceptance gates.
 
 The status visuals use the original warning SVG, three-color gradient, 14-point
 text, fixed numeric widths and three 3-point loading dots separated by 3 points.

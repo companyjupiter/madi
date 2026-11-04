@@ -3,8 +3,9 @@
 `madi-platform::live_session` now connects the verified session state machine,
 linked macOS capture boundary, Rust PCM/WAV pipeline and resident ASR process.
 The recording button and shared transcript/archive owner now connect through
-`LIVE_WORKFLOW.md`. Preview admission, watchdog, translation, audio retention
-and other live product consumers are not yet connected.
+`LIVE_WORKFLOW.md`. Preview admission, translation, retained audio and W1
+coverage retry now have native consumers; W2 hang recovery and remaining live
+AI features still require integration. See `COVERAGE_RETRY.md` for W1 behavior.
 
 ## Ownership and event order
 
@@ -66,10 +67,11 @@ three WAV jobs, 28 word events, a finalized transcript and exactly one Finished;
 the source and model metadata remain unchanged and owned scratch is empty after
 shutdown. Replay opens no microphone or system audio device.
 
-Preview WAVs are surfaced as typed availability updates, **not fed directly**.
-The original language lock, busy-lane admission, forced-prefix agreement and
-preview rotation ownership require the separate product policy before enabling
-them. The core's replacement-engine policy also awaits watchdog integration.
+Preview WAVs are surfaced as typed availability updates and admitted by the
+product scheduler described in `LIVE_WORKFLOW.md`. Language lock, busy-lane
+admission, forced-prefix agreement and preview ownership are checked before
+feeding them. W1 retries share that committed-job priority; the core's
+replacement-engine policy still awaits W2 hang-watchdog integration.
 The Windows capture adapter is not implemented; this executor is macOS-only.
 A bounded microphone/UI observation is recorded in `LIVE_WORKFLOW.md`; full
 device/TCC scenarios, UI/UX parity and recording acceptance remain incomplete.

@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "verifiedUTC": "2026-11-04T23:06:50.647462+00:00",
+  "status": "CI_AND_SELECTED_ARTIFACTS_VERIFIED",
+  "featureHead": "02255f352325fe68d8b1029721fd37d74d1a7558",
+  "prMergeHead": "d7af6e6498ae96bc131e0806b4f7e2d324c682a8",
+  "prMergeParents": [
+    "c1390c750f2506e556a277421e146d80195ab797",
+    "02255f352325fe68d8b1029721fd37d74d1a7558"
+  ],
+  "successfulRuns": [
+    41926224601,
+    41926233094
+  ],
+  "verifiedArtifactRun": 41926233094,
+  "artifacts": {
+    "windows": {
+      "artifactId": 13370222600,
+      "artifactSHA256": "b05c690fe79cb8353014fbe7a66611cd7ae5bb1f1d81dead3e07a3adf1d41e2e",
+      "sourceHead": "d7af6e6498ae96bc131e0806b4f7e2d324c682a8",
+      "sourceDirty": false,
+      "binary": "target/debug/madi-desktop.exe",
+      "binaryBytes": 19976192,
+      "binarySHA256": "8e98f87c85a8b2427719c7e16e21ff77b5af6a6ef54f8949527ed0d47f9708a7",
+      "rustTestCounts": [
+        30,
+        11,
+        102,
+        14
+      ],
+      "rustTestTotal": 157,
+      "pipelineStatus": {
+        "cases": 3000,
+        "pipelineKinds": [
+          "backfilling",
+          "completed",
+          "correcting",
+          "diarizing",
+          "error",
+          "fileTranscribing",
+          "idle",
+          "listening",
+          "transcribing",
+          "translating",
+          "translatingBacklogged"
+        ],
+        "languages": [
+          "ko",
+          "en",
+          "ja"
+        ],
+        "corpusSHA256": "3548fa7ba7de4952689efa01bac586c24eaa07532442835fafb30d51cffc165b",
+        "resultSHA256": "43030c3090f26953441966c04497ecde31cf931ab4e385e1a3a148d514cd257f",
+        "sources": {
+          "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+          "apps/macos/Sovereign/UI/ContentView.swift": "b546ea492be43d6c0ef978b4f57d5ad33aec282816bc9a9e37f789085810d511",
+          "apps/macos/Sovereign/UI/StatusLine.swift": "6487577c1db7116eb3d4a94c3bb363871814fbcd487a20e27907e379e0732ab2"
+        },
+        "status": "passed",
+        "nativeSwiftRun": false,
+        "scope": "Unchanged extracted pipeline, warning, gap formatting and localized activity computations. StatusLine source is pinned, not executed; no native UI, timer scheduling, coverage retry or AI producer acceptance."
+      },
+      "nativeSwiftBytesSHA256": null,
+      "packageArchiveSHA256": null,
+      "jobLogSHA256": "212482a251c9d9ac3d10939ddb73ee74ef08e4f1297dee393bc34312c7368300"
+    },
+    "macos": {
+      "artifactId": 13370312945,
+      "artifactSHA256": "c140a9b4a2d97e578eb61e462daf1061291ff33d2d6556411d0dadc823c3209f",
+      "sourceHead": "d7af6e6498ae96bc131e0806b4f7e2d324c682a8",
+      "sourceDirty": false,
+      "binary": "target/debug/madi-desktop",
+      "binaryBytes": 67297248,
+      "binarySHA256": "681ea8ebebd5d91130514758c55c28c046735fc01b9b88b49e50a811629c83ac",
+      "rustTestCounts": [
+        30,
+        11,
+        130,
+        14
+      ],
+      "rustTestTotal": 185,
+      "pipelineStatus": {
+        "cases": 3000,
+        "pipelineKinds": [
+          "backfilling",
+          "completed",
+          "correcting",
+          "diarizing",
+          "error",
+          "fileTranscribing",
+          "idle",
+          "listening",
+          "transcribing",
+          "translating",
+          "translatingBacklogged"
+        ],
+        "languages": [
+          "ko",
+          "en",
+          "ja"
+        ],
+        "corpusSHA256": "3548fa7ba7de4952689efa01bac586c24eaa07532442835fafb30d51cffc165b",
+        "resultSHA256": "43030c3090f26953441966c04497ecde31cf931ab4e385e1a3a148d514cd257f",
+        "sources": {
+          "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+          "apps/macos/Sovereign/UI/ContentView.swift": "b546ea492be43d6c0ef978b4f57d5ad33aec282816bc9a9e37f789085810d511",
+          "apps/macos/Sovereign/UI/StatusLine.swift": "6487577c1db7116eb3d4a94c3bb363871814fbcd487a20e27907e379e0732ab2"
+        },
+        "status": "passed",
+        "nativeSwiftRun": true,
+        "scope": "Unchanged extracted pipeline, warning, gap formatting and localized activity computations. StatusLine source is pinned, not executed; no native UI, timer scheduling, coverage retry or AI producer acceptance."
+      },
+      "nativeSwiftBytesSHA256": "43030c3090f26953441966c04497ecde31cf931ab4e385e1a3a148d514cd257f",
+      "packageArchiveSHA256": "53f689f7bf6b3783fb867fcc5f5bc6bb70837b9576a9a42932fb2c11afdee3d6",
+      "jobLogSHA256": "f728d04cc4f52d9ca0e9333f5984255a994c8204a05869b97ab5218047de0c71"
+    }
+  },
+  "scope": "Both push/PR runs completed successfully on macOS 15 and Windows 2022. Downloaded PR merge artifacts verify clean checkout, executable hashes, pinned pipeline-status reference/source hashes, native Swift semantic equality and macOS package archive hash. Not full UI/UX, actual audio playback, coverage recovery or Windows native audio/GPU acceptance."
+}

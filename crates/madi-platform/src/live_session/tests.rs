@@ -159,7 +159,7 @@ async fn preview_transport_checks_language_committed_backlog_pause_run_root_and_
         &r#"
 print('[caps] preview-fp',flush=True)
 print('[stream] ready',flush=True)
-p=0
+p=0;segments=0
 for line in sys.stdin:
     line=line.rstrip('\n')
     if line=='FLUSH':print('<<FLUSH_END>>',flush=True);break
@@ -168,8 +168,12 @@ for line in sys.stdin:
         while not (root/('release-preview-'+str(p))).exists():time.sleep(.005)
         print('<<PREVIEW_BEGIN>>\n=== WORD TIMESTAMPS ===\n[0s-1s] ephemeral\n<<PREVIEW_END>>',flush=True)
     else:
+        segments+=1
         print('[lang] locked token 50259',flush=True)
         while not (root/'release-segment').exists():time.sleep(.005)
+        if segments==2:
+            (root/'retry-started').write_text('ready',encoding='utf-8')
+            while not (root/'release-retry').exists():time.sleep(.005)
         print('<<SEG_END>>',flush=True)
 "#.replace("print('[caps] preview-fp',flush=True)",if forced_capability {"print('[caps] preview-fp',flush=True)"}else{""}),
     );
@@ -220,6 +224,25 @@ for line in sys.stdin:
             matches!(
                 k,
                 UpdateKind::Output(Output::Stdout(transcribe::Event::SegmentEnd))
+            )
+        })
+        .await;
+        marker(&root.path().join("retry-started")).await;
+        assert!(
+            !session
+                .preview(run, wav.clone(), String::new())
+                .await
+                .unwrap(),
+            "an empty speech segment's retry retains committed priority"
+        );
+        std::fs::write(root.path().join("release-retry"), b"go").unwrap();
+        until(&mut session, |k| {
+            matches!(
+                k,
+                UpdateKind::Coverage {
+                    segments_in_flight: 0,
+                    ..
+                }
             )
         })
         .await;
@@ -581,6 +604,368 @@ async fn startup_deadline_reaps_engine_without_opening_capture() {
     )));
     assert!(matches!(updates.last().unwrap().kind, UpdateKind::Failed));
     assert!(controls.try_recv().is_err());
+    session.shutdown().await.unwrap();
+    assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
+}
+
+pub(crate) const COVERAGE_ENGINE: &str = r#"
+import hashlib
+print('[stream] ready',flush=True)
+records=[];turn=0
+for wire in sys.stdin:
+    line=wire.rstrip('\n')
+    if line=='FLUSH':
+        (root/'coverage-wire.json').write_text(json.dumps(records+['FLUSH']),encoding='utf-8')
+        print('<<FLUSH_END>>',flush=True)
+        continue
+    turn+=1
+    offset,path=line.split(' ',1)
+    record={'offset':float(offset),'name':pathlib.Path(path).name,'sha256':hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()}
+    records.append(record)
+    (root/('coverage-turn-'+str(turn))).write_text(json.dumps(record),encoding='utf-8')
+    # Preview words AND its fake segment boundary must not satisfy/pop W1 jobs.
+    if turn==1:print('<<PREVIEW_BEGIN>>\n=== WORD TIMESTAMPS ===\n[0s-0.1s] ghost\n<<SEG_END>>\n<<PREVIEW_END>>',flush=True)
+    while not (root/('coverage-release-'+str(turn))).exists():
+        if (root/'coverage-crash').exists():sys.exit(7)
+        time.sleep(.005)
+    if turn==2 and (root/'coverage-recover').exists():
+        print('=== WORD TIMESTAMPS ===',flush=True)
+        print(f'[{offset}s-{float(offset)+.5}s] Recovered. «conf 0.99»',flush=True)
+    print('<<SEG_END>>',flush=True)
+"#;
+pub(crate) fn coverage_request(capture: Input) -> Request {
+    let mut value = request(capture);
+    value.capture.segment_seconds = 1.0;
+    value.capture.first_segment_seconds = 1.0;
+    value.capture.overlap_seconds = 0.0;
+    value
+}
+pub(crate) async fn coverage_marker(path: &Path) {
+    marker(path).await;
+}
+pub(crate) fn coverage_release(root: &Path, turn: usize) {
+    std::fs::write(root.join(format!("coverage-release-{turn}")), b"go").unwrap();
+}
+
+#[tokio::test]
+async fn coverage_retries_same_owned_audio_once_and_excludes_preview_and_silence() {
+    for (had_speech, recovered) in [(true, true), (true, false), (false, false)] {
+        let (root, configuration) = fixture(COVERAGE_ENGINE);
+        if recovered {
+            std::fs::write(root.path().join("coverage-recover"), b"yes").unwrap();
+        }
+        let original = root.path().join("original.wav");
+        std::fs::write(&original, b"unchanged caller input").unwrap();
+        let mut session = LiveSession::new(configuration).unwrap();
+        let (capture, events, mut controls) = input();
+        let run = session
+            .start(coverage_request(capture))
+            .await
+            .unwrap()
+            .unwrap();
+        events.send(CaptureEvent::Started).unwrap();
+        until(&mut session, |e| matches!(e, UpdateKind::RecordingStarted)).await;
+        events
+            .send(samples(16000, if had_speech { 4000 } else { 0 }))
+            .unwrap();
+        let first = until(&mut session, |e| matches!(e, UpdateKind::Segment { .. })).await;
+        let wav = first
+            .iter()
+            .find_map(|e| {
+                if let UpdateKind::Segment {
+                    wav,
+                    had_speech: actual,
+                    ..
+                } = &e.kind
+                {
+                    assert_eq!(*actual, had_speech);
+                    Some(wav.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let before = std::fs::read(wav.path()).unwrap();
+        let dir = wav.directory().to_owned();
+        marker(&root.path().join("coverage-turn-1")).await;
+        until(&mut session, |e| {
+            matches!(
+                e,
+                UpdateKind::Output(Output::Stdout(transcribe::Event::PreviewEnd))
+            )
+        })
+        .await;
+        coverage_release(root.path(), 1);
+        if had_speech {
+            marker(&root.path().join("coverage-turn-2")).await;
+            let read = |n| {
+                serde_json::from_slice::<serde_json::Value>(
+                    &std::fs::read(root.path().join(format!("coverage-turn-{n}"))).unwrap(),
+                )
+                .unwrap()
+            };
+            assert_eq!(
+                read(1),
+                read(2),
+                "retry must reuse offset, immutable path and exact bytes"
+            );
+            session.pause(run).unwrap();
+            control(&mut controls, Control::Pause).await;
+            events.send(CaptureEvent::Paused).unwrap();
+            coverage_release(root.path(), 2);
+        }
+        let finished_job = until(&mut session, |e| {
+            matches!(
+                e,
+                UpdateKind::Coverage {
+                    segments_in_flight: 0,
+                    ..
+                }
+            )
+        })
+        .await;
+        let gaps = finished_job
+            .iter()
+            .find_map(|e| {
+                if let UpdateKind::Coverage {
+                    segments_in_flight: 0,
+                    gaps,
+                } = &e.kind
+                {
+                    Some(gaps.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert_eq!(
+            gaps,
+            if had_speech && !recovered {
+                vec![0.]
+            } else {
+                vec![]
+            }
+        );
+        session.stop(run).unwrap();
+        control(&mut controls, Control::Stop).await;
+        events.send(CaptureEvent::Stopped).unwrap();
+        let done = terminal(&mut session).await;
+        assert!(done.iter().any(|e| matches!(e.kind, UpdateKind::Finished)));
+        let wire: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(root.path().join("coverage-wire.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            wire.as_array().unwrap().len(),
+            if had_speech { 3 } else { 2 }
+        );
+        assert_eq!(std::fs::read(wav.path()).unwrap(), before);
+        session.reset().await.unwrap();
+        assert!(wav.path().exists());
+        drop(first);
+        drop(finished_job);
+        drop(done);
+        drop(wav);
+        assert!(!dir.exists());
+        session.shutdown().await.unwrap();
+        assert_eq!(std::fs::read(original).unwrap(), b"unchanged caller input");
+        assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
+    }
+}
+
+#[tokio::test]
+async fn coverage_backlog_marks_gap_without_refeeding_past_later_audio() {
+    let (root, configuration) = fixture(COVERAGE_ENGINE);
+    std::fs::write(root.path().join("coverage-recover"), b"yes").unwrap();
+    let mut session = LiveSession::new(configuration).unwrap();
+    let (capture, events, mut controls) = input();
+    let run = session
+        .start(coverage_request(capture))
+        .await
+        .unwrap()
+        .unwrap();
+    events.send(CaptureEvent::Started).unwrap();
+    until(&mut session, |e| matches!(e, UpdateKind::RecordingStarted)).await;
+    events.send(samples(32000, 4000)).unwrap();
+    let queued = until(&mut session, |e| {
+        matches!(
+            e,
+            UpdateKind::Coverage {
+                segments_in_flight: 2,
+                ..
+            }
+        )
+    })
+    .await;
+    marker(&root.path().join("coverage-turn-1")).await;
+    coverage_release(root.path(), 1);
+    let gap = until(
+        &mut session,
+        |e| matches!(e,UpdateKind::Coverage{segments_in_flight:1,gaps} if gaps==&[0.]),
+    )
+    .await;
+    marker(&root.path().join("coverage-turn-2")).await;
+    let second: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(root.path().join("coverage-turn-2")).unwrap())
+            .unwrap();
+    assert_eq!(second["offset"], 1.0);
+    coverage_release(root.path(), 2);
+    until(
+        &mut session,
+        |e| matches!(e,UpdateKind::Coverage{segments_in_flight:0,gaps} if gaps==&[0.]),
+    )
+    .await;
+    session.stop(run).unwrap();
+    control(&mut controls, Control::Stop).await;
+    events.send(CaptureEvent::Stopped).unwrap();
+    let done = terminal(&mut session).await;
+    assert!(done.iter().any(|e| matches!(e.kind, UpdateKind::Finished)));
+    let wire: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(root.path().join("coverage-wire.json")).unwrap())
+            .unwrap();
+    assert_eq!(wire.as_array().unwrap().len(), 3);
+    session.reset().await.unwrap();
+    drop(queued);
+    drop(gap);
+    drop(done);
+    session.shutdown().await.unwrap();
+    assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
+}
+
+#[tokio::test]
+async fn coverage_pending_retry_is_retired_by_stop_reset_or_engine_failure() {
+    for action in ["stop", "reset", "crash"] {
+        let (root, configuration) = fixture(COVERAGE_ENGINE);
+        let mut session = LiveSession::new(configuration).unwrap();
+        let (capture, events, mut controls) = input();
+        let run = session
+            .start(coverage_request(capture))
+            .await
+            .unwrap()
+            .unwrap();
+        events.send(CaptureEvent::Started).unwrap();
+        until(&mut session, |e| matches!(e, UpdateKind::RecordingStarted)).await;
+        events.send(samples(16000, 4000)).unwrap();
+        let first = until(&mut session, |e| matches!(e, UpdateKind::Segment { .. })).await;
+        let wav = first
+            .iter()
+            .find_map(|e| match &e.kind {
+                UpdateKind::Segment { wav, .. } => Some(wav.clone()),
+                _ => None,
+            })
+            .unwrap();
+        let dir = wav.directory().to_owned();
+        marker(&root.path().join("coverage-turn-1")).await;
+        if action == "stop" {
+            // Enter flushing before the first boundary. W1 must still run;
+            // the native capture acknowledgement and FLUSH come afterward.
+            session.stop(run).unwrap();
+            control(&mut controls, Control::Stop).await;
+        }
+        coverage_release(root.path(), 1);
+        marker(&root.path().join("coverage-turn-2")).await;
+        assert!(wav.path().exists());
+        match action {
+            "stop" => {
+                events.send(CaptureEvent::Stopped).unwrap();
+                coverage_release(root.path(), 2);
+                let done = terminal(&mut session).await;
+                assert!(matches!(done.last().unwrap().kind, UpdateKind::Finished));
+                assert!(done.iter().any(|u| matches!(&u.kind,
+                    UpdateKind::Coverage {segments_in_flight:0, gaps} if gaps == &[0.])));
+                session.reset().await.unwrap();
+            }
+            "reset" => {
+                let native = tokio::spawn(async move {
+                    control(&mut controls, Control::Stop).await;
+                    events.send(CaptureEvent::Stopped).unwrap();
+                });
+                session.reset().await.unwrap();
+                native.await.unwrap();
+                let reset = until(&mut session, |e| {
+                    matches!(e, UpdateKind::Phase(Phase::Idle))
+                })
+                .await;
+                assert!(reset.iter().any(|u| matches!(&u.kind,
+                    UpdateKind::Coverage {segments_in_flight:0, gaps} if gaps.is_empty())));
+                assert!(!reset.iter().any(|u| matches!(u.kind, UpdateKind::Finished)));
+            }
+            _ => {
+                std::fs::write(root.path().join("coverage-crash"), b"go").unwrap();
+                control(&mut controls, Control::Stop).await;
+                events.send(CaptureEvent::Stopped).unwrap();
+                let failed = terminal(&mut session).await;
+                assert!(matches!(failed.last().unwrap().kind, UpdateKind::Failed));
+                assert!(failed.iter().any(|u| matches!(&u.kind,
+                    UpdateKind::Coverage {segments_in_flight:0, gaps} if gaps.is_empty())));
+                assert!(
+                    !failed
+                        .iter()
+                        .any(|u| matches!(u.kind, UpdateKind::Finished))
+                );
+                session.reset().await.unwrap();
+            }
+        }
+        // External audio leases survive teardown; pending retry ownership does
+        // not leak a private directory after the last consumer releases it.
+        assert!(wav.path().exists());
+        drop(first);
+        drop(wav);
+        assert!(!dir.exists());
+        session.shutdown().await.unwrap();
+        assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
+    }
+}
+
+#[tokio::test]
+async fn coverage_retry_after_queued_flush_does_not_reorder_or_extend_completion() {
+    let (root, configuration) = fixture(
+        r#"
+import hashlib
+print('[stream] ready',flush=True)
+first=sys.stdin.readline().rstrip('\n')
+offset,path=first.split(' ',1)
+before=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+(root/'first-read').write_text('ready',encoding='utf-8')
+assert sys.stdin.readline().strip()=='FLUSH'
+# Original stop queues FLUSH independently of W1. Complete the first job
+# afterward so its retry must remain behind FLUSH on the same wire.
+print('<<SEG_END>>',flush=True)
+assert sys.stdin.readline().rstrip('\n')==first
+assert hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()==before
+(root/'retry-after-flush').write_text('same WAV',encoding='utf-8')
+print('<<FLUSH_END>>',flush=True)
+# These queued events belong to the retired engine, not a later session.
+print('=== WORD TIMESTAMPS ===\n[0s-1s] Late. «conf 0.99»\n<<SEG_END>>',flush=True)
+time.sleep(60)
+"#,
+    );
+    let mut session = LiveSession::new(configuration).unwrap();
+    let (capture, events, mut controls) = input();
+    let run = session
+        .start(coverage_request(capture))
+        .await
+        .unwrap()
+        .unwrap();
+    events.send(CaptureEvent::Started).unwrap();
+    until(&mut session, |e| matches!(e, UpdateKind::RecordingStarted)).await;
+    events.send(samples(16000, 4000)).unwrap();
+    let first = until(&mut session, |e| matches!(e, UpdateKind::Segment { .. })).await;
+    marker(&root.path().join("first-read")).await;
+    session.stop(run).unwrap();
+    control(&mut controls, Control::Stop).await;
+    events.send(CaptureEvent::Stopped).unwrap();
+    let done = terminal(&mut session).await;
+    assert!(root.path().join("retry-after-flush").exists());
+    assert!(matches!(done.last().unwrap().kind, UpdateKind::Finished));
+    assert!(done.iter().any(|u| matches!(&u.kind,
+        UpdateKind::Coverage {segments_in_flight:0, gaps} if gaps.is_empty())));
+    assert!(!done.iter().any(|u| matches!(
+        u.kind,
+        UpdateKind::Output(Output::Stdout(transcribe::Event::Word { .. }))
+    )));
+    session.reset().await.unwrap();
+    drop(first);
+    drop(done);
     session.shutdown().await.unwrap();
     assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
 }

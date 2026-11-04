@@ -506,3 +506,61 @@ async fn silence_deadline_publishes_without_audio_and_audible_input_clears_it() 
     );
     workflow.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn coverage_gap_survives_completion_but_never_invents_saved_transcript_words() {
+    use crate::live_session::tests::{
+        COVERAGE_ENGINE, coverage_marker, coverage_release, coverage_request,
+    };
+    let (root, config) = fixture(COVERAGE_ENGINE);
+    std::fs::write(root.path().join("coverage-recover"), b"yes").unwrap();
+    let workflow = FileWorkflow::with_archive(
+        Configuration {
+            decoder: config.resources.executable.clone(),
+            resources: config.resources,
+            scratch_parent: config.scratch_parent,
+        },
+        Some(ArchiveSettings {
+            enabled: true,
+            folder: root.path().join("archive"),
+        }),
+        |_| {},
+    )
+    .unwrap();
+    let (capture, events, mut controls) = input();
+    workflow
+        .start_live(coverage_request(capture), None)
+        .await
+        .unwrap();
+    events.send(Event::Started).unwrap();
+    let active = state(&workflow, |s| s.phase == ViewPhase::Recording).await;
+    events.send(samples(32000)).unwrap();
+    coverage_marker(&root.path().join("coverage-turn-1")).await;
+    coverage_release(root.path(), 1);
+    coverage_marker(&root.path().join("coverage-turn-2")).await;
+    coverage_release(root.path(), 2);
+    let marked = state(&workflow, |s| {
+        !s.lines.is_empty() && s.status.gap_times == ["0:00"]
+    })
+    .await;
+    assert_eq!(marked.status.warning.as_deref(), Some("누락 의심 1구간"));
+    assert_eq!(marked.lines[0].text, "Recovered.");
+    workflow
+        .live_control(active.generation, LiveControl::Stop)
+        .await
+        .unwrap();
+    control(&mut controls, Control::Stop).await;
+    events.send(Event::Stopped).unwrap();
+    let done = state(&workflow, |s| s.phase == ViewPhase::Done).await;
+    assert_eq!(done.status.gap_times, ["0:00"]);
+    assert_eq!(done.status.warning, marked.status.warning);
+    let saved = std::fs::read_to_string(done.archive.transcript.unwrap()).unwrap();
+    assert!(saved.contains("Recovered."));
+    assert!(!saved.contains("ghost"));
+    assert!(!saved.contains("누락 의심"));
+    let reset = workflow.reset(done.generation).await.unwrap();
+    assert!(reset.status.gap_times.is_empty());
+    assert!(reset.status.warning.is_none());
+    workflow.shutdown().await.unwrap();
+    assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
+}

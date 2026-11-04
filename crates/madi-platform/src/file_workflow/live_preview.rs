@@ -105,9 +105,6 @@ impl Worker {
             {
                 preview.scheduler.start()
             }
-            Event::SegmentEnd => {
-                preview.segments_pending = preview.segments_pending.saturating_sub(1)
-            }
             Event::WordSectionBegin => preview.source.reset(),
             Event::Partial { t0, text } => {
                 let shown = preview::trim_by_count(text, self.store.displayed_words(*t0).len());

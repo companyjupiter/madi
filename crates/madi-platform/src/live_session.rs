@@ -28,6 +28,10 @@ pub enum UpdateKind {
     Output(Output),
     Capabilities(Vec<String>),
     Level(f32),
+    Coverage {
+        segments_in_flight: usize,
+        gaps: Vec<f64>,
+    },
     Segment {
         offset: f64,
         wav: OwnedWav,
@@ -126,7 +130,7 @@ impl LiveSession {
                 flush_sent: None,
                 pipeline_token: None,
                 clock_tick: None,
-                segments_pending: 0,
+                coverage: Default::default(),
                 preview_lease: None,
                 language_locked: false,
                 preview_forced_prefix: false,
@@ -286,7 +290,7 @@ struct Worker {
     flush_sent: Option<Token>,
     pipeline_token: Option<Token>,
     clock_tick: Option<Instant>,
-    segments_pending: usize,
+    coverage: madi_core::coverage::Coverage<OwnedWav>,
     preview_lease: Option<OwnedWav>,
     language_locked: bool,
     preview_forced_prefix: bool,
@@ -299,6 +303,12 @@ impl Worker {
         let _ = self.output.send(Update {
             run: self.run,
             kind,
+        });
+    }
+    fn emit_coverage(&self) {
+        self.emit(UpdateKind::Coverage {
+            segments_in_flight: self.coverage.pending(),
+            gaps: self.coverage.gaps.clone(),
         });
     }
     fn phase_changed(&mut self) {
@@ -317,6 +327,8 @@ impl Worker {
         let effects = self.core.reset();
         let cleanup = self.effects(effects).await;
         // Even a task failure must reap before releasing the last directory owner.
+        self.coverage.retire_pending();
+        self.emit_coverage();
         self.retained.clear();
         self.pipeline.take();
         self.request.take();
@@ -345,7 +357,7 @@ impl Worker {
                         // Retire the old run before installing any replacement paths.
                         let effects = self.core.reset(); self.effects(effects).await?;
                         self.pipeline.take(); self.retained.clear(); self.request.take();
-                        self.preview_lease.take(); self.segments_pending=0;
+                        self.preview_lease.take(); self.coverage=Default::default();
                         self.language_locked=request.settings.common.language_token.is_some();
                         self.preview_forced_prefix=false;
                         let config = request.capture.clone();
@@ -353,6 +365,7 @@ impl Worker {
                         let pipeline = tokio::task::spawn_blocking(move || CapturePipeline::new(config, &parent)).await.map_err(io::Error::other)?;
                         let pipeline = match pipeline { Ok(p) => p, Err(e) => { self.phase_changed(); let _ = reply.send(Err(e)); continue; } };
                         self.run.0 = self.run.0.checked_add(1).ok_or_else(|| io::Error::other("live run identity exhausted"))?;
+                        self.emit_coverage();
                         self.pipeline = Some(pipeline); self.request = Some(request); self.flush_sent = None;
                         let effects = self.core.begin_live(); self.pipeline_token = self.core.capture_token(); self.phase_changed(); self.effects(effects).await?; self.phase_changed();
                         let _ = reply.send(Ok(Some(self.run)));
@@ -371,6 +384,7 @@ impl Worker {
                     Some(Command::Reset(reply)) => {
                         let effects = self.core.reset(); self.effects(effects).await?;
                         self.retained.clear(); self.pipeline.take(); self.request.take(); self.flush_sent = None;
+                        self.coverage=Default::default(); self.emit_coverage();
                         self.phase_changed(); let _ = reply.send(());
                     }
                     Some(Command::Shutdown) | None => return Ok(()),
@@ -427,7 +441,7 @@ impl Worker {
         if run != self.run
             || *self.core.phase() != Phase::Recording
             || !self.language_locked
-            || self.segments_pending != 0
+            || self.coverage.pending() != 0
             || self.preview_lease.is_some()
             || !self
                 .request
@@ -546,7 +560,8 @@ impl Worker {
                         .ok_or_else(|| io::Error::other("missing live engine"))?
                         .1;
                     engine.send_line(&format!("{offset:.3} {path}"))?;
-                    self.segments_pending += 1;
+                    self.coverage.feed(offset, wav.clone(), had_speech);
+                    self.emit_coverage();
                     self.retained.push(wav.clone());
                     self.emit(UpdateKind::Segment {
                         offset,
@@ -609,8 +624,21 @@ impl Worker {
                     Output::Stdout(transcribe::Event::LanguageDetected(_)) => {
                         self.language_locked = true
                     }
+                    Output::Stdout(transcribe::Event::Word { .. }) => self.coverage.word(),
                     Output::Stdout(transcribe::Event::SegmentEnd) => {
-                        self.segments_pending = self.segments_pending.saturating_sub(1)
+                        if let Some(retry) = self.coverage.segment_end() {
+                            let path = retry
+                                .audio
+                                .path()
+                                .to_str()
+                                .ok_or_else(|| io::Error::other("non UTF-8 live WAV"))?;
+                            let (_, engine) = self
+                                .engine
+                                .as_ref()
+                                .ok_or_else(|| io::Error::other("missing live retry engine"))?;
+                            engine.send_line(&format!("{:.3} {path}", retry.offset))?;
+                        }
+                        self.emit_coverage();
                     }
                     Output::Stdout(transcribe::Event::PreviewEnd) => {
                         self.preview_lease.take();
@@ -811,6 +839,8 @@ impl Worker {
                     Ok(())
                 }
                 Effect::Finished | Effect::Failed => {
+                    self.coverage.retire_pending();
+                    self.emit_coverage();
                     if fault.is_none() {
                         self.phase_changed();
                         self.emit(if effect == Effect::Finished {
