@@ -15,7 +15,17 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
-- FAQ persistence and committed cache reuse are connected to the native owner.
+- The empty-cache backfill follow-up now closes consumed target keys even when
+  the revision-guarded store rejects the empty text. A shed coalesced request
+  followed by single-line cache reuse reproduced two remaining keys where only
+  the uncached target should remain. The fix reaches zero after that target
+  completes, without changing transcript content or suppressing the empty cache
+  language. Its mutation is detected. The latest local source passes 169 Rust
+  tests (28/127/14), formatting, clippy, macOS debug app build and relocated
+  package/decoder/native-capture checks. See
+  `evidence/macos-empty-cache-backfill-2026-11-05.json`.
+
+- At `6e90399`, FAQ persistence and committed cache reuse connect to the native owner.
   Exact normalized hits populate revision-guarded transcript translations and
   the owned archive; partial hits queue only missing targets. A real engine
   crash previously left 14 shed backfill keys pending with an empty queue; the
@@ -27,9 +37,12 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   in about 1.5 seconds, preserving its input and bank. This checks actual ASR and
   cache integration, not DNA inference or translation quality. See
   `runtime/TRANSLATION_CACHE.md` and
-  `evidence/macos-translation-cache-2026-11-05.json`. Interim request production
-  and caption display remain open, as do ambiguous FAQ source-column matching
-  and empty-value/backfill edge cases. Native GUI checking remains unavailable
+  `evidence/macos-translation-cache-2026-11-05.json`. The original explicitly
+  disables interim translation and committed token streaming in
+  `LiveFeatureWiring.swift`; the candidate preserves those product decisions.
+  Porting the dormant interim producer is future redesign work. Committed caption
+  fallback and ambiguous FAQ source-column matching remain open.
+  Native GUI checking remains unavailable
   while the Mac is locked. The final local source passes 168 Rust tests
   (27/127/14), formatting, clippy, both cache comparisons and the existing
   committed/client comparisons. Three deliberate mutations fail the intended
@@ -48,7 +61,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   Three deliberate revision/archive mutations are detected and restored. See
   `runtime/COMMITTED_TRANSLATION.md` and
   `evidence/macos-committed-translation-2026-11-05.json`. Cache integration is
-  described above; interim caption display, complete backlog HUD and actual
+  described above; committed caption overlay, complete backlog HUD and actual
   live/UI acceptance remain open.
   That source passes 161 Rust tests (26/121/14), formatting, clippy,
   both grouping/routing comparisons and a rebuilt standalone macOS debug app.
@@ -68,8 +81,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   and a second client's request in one reaped process, with identical full
   before/after engine/model hashes. See `runtime/TRANSLATION_CLIENT.md` and
   `evidence/macos-translation-client-2026-11-05.json`. The file/live session's
-  committed scheduling/revision/backfill follow-up is described above; interim
-  display and complete product translation/UI acceptance remain open.
+  committed scheduling/revision/backfill follow-up is described above; committed
+  caption overlay and complete product translation/UI acceptance remain open.
   The final local workspace passes 151 Rust tests (23/114/14), formatting,
   clippy and both client comparisons; the 3,574 output/queue and 760 broker
   policy comparisons also remain green.
@@ -81,8 +94,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   intentional mutations are detected and restored. See
   `runtime/TRANSLATION_POLICY.md` and
   `evidence/macos-translation-policy-2026-11-05.json`. The translation client,
-  broker connection, revision acceptance, interim display and stop-time backfill
-  are still unconnected; these checks are not end-to-end translation acceptance.
+  broker connection, revision acceptance and stop-time backfill were connected
+  in the later slices described above. Interim translation stays disabled as in
+  the original; these isolated policy checks are not product acceptance.
   The final local snapshot passes 141 Rust tests (23/104/14), formatting,
   workspace clippy, the live Swift comparison and the pinned-reference comparison.
   Revision `138a741` now completes macOS/Windows Desktop CI successfully with

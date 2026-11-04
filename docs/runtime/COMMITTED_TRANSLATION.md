@@ -45,8 +45,9 @@ FAQ persistence, starter-pack lookup and committed cache reuse are now connected
 the terminal-client/shed-backfill regression is also covered. See
 `TRANSLATION_CACHE.md` for that follow-up and its separate evidence.
 
-This is not complete translation or UI/UX parity. Interim translation
-requests/display, caption overlays, the full backlog HUD, summary/AI broker
+This is not complete translation or UI/UX parity. Interim translation and
+committed token streaming stay disabled, matching `LiveFeatureWiring.swift`.
+Caption overlays, the full backlog HUD, summary/AI broker
 consumers, complete live timing tests, visual comparison, Windows native
 ASR/capture and Windows GPU inference remain open. The existing shipping Swift
 implementation remains the comparison baseline.

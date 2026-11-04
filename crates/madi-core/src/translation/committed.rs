@@ -351,16 +351,19 @@ impl Session {
         request.targets.retain(|lang| {
             if let Some(text) = cached.get(lang) {
                 store.set_translation(request.id, lang.clone(), text, Some(revision), false);
+                // A consumed cache target has no later client callback, even
+                // when the store rejects an empty value or obsolete revision.
+                // Close its exact barrier key without fabricating a translation
+                // or changing the shipping empty-value display behavior.
+                self.backfill.remove(&Key {
+                    id: request.id,
+                    language: lang.clone(),
+                    revision,
+                });
                 false
             } else {
                 true
             }
-        });
-        // Cache hits have no client callback. Close only matching, successfully
-        // applied keys; an empty or stale cached value is not a valid translation.
-        let valid = store.valid_translation_languages(request.id, revision);
-        self.backfill.retain(|key| {
-            key.id != request.id || key.revision != revision || !valid.contains(&key.language)
         });
     }
     fn valid_backlog(

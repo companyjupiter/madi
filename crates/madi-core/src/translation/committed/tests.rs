@@ -158,3 +158,47 @@ fn cache_closes_only_applied_backfill_keys_and_never_rewrites_a_joined_run() {
     assert_eq!(joined[0].targets, ["Korean"]);
     assert!(store.lines()[1].translations.is_empty());
 }
+
+#[test]
+fn empty_cached_target_closes_coalesced_backfill_without_changing_transcript() {
+    let mut store = TranscriptStore::default();
+    store.load(vec![
+        line(1, "And", 0.0),
+        line(2, "we discuss this today.", 1.0),
+    ]);
+    let mut session = Session::default();
+    let targets = vec!["Korean".into(), "Japanese".into()];
+    let joined = session.stable(&mut store, &targets, Some(50259), "", true, true);
+    assert_eq!(joined.len(), 1);
+    assert!(!joined[0].cacheable);
+    for language in &targets {
+        session.handle(
+            &mut store,
+            &Effect::Drop {
+                id: joined[0].id,
+                source: joined[0].text.clone(),
+                language: language.clone(),
+            },
+        );
+    }
+    let mut backfill = session.backfill(&mut store, &targets, Some(50259), true);
+    assert_eq!(backfill.len(), 1);
+    assert!(backfill[0].cacheable);
+    let original = store.lines()[1].clone();
+    session.apply_cached(
+        &mut store,
+        &mut backfill[0],
+        &BTreeMap::from([("Korean".into(), String::new())]),
+    );
+    assert_eq!(backfill[0].targets, ["Japanese"]);
+    assert_eq!(
+        session.backfill_remaining(),
+        1,
+        "no callback exists for the consumed empty cache target"
+    );
+    assert_eq!(store.lines()[1], original);
+    session.handle(&mut store, &result(&backfill[0], "Japanese", ""));
+    assert_eq!(session.backfill_remaining(), 0);
+    assert!(store.lines()[1].translations.is_empty());
+    assert!(!store.lines()[1].suppressed_translations.contains("Korean"));
+}
