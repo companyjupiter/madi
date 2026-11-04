@@ -1,0 +1,508 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T18:05:22.677936+00:00",
+  "baseHead": "032ce33b3f1e8a7f32bccaa025da6e2dfd88d222",
+  "status": "PASS",
+  "scope": "Committed translation connection to the shared file/live owner; real-model acceptance here covers public file input only",
+  "sourceSHA256": {
+    "crates/madi-core/src/translation/mod.rs": "a990b45580369212a1e988996bc2b124ab7327de8c615f36b0f01458ee41a7e6",
+    "crates/madi-core/src/translation/committed.rs": "379c6d0944d562d026ad2ffaa72b03952a333c000bc72c23da50edabbb71c21f",
+    "crates/madi-core/src/translation/committed/tests.rs": "63fd7a80a74cfc7e31632e99157a6f5173491ee60bb53d50724c6daecd30cf3b",
+    "crates/madi-core/examples/committed_translation_oracle.rs": "ff9130dae39fa9339524eb59803ceac6b8e5779cadee5802f73d8e97b581c5e0",
+    "crates/madi-platform/src/file_workflow.rs": "34789f1990dc650519540bd4227011dfdb693c95b4c72cfb83ccb92579ec8c72",
+    "crates/madi-platform/src/file_workflow/translation.rs": "cfece7a5acaf13f3d60bbf73577f081197eea3271b9971bf660f0afea455adf4",
+    "crates/madi-platform/src/file_workflow/translation/tests.rs": "a092a0969e11db5df60d59baa96b87f8f6a86cc93231fb113b31c630e653ef6b",
+    "crates/madi-platform/src/file_workflow/live_preview.rs": "09c9e41a2e82f98432b2a12ca537534d720151693300e6e4c040e98090ed56cd",
+    "crates/madi-platform/src/preferences_service.rs": "9adbd1409d0a340b830466c606027cb7f32e5fb91bcae803ea18d0aa9f9e6bf2",
+    "crates/madi-platform/examples/committed_translation_smoke.rs": "b3dd2c874e9fd575736e59a3e0e4f2ab0b551849f5944b41d9289ae093e4c3dc",
+    "apps/desktop/src-tauri/src/files_host.rs": "14e988a29700f18d97840bb10437791e80e2fa54331b9a778facc2cfa6c3848c",
+    "apps/desktop/src/files.ts": "00bb013e44398a4966cd41d7bf95fbcea3cd20e98c69470e8deb4857474cd548",
+    "scripts/check_committed_translation_parity.py": "01160b70b15fe2ca7ba544b8b35cb25bacb6e1ecd840269326895d0be8762542",
+    "design/parity/committed-translation-reference.json": "72d48e450492221012b600b2d102d9dbb03a4e6bed6cddb09d34445f571a6fd7",
+    ".github/workflows/desktop-parity.yml": "3e2c033ead36e4927edb3788f4225a461e96dde3b6b2f362ac1b39b078363b61",
+    "Cargo.lock": "34edea7a803aaefc9e08ed8d8fdd4ec6287aec38b0012b95fb0f536c3d8eac52",
+    "rust-toolchain.toml": "d13306be0ecda81ce779baa290ffb417380d525928477f16200884b5169cca33"
+  },
+  "checks": {
+    "format": "PASS",
+    "clippy": "PASS",
+    "unitTests": [
+      26,
+      121,
+      14
+    ],
+    "totalTests": 161,
+    "coreRevisionBackfillTests": 3,
+    "processWorkflowTests": 7,
+    "frontendTypecheckAndBuild": "PASS",
+    "macOSDebugAppBundle": "PASS",
+    "package": "PASS"
+  },
+  "nativeSwift": {
+    "cases": 360,
+    "lines": 8005,
+    "corpusSHA256": "ba13756891dea918bd02f42f3258d4a7473610e90891f3e0b867dd5d2f98ff00",
+    "resultSHA256": "52580eec8508beb223ea2678ce28d4af4b7b0b567c008099c4abb798c3efe804",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranslationCoalescer.swift": "9a8e71d9589bc26847b2fccf885b03007ac2cbbca4c2260d5546f9d510a82de1",
+      "apps/macos/Sovereign/Engine/TranslateStreamParser.swift": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "Unchanged TranslationCoalescer and extracted unchanged TranslateRouting; session callbacks tested separately"
+  },
+  "pinnedReference": {
+    "cases": 360,
+    "lines": 8005,
+    "corpusSHA256": "ba13756891dea918bd02f42f3258d4a7473610e90891f3e0b867dd5d2f98ff00",
+    "resultSHA256": "52580eec8508beb223ea2678ce28d4af4b7b0b567c008099c4abb798c3efe804",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranslationCoalescer.swift": "9a8e71d9589bc26847b2fccf885b03007ac2cbbca4c2260d5546f9d510a82de1",
+      "apps/macos/Sovereign/Engine/TranslateStreamParser.swift": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6"
+    },
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "scope": "Unchanged TranslationCoalescer and extracted unchanged TranslateRouting; session callbacks tested separately"
+  },
+  "mutations": {
+    "mutations": [
+      {
+        "name": "source-revision-guard",
+        "exitCode": 101,
+        "assertionDetected": true,
+        "logSHA256": "57fe0ff1fde8471be1d09a1ecba54d97e759f415ae38692232900ba1c5feea26"
+      },
+      {
+        "name": "anchor-revision-map",
+        "exitCode": 101,
+        "assertionDetected": true,
+        "logSHA256": "f0fd41d6e88690258c7e5c3c2bb4f4b4ef4647ae8b0a4c9c3873e1016742623b"
+      },
+      {
+        "name": "final-translation-checkpoint",
+        "exitCode": 101,
+        "assertionDetected": true,
+        "logSHA256": "b3cffbdccf8f48da54d7fed0fe715969ebef6657a9de9a285623c33b64df97e1"
+      }
+    ],
+    "sourcesRestored": true,
+    "sourceSHA256": {
+      "crates/madi-core/src/translation/committed.rs": "379c6d0944d562d026ad2ffaa72b03952a333c000bc72c23da50edabbb71c21f",
+      "crates/madi-platform/src/file_workflow/translation.rs": "cfece7a5acaf13f3d60bbf73577f081197eea3271b9971bf660f0afea455adf4"
+    }
+  },
+  "nativeModelProbe": {
+    "report": {
+      "allTranslationsSaved": true,
+      "archive": "/Users/jupitersong/antigravity/madi/out/committed-translation-native/report.md",
+      "archiveError": null,
+      "archiveSHA256": "06100b910e139e348859b1947d7a68f81d966629b1e46ca1a70c18e4232e2808",
+      "backfillRemaining": 0,
+      "backlog": 0,
+      "decoderSHA256": "8a24fe90c479cd001e953a17f58144c3b80c710cf123dbb4b6255a73d5e45fa4",
+      "elapsedSeconds": 5.481165958,
+      "lines": [
+        {
+          "editedText": null,
+          "editedTranslations": [],
+          "end": 10.35,
+          "id": "8ff41f7d-b83e-42e3-9558-cf0a3b8a94ea",
+          "overlapSpeakers": [],
+          "sourceRevision": "13950391516942635375",
+          "speaker": 0,
+          "speakerMargin": 1.0,
+          "staleTranslations": {},
+          "start": 0.33,
+          "suppressedTranslations": [],
+          "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+          "translations": {
+            "Korean": "따라서 제 동료 미국인 여러분, 국가가 여러분을 위해 무엇을 할 수 있는지 묻지 마시고, 여러분이 국가를 위해 무엇을 할 수 있는지 묻으십시오."
+          },
+          "words": [
+            {
+              "conf": 1.0,
+              "id": "8ff41f7d-b83e-42e3-9558-cf0a3b8a94ea",
+              "t0": 0.33,
+              "t1": 0.5,
+              "text": "And"
+            },
+            {
+              "conf": 0.6,
+              "id": "a15bf3f7-4d7d-4a88-bfe9-0f8fd3ed081f",
+              "t0": 0.5,
+              "t1": 0.58,
+              "text": "so,"
+            },
+            {
+              "conf": 1.0,
+              "id": "fc72624e-3f03-4be0-8d97-fee63550971f",
+              "t0": 0.69,
+              "t1": 1.2,
+              "text": "my"
+            },
+            {
+              "conf": 1.0,
+              "id": "564d5a45-5a8c-4dd0-a211-14f152bee314",
+              "t0": 1.2,
+              "t1": 1.28,
+              "text": "fellow"
+            },
+            {
+              "conf": 0.86,
+              "id": "27ba6a7b-3cd9-4f8a-b332-3714fba9ceb3",
+              "t0": 1.37,
+              "t1": 2.11,
+              "text": "Americans,"
+            },
+            {
+              "conf": 0.98,
+              "id": "8d0e1e74-ca10-4ffc-ac11-5b019fa86d18",
+              "t0": 3.29,
+              "t1": 3.66,
+              "text": "ask"
+            },
+            {
+              "conf": 0.98,
+              "id": "8ae49379-cd6b-4851-bc9e-359636dd69aa",
+              "t0": 4.03,
+              "t1": 4.29,
+              "text": "not"
+            },
+            {
+              "conf": 0.99,
+              "id": "48c740df-cec7-48e6-9f86-90ac9ef5a64f",
+              "t0": 4.54,
+              "t1": 5.56,
+              "text": "what"
+            },
+            {
+              "conf": 0.99,
+              "id": "eb37c952-b752-435e-8201-9b5b9326a3fe",
+              "t0": 5.56,
+              "t1": 5.64,
+              "text": "your"
+            },
+            {
+              "conf": 1.0,
+              "id": "61d54721-00f2-45b2-97e2-48f74a86804d",
+              "t0": 5.66,
+              "t1": 6.42,
+              "text": "country"
+            },
+            {
+              "conf": 1.0,
+              "id": "d446c603-ff3e-4fd7-b471-128108f0156d",
+              "t0": 6.51,
+              "t1": 6.6,
+              "text": "can"
+            },
+            {
+              "conf": 1.0,
+              "id": "e354c9d4-680e-4b96-8c72-07c31804fdf6",
+              "t0": 6.6,
+              "t1": 6.68,
+              "text": "do"
+            },
+            {
+              "conf": 1.0,
+              "id": "0a1c5f42-4732-4117-82cc-0d82041ad7b8",
+              "t0": 6.71,
+              "t1": 6.91,
+              "text": "for"
+            },
+            {
+              "conf": 0.64,
+              "id": "e280d862-6206-47d7-b416-edc03f77ce64",
+              "t0": 7.01,
+              "t1": 7.52,
+              "text": "you,"
+            },
+            {
+              "conf": 1.0,
+              "id": "29410d1d-6fc0-498a-96b3-4377095673f3",
+              "t0": 8.2,
+              "t1": 8.48,
+              "text": "ask"
+            },
+            {
+              "conf": 1.0,
+              "id": "cf8ef8df-fa27-42f3-8636-091f9dd1236f",
+              "t0": 8.52,
+              "t1": 8.76,
+              "text": "what"
+            },
+            {
+              "conf": 1.0,
+              "id": "74618a8e-5731-459c-bed2-649a54773676",
+              "t0": 8.76,
+              "t1": 8.84,
+              "text": "you"
+            },
+            {
+              "conf": 1.0,
+              "id": "5b3bbe5c-7d58-450b-89b5-b99cf193c60c",
+              "t0": 8.92,
+              "t1": 9.33,
+              "text": "can"
+            },
+            {
+              "conf": 1.0,
+              "id": "8668ac1d-d41f-429b-bf10-5995fef2d3a5",
+              "t0": 9.33,
+              "t1": 9.41,
+              "text": "do"
+            },
+            {
+              "conf": 1.0,
+              "id": "ae8c4144-a268-4f62-8e86-3642fb28a2f2",
+              "t0": 9.45,
+              "t1": 9.76,
+              "text": "for"
+            },
+            {
+              "conf": 1.0,
+              "id": "b2f15502-871a-4db6-ae3e-2e54d6bba5ac",
+              "t0": 9.76,
+              "t1": 9.83,
+              "text": "your"
+            },
+            {
+              "conf": 0.95,
+              "id": "45fd084d-2d49-47b8-adb3-a011eada899f",
+              "t0": 9.83,
+              "t1": 10.35,
+              "text": "country."
+            }
+          ]
+        }
+      ],
+      "queueDepth": 0,
+      "scope": "Real public audio through FileWorkflow ASR, committed translation and archive; GUI/live microphone/interim/FAQ are not exercised",
+      "source": "/Users/jupitersong/antigravity/madi/out/macos-engine-smoke/jfk.wav",
+      "sourceSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "transcribeSHA256": "1f5740fd69aa317b3a67eedb6bd1ba3ef4fa06a35cff5e5a2c2cdfc4e998df4a",
+      "translationEngineSHA256": "64be74aed0e23a650ede70ae7951f131b44f0c229e82d2ee68a74d089ff78a0e"
+    },
+    "buildSnapshot": {
+      "crates/madi-core/src/translation/committed.rs": "379c6d0944d562d026ad2ffaa72b03952a333c000bc72c23da50edabbb71c21f",
+      "crates/madi-core/src/translation/client.rs": "77b54983c661bb617203bea06e1a0a4b14de91e0f036beaa3d9cdfd3048f2881",
+      "crates/madi-platform/src/file_workflow.rs": "34789f1990dc650519540bd4227011dfdb693c95b4c72cfb83ccb92579ec8c72",
+      "crates/madi-platform/src/file_workflow/translation.rs": "cfece7a5acaf13f3d60bbf73577f081197eea3271b9971bf660f0afea455adf4",
+      "crates/madi-platform/src/file_workflow/live_preview.rs": "09c9e41a2e82f98432b2a12ca537534d720151693300e6e4c040e98090ed56cd",
+      "crates/madi-platform/src/dna_broker.rs": "45cef6accf832a7d5a4c268a0f8822511e80bb94a2d0b4cdb1dc25709eec3292",
+      "crates/madi-platform/src/translation_client.rs": "fd662f4dfc255516f249788457c65bc7003d380b26a80e9eb217411be3a7b9ad",
+      "crates/madi-platform/examples/committed_translation_smoke.rs": "b3dd2c874e9fd575736e59a3e0e4f2ab0b551849f5944b41d9289ae093e4c3dc",
+      "out/committed-translation-native/probe": "8557f7b9b6490bd6b3d397413df8df02b5b6eca207a027b1352351c4b1fa031b"
+    },
+    "inputHashesBeforeAndAfter": {
+      "/Users/jupitersong/Library/Application Support/Madi/model.q8.safetensors": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+      "/Users/jupitersong/Library/Application Support/Madi/DNA3.0-4B.i1-Q4_K_M.gguf": "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8"
+    },
+    "modelInputsUnchanged": true,
+    "command": "committed_translation_smoke <absolute-executables-directory> <absolute-assets-small-directory> <Madi-model-directory> <public-jfk.wav> <report.json>",
+    "initialInvocation": "Relative executable path resolved against the child assets directory and failed before ASR; corrected to absolute paths",
+    "binaryHashScope": "Persisted probe executable and all eight runtime source hashes match the completed real-model run."
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "captureUsageDescriptionsMatch": [
+      "NSMicrophoneUsageDescription",
+      "NSScreenCaptureUsageDescription",
+      "NSAudioCaptureUsageDescription"
+    ],
+    "captureAudioInputEntitlement": true,
+    "developerLibraryDependenciesAbsent": true,
+    "relocatedNativeCaptureReplay": {
+      "devicesOpened": false,
+      "ownedDirectoryCleaned": true,
+      "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+      "sampleCount": 16000,
+      "segments": [
+        {
+          "hadSpeech": true,
+          "name": "seg00000.wav",
+          "offsetBits": "0000000000000000",
+          "wavBytes": 32044,
+          "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+        }
+      ],
+      "stopped": true
+    },
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957888,
+        "sha256": "c4e626cc3fc28a4752529d0889405b82f1d0538625576e570953c599ce0fe292"
+      },
+      "translate-engine-2b": {
+        "bytes": 1576224,
+        "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+      },
+      "translate-engine-4b": {
+        "bytes": 1576080,
+        "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+    "helperBytes": 151296,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "ed249af8ba5b19f22d78ea69a9416789f560811f810f8fc5589a66cc84935546",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "precedingCI": {
+    "head": "032ce33b3f1e8a7f32bccaa025da6e2dfd88d222",
+    "run": "https://github.com/companyjupiter/madi/actions/runs/41878577349",
+    "status": "success",
+    "unitTests": {
+      "macos-15": [
+        23,
+        114,
+        14
+      ],
+      "windows-2022": [
+        23,
+        86,
+        14
+      ],
+      "windowsArchiveRepeats": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "artifactAndResultBytesVerified": true
+  },
+  "logs": {
+    "fmt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests": "594bb0ef5e6109296e1cd82b86c50cc2746f5b589bb8fced071b49bcaa72f22c",
+    "clippy": "048be05d86ccdac88accb3dd134336488673d6cfa1a1b198cb6edd0e71445072",
+    "native": "c612a7a65ae667f7e2d3e5bc0306d4c00cf1b123af3d1cee316ce62447e4ac36",
+    "reference": "b5074f8a26c491842e1467e3be5bd9f0e74fcb099b1a783d8c89c49216b65729",
+    "bundle": "4e62305481006fd414fc3ab4fad1c95eed9d74354e3f81487631288aebc5ff4c",
+    "package": "a32e20e3698bc9b2816e39813b1302767be877dfa524402a715702f426809548"
+  },
+  "limits": [
+    "This new source snapshot has not yet completed its own macOS/Windows CI",
+    "FAQ loading/seed lookup, interim caption requests/display/cache reuse and complete translation HUD remain unconnected",
+    "Terminal engine failure combined with previously shed session backlog still needs a workflow regression",
+    "Live preview busy/aging is wired; real simultaneous microphone-ASR-DNA acceptance and full live timing regressions remain open",
+    "Computer Use reports Mac locked; native GUI/UX acceptance NOT_RUN for this change",
+    "The public JFK probe is one file, not translation-quality or audio/hardware-matrix acceptance",
+    "No Windows native ASR/capture/GPU inference or release/notarization acceptance"
+  ]
+}

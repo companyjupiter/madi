@@ -27,11 +27,18 @@ impl Worker {
         let (Some(preview), Some(run)) = (&mut self.live_preview, self.run) else {
             return;
         };
-        // The DNA lane is not connected yet. Once present its admission/aging
-        // signal belongs here, after the strict committed-transcript priority.
+        let aged = self.translations.last_preview_admit.is_none_or(|last| {
+            last.elapsed()
+                >= Duration::from_secs(if self.translations.policy.depth <= 6 {
+                    2
+                } else {
+                    4
+                })
+        });
         preview.scheduler.set_admitted(
             self.state.phase == ViewPhase::Recording
                 && preview.segments_pending == 0
+                && (!self.translations.dna_busy || aged)
                 && !self.closing,
         );
         if let Some((wav, offset)) = preview.scheduler.take_ready() {
@@ -43,7 +50,10 @@ impl Worker {
                 .collect::<Vec<_>>();
             let forced = preview::forced_prefix(&shown, &preview.source.committed_text());
             match self.session.preview(run, wav.clone(), forced.clone()).await {
-                Ok(true) => preview.scheduler.submitted(forced),
+                Ok(true) => {
+                    preview.scheduler.submitted(forced);
+                    self.translations.last_preview_admit = Some(Instant::now());
+                }
                 Ok(false) => {
                     // Capture/engine events can race this owner. The executor checks
                     // recording phase, language lock and committed backlog again.

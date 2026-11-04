@@ -24,6 +24,7 @@ on:
       - 'apps/macos/Sovereign/Engine/EngineProtocol.swift'
       - 'apps/macos/Sovereign/Engine/PreviewEngine.swift'
       - 'apps/macos/Sovereign/Engine/TranslationStability.swift'
+      - 'apps/macos/Sovereign/Transcript/TranslationCoalescer.swift'
       - 'apps/macos/Sovereign/UI/TranscriptView.swift'
       - 'apps/macos/Sovereign/Engine/EngineEvents.swift'
       - 'apps/macos/Sovereign/Engine/EngineProcess.swift'
@@ -136,6 +137,7 @@ jobs:
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_dna_broker_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_client_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_committed_translation_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -170,6 +172,7 @@ jobs:
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_dna_broker_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_client_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_committed_translation_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -219,6 +222,8 @@ jobs:
             out/translation-parity/result.json
             out/translation-client-parity/report.json
             out/translation-client-parity/result.json
+            out/committed-translation-parity/report.json
+            out/committed-translation-parity/result.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json

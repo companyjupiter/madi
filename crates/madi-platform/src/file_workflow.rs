@@ -7,6 +7,7 @@ use crate::{
 mod driver;
 #[cfg(target_os = "macos")]
 mod live_preview;
+pub mod translation;
 use driver::{Driver, Kind as UpdateKind, RunId};
 use madi_core::{
     personal_vocabulary,
@@ -93,6 +94,10 @@ pub struct Snapshot {
     pub live: Option<LiveSnapshot>,
     pub permission_issue: Option<crate::audio_permissions::Issue>,
     pub admission_pending: bool,
+    pub translation_queue_depth: usize,
+    pub translation_queued_lines: usize,
+    pub translation_backlog: usize,
+    pub translation_backfill_remaining: usize,
 }
 #[derive(Clone, Debug)]
 pub struct ArchiveSettings {
@@ -128,6 +133,10 @@ impl Default for Snapshot {
             live: None,
             permission_issue: None,
             admission_pending: false,
+            translation_queue_depth: 0,
+            translation_queued_lines: 0,
+            translation_backlog: 0,
+            translation_backfill_remaining: 0,
         }
     }
 }
@@ -239,6 +248,15 @@ impl FileWorkflow {
         archive_settings: Option<ArchiveSettings>,
         changed: impl Fn(Snapshot) + Send + Sync + 'static,
     ) -> io::Result<Self> {
+        Self::with_translation(configuration, archive_settings, None, changed)
+    }
+    pub fn with_translation(
+        configuration: Configuration,
+        archive_settings: Option<ArchiveSettings>,
+        translation_resources: Option<translation::Resources>,
+        changed: impl Fn(Snapshot) + Send + Sync + 'static,
+    ) -> io::Result<Self> {
+        let translations = translation::Translations::new(translation_resources)?;
         let session = Driver::new(configuration.clone())?;
         let (commands, input) = mpsc::unbounded_channel();
         let mut state = Snapshot::default();
@@ -260,6 +278,8 @@ impl FileWorkflow {
                 store: TranscriptStore::default(),
                 glossary: None,
                 preferences: None,
+                preference_updates: None,
+                translations,
                 text_passes: TextPasses::default(),
                 run: None,
                 render: None,
@@ -481,6 +501,8 @@ struct Worker {
     store: TranscriptStore,
     glossary: Option<GlossaryService>,
     preferences: Option<PreferencesService>,
+    preference_updates: Option<watch::Receiver<crate::preferences_service::Snapshot>>,
+    translations: translation::Translations,
     text_passes: TextPasses,
     run: Option<RunId>,
     render: Option<Instant>,
@@ -505,9 +527,16 @@ impl Worker {
         self.cancel_admission().await;
         // Keep the async owner alive until native children and owned WAVs exit.
         let cleanup = self.session.shutdown().await;
-        result.and(cleanup)
+        self.stop_translation().await;
+        self.translations.broker.shutdown();
+        let dna_cleanup = self.translations.broker.wait().await;
+        result.and(cleanup).and(dna_cleanup)
     }
     fn publish(&mut self) {
+        self.state.translation_queue_depth = self.translations.policy.depth;
+        self.state.translation_queued_lines = self.translations.policy.queued_lines;
+        self.state.translation_backlog = self.translations.policy.backlog_lines();
+        self.state.translation_backfill_remaining = self.translations.policy.backfill_remaining();
         self.state.lines = self
             .store
             .display_lines()
@@ -531,7 +560,13 @@ impl Worker {
             self.fix = Some(Instant::now() + Duration::from_millis(50));
         }
     }
-    fn clear(&mut self) {
+    async fn clear(&mut self) {
+        self.stop_translation().await;
+        self.translations.policy = Default::default();
+        self.translations.language_token = None;
+        self.translations.finalized = false;
+        self.translations.idle = None;
+        self.translations.preview_tick = None;
         #[cfg(target_os = "macos")]
         {
             self.live_preview = None;
@@ -579,6 +614,11 @@ impl Worker {
             self.text_passes.finalize(&mut self.store, None);
         }
         self.state.partial.clear();
+        self.translations.tail = None;
+        self.translations.idle = None;
+        self.translations.finalized = true;
+        self.translations.preview_tick = None;
+        self.translate_stable(true).await;
         self.auto_save().await;
         self.publish();
     }
@@ -662,7 +702,7 @@ impl Worker {
             return Ok(self.state.clone());
         }
         self.session.reset().await?;
-        self.clear();
+        self.clear().await;
         self.state.speaker_names = parsed.names;
         self.store.load(parsed.lines);
         self.state.file_name = media_file::summary(&path).name;
@@ -675,6 +715,7 @@ impl Worker {
     async fn run_loop(&mut self) -> io::Result<()> {
         loop {
             let permission_pending = self.permission.is_some();
+            let preference_pending = self.preference_updates.is_some();
             tokio::select! {
                 command=self.input.recv(),if !self.closing=>match command {
                     #[cfg(target_os="macos")]
@@ -682,6 +723,7 @@ impl Worker {
                     #[cfg(target_os="macos")]
                     Some(Command::LiveControl {generation,command,reply})=>{let result=self.live_control(generation,command).await;let _=reply.send(result);},
                     Some(Command::Preferences(preferences, reply))=>{
+                        self.preference_updates=Some(preferences.subscribe());
                         self.preferences=Some(preferences);let _=reply.send(Ok(()));
                     },
                     Some(Command::Glossary(glossary, reply))=>{
@@ -724,7 +766,7 @@ impl Worker {
                     Some(Command::Reset {generation,reply})=>{
                         let result=if generation==self.state.generation && !self.state.phase.is_recording() {
                             self.cancel_admission().await;
-                            self.clear(); self.publish();
+                            self.clear().await; self.publish();
                             self.session.reset().await.map(|()|self.state.clone())
                         }else {Ok(self.state.clone())};
                         let _=reply.send(result);
@@ -739,6 +781,7 @@ impl Worker {
                             if self.state.phase.is_recording() && let Some(run)=self.run {self.session.control(run,LiveControl::Stop)?;}
                             self.closing=true; continue;
                         }
+                        if self.translations.finalized && self.translations.policy.depth > 0 {self.closing=true;continue;}
                         return Ok(());
                     },
                 },
@@ -746,7 +789,7 @@ impl Worker {
                     let Some(update)=update else {return Err(closed())};
                     if self.run!=Some(update.run) {continue;}
                     match update.kind {
-                        UpdateKind::Output(Output::Stdout(event))=>self.ingest(event),
+                        UpdateKind::Output(Output::Stdout(event))=>self.ingest(event).await,
                         UpdateKind::Phase(Phase::Processing)=>{self.state.phase=ViewPhase::Processing;self.publish();},
                         UpdateKind::Phase(phase)=>{
                             if let Phase::Error(failure)=phase {self.pending_failure=Some(failure_message(&failure,&self.state.file_name));}
@@ -754,11 +797,11 @@ impl Worker {
                                 self.state.phase=match phase {Phase::EngineStarting=>ViewPhase::EngineStarting,Phase::Ready=>ViewPhase::Ready,Phase::Recording=>ViewPhase::Recording,Phase::Paused=>ViewPhase::Paused,Phase::Flushing=>ViewPhase::Flushing,_=>self.state.phase.clone()};self.publish();
                             }
                         },
-                        UpdateKind::Finished=>{self.state.phase=ViewPhase::Done;self.finish().await;if self.closing {return Ok(());}},
+                        UpdateKind::Finished=>{self.state.phase=ViewPhase::Done;self.finish().await;if self.closing && self.translations.policy.depth==0 {return Ok(());}},
                         UpdateKind::Failed=>{
                             if let Some(message)=self.pending_failure.take() {self.state.phase=ViewPhase::Error {message};}
                             self.finish().await;
-                            if self.closing {return Ok(());}
+                            if self.closing && self.translations.policy.depth==0 {return Ok(());}
                         },
                         UpdateKind::Fault(message)=>{
                             self.state.phase=ViewPhase::Error {message:message.clone()};self.finish().await;
@@ -775,6 +818,21 @@ impl Worker {
                     }
                     #[cfg(target_os="macos")]
                     self.pump_preview().await;
+                },
+                event=self.translations.broker.next()=>{
+                    if let Some(event)=event {self.translation_event(event).await;}
+                    else {return Err(io::Error::other("translation broker closed"));}
+                    if self.closing && self.translations.finalized && self.translations.policy.depth==0 {return Ok(());}
+                },
+                _=deadline(self.translations.tail.map(|tail|tail.0))=>self.translation_tail().await,
+                _=deadline(self.translations.idle)=>self.translation_idle().await,
+                _=deadline(self.translations.preview_tick)=>{
+                    self.translations.preview_tick=(self.state.live.is_some() && self.state.phase.is_busy())
+                        .then(||Instant::now()+Duration::from_secs(1));
+                },
+                changed=async{self.preference_updates.as_mut().unwrap().changed().await},if preference_pending=>{
+                    if changed.is_err() {self.preference_updates=None;}
+                    else if self.preferences.as_ref().is_some_and(|p|!p.has_translation_targets()) {self.stop_translation().await;self.publish();}
                 },
                 _=deadline(self.fix)=>{
                     self.fix=None;
@@ -799,6 +857,8 @@ impl Worker {
                 },
             }
             self.schedule();
+            #[cfg(target_os = "macos")]
+            self.pump_preview().await;
         }
     }
     async fn start(
@@ -819,7 +879,8 @@ impl Worker {
             return Ok(self.state.clone());
         }
         self.session.reset().await?;
-        self.clear();
+        self.clear().await;
+        self.translations.language_token = settings.language_token;
         self.store.features = Features::for_language(settings.language_token);
         self.state.speaker_island_absorption = self.store.features.speaker_island_absorption;
         let file = media_file::summary(&path);
@@ -870,6 +931,7 @@ impl Worker {
         let devices = matches!(request.input, crate::live_session::Input::Devices { .. });
         // A cancelled admission is a retired UI identity too, even if no engine
         // was started. Delayed countdown controls cannot cancel its replacement.
+        self.stop_translation().await;
         self.state.generation = self.state.generation.wrapping_add(1);
         self.pending_live = Some(request);
         self.state.admission_pending = true;
@@ -973,7 +1035,10 @@ impl Worker {
                 }
             }
             self.session.reset().await?;
-            self.clear();
+            self.clear().await;
+            self.translations.language_token = request.settings.common.language_token;
+            self.translations.idle = Some(Instant::now() + Duration::from_secs(5));
+            self.translations.preview_tick = Some(Instant::now() + Duration::from_secs(1));
             self.store.features = Features::for_language(request.settings.common.language_token);
             self.state.speaker_island_absorption = self.store.features.speaker_island_absorption;
             self.state.live = Some(LiveSnapshot {
@@ -1095,7 +1160,7 @@ impl Worker {
             _ => {}
         }
     }
-    fn ingest(&mut self, event: Event) {
+    async fn ingest(&mut self, event: Event) {
         #[cfg(target_os = "macos")]
         if self.preview_event(&event) {
             return;
@@ -1133,25 +1198,11 @@ impl Worker {
             _ => (),
         }
         self.store.ingest(&event);
-        if matches!(event, Event::Word { .. } | Event::WordSectionBegin)
-            && self
-                .preferences
-                .as_ref()
-                .is_some_and(PreferencesService::has_translation_targets)
-        {
-            if let Some(glossary) = &self.glossary {
-                glossary.with_value(|glossary| {
-                    self.text_passes.stable(
-                        &mut self.store,
-                        Some(glossary),
-                        true,
-                        &self.state.partial,
-                        false,
-                    );
-                });
-            } else {
-                self.text_passes
-                    .stable(&mut self.store, None, true, &self.state.partial, false);
+        if matches!(event, Event::Word { .. } | Event::WordSectionBegin) {
+            self.apply_stable_passes();
+            self.translate_stable(false).await;
+            if matches!(event, Event::Word { .. }) {
+                self.arm_translation_tail();
             }
         }
         // Progress/name callbacks are low-frequency UI state, also coalesced.
@@ -1159,9 +1210,30 @@ impl Worker {
             self.render = Some(Instant::now() + Duration::from_millis(33));
         }
     }
+    fn apply_stable_passes(&mut self) {
+        let enabled = self
+            .preferences
+            .as_ref()
+            .is_some_and(PreferencesService::has_translation_targets);
+        if let Some(glossary) = &self.glossary {
+            glossary.with_value(|glossary| {
+                self.text_passes.stable(
+                    &mut self.store,
+                    Some(glossary),
+                    enabled,
+                    &self.state.partial,
+                    false,
+                )
+            });
+        } else {
+            self.text_passes
+                .stable(&mut self.store, None, enabled, &self.state.partial, false);
+        }
+    }
     async fn edit(&mut self, edit: Edit) -> io::Result<Snapshot> {
         let invalid = || io::Error::new(io::ErrorKind::InvalidInput, "invalid transcript identity");
         let mut learn = None;
+        let mut retranslate = None;
         match edit {
             Edit::Line { id, text } => {
                 let id = id.parse::<Uuid>().map_err(|_| invalid())?;
@@ -1176,6 +1248,7 @@ impl Worker {
                     && let Some(before) = before
                 {
                     learn = Some((personal_vocabulary::diff(&before, &text), false));
+                    retranslate = Some(id);
                 }
             }
             Edit::Word { id, index, text } => {
@@ -1192,6 +1265,7 @@ impl Worker {
                     && !personal_vocabulary::canonically_equal(&before, &text)
                 {
                     learn = Some((personal_vocabulary::diff(&before, &text), true));
+                    retranslate = Some(id);
                 }
             }
             Edit::Translation { id, language, text } => {
@@ -1222,6 +1296,9 @@ impl Worker {
             // The successful transcript edit is not discarded when optional
             // glossary persistence fails. The owner retains its last saved rules.
             eprintln!("personal glossary learning: {error}");
+        }
+        if let Some(id) = retranslate {
+            self.translate_line(id, true).await;
         }
         self.schedule();
         Ok(self.state.clone())

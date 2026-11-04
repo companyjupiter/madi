@@ -1,6 +1,7 @@
 //! Shipping translation queue, prompt and response policies. Transcript revision
 //! acceptance remains the session owner's responsibility.
 pub mod client;
+pub mod committed;
 pub mod output;
 use crate::{
     personal_vocabulary::canonically_equal as equal,

@@ -15,6 +15,28 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Committed translation now reaches the shared file/live workflow, display
+  snapshots and owned Markdown archive. It connects trusted model admission,
+  source-language routing, stable/coalesced scheduling, source revision gates,
+  tail deadlines, idle/stop backfill and reset/quit cleanup. DNA busy/aging now
+  gates provisional preview admission. A real public JFK recording produces a
+  Korean translation and persists it in about 5.5 seconds with no remaining
+  queue/backlog, while preserving the original audio. Unchanged Swift grouping
+  and routing match 360 cases / 8,005 rows; seven process-backed workflow tests
+  cover stale replies, reset, setting changes, tail timing and final saving.
+  Three deliberate revision/archive mutations are detected and restored. See
+  `runtime/COMMITTED_TRANSLATION.md` and
+  `evidence/macos-committed-translation-2026-11-05.json`. FAQ/interim cache reuse,
+  interim caption display, complete backlog HUD and actual live/UI acceptance
+  remain open. The Mac was locked at the latest Computer Use attempt.
+  The final local source passes 161 Rust tests (26/121/14), formatting, clippy,
+  both grouping/routing comparisons and a rebuilt standalone macOS debug app.
+  Its relocated package/decoder/capture replay also passes. The preceding
+  `032ce33` desktop CI passes on macOS (151 tests) and Windows (123 tests plus
+  50 archive repeats), with downloaded binaries, packages and translation
+  client result bytes verified in `evidence/desktop-ci-032ce33-2026-11-05.json`.
+  This new session connection requires its own CI verdict.
+
 - The native translation client now executes the shipping queue/prompt/output
   state through the shared DNA broker. Its 165 Swift scenarios / 6,767 operations
   preserve request/callback order, partial throttling, prefix caches, retries,
@@ -25,8 +47,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   and a second client's request in one reaped process, with identical full
   before/after engine/model hashes. See `runtime/TRANSLATION_CLIENT.md` and
   `evidence/macos-translation-client-2026-11-05.json`. The file/live session's
-  model admission, scheduling, revision acceptance, interim display and backfill
-  still need connection; product translation/UI acceptance remains open.
+  committed scheduling/revision/backfill follow-up is described above; interim
+  display and complete product translation/UI acceptance remain open.
   The final local workspace passes 151 Rust tests (23/114/14), formatting,
   clippy and both client comparisons; the 3,574 output/queue and 760 broker
   policy comparisons also remain green.

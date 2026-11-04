@@ -163,6 +163,9 @@ impl PreferencesService {
             }),
         })
     }
+    pub(crate) fn subscribe(&self) -> watch::Receiver<Snapshot> {
+        self.owner.snapshot.clone()
+    }
     pub fn snapshot(&self) -> Snapshot {
         self.owner.snapshot.borrow().clone()
     }

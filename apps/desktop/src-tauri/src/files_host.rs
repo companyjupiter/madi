@@ -211,7 +211,7 @@ pub(crate) fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
         let workspace = crate::workspace_host::service(app)?;
         let preferences = workspace.snapshot();
         let saved_revision = Mutex::new(None);
-        let worker = FileWorkflow::with_archive(
+        let worker = FileWorkflow::with_translation(
             madi_platform::file_session::Configuration {
                 resources: madi_platform::asr_config::Resources {
                     executable: runtime.transcribe,
@@ -226,6 +226,13 @@ pub(crate) fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
                 enabled: preferences.auto_save,
                 folder: preferences.folder,
             }),
+            Some(madi_platform::file_workflow::translation::Resources::new(
+                locations,
+                madi_core::assets::TranslationVariant::selected(
+                    madi_platform::model_presentation::physical_memory(),
+                    std::env::var("MADI_TRANSLATE_MODEL").ok().as_deref(),
+                ),
+            )),
             move |snapshot| {
                 if let Some(path) = &snapshot.archive.transcript {
                     let key = (snapshot.generation, snapshot.archive.write_revision);
