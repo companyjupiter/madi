@@ -20,7 +20,9 @@ use files_host::{
     file_snapshot, file_start,
 };
 use models_host::{models_artwork, models_command, models_snapshot};
-use setup_host::{SetupHost, choose_file, preferences_command, preferences_snapshot};
+use setup_host::{
+    SetupHost, choose_file, preferences_command, preferences_snapshot, settings_command,
+};
 use workspace_host::{
     WorkspaceHost, workspace_choose_folder, workspace_command, workspace_export, workspace_open,
     workspace_snapshot,
@@ -188,6 +190,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            settings_command,
             preferences_snapshot,
             preferences_command,
             setup_snapshot,

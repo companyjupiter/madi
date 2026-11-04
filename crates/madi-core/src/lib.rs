@@ -3,6 +3,7 @@ pub mod assets;
 pub mod model_setup;
 pub mod preferences;
 pub mod session;
+pub mod settings;
 pub mod setup;
 pub mod transcript;
 pub mod workspace;

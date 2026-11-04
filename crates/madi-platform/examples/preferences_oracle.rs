@@ -15,7 +15,27 @@ fn result(legacy: Legacy) -> Value {
         });
         steps.push(format!("{:016x}", presentation.font_size.to_bits()));
     }
-    json!({"restored":restored,"fontSteps":steps,"inputLanguage":setup.input_language,"engineToken":madi_platform::asr_config::FileSettings::from_setup(&setup,true,0,Vec::new()).unwrap().language_token,"nonEnglishFeatures":madi_core::transcript::Features::for_language(setup.language_token()).speaker_island_absorption})
+    let settings = &restored.settings;
+    let mut caption = settings.clone();
+    caption
+        .apply(
+            &mut setup.clone(),
+            &madi_core::settings::SettingsCommand::PatientPanel(
+                settings.caption.patient_panel_enabled,
+            ),
+        )
+        .unwrap();
+    let settings_bits = [
+        settings.live_window_seconds,
+        settings.translate_tail_seconds,
+        settings.vad_conf_threshold,
+        settings.caption.staff_font_size,
+        settings.caption.patient_font_size,
+        settings.caption.panel_width,
+        settings.caption.min_scale_factor,
+    ]
+    .map(|value| format!("{:016x}", value.to_bits()));
+    json!({"settingsNumericBits":settings_bits,"effectiveWindow":settings.effective_window_seconds(&setup),"multiTranslateForcesAccurate":settings.multi_translate_forces_accurate(&setup),"clampedCaption":caption.caption,"restored":restored,"fontSteps":steps,"inputLanguage":setup.input_language,"engineToken":madi_platform::asr_config::FileSettings::from_setup(&setup,0,Vec::new()).unwrap().language_token,"nonEnglishFeatures":madi_core::transcript::Features::for_language(setup.language_token()).speaker_island_absorption})
 }
 #[cfg(target_os = "macos")]
 fn native(raw: &Value) -> Legacy {
@@ -51,7 +71,20 @@ fn native(raw: &Value) -> Legacy {
         unsafe {
             defaults.setVolatileDomain_forName(&dictionary, &domain);
         }
+        let registration = NSString::from_str("NSRegistrationDomain");
+        if let Some(blob) = raw.get("__captionJSON").and_then(Value::as_str) {
+            let key = NSString::from_str("captionSettings.v1");
+            let data = NSData::with_bytes(blob.as_bytes());
+            let values = NSDictionary::<NSString, objc2::runtime::AnyObject>::from_slices(
+                &[&*key],
+                &[&*data],
+            );
+            unsafe {
+                defaults.setVolatileDomain_forName(&values, &registration);
+            }
+        }
         let legacy = madi_platform::preferences::read_legacy(&defaults);
+        defaults.removeVolatileDomainForName(&registration);
         defaults.removeVolatileDomainForName(&domain);
         legacy
     })

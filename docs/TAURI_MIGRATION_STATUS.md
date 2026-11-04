@@ -15,6 +15,22 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Settings contract candidate: schema-2 migration adds the original live/translation,
+  diagnostics/review and caption preferences. Settings language, device and OSD
+  changes remain transient; unrelated durable writes preserve the saved token.
+  The uncapped four-target settings intent and response-speed floor match Swift.
+  Live comparison passes 725 cases / 5,075 font steps / 105 caption blobs, including
+  optional decoding and exact floating-point bits. Local checks pass 87 Rust
+  tests (11/62/14), 601 ASR configuration cases, clippy, frontend/debug app and
+  strict package validation. The relocated decoder/Metal probe receives OSD off,
+  produces 22 words and completes all five exports with preserved source/model
+  data and cleanup. Settings-window UI, live/translation/caption consumers and
+  real-user migration acceptance remain incomplete. See `runtime/SETTINGS_CONTRACT.md`
+  and `evidence/macos-settings-contract-2026-11-04.json`.
+  Two frontend regressions also verify commit-before-start ordering and prevent
+  queued file admission after a failed preference save; the previous queue
+  fails the error regression.
+
 - Setup/presentation candidate: the start-screen selections, language/appearance,
   transcript mode and font size now restore through a native serialized store.
   The Swift preference domain is read-only; transient paths and device IDs are
@@ -30,7 +46,16 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   decoder/Metal engine: 22 JFK words, workspace/archive and five exports pass;
   original source/model data and temporary cleanup are preserved. See
   `runtime/PREFERENCES.md` and `evidence/macos-preferences-2026-11-04.json`;
-  the full Settings UI remains open. CI for this new candidate is pending.
+  the full Settings UI remains open. Revision `ec5b8d2` passed macOS CI but
+  failed Windows clippy on a macOS-only import; `eb6b2e4` fixed that and passed
+  Windows build checks before failing preference source-reference comparison.
+  Downloaded macOS artifacts for both revisions have verified binary/package/
+  runtime/notice hashes and clean provenance (`evidence/desktop-ci-ec5b8d2-2026-11-04.json`,
+  `evidence/desktop-ci-eb6b2e4-2026-11-04.json`). `e3096ad` fixes reference path and
+  source-ending portability; CI `41749413499` passes on both hosts with 84/76
+  Rust tests, all references, standalone debug builds and macOS package checks.
+  Downloaded binaries/package/runtime/notices match their reports with clean
+  provenance (`evidence/desktop-ci-e3096ad-2026-11-04.json`).
 
 - Workspace/export candidate: the macOS file screen now connects the fixed right
   panel, native folder selection, generation-bound saved meeting opening,
@@ -278,10 +303,11 @@ match their reports; clean trees and empty build diffs are verified in
 `evidence/desktop-ci-fb67b46-2026-11-04.json`.
 
 The macOS host now reads real model readiness and connects explicit first-run
-downloads. Setup choices remain in memory. Native setup selection/drop stages a
+downloads. Setup choices restore through the isolated preference owner. Native setup selection/drop stages a
 file; file start now connects to the timed workflow and transcript candidate.
 The recording start button still emits a harness intent only.
-Meeting saving, preference/data migration and updater remain unconnected.
+Meeting saving and preference migration have the candidates described above;
+real-user migration acceptance and the updater remain open.
 
 ## SovereignLLM Windows engine
 

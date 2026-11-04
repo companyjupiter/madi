@@ -15,6 +15,7 @@ export interface SetupState {
   translateTargets: string[];
   meetingMode: MeetingMode;
   diarize: boolean;
+  osd: boolean;
   speakerCount: number;
   audioSource: AudioSource;
   inputDeviceId: string | null;
@@ -40,7 +41,7 @@ export async function snapshot(): Promise<SetupState> {
   if (browserFixture) {
     return {
       revision: 0, inputLanguage: null, translateTargets: [], meetingMode: 'general',
-      diarize: true, speakerCount: 0, audioSource: 'mic', inputDeviceId: null, stagedFile: null,
+      diarize: true, osd: true, speakerCount: 0, audioSource: 'mic', inputDeviceId: null, stagedFile: null,
     };
   }
   return invoke<SetupState>('setup_snapshot');

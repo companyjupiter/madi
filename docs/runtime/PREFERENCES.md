@@ -1,10 +1,11 @@
 # Setup and presentation preferences
 
 The Tauri candidate restores the original start-screen choices and transcript
-presentation before showing its content. It reads only ten non-secret keys from
+presentation before showing its content. Its setup/presentation adapter reads ten keys from
 `com.companyjupiter.madi` on macOS: `languageTokenID`, `translateTargets`,
 `meetingMode`, `diarizeEnabled`, `fixedSpeakerCount`, `audioSource`, `uiLanguage`,
-`appearance`, `transcriptViewMode`, and `transcriptFontSize`. The Swift domain is
+`appearance`, `transcriptViewMode`, and `transcriptFontSize`; seven session keys
+are now added as documented in `SETTINGS_CONTRACT.md`. The Swift domain is
 never written. A valid `preferences.json` in the isolated Tauri configuration
 directory takes precedence; an invalid file is retained and reported.
 
@@ -13,6 +14,13 @@ appearance, real-user migration, full Settings UI and OS relaunch acceptance are
 **NOT_RUN**. The last computer-use operation was refused because the Mac was
 locked; these checks do not bypass that boundary. Windows uses the same isolated
 store with default values until native product integration is implemented.
+
+Schema 2 now adds session/settings values and preserves transient Settings
+language/overlap semantics across unrelated saves. Its expanded 725-case gate,
+version-1 migration, supported command boundary and remaining UI/consumer work
+are documented in `SETTINGS_CONTRACT.md`. The evidence below also records the
+initial 432-case setup/presentation revision; it is historical, not the latest
+full Settings acceptance.
 
 ## Original restoration rules
 

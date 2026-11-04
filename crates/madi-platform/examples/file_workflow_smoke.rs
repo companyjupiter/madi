@@ -83,14 +83,25 @@ async fn main() -> io::Result<()> {
     {
         return Err(io::Error::other("isolated preference restoration failed"));
     }
+    restored
+        .settings(madi_core::settings::SettingsCommand::OverlappingSpeech(
+            false,
+        ))
+        .await?;
+    restored
+        .settings(madi_core::settings::SettingsCommand::LiveWindowSeconds(5.0))
+        .await?;
     restored.stage(source.clone()).await?;
     let (selected_source, restored_setup) = restored
         .take_file()
         .await?
         .ok_or_else(|| io::Error::other("restored file admission missing"))?;
     let restored_settings =
-        FileSettings::from_setup(&restored_setup, true, 0, Vec::new()).map_err(io::Error::other)?;
-    if selected_source != source || restored_settings.language_token != Some(50259) {
+        FileSettings::from_setup(&restored_setup, 0, Vec::new()).map_err(io::Error::other)?;
+    if selected_source != source
+        || restored_settings.language_token != Some(50259)
+        || restored_settings.osd
+    {
         return Err(io::Error::other("restored settings not admitted"));
     }
     restored.shutdown().await?;
@@ -302,7 +313,7 @@ async fn main() -> io::Result<()> {
     println!(
         "{}",
         serde_json::to_string_pretty(
-            &json!({"schema":3,"preferences":{"restored":restored_snapshot,"nativeFileAdmission":true,"isolatedRelaunch":true},"passed":preserved && model_unchanged && clean,"sourceSha256":original_sha,"sourcePreserved":preserved,"modelSizeMtimeUnchanged":model_unchanged,"cleanAtShutdown":clean,"workflow":result})
+            &json!({"schema":3,"preferences":{"restored":restored_snapshot,"nativeFileAdmission":true,"overlapDisabledForAdmittedFile":true,"isolatedRelaunch":true},"passed":preserved && model_unchanged && clean,"sourceSha256":original_sha,"sourcePreserved":preserved,"modelSizeMtimeUnchanged":model_unchanged,"cleanAtShutdown":clean,"workflow":result})
         )?
     );
     if !preserved || !model_unchanged || !clean {

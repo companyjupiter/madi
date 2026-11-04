@@ -2,7 +2,8 @@
 //! An accepted command outlives its IPC caller and is joined at app shutdown.
 use crate::{media_file, preferences::Store};
 use madi_core::{
-    preferences::{Preferences, Presentation, PresentationCommand},
+    preferences::{Presentation, PresentationCommand},
+    settings::{Settings, SettingsCommand},
     setup::{SetupCommand, SetupState},
 };
 use serde::Serialize;
@@ -15,11 +16,15 @@ pub struct Snapshot {
     pub revision: u64,
     pub setup: SetupState,
     pub presentation: Presentation,
+    pub settings: Settings,
+    pub effective_window_seconds: f64,
+    pub multi_translate_forces_accurate: bool,
 }
 type Reply<T> = oneshot::Sender<io::Result<T>>;
 enum Command {
     Setup(SetupCommand, Reply<Snapshot>),
     Presentation(PresentationCommand, Reply<Snapshot>),
+    Settings(SettingsCommand, Reply<Snapshot>),
     Stage(PathBuf, Reply<Snapshot>),
     Take(Reply<Option<(PathBuf, SetupState)>>),
     Shutdown,
@@ -44,6 +49,15 @@ impl PreferencesService {
             revision: 0,
             setup: store.value().setup(),
             presentation: store.value().presentation.clone(),
+            settings: store.value().settings.clone(),
+            effective_window_seconds: store
+                .value()
+                .settings
+                .effective_window_seconds(&store.value().setup()),
+            multi_translate_forces_accurate: store
+                .value()
+                .settings
+                .multi_translate_forces_accurate(&store.value().setup()),
         };
         let (commands, mut input) = mpsc::unbounded_channel();
         let (output, snapshot) = watch::channel(state.clone());
@@ -53,11 +67,8 @@ impl PreferencesService {
                 let mut state = state;
                 let mut selected = None;
                 while let Some(command) = input.blocking_recv() {
-                    // An explicit durable choice must survive relaunch even
-                    // when it equals the imported fallback. Transient native
-                    // selection alone must never create a preferences file.
-                    let explicit = matches!(&command, Command::Presentation(..)) ||
-                        matches!(&command, Command::Setup(action, _) if !matches!(action, SetupCommand::InputDevice(_) | SetupCommand::ClearStagedFile));
+                    let mut explicit = false;
+                    let mut durable = store.value().clone();
                     let mut next = state.clone();
                     let mut next_selected = selected.clone();
                     let reply = match command {
@@ -77,15 +88,42 @@ impl PreferencesService {
                             continue;
                         }
                         Command::Setup(command, reply) => {
-                            if let Err(error) = next.setup.apply(command) {
-                                let _ = reply
-                                    .send(Err(io::Error::new(io::ErrorKind::InvalidInput, error)));
-                                continue;
+                            match durable.apply_setup(&mut next.setup, command) {
+                                Ok(persist) => explicit = persist,
+                                Err(error) => {
+                                    let _ = reply.send(Err(io::Error::new(
+                                        io::ErrorKind::InvalidInput,
+                                        error,
+                                    )));
+                                    continue;
+                                }
                             }
                             reply
                         }
                         Command::Presentation(command, reply) => {
                             next.presentation.apply(command);
+                            durable.presentation = next.presentation.clone();
+                            explicit = true;
+                            reply
+                        }
+                        Command::Settings(command, reply) => {
+                            match next.settings.apply(&mut next.setup, &command) {
+                                Ok(persist) => explicit = persist,
+                                Err(error) => {
+                                    let _ = reply.send(Err(io::Error::new(
+                                        io::ErrorKind::InvalidInput,
+                                        error,
+                                    )));
+                                    continue;
+                                }
+                            }
+                            if explicit {
+                                if matches!(command, SettingsCommand::TranslationTarget { .. }) {
+                                    durable.translate_targets =
+                                        next.setup.translate_targets.clone();
+                                }
+                                durable.settings = next.settings.clone();
+                            }
                             reply
                         }
                         Command::Stage(path, reply) => {
@@ -95,7 +133,6 @@ impl PreferencesService {
                             reply
                         }
                     };
-                    let durable = Preferences::project(&next.setup, next.presentation.clone());
                     if (durable != *store.value() || explicit && !store.is_persisted())
                         && let Err(error) = store.save(durable)
                     {
@@ -108,6 +145,10 @@ impl PreferencesService {
                         next_selected
                     };
                     next.revision += 1;
+                    next.effective_window_seconds =
+                        next.settings.effective_window_seconds(&next.setup);
+                    next.multi_translate_forces_accurate =
+                        next.settings.multi_translate_forces_accurate(&next.setup);
                     state = next;
                     output.send_replace(state.clone());
                     changed(state.clone());
@@ -140,6 +181,10 @@ impl PreferencesService {
         self.request(|reply| Command::Presentation(command, reply))
             .await
     }
+    pub async fn settings(&self, command: SettingsCommand) -> io::Result<Snapshot> {
+        self.request(|reply| Command::Settings(command, reply))
+            .await
+    }
     pub async fn stage(&self, path: PathBuf) -> io::Result<Snapshot> {
         self.request(|reply| Command::Stage(path, reply)).await
     }
@@ -166,11 +211,139 @@ fn closed() -> io::Error {
 mod tests {
     use super::*;
     use madi_core::{
-        preferences::{Legacy, UILanguage},
+        preferences::{Legacy, Preferences, UILanguage},
         setup::{Language, MeetingMode},
     };
     fn baseline() -> Preferences {
         Preferences::from_legacy(Legacy::default())
+    }
+
+    #[tokio::test]
+    async fn settings_language_and_overlap_remain_transient_across_unrelated_saves() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("preferences.json");
+        let imported = Preferences::from_legacy(Legacy {
+            language_token_id: 50260,
+            translate_targets: vec!["English".into(), "Chinese".into()],
+            ..Legacy::default()
+        });
+        let worker =
+            PreferencesService::new(Store::load(path.clone(), imported).unwrap(), |_| {}).unwrap();
+        worker
+            .settings(SettingsCommand::InputLanguage(Some(Language::English)))
+            .await
+            .unwrap();
+        worker
+            .settings(SettingsCommand::OverlappingSpeech(false))
+            .await
+            .unwrap();
+        worker
+            .settings(SettingsCommand::InputDevice(Some("coreaudio:83".into())))
+            .await
+            .unwrap();
+        assert!(!path.exists());
+        for language in [
+            Language::Korean,
+            Language::Japanese,
+            Language::Chinese,
+            Language::English,
+        ] {
+            worker
+                .settings(SettingsCommand::TranslationTarget {
+                    language,
+                    enabled: true,
+                })
+                .await
+                .unwrap();
+        }
+        worker
+            .settings(SettingsCommand::LiveWindowSeconds(5.0))
+            .await
+            .unwrap();
+        worker
+            .settings(SettingsCommand::TranslateTailSeconds(4.0))
+            .await
+            .unwrap();
+        worker
+            .presentation(PresentationCommand::UILanguage(UILanguage::Ja))
+            .await
+            .unwrap();
+        worker.setup(SetupCommand::Diarize(false)).await.unwrap();
+        let live = worker.snapshot();
+        assert_eq!(live.setup.input_language, Some(Language::English));
+        assert!(!live.setup.osd);
+        assert_eq!(live.setup.translate_targets.len(), 4);
+        assert_eq!(live.settings.live_window_seconds, 5.0);
+        assert_eq!(live.settings.effective_window_seconds(&live.setup), 7.0);
+        assert_eq!(live.effective_window_seconds, 7.0);
+        assert!(live.multi_translate_forces_accurate);
+        let settings =
+            crate::asr_config::FileSettings::from_setup(&live.setup, 0, Vec::new()).unwrap();
+        assert_eq!(settings.language_token, Some(50259));
+        assert!(!settings.osd);
+        worker.shutdown().await.unwrap();
+        let disk = Store::load(path, baseline()).unwrap();
+        assert_eq!(disk.value().language_token_id, Some(50260));
+        let restored = disk.value().setup();
+        assert!(restored.osd);
+        assert!(restored.input_device_id.is_none());
+        assert_eq!(restored.input_language, Some(Language::Chinese));
+        assert_eq!(restored.translate_targets.len(), 4);
+        assert_eq!(disk.value().settings.translate_tail_seconds, 4.0);
+        assert_eq!(disk.value().presentation.ui_language, UILanguage::Ja);
+    }
+
+    #[tokio::test]
+    async fn settings_failure_retains_runtime_values_and_start_selection_later_persists_language() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("preferences.json");
+        let worker =
+            PreferencesService::new(Store::load(path.clone(), baseline()).unwrap(), |_| {})
+                .unwrap();
+        worker
+            .settings(SettingsCommand::InputLanguage(Some(Language::Korean)))
+            .await
+            .unwrap();
+        worker
+            .settings(SettingsCommand::OverlappingSpeech(false))
+            .await
+            .unwrap();
+        let before = worker.snapshot();
+        assert!(
+            worker
+                .settings(SettingsCommand::InputLanguage(Some(Language::Japanese)))
+                .await
+                .is_err()
+        );
+        assert!(
+            worker
+                .settings(SettingsCommand::TranslateTailSeconds(0.0))
+                .await
+                .is_err()
+        );
+        assert_eq!(worker.snapshot().revision, before.revision);
+        std::fs::create_dir(&path).unwrap();
+        assert!(
+            worker
+                .settings(SettingsCommand::LiveWindowSeconds(5.0))
+                .await
+                .is_err()
+        );
+        assert_eq!(worker.snapshot().settings, before.settings);
+        assert_eq!(worker.snapshot().setup, before.setup);
+        std::fs::remove_dir(&path).unwrap();
+        worker
+            .setup(SetupCommand::InputLanguage(Some(Language::Korean)))
+            .await
+            .unwrap();
+        assert_eq!(
+            Store::load(path, baseline())
+                .unwrap()
+                .value()
+                .language_token_id,
+            Some(50264)
+        );
+        worker.shutdown().await.unwrap();
     }
 
     #[tokio::test]

@@ -27,7 +27,7 @@ fn main() {
     };
     let records: Vec<_> = cases.into_iter().map(|case| {
         let settings = if case.defaults { FileSettings::default() } else {
-            FileSettings::from_setup(&SetupState { speaker_count: case.speaker_count, diarize: case.diarize, input_language: case.input_language, ..SetupState::default() }, case.osd, case.physical_memory, case.bias_terms).unwrap()
+            FileSettings::from_setup(&SetupState { speaker_count: case.speaker_count, diarize: case.diarize, osd: case.osd, input_language: case.input_language, ..SetupState::default() }, case.physical_memory, case.bias_terms).unwrap()
         };
         let launch = resources.file_launch(Path::new("/madi/owned/input.wav"), &settings).unwrap();
         let environment: std::collections::BTreeMap<_, _> = launch.environment.into_iter().filter_map(|(key, value)| value.map(|value| (key.to_string_lossy().into_owned(), value.to_string_lossy().into_owned()))).collect();

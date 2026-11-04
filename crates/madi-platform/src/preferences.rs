@@ -13,15 +13,22 @@ pub struct Store {
 }
 impl Store {
     pub fn load(path: PathBuf, fallback: Preferences) -> io::Result<Self> {
-        let (value, persisted) = match fs::read(&path) {
+        let (mut value, mut persisted) = match fs::read(&path) {
             Ok(bytes) => (
                 serde_json::from_slice::<Preferences>(&bytes)
                     .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
                 true,
             ),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => (fallback, false),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => (fallback.clone(), false),
             Err(error) => return Err(error),
         };
+        // Version 1 had only setup/presentation. Import newly supported keys
+        // without changing the existing file until the user saves a setting.
+        if value.schema == 1 {
+            value.schema = 2;
+            persisted = false;
+            value.settings = fallback.settings;
+        }
         value
             .validate()
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
@@ -96,6 +103,49 @@ pub fn read_legacy(defaults: &objc2_foundation::NSUserDefaults) -> Legacy {
         transcript_font_size: defaults
             .objectForKey(&size)
             .map(|_| defaults.doubleForKey(&size)),
+        settings: read_legacy_settings(defaults),
+    }
+}
+#[cfg(target_os = "macos")]
+pub fn read_legacy_settings(
+    defaults: &objc2_foundation::NSUserDefaults,
+) -> madi_core::settings::LegacySettings {
+    use objc2_foundation::{NSNumber, NSString};
+    let number = |name| {
+        defaults
+            .objectForKey(&NSString::from_str(name))
+            .and_then(|value| value.downcast::<NSNumber>().ok())
+            .map(|value| value.doubleValue())
+    };
+    let boolean = |name| {
+        number(name).and_then(|value| match value {
+            0.0 => Some(false),
+            1.0 => Some(true),
+            _ => None,
+        })
+    };
+    let app_boolean = |name| {
+        let key = NSString::from_str(name);
+        defaults
+            .objectForKey(&key)
+            .map(|_| defaults.boolForKey(&key))
+    };
+    let app_double = |name| {
+        let key = NSString::from_str(name);
+        defaults
+            .objectForKey(&key)
+            .map(|_| defaults.doubleForKey(&key))
+    };
+    madi_core::settings::LegacySettings {
+        live_window_seconds: number("liveWindowSeconds"),
+        translate_tail_seconds: number("translateTailSeconds"),
+        live_preview_enabled: boolean("livePreviewEnabled"),
+        ai_reconcile_enabled: boolean("aiReconcileEnabled"),
+        debug_capture: app_boolean("debugCapture"),
+        vad_conf_threshold: app_double("vadConfThreshold"),
+        caption: defaults
+            .dataForKey(&NSString::from_str("captionSettings.v1"))
+            .and_then(|data| serde_json::from_slice(&data.to_vec()).ok()),
     }
 }
 pub fn legacy() -> io::Result<Preferences> {
@@ -104,7 +154,7 @@ pub fn legacy() -> io::Result<Preferences> {
         use objc2::{AllocAnyThread, rc::autoreleasepool};
         use objc2_foundation::{NSString, NSUserDefaults};
         autoreleasepool(|_| {
-            // Query exactly these ten non-secret keys, never enumerate or write
+            // Query only the listed setup/presentation/session keys, never enumerate or write
             // the shipping app's domain. The CLI oracle uses a volatile fixture.
             let defaults = NSUserDefaults::initWithSuiteName(
                 NSUserDefaults::alloc(),
@@ -182,6 +232,37 @@ fn is_dark(window: &objc2_app_kit::NSWindow) -> bool {
 mod tests {
     use super::*;
     #[test]
+    fn version_one_migration_preserves_existing_choices_and_imports_new_keys_only() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("preferences.json");
+        let baseline = Preferences::from_legacy(Legacy::default());
+        let mut old = serde_json::to_value(&baseline).unwrap();
+        old["schema"] = 1.into();
+        old["languageTokenId"] = 50266.into();
+        old["diarize"] = false.into();
+        old.as_object_mut().unwrap().remove("settings");
+        let original = serde_json::to_vec(&old).unwrap();
+        fs::write(&path, &original).unwrap();
+        let mut fallback = baseline.clone();
+        fallback.settings.live_window_seconds = 5.0;
+        let mut store = Store::load(path.clone(), fallback).unwrap();
+        assert_eq!(store.value().schema, 2);
+        assert!(!store.is_persisted());
+        assert_eq!(store.value().language_token_id, Some(50266));
+        assert!(!store.value().diarize);
+        assert_eq!(store.value().settings.live_window_seconds, 5.0);
+        assert_eq!(fs::read(&path).unwrap(), original);
+        store.save(store.value().clone()).unwrap();
+        assert_eq!(
+            Store::load(path, baseline)
+                .unwrap()
+                .value()
+                .settings
+                .live_window_seconds,
+            5.0
+        );
+    }
+    #[test]
     fn corrupt_or_future_file_is_retained_and_invalid_values_cannot_be_saved() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("preferences.json");
@@ -189,7 +270,7 @@ mod tests {
         for bytes in [
             b"broken".to_vec(),
             serde_json::to_vec(&Preferences {
-                schema: 2,
+                schema: 3,
                 ..baseline.clone()
             })
             .unwrap(),

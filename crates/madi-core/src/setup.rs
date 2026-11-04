@@ -91,6 +91,9 @@ pub struct SetupState {
     pub translate_targets: Vec<String>,
     pub meeting_mode: MeetingMode,
     pub diarize: bool,
+    /// Session-only overlap switch; the Swift controller starts each launch on.
+    #[serde(default = "default_osd")]
+    pub osd: bool,
     /// Existing persistence values: 0 (auto), 2, 3, 4, 5 (five or more).
     pub speaker_count: u8,
     pub audio_source: AudioSource,
@@ -98,6 +101,10 @@ pub struct SetupState {
     /// Not persisted: Core Audio IDs can change when a device reconnects.
     pub input_device_id: Option<String>,
     pub staged_file: Option<StagedFile>,
+}
+
+fn default_osd() -> bool {
+    true
 }
 
 impl Default for SetupState {
@@ -109,6 +116,7 @@ impl Default for SetupState {
             translate_targets: Vec::new(),
             meeting_mode: MeetingMode::General,
             diarize: true,
+            osd: true,
             speaker_count: 0,
             audio_source: AudioSource::Mic,
             input_device_id: None,
@@ -117,7 +125,7 @@ impl Default for SetupState {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", content = "value", rename_all = "camelCase")]
 pub enum SetupCommand {
     InputLanguage(Option<Language>),

@@ -7,6 +7,7 @@ on:
       - 'apps/desktop/**'
       - 'crates/**'
       - 'Cargo.*'
+      - '.gitattributes'
       - 'rust-toolchain.toml'
       - 'scripts/*parity.py'
       - 'scripts/prepare_desktop_native.mjs'
@@ -28,6 +29,8 @@ on:
       - 'apps/macos/Tests/AudioDecodeLimitTests.swift'
       - 'apps/macos/Sovereign/UI/ContentView.swift'
       - 'apps/macos/Sovereign/UI/L10n.swift'
+      - 'apps/macos/Sovereign/UI/SettingsView.swift'
+      - 'apps/macos/Sovereign/UI/ClinicDisplaySupport.swift'
       - 'apps/macos/Sovereign/SovereignApp.swift'
       - 'apps/macos/Sovereign/Audio/AudioSource.swift'
       - 'apps/macos/Sovereign/SessionController.swift'
@@ -94,6 +97,7 @@ jobs:
           cargo fmt --all --check
           cargo test --locked -p madi-core -p madi-protocol -p madi-platform
           cargo clippy --locked --workspace --all-targets -- -D warnings
+          node --test tests/parity/setup_intent_queue.test.mjs
       - name: Compare against the shipping Swift parser
         if: runner.os == 'macOS'
         run: |

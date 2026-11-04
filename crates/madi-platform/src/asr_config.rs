@@ -48,7 +48,6 @@ impl FileSettings {
     /// memory and glossary terms come from native services, not UI estimates.
     pub fn from_setup(
         setup: &SetupState,
-        osd: bool,
         physical_memory: u64,
         bias_terms: Vec<String>,
     ) -> Result<Self, &'static str> {
@@ -62,7 +61,7 @@ impl FileSettings {
         };
         Ok(Self {
             diarize: setup.diarize,
-            osd,
+            osd: setup.osd,
             language_token: setup.language_token(),
             max_speakers,
             fixed_speakers,

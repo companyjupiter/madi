@@ -9,6 +9,7 @@ import { workspaceSnapshot, watchWorkspace, workspaceCommand, chooseWorkspaceFol
 import { copyLine, renameSpeaker, editFile, fileArtwork, fileSnapshot, resetFile, startFile, watchFile, type FileArtwork, type FileEdit, type FileSnapshot } from './files';
 import { modelArtwork, modelCommand, modelSnapshot, watchModels, type ModelArtwork, type ModelCommand, type ModelSnapshot } from './models';
 import { PreferencesProvider, usePreferences, type UILanguage } from './preferences';
+import { SetupIntentQueue } from './SetupIntentQueue';
 import './theme.generated.css';
 import './styles.css';
 
@@ -143,7 +144,7 @@ function SetupScreen({ start }: { start: () => void }) {
   const [error, setError] = useState('');
   const [picking, setPicking] = useState(false);
   const [dropTargeted, setDropTargeted] = useState(false);
-  const queue = useRef(Promise.resolve());
+  const [queue] = useState(() => new SetupIntentQueue(reason => setError(String(reason))));
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
     let active = true;
@@ -201,19 +202,19 @@ function SetupScreen({ start }: { start: () => void }) {
   function send(intent: SetupCommand) {
     if (browserFixture) return;
     // Serialize rapid clicks so an older IPC response cannot replace newer UI.
-    queue.current = queue.current.then(async () => {
+    void queue.enqueue(async () => {
       const next = await command(intent);
       setState(previous => previous && previous.revision > next.revision ? previous : next);
-    }).catch(reason => setError(String(reason)));
+    });
   }
 
   function pickFile() {
     if (browserFixture || picking) return;
     setOpen(null); setPicking(true);
-    queue.current = queue.current.then(async () => {
+    void queue.enqueue(async () => {
       const next = await chooseFile();
       setState(previous => previous && previous.revision > next.revision ? previous : next);
-    }).catch(reason => setError(String(reason))).finally(() => setPicking(false));
+    }).finally(() => setPicking(false));
   }
 
   function picker(id: string, label: string, children: ReactNode, mic = false) {
@@ -298,7 +299,7 @@ function SetupScreen({ start }: { start: () => void }) {
               <Icon name="folder-plus" size={24} /><span>{text('Choose file or drag & drop')}</span>
             </button>}
             <button className={`cta ${state.stagedFile ? '' : 'unavailable'}`} aria-disabled={!state.stagedFile}
-              onClick={() => { if (state.stagedFile) { queue.current = queue.current.then(() => start()).catch(reason => setError(String(reason))); } }}>{text('Start from file')}</button>
+              onClick={() => { if (state.stagedFile) void queue.enqueue(start); }}>{text('Start from file')}</button>
             <div className="or-divider"><span /><span>or</span><span /></div>
             <div className="record-row">
               {picker('mic', micLabel, <>

@@ -1,6 +1,7 @@
 use crate::files_host::FilesHost;
 use madi_core::{
     preferences::{Appearance, PresentationCommand},
+    settings::SettingsCommand,
     setup::SetupState,
 };
 use madi_platform::{
@@ -139,6 +140,20 @@ pub async fn preferences_command(
     service(window.app_handle())
         .await?
         .presentation(command)
+        .await
+        .map_err(|error| error.to_string())
+}
+#[tauri::command]
+pub async fn settings_command(
+    window: tauri::WebviewWindow,
+    command: SettingsCommand,
+) -> Result<Snapshot, String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    service(window.app_handle())
+        .await?
+        .settings(command)
         .await
         .map_err(|error| error.to_string())
 }

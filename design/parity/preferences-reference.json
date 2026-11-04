@@ -1,5082 +1,1920 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "cases": 432,
-  "fontStepSnapshots": 3024,
+  "cases": 725,
+  "fontStepSnapshots": 5075,
+  "captionBlobCases": 105,
+  "captionClampSnapshots": 725,
+  "effectiveWindowSnapshots": 725,
   "sources": {
     "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
     "apps/macos/Sovereign/UI/ContentView.swift": "b546ea492be43d6c0ef978b4f57d5ad33aec282816bc9a9e37f789085810d511",
     "apps/macos/Sovereign/UI/L10n.swift": "78050a1a0859e22edfda7c37aa0a4754267411e4020e1db2ef9c8bbc5b434410",
     "apps/macos/Sovereign/SovereignApp.swift": "78e57ec6ba500686dc410c938bd1f583d112e00e29bad6276c5cdb363fba9c29",
     "apps/macos/Sovereign/Audio/AudioSource.swift": "d536fe141172773722101886e0330b3c6f1605107ef610ad1a887b2d421f10b5",
-    "apps/macos/Sovereign/Transcript/MeetingMode.swift": "f8b2c4ec52a84703ab5ff7345b5d3b09ec80557b103084d001b6eeab2719266b"
+    "apps/macos/Sovereign/Transcript/MeetingMode.swift": "f8b2c4ec52a84703ab5ff7345b5d3b09ec80557b103084d001b6eeab2719266b",
+    "apps/macos/Sovereign/UI/SettingsView.swift": "0bd71950c651bce1f50c95ddedfd95bae9c40a09f10208552cdae90c6b396f07",
+    "apps/macos/Sovereign/UI/ClinicDisplaySupport.swift": "75cc35bd1be94e5dc691e4203551805b978d94451266440e1dc8f5a2d44b35b5"
   },
-  "corpusSHA256": "de9e47124396622441011b80a1979cc4a25e472d43c09ce02e867bd140c9b91d",
-  "resultSHA256": "87a63cfd77b7b9e4ae77a9481fb9c0de42441c86158a19518174a986a6de7e65",
+  "corpusSHA256": "cd5094604be4df6b7b6df7669792b3358e42cb5a9ad48988434a3471122ca4a7",
+  "resultSHA256": "895f30973679749a683c1ae68c248b7d7e00ec198936a94a478969b622b3c39d",
   "normalized": [
+    {},
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "general",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "general"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "oneOnOne",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "oneOnOne"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "standup",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "standup"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "interview",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "interview"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "lecture"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": -1,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 3,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 5,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 6,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": false,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "meetingMode": "future"
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 255,
-      "languageTokenId": 0,
-      "meetingMode": "future",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 1,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": -2,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 1,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 2,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 22,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 1,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": -2,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 2,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 22,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 1,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": true,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": false,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "0",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "1",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "-2",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "0",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "1",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "2",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "22.5",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "true",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "false",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "YES",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "NO",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "1",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "0",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "22.5",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "en",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "ja",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "ko",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "light",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "dark",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "system",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "0",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "1",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "-2",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "0",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "1",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "2",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "22.5",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "true",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "false",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "YES",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "NO",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "1",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "0",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "22.5",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "en",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "ja",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "ko",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "light",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "dark",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "system",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
+      "meetingMode": "future"
+    },
+    {},
+    {
+      "languageTokenId": 1
+    },
+    {
+      "languageTokenId": -2
+    },
+    {},
+    {
+      "languageTokenId": 1
+    },
+    {
+      "languageTokenId": 2
+    },
+    {
+      "languageTokenId": 22
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "languageTokenId": 1
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "fixedSpeakerCount": 1
+    },
+    {
+      "fixedSpeakerCount": -2
+    },
+    {},
+    {
+      "fixedSpeakerCount": 1
+    },
+    {
+      "fixedSpeakerCount": 2
+    },
+    {
+      "fixedSpeakerCount": 22
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "fixedSpeakerCount": 1
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": true
+    },
+    {
+      "diarizeEnabled": true
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": true
+    },
+    {
+      "diarizeEnabled": true
+    },
+    {
+      "diarizeEnabled": true
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": true
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": true
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": true
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "diarizeEnabled": false
+    },
+    {
+      "audioSource": "0"
+    },
+    {
+      "audioSource": "1"
+    },
+    {
+      "audioSource": "-2"
+    },
+    {
+      "audioSource": "0"
+    },
+    {
+      "audioSource": "1"
+    },
+    {
+      "audioSource": "2"
+    },
+    {
+      "audioSource": "22.5"
+    },
+    {},
+    {
+      "audioSource": "true"
+    },
+    {
+      "audioSource": "false"
+    },
+    {
+      "audioSource": "YES"
+    },
+    {
+      "audioSource": "NO"
+    },
+    {
+      "audioSource": "1"
+    },
+    {
+      "audioSource": "0"
+    },
+    {
+      "audioSource": "22.5"
+    },
+    {
+      "audioSource": "en"
+    },
+    {
+      "audioSource": "ja"
+    },
+    {
+      "audioSource": "ko"
+    },
+    {
+      "audioSource": "light"
+    },
+    {
+      "audioSource": "dark"
+    },
+    {
+      "audioSource": "system"
+    },
+    {},
+    {},
+    {},
+    {
+      "meetingMode": "0"
+    },
+    {
+      "meetingMode": "1"
+    },
+    {
+      "meetingMode": "-2"
+    },
+    {
+      "meetingMode": "0"
+    },
+    {
+      "meetingMode": "1"
+    },
+    {
+      "meetingMode": "2"
+    },
+    {
+      "meetingMode": "22.5"
+    },
+    {},
+    {
+      "meetingMode": "true"
+    },
+    {
+      "meetingMode": "false"
+    },
+    {
+      "meetingMode": "YES"
+    },
+    {
+      "meetingMode": "NO"
+    },
+    {
+      "meetingMode": "1"
+    },
+    {
+      "meetingMode": "0"
+    },
+    {
+      "meetingMode": "22.5"
+    },
+    {
+      "meetingMode": "en"
+    },
+    {
+      "meetingMode": "ja"
+    },
+    {
+      "meetingMode": "ko"
+    },
+    {
+      "meetingMode": "light"
+    },
+    {
+      "meetingMode": "dark"
+    },
+    {
+      "meetingMode": "system"
+    },
+    {},
+    {},
+    {},
+    {
       "uiLanguage": "0"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "1"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "-2"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "0"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "1"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "2"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "22.5"
     },
+    {},
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "true"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "false"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "YES"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "NO"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "1"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "0"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "22.5"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "en"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "ja"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "ko"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "light"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "dark"
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
       "uiLanguage": "system"
     },
+    {},
+    {},
+    {},
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "0",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "1",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "-2",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "0",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "1",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "2",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "22.5",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "true",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "false",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "YES",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "NO",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "1",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "0",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "22.5",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "en",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "ja",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "ko",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "light",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "dark",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "system",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": true,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": true,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": true,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": true,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": true,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": true,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": true,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": true,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": false,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 1.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": -2.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 1.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 2.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 22.5,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 1.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 22.5,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
+      "appearance": "0"
+    },
+    {
+      "appearance": "1"
+    },
+    {
+      "appearance": "-2"
+    },
+    {
+      "appearance": "0"
+    },
+    {
+      "appearance": "1"
+    },
+    {
+      "appearance": "2"
+    },
+    {
+      "appearance": "22.5"
+    },
+    {},
+    {
+      "appearance": "true"
+    },
+    {
+      "appearance": "false"
+    },
+    {
+      "appearance": "YES"
+    },
+    {
+      "appearance": "NO"
+    },
+    {
+      "appearance": "1"
+    },
+    {
+      "appearance": "0"
+    },
+    {
+      "appearance": "22.5"
+    },
+    {
+      "appearance": "en"
+    },
+    {
+      "appearance": "ja"
+    },
+    {
+      "appearance": "ko"
+    },
+    {
+      "appearance": "light"
+    },
+    {
+      "appearance": "dark"
+    },
+    {
+      "appearance": "system"
+    },
+    {},
+    {},
+    {},
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": true
+    },
+    {
+      "transcriptViewMode": true
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": true
+    },
+    {
+      "transcriptViewMode": true
+    },
+    {
+      "transcriptViewMode": true
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": true
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": true
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": true
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptViewMode": false
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 1.0
+    },
+    {
+      "transcriptFontSize": -2.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 1.0
+    },
+    {
+      "transcriptFontSize": 2.0
+    },
+    {
+      "transcriptFontSize": 22.5
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 1.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 22.5
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
       "translateTargets": [
         "x"
-      ],
-      "uiLanguage": ""
+      ]
+    },
+    {},
+    {
+      "settings": {
+        "liveWindowSeconds": 0.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "settings": {
+        "liveWindowSeconds": 1.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
+      "settings": {
+        "liveWindowSeconds": -2.0
+      }
+    },
+    {
+      "settings": {
+        "liveWindowSeconds": 0.0
+      }
+    },
+    {
+      "settings": {
+        "liveWindowSeconds": 1.0
+      }
+    },
+    {
+      "settings": {
+        "liveWindowSeconds": 2.0
+      }
+    },
+    {
+      "settings": {
+        "liveWindowSeconds": 22.5
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "translateTailSeconds": 0.0
+      }
+    },
+    {
+      "settings": {
+        "translateTailSeconds": 1.0
+      }
+    },
+    {
+      "settings": {
+        "translateTailSeconds": -2.0
+      }
+    },
+    {
+      "settings": {
+        "translateTailSeconds": 0.0
+      }
+    },
+    {
+      "settings": {
+        "translateTailSeconds": 1.0
+      }
+    },
+    {
+      "settings": {
+        "translateTailSeconds": 2.0
+      }
+    },
+    {
+      "settings": {
+        "translateTailSeconds": 22.5
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "livePreviewEnabled": false
+      }
+    },
+    {
+      "settings": {
+        "livePreviewEnabled": true
+      }
+    },
+    {},
+    {
+      "settings": {
+        "livePreviewEnabled": false
+      }
+    },
+    {
+      "settings": {
+        "livePreviewEnabled": true
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "aiReconcileEnabled": false
+      }
+    },
+    {
+      "settings": {
+        "aiReconcileEnabled": true
+      }
+    },
+    {},
+    {
+      "settings": {
+        "aiReconcileEnabled": false
+      }
+    },
+    {
+      "settings": {
+        "aiReconcileEnabled": true
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": true
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": true
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": true
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": true
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": true
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": true
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": true
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": true
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "debugCapture": false
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 1.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": -2.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 1.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 2.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 22.5
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 1.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 22.5
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {
+      "settings": {
+        "vadConfThreshold": 0.0
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": -9223372036854775808,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
-      "languageTokenId": 0,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": 1,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": 50259,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": 50260,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": 50264,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": 50266,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": 99999,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": 4294967296,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
       "diarizeEnabled": true,
       "fixedSpeakerCount": 4,
       "languageTokenId": 9223372036854775807,
       "meetingMode": "lecture",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese"
-      ],
-      "uiLanguage": ""
+      ]
     },
+    {},
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
-    },
-    {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Japanese",
         "Japanese",
         "Japanese"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "Korean",
         "English",
         "Japanese",
         "Chinese",
         "unknown"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "é",
         "é",
@@ -5088,48 +1926,21 @@
         "A",
         "😀",
         "💡"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "é",
         "é"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "가",
         "가"
-      ],
-      "uiLanguage": ""
+      ]
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": null,
-      "transcriptViewMode": null,
       "translateTargets": [
         "",
         " ",
@@ -5139,152 +1950,960 @@
         "ss",
         "𝄞",
         "😀"
+      ]
+    },
+    {
+      "transcriptFontSize": -100.0
+    },
+    {
+      "transcriptFontSize": -0.0
+    },
+    {
+      "transcriptFontSize": 0.0
+    },
+    {
+      "transcriptFontSize": 1.0
+    },
+    {
+      "transcriptFontSize": 11.5
+    },
+    {
+      "transcriptFontSize": 12.0
+    },
+    {
+      "transcriptFontSize": 16.0
+    },
+    {
+      "transcriptFontSize": 33.0
+    },
+    {
+      "transcriptFontSize": 34.0
+    },
+    {
+      "transcriptFontSize": 35.0
+    },
+    {
+      "transcriptFontSize": 100.0
+    },
+    {
+      "transcriptFontSize": 1e+100
+    },
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": "Japanese",
+          "patientPanelEnabled": false,
+          "patientScreenIndex": 2,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 2.0,
+          "panelWidth": 100.0,
+          "patientFontSize": 150.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": -50.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": -0.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": -1.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 0.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 1.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 14.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 24.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 48.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 96.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 480.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 1400.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": -0.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": -1.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 0.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 1.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 14.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 24.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 48.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 96.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 480.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 1400.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": -0.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": -1.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 0.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 1.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 14.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 24.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 48.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 96.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 480.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 1400.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": -0.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": -1.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 1.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 14.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 24.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 48.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 96.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 480.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 1400.0,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": true,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": 0,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": 1,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": -1,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": -9223372036854775808,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": 9223372036854775807,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": null,
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": "",
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": "Japanese",
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {
+      "settings": {
+        "caption": {
+          "minScaleFactor": 0.9,
+          "panelWidth": 760.0,
+          "patientFontSize": 46.0,
+          "patientLangOverride": "unknown",
+          "patientPanelEnabled": false,
+          "patientScreenIndex": null,
+          "staffFontSize": 26.0
+        }
+      }
+    },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {
+      "settings": {
+        "liveWindowSeconds": 5.0
+      }
+    },
+    {
+      "settings": {
+        "liveWindowSeconds": 7.0
+      }
+    },
+    {
+      "settings": {
+        "liveWindowSeconds": 10.0
+      }
+    },
+    {
+      "settings": {
+        "liveWindowSeconds": 4.5
+      }
+    },
+    {
+      "translateTargets": [
+        "Korean"
       ],
-      "uiLanguage": ""
+      "settings": {
+        "liveWindowSeconds": 5.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": -100.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "Korean"
+      ],
+      "settings": {
+        "liveWindowSeconds": 7.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": -0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "Korean"
+      ],
+      "settings": {
+        "liveWindowSeconds": 10.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 0.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "Korean"
+      ],
+      "settings": {
+        "liveWindowSeconds": 4.5
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 1.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "Korean",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 5.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 11.5,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "Korean",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 7.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 12.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "Korean",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 10.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 16.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "Korean",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 4.5
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 33.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "English",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 5.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 34.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "English",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 7.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 35.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "English",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 10.0
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 100.0,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "English",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 4.5
+      }
     },
     {
-      "appearance": "",
-      "audioSource": "",
-      "diarizeEnabled": null,
-      "fixedSpeakerCount": 0,
-      "languageTokenId": 0,
-      "meetingMode": "",
-      "transcriptFontSize": 1e+100,
-      "transcriptViewMode": null,
-      "translateTargets": [],
-      "uiLanguage": ""
+      "translateTargets": [
+        "Korean",
+        "English",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 5.0
+      }
+    },
+    {
+      "translateTargets": [
+        "Korean",
+        "English",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 7.0
+      }
+    },
+    {
+      "translateTargets": [
+        "Korean",
+        "English",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 10.0
+      }
+    },
+    {
+      "translateTargets": [
+        "Korean",
+        "English",
+        "Japanese"
+      ],
+      "settings": {
+        "liveWindowSeconds": 4.5
+      }
     }
   ]
 }

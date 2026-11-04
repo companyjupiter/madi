@@ -289,10 +289,9 @@ pub async fn start_native(
     let memory = madi_platform::model_presentation::physical_memory();
     #[cfg(not(target_os = "macos"))]
     let memory = 0;
-    // OSD/default vocabulary/settings persistence are separate migration work.
-    let settings =
-        madi_platform::asr_config::FileSettings::from_setup(&setup, true, memory, Vec::new())
-            .map_err(str::to_owned)?;
+    // The overlap toggle is session-only; vocabulary remains separate migration work.
+    let settings = madi_platform::asr_config::FileSettings::from_setup(&setup, memory, Vec::new())
+        .map_err(str::to_owned)?;
     #[cfg(target_os = "macos")]
     let admission_error = (!madi_platform::model_assets::fast_size_matches(
         &model_locations(app)?.transcription_model(),
