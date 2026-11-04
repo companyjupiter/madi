@@ -95,7 +95,7 @@ jobs:
       - name: Check formatting and shared behavior
         run: |
           python scripts/sync_desktop_resources.py
-          git diff --exit-code -- apps/desktop/public/assets apps/desktop/src/strings.generated.json apps/desktop/src/model-strings.generated.json design/parity/asset-reference.json
+          git diff --exit-code -- apps/desktop/public/assets apps/desktop/src/strings.generated.json apps/desktop/src/model-strings.generated.json apps/desktop/src/settings-strings.generated.json design/parity/asset-reference.json
           cargo fmt --all --check
           cargo test --locked -p madi-core -p madi-protocol -p madi-platform
           cargo clippy --locked --workspace --all-targets -- -D warnings

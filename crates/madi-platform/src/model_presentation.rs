@@ -80,6 +80,34 @@ pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static st
     ]))
 }
 
+pub fn settings_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
+    [
+        ("recording", "mic"),
+        ("save", "square.and.arrow.down"),
+        ("translation", "character.bubble"),
+        ("glossary", "character.book.closed"),
+        ("model", "shippingbox"),
+        ("trash", "trash"),
+        ("arrow", "arrow.right"),
+    ]
+    .into_iter()
+    .map(|(key, name)| {
+        Ok((
+            key.into(),
+            render_symbol(
+                name,
+                if matches!(key, "trash" | "arrow") {
+                    11.0
+                } else {
+                    20.0
+                },
+                unsafe { NSFontWeightRegular },
+            )?,
+        ))
+    })
+    .collect()
+}
+
 fn render_symbol(name: &str, points: f64, weight: f64) -> Result<SymbolImage, &'static str> {
     let _main =
         MainThreadMarker::new().ok_or("system artwork must be prepared on the main thread")?;

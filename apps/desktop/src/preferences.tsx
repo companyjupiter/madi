@@ -3,12 +3,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { browserFixture, type SetupState } from './bridge';
 import strings from './strings.generated.json';
+import type {SessionSettings, SettingsCommand, SettingsSetupCommand} from './settings';
 
 export type UILanguage = 'ko' | 'en' | 'ja';
 export interface Presentation { uiLanguage: UILanguage; appearance: 'system' | 'light' | 'dark'; contentMode: boolean; fontSize: number }
-interface Preferences { revision: number; setup: SetupState; presentation: Presentation }
+export interface Preferences { revision: number; setup: SetupState; presentation: Presentation; settings: SessionSettings; effectiveWindowSeconds: number; multiTranslateForcesAccurate: boolean }
 export type PresentationCommand = { type: 'uiLanguage'; value: UILanguage } | { type: 'appearance'; value: Presentation['appearance'] } | { type: 'contentMode'; value: boolean } | { type: 'smallerText' | 'largerText' };
-interface Context { presentation: Presentation; language: UILanguage; text: (key: string) => string; send: (command: PresentationCommand) => void }
+interface Context { state: Preferences; settings: (command: SettingsCommand) => void; setupSettings: (command: SettingsSetupCommand) => void; presentation: Presentation; language: UILanguage; text: (key: string) => string; send: (command: PresentationCommand) => void }
 const context = createContext<Context | null>(null);
 export function usePreferences() { const value = useContext(context); if (!value) throw new Error('preferences not ready'); return value; }
 const parameters = new URLSearchParams(location.search);
@@ -22,7 +23,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     let active = true;
     let unlisten: (() => void) | undefined;
     if (browserFixture) {
-      setState({ revision: 0, setup: {} as SetupState, presentation: { uiLanguage: 'ko', appearance: 'system', contentMode: true, fontSize: 16 } });
+      setState({ revision: 0, setup: {} as SetupState, settings: {} as SessionSettings, effectiveWindowSeconds: 10, multiTranslateForcesAccurate: false, presentation: { uiLanguage: 'ko', appearance: 'system', contentMode: true, fontSize: 16 } });
       return;
     }
     void getCurrentWebviewWindow().listen<Preferences>('preferences-changed', event => { if (active) receive(event.payload); }).then(async cleanup => {
@@ -37,7 +38,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const lang = parameters.get('lang');
   const language = lang === 'ko' || lang === 'en' || lang === 'ja' ? lang : state?.presentation.uiLanguage ?? 'ko';
   const theme = parameters.get('theme');
-  const appearance = theme === 'system' || theme === 'light' || theme === 'dark' ? theme : state?.presentation.appearance ?? 'system';
+  const appearance = location.hash === '#settings' ? 'system' : theme === 'system' || theme === 'light' || theme === 'dark' ? theme : state?.presentation.appearance ?? 'system';
   useLayoutEffect(() => {
     document.documentElement.lang = language;
     const media = matchMedia('(prefers-color-scheme: dark)');
@@ -49,7 +50,16 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     if (browserFixture) return;
     queue.current = queue.current.then(async () => receive(await invoke<Preferences>('preferences_command', { command }))).catch(reason => setError(String(reason)));
   }
+  function settings(command: SettingsCommand) {
+    queue.current = queue.current.then(async () => receive(await invoke<Preferences>('settings_command', {command}))).catch(reason => setError(String(reason)));
+  }
+  function setupSettings(command: SettingsSetupCommand) {
+    queue.current = queue.current.then(async () => {
+      await invoke('setup_command', {command});
+      receive(await invoke<Preferences>('preferences_snapshot'));
+    }).catch(reason => setError(String(reason)));
+  }
   if (error) return <pre className="harness-error" role="alert">{error}</pre>;
   if (!state) return null;
-  return <context.Provider value={{ presentation: state.presentation, language, text: key => table[key]?.[language] ?? key, send }}>{children}</context.Provider>;
+  return <context.Provider value={{ state, settings, setupSettings, presentation: state.presentation, language, text: key => table[key]?.[language] ?? key, send }}>{children}</context.Provider>;
 }

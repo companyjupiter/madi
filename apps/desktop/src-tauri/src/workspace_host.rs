@@ -68,7 +68,9 @@ pub(crate) fn service(app: &tauri::AppHandle) -> Result<Workspace, String> {
             {
                 eprintln!("workspace archive settings: {error}");
             }
-            let _ = events.emit_to("main", "workspace-changed", snapshot);
+            for label in ["main", "settings"] {
+                let _ = events.emit_to(label, "workspace-changed", &snapshot);
+            }
         });
         *slot = Some(worker.clone());
         Ok(worker)
@@ -91,7 +93,7 @@ pub async fn workspace_snapshot(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
 ) -> Result<Option<Snapshot>, String> {
-    main_window(&window)?;
+    crate::settings_host::known_window(&window)?;
     #[cfg(target_os = "macos")]
     {
         Ok(Some(service(&app)?.snapshot()))
@@ -108,7 +110,10 @@ pub async fn workspace_command(
     app: tauri::AppHandle,
     command: Action,
 ) -> Result<Snapshot, String> {
-    main_window(&window)?;
+    crate::settings_host::known_window(&window)?;
+    if window.label() == "settings" && !matches!(command, Action::AutoSave(_)) {
+        return Err("unsupported settings workspace intent".into());
+    }
     let worker = service(&app)?;
     match command {
         Action::AutoSave(enabled) => worker
@@ -134,9 +139,32 @@ pub async fn workspace_choose_folder(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
 ) -> Result<Snapshot, String> {
-    main_window(&window)?;
+    crate::settings_host::known_window(&window)?;
     let worker = service(&app)?;
     let current = worker.snapshot();
+    #[cfg(target_os = "macos")]
+    let settings_copy = if window.label() == "settings" {
+        let language = crate::setup_host::service(&app)
+            .await?
+            .snapshot()
+            .presentation
+            .ui_language;
+        let language = match language {
+            madi_core::preferences::UILanguage::Ko => "ko",
+            madi_core::preferences::UILanguage::En => "en",
+            madi_core::preferences::UILanguage::Ja => "ja",
+        };
+        let strings: serde_json::Value =
+            serde_json::from_str(include_str!("../../src/settings-strings.generated.json"))
+                .map_err(|error| error.to_string())?;
+        let text = |key: &str| strings[key][language].as_str().unwrap_or(key).to_owned();
+        Some((
+            text("Select"),
+            text("Folder to save the .md when transcription finishes"),
+        ))
+    } else {
+        None
+    };
     let host = app.state::<WorkspaceHost>();
     if host.dialog_open.swap(true, Ordering::AcqRel) {
         return Ok(current);
@@ -145,7 +173,12 @@ pub async fn workspace_choose_folder(
     let owner = app.clone();
     if let Err(error) = app.run_on_main_thread(move || {
         #[cfg(target_os = "macos")]
-        let result = madi_platform::workspace_scan::macos::choose_folder(&current.folder);
+        let result = madi_platform::workspace_scan::macos::choose_folder_with_copy(
+            &current.folder,
+            settings_copy
+                .as_ref()
+                .map(|(prompt, message)| (prompt.as_str(), message.as_str())),
+        );
         #[cfg(not(target_os = "macos"))]
         let result: std::io::Result<Option<std::path::PathBuf>> = Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,

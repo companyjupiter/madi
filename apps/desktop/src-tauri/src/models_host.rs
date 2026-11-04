@@ -6,7 +6,7 @@ use tauri::Emitter;
 use tauri::Manager;
 
 pub struct ModelsHost {
-    service: Option<ModelSetupService>,
+    pub(crate) service: Option<ModelSetupService>,
     #[cfg(target_os = "macos")]
     artwork: std::sync::OnceLock<serde_json::Value>,
     shutdown: AtomicU8,
@@ -32,7 +32,9 @@ pub fn install(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             std::env::var("MADI_TRANSLATE_MODEL").ok().as_deref(),
             model_presentation::file_size,
             move |snapshot| {
-                let _ = events.emit_to("main", "models-changed", snapshot);
+                for label in ["main", "settings"] {
+                    let _ = events.emit_to(label, "models-changed", &snapshot);
+                }
             },
         );
         ModelsHost {
@@ -57,9 +59,7 @@ pub async fn models_snapshot(
     window: tauri::WebviewWindow,
     host: tauri::State<'_, ModelsHost>,
 ) -> Result<Option<ModelSnapshot>, String> {
-    if window.label() != "main" {
-        return Err("unsupported window".into());
-    }
+    crate::settings_host::known_window(&window)?;
     Ok(match &host.service {
         Some(service) => Some(service.snapshot().await),
         None => None,

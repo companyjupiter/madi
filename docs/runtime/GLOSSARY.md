@@ -5,8 +5,8 @@ rules. `personal_vocabulary` adds its original edit diff, matching and prompt
 policy. A shared native owner now connects isolated persistence, file edits,
 incoming-word correction, final display correction and file-engine prompt terms.
 The combined Korean number pass and target-gated stable scan are now connected
-to file events; see `TEXT_PASSES.md`. **The Settings tab UI and translation
-dispatch remain incomplete.**
+to file events; see `TEXT_PASSES.md`. The Settings tab now uses that same owner.
+**Translation dispatch and complete native Settings acceptance remain open.**
 
 The original defaults remain disabled with two confirmations required. Loading
 a pre-v2 blob raises the minimum to at least two while preserving entries;
@@ -76,12 +76,22 @@ Remaining integration order:
 1. Connect translation consumers, tail dispatch and live preview before claiming
    full live/file correction behavior. The combined pass and pure stable scan
    now match the original source.
-2. Connect the original Settings rows and verify native appearance/interactions.
+2. Verify populated Settings rows, destructive actions and full native appearance.
 3. Verify real-user glossary import/relaunch, live capture and full UI acceptance.
 
 Reference: `design/parity/glossary-reference.json`. Local evidence:
 `docs/evidence/macos-glossary-value-2026-11-04.json`. No real user glossary has
 been read, changed or imported by this comparison.
+
+The Settings transport adds native-ordered display rows and decimal string
+labels for hit counts/minimum hits, avoiding JavaScript UTF-16 ordering and
+Int64 rounding. These presentation fields never enter the stored glossary.
+A persistence regression checks Swift ordering across BMP/supplementary Unicode,
+Int64.max labels, disabled active-count semantics, save and reopen. Actual macOS
+UI checks toggle application off→on→off, change the threshold 2→3→2 and verify
+restoration after app relaunch. No learned entries were removed. This candidate
+passes 97 Rust tests and four frontend tests; see
+`docs/evidence/macos-settings-ui-2026-11-04.json`.
 
 The value-only revision `8ddd3c3` passed desktop CI `41752275613` with 88 macOS /
 80 Windows Rust tests. Both clean executables and the macOS package/runtime/

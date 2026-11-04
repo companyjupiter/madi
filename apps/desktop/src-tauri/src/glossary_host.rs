@@ -44,7 +44,9 @@ pub async fn service(app: &tauri::AppHandle) -> Result<GlossaryService, String> 
     }
     let events = app.clone();
     let worker = GlossaryService::new(store, move |snapshot| {
-        let _ = events.emit_to("main", "glossary-changed", snapshot);
+        for label in ["main", "settings"] {
+            let _ = events.emit_to(label, "glossary-changed", &snapshot);
+        }
     })
     .map_err(|error| error.to_string())?;
     *slot = Some(worker.clone());
@@ -52,9 +54,7 @@ pub async fn service(app: &tauri::AppHandle) -> Result<GlossaryService, String> 
 }
 #[tauri::command]
 pub async fn glossary_snapshot(window: tauri::WebviewWindow) -> Result<Snapshot, String> {
-    if window.label() != "main" {
-        return Err("unsupported window".into());
-    }
+    crate::settings_host::known_window(&window)?;
     service(window.app_handle())
         .await?
         .current()
@@ -66,9 +66,7 @@ pub async fn glossary_command(
     window: tauri::WebviewWindow,
     command: SettingsCommand,
 ) -> Result<Snapshot, String> {
-    if window.label() != "main" {
-        return Err("unsupported window".into());
-    }
+    crate::settings_host::known_window(&window)?;
     service(window.app_handle())
         .await?
         .settings(command)

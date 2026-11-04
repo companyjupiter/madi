@@ -8,26 +8,49 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 |---|---|---|
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
-| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file transcript and workspace/export candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, complete transcript/settings/workspace/AI/overlays |
+| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file transcript, workspace/export and five-tab Settings candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, native Settings toolbar/form match, complete transcript/workspace/AI/overlays |
 | G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, native decode/ASR, transcript/edit differentials, timed file workflow, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
 
+- Settings UI candidate: five localized tabs connect the shared native owners
+  with an explicit Settings-only command capability. Actual macOS checks pass
+  menu/Cmd+, open, close/reopen with selected-tab retention, cross-window language
+  propagation, auto-save toggling, localized folder-panel cancellation, glossary
+  application/threshold changes, restored values after relaunch and model Finder
+  selection. Native ordered glossary rows preserve exact Int64 labels. All 97
+  Rust and four frontend tests, clippy, frontend/debug app and strict package
+  checks pass; the 95.38 MiB relocated app produces 22 Metal words and five exports.
+  Initial window height/accessibility-name gaps were corrected. The web tab bar
+  still differs from the source native toolbar; form spacing/popup chrome, full
+  control coverage, populated glossary and transfer/cancel UI remain open.
+  Live/translation/AI/caption consumers are still incomplete. See
+  `runtime/SETTINGS_CONTRACT.md` and `evidence/macos-settings-ui-2026-11-04.json`.
+
+- Actual desktop CI reruns now pass both hosts: `da3b146` / `41764627797`
+  (93 macOS / 85 Windows Rust tests) and `b68cbd6` / `41765167553`
+  (96 / 88), each with three frontend tests, all references and standalone builds.
+  Downloaded executables, macOS package/runtime and 16 notices match clean source
+  provenance and hashes in the corresponding `desktop-ci-*` evidence receipts.
+  This closes the earlier cp1252 failure and model-management owner CI gap;
+  these runs predate the new Settings renderer. The separate Linux glib
+  dependency-review failure remains unresolved.
+
 - Settings model-management owner: explicit re-download, translation-only cancel
   and source-compatible presence refresh preserve first-run choice and installed
   bytes. Three new loopback transfer tests cover failure/retry, independent
   cancellation and dropped callers; repeated-cancel cleanup has RED→GREEN
   mutation evidence. All eight model service tests and 96 local Rust tests pass,
-  along with formatting/clippy. Settings controls are not connected yet. See
+  along with formatting/clippy. The Settings integration above adds controls. See
   `runtime/MODEL_MANAGEMENT.md` and `evidence/model-management-owner-2026-11-04.json`.
 
 - The text-pass revision `a6f4ba2` passed Windows Rust/frontend checks but its
   Korean-number reference script failed to decode UTF-8 source with Python's
   Windows cp1252 default. `da3b146` makes both new gates' text I/O explicitly
   UTF-8. A local cp1252-default reproduction fails before the fix and both
-  portable gates pass after it; actual rerun CI remains pending. The macOS job
+  portable gates pass after it; the actual rerun passes both hosts as recorded above. The original macOS job
   passes all gates and builds with clean, hash-verified artifacts in
   `evidence/desktop-ci-a6f4ba2-2026-11-04.json`. Windows completed 85 Rust tests,
   clippy and three frontend tests; its standalone build was not reached.
@@ -46,7 +69,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   native registry/manifest/generated-permission/renderer contract test fails
   before the fix and passes after it. Fresh startup, current device labels and
   the upward device menu now work. The original five Settings tabs were captured
-  for comparison; the Tauri Settings window is still not implemented.
+  for comparison; the Settings candidate and its actual checks are recorded above.
 
 - Actual macOS file-panel selection of the public JFK fixture reaches completed
   transcription and non-overwriting Markdown autosaves. Font changes (16→18→16)
@@ -76,7 +99,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   source/model/archive data and cleanup. Revision `c44dc26` passes desktop CI
   `41755961248` with 92/84 tests and clean hash-verified artifacts; its actual UI
   startup gap and the subsequent text-pass work are recorded above. Settings
-  controls, live capture and full real-user/native-UI acceptance remain open.
+  controls are now connected as described above; live capture and full real-user/native-UI acceptance remain open.
   See `runtime/GLOSSARY.md` and
   `evidence/macos-vocabulary-integration-2026-11-04.json`.
 

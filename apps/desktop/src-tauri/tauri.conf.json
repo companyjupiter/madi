@@ -10,27 +10,48 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{
-      "label": "main",
-      "title": "Madi UI Parity",
-      "width": 1150,
-      "height": 710,
-      "minWidth": 980,
-      "minHeight": 640,
-      "center": true,
-      "visible": false,
-      "resizable": true,
-      "titleBarStyle": "Transparent",
-      "hiddenTitle": true,
-      "backgroundColor": "#ffffff"
-    }],
+    "windows": [
+      {
+        "label": "main",
+        "title": "Madi UI Parity",
+        "width": 1150,
+        "height": 710,
+        "minWidth": 980,
+        "minHeight": 640,
+        "center": true,
+        "visible": false,
+        "resizable": true,
+        "titleBarStyle": "Transparent",
+        "hiddenTitle": true,
+        "backgroundColor": "#ffffff"
+      },
+      {
+        "label": "settings",
+        "url": "index.html#settings",
+        "title": "녹음",
+        "width": 492,
+        "height": 500,
+        "center": true,
+        "visible": false,
+        "resizable": false,
+        "minimizable": false,
+        "maximizable": false
+      }
+    ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-src 'none'",
-      "capabilities": ["main"]
+      "capabilities": [
+        "main",
+        "settings"
+      ]
     }
   },
   "bundle": {
     "active": false,
-    "icon": ["../../macos/Sovereign/Resources/AppIcon.icns", "../../macos/Sovereign/Resources/icon_app_madi.png", "icons/icon.ico"]
+    "icon": [
+      "../../macos/Sovereign/Resources/AppIcon.icns",
+      "../../macos/Sovereign/Resources/icon_app_madi.png",
+      "icons/icon.ico"
+    ]
   }
 }

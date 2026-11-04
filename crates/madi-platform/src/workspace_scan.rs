@@ -211,6 +211,12 @@ pub mod macos {
         })
     }
     pub fn choose_folder(current: &Path) -> io::Result<Option<PathBuf>> {
+        choose_folder_with_copy(current, None)
+    }
+    pub fn choose_folder_with_copy(
+        current: &Path,
+        copy: Option<(&str, &str)>,
+    ) -> io::Result<Option<PathBuf>> {
         use objc2_app_kit::{NSModalResponseOK, NSOpenPanel};
         let mtm = MainThreadMarker::new()
             .ok_or_else(|| io::Error::other("workspace picker requires the main thread"))?;
@@ -220,6 +226,10 @@ pub mod macos {
         panel.setAllowsMultipleSelection(false);
         let current = url(current)?;
         panel.setDirectoryURL(Some(&current));
+        if let Some((prompt, message)) = copy {
+            panel.setPrompt(Some(&NSString::from_str(prompt)));
+            panel.setMessage(Some(&NSString::from_str(message)));
+        }
         if panel.runModal() != NSModalResponseOK {
             return Ok(None);
         }

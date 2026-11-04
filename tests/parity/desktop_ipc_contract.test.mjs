@@ -29,3 +29,30 @@ test('every desktop command has a generated permission and a main-window grant',
     }
   }
 });
+
+test('Settings gets only its own local capabilities and cannot admit or edit files', () => {
+  const capability = JSON.parse(read('apps/desktop/src-tauri/capabilities/settings.json'));
+  assert.deepEqual(capability.windows, ['settings']);
+  assert.equal(capability.remote, undefined);
+  const commands = [
+    'settings_open', 'settings_metadata', 'settings_model_locations', 'settings_models_command', 'settings_reveal',
+    'preferences_snapshot', 'preferences_command', 'settings_command', 'glossary_snapshot', 'glossary_command',
+    'setup_command', 'audio_inputs', 'models_snapshot', 'workspace_snapshot', 'workspace_command', 'workspace_choose_folder',
+  ];
+  assert.deepEqual(capability.permissions.toSorted(), [
+    ...commands.map(command => `allow-${command.replaceAll('_', '-')}`),
+    'core:event:allow-listen', 'core:event:allow-unlisten', 'core:window:allow-set-title',
+  ].toSorted());
+  const config = JSON.parse(read('apps/desktop/src-tauri/tauri.conf.json'));
+  const settings = config.app.windows.find(window => window.label === 'settings');
+  assert.equal(settings.url, 'index.html#settings');
+  assert.equal(settings.visible, false);
+  assert.ok(config.app.security.capabilities.includes('settings'));
+  // This window can only change the two shared setup bindings. Staging/file
+  // selection and all session admission/edit commands remain main-only.
+  const main = read('apps/desktop/src-tauri/src/main.rs');
+  const setup = main.slice(main.indexOf('async fn setup_command('), main.indexOf('fn audio_inputs('));
+  assert.match(setup, /window.label\(\) == "settings"/);
+  assert.match(setup, /SetupCommand::AudioSource\(_\) \| SetupCommand::Diarize\(_\)/);
+  assert.ok(setup.indexOf('unsupported settings setup intent') < setup.indexOf('.setup(command)'));
+});

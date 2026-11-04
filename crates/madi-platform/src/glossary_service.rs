@@ -72,9 +72,42 @@ pub fn legacy() -> io::Result<Glossary> {
     }
 }
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayEntry {
+    pub wrong: String,
+    pub right: String,
+    pub hits_label: String,
+    pub active: bool,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub revision: u64,
     pub glossary: Glossary,
+    pub display_entries: Vec<DisplayEntry>,
+    pub minimum_hits_label: String,
+    pub active_count: usize,
+}
+impl Snapshot {
+    fn new(revision: u64, glossary: Glossary) -> Self {
+        let display_entries = glossary
+            .display_entries()
+            .into_iter()
+            .map(|entry| DisplayEntry {
+                wrong: entry.wrong.clone(),
+                right: entry.right.clone(),
+                hits_label: entry.hits.to_string(),
+                active: entry.hits >= glossary.min_hits.max(1),
+            })
+            .collect();
+        Self {
+            revision,
+            display_entries,
+            minimum_hits_label: glossary.min_hits.to_string(),
+            active_count: glossary.active_entries().len(),
+            glossary,
+        }
+    }
 }
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", content = "value", rename_all = "camelCase")]
@@ -107,10 +140,7 @@ pub struct GlossaryService {
 }
 impl GlossaryService {
     pub fn new(mut store: Store, changed: impl Fn(Snapshot) + Send + 'static) -> io::Result<Self> {
-        let initial = Snapshot {
-            revision: 0,
-            glossary: store.value.clone(),
-        };
+        let initial = Snapshot::new(0, store.value.clone());
         let (commands, mut input) = mpsc::unbounded_channel();
         let (output, snapshot) = watch::channel(initial.clone());
         let task = thread::Builder::new()
@@ -168,10 +198,7 @@ impl GlossaryService {
                         let _ = reply.send(Err(error));
                         continue;
                     }
-                    state = Snapshot {
-                        revision: state.revision.wrapping_add(1),
-                        glossary: next,
-                    };
+                    state = Snapshot::new(state.revision.wrapping_add(1), next);
                     output.send_replace(state.clone());
                     changed(state.clone());
                     let _ = reply.send(Ok(state.clone()));
@@ -237,6 +264,65 @@ mod tests {
             wrong: "소버림".into(),
             right: "소버린".into(),
         }
+    }
+
+    #[tokio::test]
+    async fn settings_projection_keeps_swift_order_and_exact_integer_labels_across_save() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("glossary.json");
+        let glossary: Glossary = serde_json::from_str(
+            r#"{"enabled":false,"minHits":2,"entries":{
+            "big":{"wrong":"big","right":"large","hits":9223372036854775807},
+            "\uE000":{"wrong":"\uE000","right":"bmp","hits":2},
+            "😀":{"wrong":"😀","right":"supplementary","hits":2},
+            "low":{"wrong":"low","right":"once","hits":1}
+        }}"#,
+        )
+        .unwrap();
+        let service =
+            GlossaryService::new(Store::load(path.clone(), glossary).unwrap(), |_| {}).unwrap();
+        let state = service.current().await.unwrap();
+        assert!(!path.exists());
+        assert_eq!(
+            state.active_count, 3,
+            "source counts eligibility even when disabled"
+        );
+        assert_eq!(state.minimum_hits_label, "2");
+        assert_eq!(
+            state
+                .display_entries
+                .iter()
+                .map(|entry| entry.wrong.as_str())
+                .collect::<Vec<_>>(),
+            vec!["big", "\u{E000}", "😀", "low"]
+        );
+        let ipc = serde_json::to_value(&state).unwrap();
+        assert_eq!(ipc["displayEntries"][0]["hitsLabel"], "9223372036854775807");
+        assert!(!state.display_entries[3].active);
+        service
+            .settings(SettingsCommand::Enabled(true))
+            .await
+            .unwrap();
+        let persisted: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(
+            persisted.get("displayEntries").is_none(),
+            "presentation fields never enter storage"
+        );
+        assert_eq!(persisted["entries"]["big"]["hits"].as_i64(), Some(i64::MAX));
+        let removed = service
+            .settings(SettingsCommand::Forget("😀".into()))
+            .await
+            .unwrap();
+        assert_eq!(removed.display_entries.len(), 3);
+        assert_eq!(removed.active_count, 2);
+        service.shutdown().await.unwrap();
+        let reopened =
+            GlossaryService::new(Store::load(path, Glossary::default()).unwrap(), |_| {}).unwrap();
+        let state = reopened.current().await.unwrap();
+        assert_eq!(state.display_entries[0].hits_label, "9223372036854775807");
+        assert_eq!(state.display_entries[1].wrong, "\u{E000}");
+        reopened.shutdown().await.unwrap();
     }
 
     #[tokio::test]

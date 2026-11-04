@@ -2,10 +2,11 @@
 
 The original Settings scene contains Recording, Save, conditional Translation,
 Glossary and Model tabs. Its 460×380 content frame plus SwiftUI padding is the
-layout baseline. This change ports the session-setting contract and file-engine
-admission needed by that scene. **The Settings window and its controls are not
-connected yet.** No native settings-window, live-capture or caption-overlay UI
-acceptance is claimed.
+layout baseline. The isolated Tauri Settings window now connects these controls
+to the session-setting, presentation, workspace, glossary and model owners.
+Actual macOS checks cover opening, tab selection, close/reopen, language events,
+auto-save, glossary changes, folder-panel cancellation and Finder selection.
+**Full visual parity, live capture and caption-overlay acceptance remain open.**
 
 ## Different entry points have different behavior
 
@@ -51,14 +52,40 @@ because their controls have narrower ranges. Nonfinite values fail validation.
 
 | Control family | Implemented boundary | Remaining product connection |
 |---|---|---|
-| Input/source/diarization/overlap | Shared setup and distinct Settings intents; file ASR admission uses current token/OSD | Settings controls, live capture and disabled-while-recording behavior |
-| Display language/appearance | Existing presentation owner and main-window application | Settings segmented controls; the original Settings scene itself has no preferredColorScheme override |
-| Response speed/preview | Exact restore, commands and effective-window policy | Live capture/preview consumer and Settings UI |
-| Translation targets/tail/AI correction | Four-target intent, exact persistence and tail/reconcile state | Translation and correction consumers, model availability UI |
-| Caption sizes/patient options | Strict decode, original clamp/optional-binding behavior | Native caption panels, monitor enumeration and Settings UI |
-| Debug capture/VAD threshold | Exact AppStorage restore and command validation | Session diagnostic bundles, review presentation and Settings UI |
-| Auto-save/folder/export | Existing workspace owner and file archive/export effects | Settings-specific folder panel text and bindings |
-| Glossary/model management | Shared glossary persistence, edit learning, combined stable/final text passes and prompts; first-run and Settings model-management owners | Settings controls and native download/reveal actions |
+| Input/source/diarization/overlap | Connected Settings controls; distinct transient intents; file ASR admission uses current token/OSD | Live capture and disabled-while-recording behavior |
+| Display language/appearance | Connected segmented controls and cross-window events; Settings follows system appearance as in Swift | Full native appearance/interaction comparison |
+| Response speed/preview | Connected controls, exact restore and effective-window policy | Live capture/preview consumer |
+| Translation targets/tail/AI correction | Connected controls, model availability and four-target intent | Translation and correction consumers |
+| Caption sizes/patient options | Connected controls, monitor inventory, strict decode and original clamp/optional bindings | Native caption panels and complete multi-monitor checks |
+| Debug capture/VAD threshold | Connected controls and fixed native debug-folder action | Session diagnostic bundles and review presentation |
+| Auto-save/folder/export | Connected Settings controls and localized native folder panel; existing archive/export owner | Complete native interaction and persistence matrix |
+| Glossary/model management | Connected Settings rows/actions; native ordered integer-safe glossary projection and model owner | Actual transfer/cancel UI sequence, populated glossary UI and full native comparison |
+
+## Settings-window integration
+
+One hidden configured window is shown with the native Settings menu / Cmd+,
+and the main-window Settings intent. Closing hides it; reopening retains the
+selected tab. The Settings capability permits only its explicit shared stores
+and fixed native destinations, with no arbitrary renderer file path, file
+admission, transcript edit or export authority. Settings setup intents are
+limited to audio source and diarization; its workspace intent is auto-save.
+
+Listeners subscribe before snapshots load, and monotonic revisions prevent a
+late snapshot from overwriting a newer event. Device/screen inventory refreshes
+on focus; entering Translation refreshes the model owner. Native SF artwork and
+ko/en/ja strings come from the original sources. The grouped HTML form still
+differs from SwiftUI: its web tabs are not the original AppKit toolbar, and
+popup chrome/form spacing need further comparison. The initial 33 pt height
+and accessible-name differences were corrected and checked in the rebuilt app.
+
+Local integration checks pass 97 Rust tests (12/71/14), four frontend contract/
+queue tests, clippy, frontend/debug app build and strict relocated packaging.
+The 95.38 MiB candidate also produces 22 native Metal words and five exports
+from a relocated bundle. Actual UI changes were restored: Korean language,
+auto-save on and glossary off with minimum two. A fresh process retains those
+values. Model re-download was not clicked against the installed user model;
+loopback owner tests provide separate transfer/cancellation evidence. See
+`../evidence/macos-settings-ui-2026-11-04.json` for exact capture and binary hashes.
 
 ## Verification
 

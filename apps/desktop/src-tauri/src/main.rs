@@ -14,7 +14,12 @@ use tauri::Manager;
 mod files_host;
 mod glossary_host;
 mod models_host;
+mod settings_host;
 mod setup_host;
+use settings_host::{
+    settings_metadata, settings_model_locations, settings_models_command, settings_open,
+    settings_reveal,
+};
 mod workspace_host;
 use files_host::{
     FilesHost, file_artwork, file_copy_line, file_edit, file_rename_speaker, file_reset,
@@ -89,8 +94,14 @@ async fn setup_command(
     window: tauri::WebviewWindow,
     command: SetupCommand,
 ) -> Result<SetupState, String> {
-    if window.label() != "main" {
-        return Err("unsupported window".into());
+    settings_host::known_window(&window)?;
+    if window.label() == "settings"
+        && !matches!(
+            command,
+            SetupCommand::AudioSource(_) | SetupCommand::Diarize(_)
+        )
+    {
+        return Err("unsupported settings setup intent".into());
     }
     setup_host::service(window.app_handle())
         .await?
@@ -104,9 +115,7 @@ async fn setup_command(
 fn audio_inputs(
     window: tauri::WebviewWindow,
 ) -> Result<madi_platform::audio_devices::InputDevices, String> {
-    if window.label() != "main" {
-        return Err("unsupported window".into());
-    }
+    settings_host::known_window(&window)?;
     Ok(madi_platform::audio_devices::snapshot())
 }
 
@@ -145,6 +154,7 @@ fn main() {
         .on_webview_event(setup_host::handle_drop)
         .setup(|app| {
             models_host::install(app)?;
+            settings_host::install(app)?;
             let window = app
                 .get_webview_window("main")
                 .ok_or("main window missing")?;
@@ -193,6 +203,11 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            settings_open,
+            settings_metadata,
+            settings_model_locations,
+            settings_models_command,
+            settings_reveal,
             glossary_snapshot,
             glossary_command,
             settings_command,

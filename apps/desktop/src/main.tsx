@@ -10,6 +10,8 @@ import { copyLine, renameSpeaker, editFile, fileArtwork, fileSnapshot, resetFile
 import { modelArtwork, modelCommand, modelSnapshot, watchModels, type ModelArtwork, type ModelCommand, type ModelSnapshot } from './models';
 import { PreferencesProvider, usePreferences, type UILanguage } from './preferences';
 import { SetupIntentQueue } from './SetupIntentQueue';
+import { SettingsWindow } from './SettingsWindow';
+import { openSettings } from './settings';
 import './theme.generated.css';
 import './styles.css';
 
@@ -29,6 +31,11 @@ function Icon({ name, size }: { name: string; size: number }) {
 }
 
 function App() {
+  useEffect(() => {
+    const settings = (event: Event) => {if ((event as CustomEvent).detail === 'settings') void openSettings().catch(reason => setError(String(reason)));};
+    window.addEventListener('madi-parity-intent', settings);
+    return () => window.removeEventListener('madi-parity-intent', settings);
+  }, []);
   const { language: uiLanguage } = usePreferences();
   const [models, setModels] = useState<ModelSnapshot | null | undefined>(undefined);
   const [artwork, setArtwork] = useState<ModelArtwork | null>(null);
@@ -323,4 +330,4 @@ function SetupScreen({ start }: { start: () => void }) {
   </main>;
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><PreferencesProvider><App /></PreferencesProvider></StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode><PreferencesProvider>{location.hash === '#settings' ? <SettingsWindow /> : <App />}</PreferencesProvider></StrictMode>);

@@ -1,6 +1,11 @@
 fn main() {
     let attributes =
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+            "settings_open",
+            "settings_metadata",
+            "settings_model_locations",
+            "settings_models_command",
+            "settings_reveal",
             "preferences_snapshot",
             "preferences_command",
             "settings_command",

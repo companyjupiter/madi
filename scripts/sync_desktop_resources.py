@@ -62,6 +62,25 @@ def main():
         model_strings[en] = {'ko': ko, 'en': en, 'ja': translated}
     (ROOT / 'apps/desktop/src/model-strings.generated.json').write_text(
         json.dumps(model_strings, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding="utf-8")
+    settings_strings = {}
+    settings_interpolations = {
+        r'\(variant.displayName)': '{translation}', r'\(profile)': '{profile}',
+        r'\(ramGB)': '{ram}', r'\(Int(p * 100))': '{percent}', r'\(i + 1)': '{number}',
+    }
+    for rel in ['UI/SettingsView.swift', 'UI/GlossarySettingsView.swift', 'SovereignApp.swift', 'Audio/AudioSource.swift']:
+        for match in re.finditer(pattern, (SWIFT / rel).read_text(encoding='utf-8')):
+            values = []
+            for value in match.groups():
+                if value is None:
+                    values.append(None); continue
+                for source, placeholder in settings_interpolations.items():
+                    value = value.replace(source, placeholder)
+                if r'\(' in value: raise ValueError(f'Unmapped settings interpolation: {value}')
+                values.append(json.loads('"' + value + '"'))
+            ko, en, translated = values
+            settings_strings[en] = dict(ko=ko, en=en, ja=translated or ja.get(en, en))
+    (ROOT / 'apps/desktop/src/settings-strings.generated.json').write_text(
+        json.dumps(settings_strings, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
     manifest = ROOT / "design/parity/asset-reference.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(json.dumps({"source": "apps/macos/Sovereign/Resources", "sha256": assets}, indent=2) + "\n")

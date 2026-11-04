@@ -31,6 +31,11 @@
     "allow-workspace-open",
     "allow-workspace-export",
     "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:event:allow-unlisten",
+    "allow-settings-open",
+    "allow-settings-metadata",
+    "allow-settings-model-locations",
+    "allow-settings-models-command",
+    "allow-settings-reveal"
   ]
 }

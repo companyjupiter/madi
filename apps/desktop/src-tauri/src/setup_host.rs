@@ -76,7 +76,9 @@ pub async fn service(app: &tauri::AppHandle) -> Result<PreferencesService, Strin
             });
         }
         let _ = events.emit_to("main", "setup-changed", &snapshot.setup);
-        let _ = events.emit_to("main", "preferences-changed", &snapshot);
+        for label in ["main", "settings"] {
+            let _ = events.emit_to(label, "preferences-changed", &snapshot);
+        }
     })
     .map_err(|error| error.to_string())?;
     let initial = app.clone();
@@ -124,9 +126,7 @@ fn apply_appearance(app: &tauri::AppHandle, appearance: Appearance) -> Result<()
 }
 #[tauri::command]
 pub async fn preferences_snapshot(window: tauri::WebviewWindow) -> Result<Snapshot, String> {
-    if window.label() != "main" {
-        return Err("unsupported window".into());
-    }
+    crate::settings_host::known_window(&window)?;
     Ok(service(window.app_handle()).await?.snapshot())
 }
 #[tauri::command]
@@ -134,9 +134,7 @@ pub async fn preferences_command(
     window: tauri::WebviewWindow,
     command: PresentationCommand,
 ) -> Result<Snapshot, String> {
-    if window.label() != "main" {
-        return Err("unsupported window".into());
-    }
+    crate::settings_host::known_window(&window)?;
     service(window.app_handle())
         .await?
         .presentation(command)
@@ -148,9 +146,7 @@ pub async fn settings_command(
     window: tauri::WebviewWindow,
     command: SettingsCommand,
 ) -> Result<Snapshot, String> {
-    if window.label() != "main" {
-        return Err("unsupported window".into());
-    }
+    crate::settings_host::known_window(&window)?;
     service(window.app_handle())
         .await?
         .settings(command)

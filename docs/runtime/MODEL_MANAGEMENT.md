@@ -5,7 +5,8 @@ installation. `ModelSetupService::manage` now exposes transcription/translation
 re-download, translation-only cancellation and translation presence refresh.
 These actions preserve the user's first-run choice and share the existing
 pinned downloader, atomic staging, generation checks and shutdown owner.
-**The Settings window and renderer controls are not connected yet.**
+The isolated Settings window now connects these commands and current native
+locations. Translation refreshes on tab selection; snapshots reach both windows.
 
 `locations` returns the same native-selected paths and fast size-based installed
 flags used by the original Settings view, plus its decimal disk-GB label. These
@@ -35,6 +36,9 @@ regression fail; restoring it passes. The full local Rust suite passes 96 tests
 (12 core / 70 platform / 14 protocol), with formatting and workspace clippy.
 See `../evidence/model-management-owner-2026-11-04.json`.
 
-Remaining work: native Settings window lifecycle, localized controls, per-tab
-refresh, native Finder reveal and folder-panel behavior, cross-window events,
-recording-disabled controls, actual UI interactions and visual comparison.
+Actual macOS checks verify both installed-status tabs and that Show in Finder
+selects `model.q8.safetensors`. Menu open, close/reopen, localization propagation
+and Settings folder-panel cancellation also pass. The existing model was not
+re-downloaded for UI verification. Transfer/cancel UI, recording-disabled
+controls and full visual comparison remain open. See `SETTINGS_CONTRACT.md` and
+`../evidence/macos-settings-ui-2026-11-04.json`.
