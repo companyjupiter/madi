@@ -5,7 +5,9 @@ use std::sync::{
     Mutex,
     atomic::{AtomicBool, Ordering},
 };
-use tauri::{Emitter, Manager};
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
+use tauri::Manager;
 
 #[derive(Default)]
 pub struct FilesHost {
