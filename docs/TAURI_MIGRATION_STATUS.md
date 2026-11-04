@@ -27,7 +27,10 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   Korean-number reference script failed to decode UTF-8 source with Python's
   Windows cp1252 default. `da3b146` makes both new gates' text I/O explicitly
   UTF-8. A local cp1252-default reproduction fails before the fix and both
-  portable gates pass after it; actual rerun CI remains pending.
+  portable gates pass after it; actual rerun CI remains pending. The macOS job
+  passes all gates and builds with clean, hash-verified artifacts in
+  `evidence/desktop-ci-a6f4ba2-2026-11-04.json`. Windows completed 85 Rust tests,
+  clippy and three frontend tests; its standalone build was not reached.
 
 - Combined text-pass candidate: Korean number formatting matches 5,839 Swift
   inputs; combined glossary/number correction and the original stable scan match
