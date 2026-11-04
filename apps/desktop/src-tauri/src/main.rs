@@ -235,5 +235,11 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Madi parity harness")
-        .run(|app, event| models_host::on_run_event(app, &event));
+        .run(|app, event| {
+            models_host::on_run_event(app, &event);
+            #[cfg(target_os = "macos")]
+            if matches!(event, tauri::RunEvent::Exit) {
+                madi_platform::settings_toolbar::shutdown();
+            }
+        });
 }

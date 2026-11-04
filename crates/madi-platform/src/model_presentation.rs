@@ -87,6 +87,7 @@ pub fn settings_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str>
         ("translation", "character.bubble"),
         ("glossary", "character.book.closed"),
         ("model", "shippingbox"),
+        ("picker", "chevron.up.chevron.down"),
         ("trash", "trash"),
         ("arrow", "arrow.right"),
     ]
@@ -96,7 +97,7 @@ pub fn settings_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str>
             key.into(),
             render_symbol(
                 name,
-                if matches!(key, "trash" | "arrow") {
+                if matches!(key, "picker" | "trash" | "arrow") {
                     11.0
                 } else {
                     20.0

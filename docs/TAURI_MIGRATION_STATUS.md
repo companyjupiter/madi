@@ -15,6 +15,22 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Native macOS Settings toolbar candidate: actual AppKit buttons now replace
+  the web tabs, with original SF Symbols, centered title and a 492×500 pt frame.
+  All five native callbacks, selection highlight, close/reopen and ko/en/ja
+  labels are exercised. Original/candidate captures both measure 984×1000 at 2×.
+  Native body/caption font measurements, picker artwork, grouped note/button
+  rows and the bottom inset improve the form match. Fine row metrics and text
+  wrapping still differ; full UI parity remains **NOT_PASS**. Local checks and
+  the relocated Metal/export probe pass for the 95.72 MiB candidate; see
+  `evidence/macos-settings-toolbar-2026-11-04.json`.
+
+- Settings integration `50ce8a4` passes desktop CI `41767977083` on both hosts:
+  97 macOS / 89 Windows Rust tests, four frontend tests, all differential gates
+  and builds. Both downloaded artifact sets match clean source, binary, package,
+  runtime and 16-notice hashes in `evidence/desktop-ci-50ce8a4-2026-11-04.json`.
+  This precedes the native-toolbar follow-up above.
+
 - Settings UI candidate: five localized tabs connect the shared native owners
   with an explicit Settings-only command capability. Actual macOS checks pass
   menu/Cmd+, open, close/reopen with selected-tab retention, cross-window language
@@ -23,8 +39,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   selection. Native ordered glossary rows preserve exact Int64 labels. All 97
   Rust and four frontend tests, clippy, frontend/debug app and strict package
   checks pass; the 95.38 MiB relocated app produces 22 Metal words and five exports.
-  Initial window height/accessibility-name gaps were corrected. The web tab bar
-  still differs from the source native toolbar; form spacing/popup chrome, full
+  Initial window height/accessibility-name gaps were corrected. This revision's
+  web tab bar is superseded by the native follow-up above; form spacing, full
   control coverage, populated glossary and transfer/cancel UI remain open.
   Live/translation/AI/caption consumers are still incomplete. See
   `runtime/SETTINGS_CONTRACT.md` and `evidence/macos-settings-ui-2026-11-04.json`.

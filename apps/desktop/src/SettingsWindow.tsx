@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { audioInputs, type AudioSource, type InputDevices, type Language } from './bridge';
 import { modelSnapshot, type ModelDownload } from './models';
@@ -29,7 +29,7 @@ function Section({title, children}: {title?: string; children: ReactNode}) {
 }
 function Row({label, children, help}: {label: string; children: ReactNode; help?: string}) {
   return <div className="settings-row" title={help}><span>{label}</span>{isValidElement(children) && children.type === 'select'
-    ? cloneElement(children as ReactElement<{'aria-label'?: string; title?: string}>, {'aria-label':label,title:help}) : children}</div>;
+    ? <span className="settings-popup">{cloneElement(children as ReactElement<{'aria-label'?: string; title?: string}>, {'aria-label':label,title:help})}<i aria-hidden className="settings-popup-indicator"/></span> : children}</div>;
 }
 function Toggle({label, value, change, disabled, help}: {label: string; value: boolean; change: (value: boolean) => void; disabled?: boolean; help?: string}) {
   return <div className="settings-row" title={help}><span>{label}</span><button className="settings-toggle" role="switch" aria-label={label} aria-checked={value} disabled={disabled} onClick={() => change(!value)}><span /></button></div>;
@@ -46,6 +46,7 @@ export function SettingsWindow() {
   const {setup, settings, presentation} = state;
   const [tab, setTab] = useState<Tab>('recording');
   const [error, setError] = useState('');
+  const [toolbarListenerReady, setToolbarListenerReady] = useState(false);
   const fail = (reason: unknown) => setError(String(reason));
   const [metadata, setMetadata] = useState<SettingsMetadata | null>(null);
   const [locations, setLocations] = useState<ModelLocations | null>(null);
@@ -58,30 +59,39 @@ export function SettingsWindow() {
   const t = (key: string, values: Record<string,string> = {}) => Object.entries(values).reduce((text,[name,value]) => text.replaceAll(`{${name}}`,value),table[key]?.[language] ?? key);
   useEffect(() => {
     let active = true;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWebviewWindow().listen<string>('settings-tab-changed', event => {
+      if(active && Object.hasOwn(tabNames,event.payload)) setTab(event.payload as Tab);
+    }).then(cleanup => {if(!active){cleanup();return;} unlisten=cleanup;setToolbarListenerReady(true);},fail);
+    return () => {active=false;unlisten?.();};
+  }, []);
+  useEffect(() => {
+    if(!toolbarListenerReady) return;
+    let active = true;
     const refresh = () => {void settingsMetadata().then(value => {if(active)setMetadata(value);}, fail); void audioInputs().then(value => {if(active)setDevices(value);},fail);};
     refresh(); window.addEventListener('focus',refresh);
     return () => {active=false;window.removeEventListener('focus',refresh);};
-  }, []);
+  }, [language,toolbarListenerReady]);
   useEffect(() => {let active=true; void modelLocations().then(value=>{if(active)setLocations(value);},fail); return()=>{active=false;};},[models?.required.state,models?.translation.state]);
   useEffect(() => {void getCurrentWebviewWindow().setTitle(t(tabNames[tab])).catch(fail);},[tab,language]);
   useEffect(() => {if(tab==='translation') act(()=>manageModels({type:'refreshTranslation'}));},[tab]);
   const tabs = (Object.keys(tabNames) as Tab[]).filter(name=>name!=='translation'||models?.translationEngineAvailable);
   const symbol = (key: string) => {const image=metadata?.artwork?.[key];return image?<i aria-hidden style={{width:image.width,height:image.height,maskImage:`url(${image.dataUrl})`}}/>:null;};
   const note=(key:string,values?:Record<string,string>)=><p className="settings-note">{t(key,values)}</p>;
-  const button=(key:string,action:()=>Promise<unknown>)=><button className="settings-action" onClick={()=>act(action)}>{t(key)}</button>;
+  const button=(key:string,action:()=>Promise<unknown>,inline=false)=>{const content=<button className="settings-action" onClick={()=>act(action)}>{t(key)}</button>;return inline?content:<div className="settings-button-row">{content}</div>;};
   const toggle=(key:string,value:boolean,change:(value:boolean)=>void,disabled=false,help?:string)=><Toggle label={t(key)} value={value} change={change} disabled={disabled} help={help&&t(help)}/>;
   const translationAvailable=Boolean(models?.translationEngineAvailable&&locations?.translationInstalled);
   const caption=settings.caption;
   const learned=glossary?.displayEntries??[];
   const modelStatus=(value:ModelDownload)=>value.state==='ready'?t('Installed'):value.state==='verifying'?t('Verifying…'):value.state==='downloading'?t('Downloading {percent}%',{percent:String(Math.trunc(value.value*100))}):value.state==='failed'?value.value:t('Not installed');
-  return <main className="settings-window">
-    <nav className="settings-tabs" role="tablist" aria-label={language==='ko'?'설정':'Settings'}>
+  return <main className="settings-window" data-native-picker={Boolean(metadata?.artwork?.picker)} style={{'--settings-picker-image':metadata?.artwork?.picker?`url(${metadata.artwork.picker.dataUrl})`:undefined} as CSSProperties}>
+    {!metadata?.nativeToolbar && <nav className="settings-tabs" role="tablist" aria-label={language==='ko'?'설정':'Settings'}>
       {tabs.map((name,index)=><button key={name} id={`tab-${name}`} role="tab" tabIndex={tab===name?0:-1} aria-selected={tab===name} aria-controls={`panel-${name}`} onClick={()=>setTab(name)}
         onKeyDown={event=>{const next=event.key==='ArrowRight'?tabs[(index+1)%tabs.length]:event.key==='ArrowLeft'?tabs[(index+tabs.length-1)%tabs.length]:event.key==='Home'?tabs[0]:event.key==='End'?tabs.at(-1):undefined;if(next){event.preventDefault();setTab(next);document.getElementById(`tab-${next}`)?.focus();}}}>
         {symbol(name)}<span>{t(tabNames[name])}</span></button>)}
-    </nav>
+    </nav>}
     {error&&<p className="settings-error" role="alert">{error}</p>}
-    <div key={tab} id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="settings-form">
+    <div key={tab} id={`panel-${tab}`} role="tabpanel" aria-label={t(tabNames[tab])} aria-labelledby={metadata?.nativeToolbar?undefined:`tab-${tab}`} className="settings-form">
       {tab==='recording'&&<>
         <Section title={t('Input')}>
           <Row label={t('Audio source')} help={t('System audio = whatever plays on the Mac (Teams·Slack·Zoom·YouTube …). Mic + system = online meetings (your voice + the other side). First use asks for Screen Recording permission.')}>
@@ -117,7 +127,7 @@ export function SettingsWindow() {
       {tab==='save'&&<>
         <Section title={t('Auto-save')}>
           {workspace&&toggle('Auto-save .md on finish',workspace.autoSave,value=>act(()=>workspaceCommand({type:'autoSave',value})))}
-          {workspace?.autoSave&&<div className="settings-row"><span className="secondary">{t('Folder')}</span><MiddleText className="settings-folder">{workspace.folderName}</MiddleText>{button('Change…',chooseWorkspaceFolder)}</div>}
+          {workspace?.autoSave&&<div className="settings-row"><span className="secondary">{t('Folder')}</span><MiddleText className="settings-folder">{workspace.folderName}</MiddleText>{button('Change…',chooseWorkspaceFolder,true)}</div>}
         </Section>
         <Section title={t('Diagnostics')}>
           {toggle('Debug capture (session bundle)',settings.debugCapture,value=>change({type:'debugCapture',value}))}
@@ -158,7 +168,7 @@ export function SettingsWindow() {
           {note('The same correction must be seen at least this many times before it auto-applies. Higher is more conservative (so one accidental edit won’t overwrite later transcripts).')}
         </Section>
         <Section title={`${t('Learned corrections')} (${glossary.activeCount}/${learned.length})`}>
-          {learned.length? <>{learned.map(entry=><div key={entry.wrong} className="settings-row glossary-entry" title={t(entry.active?'Active':'Below the hit threshold — not applied yet')}><del>{entry.wrong}</del>{symbol('arrow')}<strong className={entry.active?'':'inactive'}>{entry.right}</strong><span className={entry.active?'active-hits':'inactive'}>{entry.hitsLabel}×</span><button aria-label={t('Forget this correction')} title={t('Forget this correction')} onClick={()=>act(()=>glossaryCommand({type:'forget',value:entry.wrong}))}>{symbol('trash')}</button></div>)}<button className="settings-action destructive" onClick={()=>act(()=>glossaryCommand({type:'clear'}))}>{t('Clear all')}</button></>:note('No learned corrections yet. Fix a misrecognized word in a transcript and it accumulates here.')}
+          {learned.length? <>{learned.map(entry=><div key={entry.wrong} className="settings-row glossary-entry" title={t(entry.active?'Active':'Below the hit threshold — not applied yet')}><del>{entry.wrong}</del>{symbol('arrow')}<strong className={entry.active?'':'inactive'}>{entry.right}</strong><span className={entry.active?'active-hits':'inactive'}>{entry.hitsLabel}×</span><button aria-label={t('Forget this correction')} title={t('Forget this correction')} onClick={()=>act(()=>glossaryCommand({type:'forget',value:entry.wrong}))}>{symbol('trash')}</button></div>)}<div className="settings-button-row"><button className="settings-action destructive" onClick={()=>act(()=>glossaryCommand({type:'clear'}))}>{t('Clear all')}</button></div></>:note('No learned corrections yet. Fix a misrecognized word in a transcript and it accumulates here.')}
         </Section>
       </>}
       {tab==='model'&&<Section>

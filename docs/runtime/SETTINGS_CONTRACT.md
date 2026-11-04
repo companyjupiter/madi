@@ -73,10 +73,8 @@ limited to audio source and diarization; its workspace intent is auto-save.
 Listeners subscribe before snapshots load, and monotonic revisions prevent a
 late snapshot from overwriting a newer event. Device/screen inventory refreshes
 on focus; entering Translation refreshes the model owner. Native SF artwork and
-ko/en/ja strings come from the original sources. The grouped HTML form still
-differs from SwiftUI: its web tabs are not the original AppKit toolbar, and
-popup chrome/form spacing need further comparison. The initial 33 pt height
-and accessible-name differences were corrected and checked in the rebuilt app.
+ko/en/ja strings come from the original sources. The initial 33 pt height and
+accessible-name differences were corrected and checked in the rebuilt app.
 
 Local integration checks pass 97 Rust tests (12/71/14), four frontend contract/
 queue tests, clippy, frontend/debug app build and strict relocated packaging.
@@ -86,6 +84,32 @@ auto-save on and glossary off with minimum two. A fresh process retains those
 values. Model re-download was not clicked against the installed user model;
 loopback owner tests provide separate transfer/cancellation evidence. See
 `../evidence/macos-settings-ui-2026-11-04.json` for exact capture and binary hashes.
+
+The follow-up replaces macOS web tabs with an AppKit `NSToolbar` using the
+preference window style and original SF Symbols. A main-thread-only owner retains
+the delegate, toolbar and window, releases them on app exit and updates labels
+only from current preference revisions. No AppKit object is made Send/Sync.
+The renderer subscribes before installation and keeps its tab listener alive
+during language changes. Selection is explicitly updated for accessibility
+actions, which did not receive the mouse path's automatic selection update in
+the first candidate. The Windows harness retains its web tabs/native select.
+
+Actual macOS checks verify all five native tab callbacks, title/content changes,
+selection highlight, close/reopen, English and Japanese toolbar labels, Korean
+restoration, and opening/canceling the input-source popup. Original and candidate
+captures are both 984×1000 pixels at 2× (492×500 pt). AppKit font measurement
+confirms body/headline 13 pt and caption 10 pt; the form now uses those sizes,
+native picker artwork, separate button/note rows and the bottom content inset.
+This is **not full pixel parity**: button-row spacing, slash-containing text
+wrapping, finer control metrics, themes and complete interaction coverage remain
+open. The 95.72 MiB candidate passes the native/package checks in
+`../evidence/macos-settings-toolbar-2026-11-04.json`.
+
+The preceding Settings integration `50ce8a4` passes desktop CI `41767977083`
+with 97 macOS / 89 Windows Rust tests, four frontend tests, all references and
+both builds. Downloaded binaries and package/runtime/notices match clean source
+provenance (`../evidence/desktop-ci-50ce8a4-2026-11-04.json`). That CI run predates
+the native-toolbar follow-up.
 
 ## Verification
 

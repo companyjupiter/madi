@@ -15,7 +15,7 @@ export type SettingsCommand = {type: 'inputLanguage'; value: Language | null}
 export type SettingsSetupCommand = {type: 'audioSource'; value: AudioSource} | {type: 'diarize'; value: boolean};
 export interface GlossarySnapshot { revision: number; displayEntries: Array<{wrong: string; right: string; hitsLabel: string; active: boolean}>; minimumHitsLabel: string; activeCount: number; glossary: {enabled: boolean; minHits: number; entries: Record<string,{wrong: string; right: string; hits: number}>} }
 export type GlossaryCommand = {type: 'enabled'; value: boolean} | {type: 'minimumHits'; value: number} | {type: 'forget'; value: string} | {type: 'clear'};
-export interface SettingsMetadata { artwork: Record<string,{dataUrl: string; width: number; height: number}> | null; screens: Array<{index: number; width: number; height: number}> }
+export interface SettingsMetadata { nativeToolbar?: boolean; artwork: Record<string,{dataUrl: string; width: number; height: number}> | null; screens: Array<{index: number; width: number; height: number}> }
 export interface ModelLocations { transcription: string; translation: string; transcriptionInstalled: boolean; translationInstalled: boolean; translationDiskGb: string }
 export type ManagementCommand = {type: 'download'; value: 'transcription' | 'translation'} | {type: 'refreshTranslation' | 'cancelTranslation'};
 export const openSettings = () => invoke<void>('settings_open');

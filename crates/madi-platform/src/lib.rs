@@ -24,3 +24,6 @@ pub mod transcript_native;
 pub mod workspace_preferences;
 pub mod workspace_scan;
 pub mod workspace_service;
+
+#[cfg(target_os = "macos")]
+pub mod settings_toolbar;

@@ -1,0 +1,478 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-04",
+  "sourceHead": "50ce8a411417c6fa310a4bbb9cce86bc7fbf8856",
+  "sourceDirty": true,
+  "sourceSHA256": {
+    "apps/desktop/src-tauri/src/main.rs": "fbd1d9b3f4e8ce724a651b8d02e37f51240dca6538813b22d47faa120b100782",
+    "apps/desktop/src-tauri/src/settings_host.rs": "ddd4a80b1e7dc26cea4398eaddc43fa4ee5b3015acb4040d3469b74852fa9740",
+    "apps/desktop/src/SettingsWindow.tsx": "662552c738aeabc277189e81f340cf47562f58c2c19c940fac8b458a3db27b4c",
+    "apps/desktop/src/settings.css": "fe9c2dd26da1ecbc74d06ba76c95eb1afabbe1086036d32caf92c443b39d237e",
+    "apps/desktop/src/settings.ts": "91bdf6df61b9a11a18666eeeb34f72cdd50ddeb6ecfab279341f4d2ef3a5961b",
+    "crates/madi-platform/Cargo.toml": "096f8a5c2ae027ecf212bd90660bf9a07e0a028ffe1026cb8915564548911702",
+    "crates/madi-platform/src/lib.rs": "19dd9b39cbf8c2002d7471d581d2673fc9369e7ff45585a8c5f0249f4af25fed",
+    "crates/madi-platform/src/model_presentation.rs": "9983aef94d56949bdf401759565051de0e6beb08c374169d452a76f535829aaa",
+    "crates/madi-platform/src/settings_toolbar.rs": "82a7a9602dc68aeca9b4719e6533bedf07953d1f56ce76a9da9e136937504156"
+  },
+  "checks": {
+    "rustTests": [
+      12,
+      71,
+      14
+    ],
+    "totalTests": 97,
+    "frontendTests": 4,
+    "clippy": "PASS",
+    "rustfmt": "PASS",
+    "frontendBuild": "PASS",
+    "debugAppBuild": "PASS",
+    "strictRelocationPackage": "PASS"
+  },
+  "binary": {
+    "path": "target/debug/bundle/macos/Madi UI Parity.app/Contents/MacOS/madi-desktop",
+    "bytes": 61094496,
+    "sha256": "edc60c3914f4e125da1f5922218adba90dc67488d853c29b5edbc72410f8a703"
+  },
+  "bundleMiB": 95.72,
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957392,
+        "sha256": "e6d55b695348e8116e4be5ad3bcdcc17ceeac4842f7d9980e2a524454b5a91dd"
+      },
+      "translate-engine-2b": {
+        "bytes": 1575744,
+        "sha256": "34795c20da441bc7baf249f4a2ca12766e04016bad05fd7303b2da4356486de0"
+      },
+      "translate-engine-4b": {
+        "bytes": 1575600,
+        "sha256": "fc0c8687300de8dd51f7a67493a57090eb2a677a730395cbd0e95fe6c21e85eb"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "helperBytes": 150816,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "a635c334d01a20f000882f6fefd7c695ba8723576548cfff7abcdb5609a36253",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "nativeProbe": {
+    "cleanAtShutdown": true,
+    "modelSizeMtimeUnchanged": true,
+    "passed": true,
+    "preferences": {
+      "isolatedRelaunch": true,
+      "nativeFileAdmission": true,
+      "overlapDisabledForAdmittedFile": true,
+      "restored": {
+        "effectiveWindowSeconds": 10.0,
+        "multiTranslateForcesAccurate": true,
+        "presentation": {
+          "appearance": "system",
+          "contentMode": false,
+          "fontSize": 18.0,
+          "uiLanguage": "ja"
+        },
+        "revision": 0,
+        "settings": {
+          "aiReconcileEnabled": false,
+          "caption": {
+            "minScaleFactor": 0.9,
+            "panelWidth": 760.0,
+            "patientFontSize": 46.0,
+            "patientLangOverride": null,
+            "patientPanelEnabled": false,
+            "patientScreenIndex": null,
+            "staffFontSize": 26.0
+          },
+          "debugCapture": false,
+          "livePreviewEnabled": true,
+          "liveWindowSeconds": 10.0,
+          "translateTailSeconds": 3.0,
+          "vadConfThreshold": 0.55
+        },
+        "setup": {
+          "audioSource": "mic",
+          "diarize": true,
+          "inputDeviceId": null,
+          "inputLanguage": "English",
+          "meetingMode": "lecture",
+          "osd": true,
+          "revision": 0,
+          "speakerCount": 0,
+          "stagedFile": null,
+          "translateTargets": [
+            "Chinese",
+            "English",
+            "Japanese",
+            "Korean"
+          ]
+        }
+      }
+    },
+    "schema": 3,
+    "sourcePreserved": true,
+    "sourceSha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "workflow": {
+      "observations": [
+        {
+          "elapsed": 0.002004875,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 1,
+          "words": 0
+        },
+        {
+          "elapsed": 0.002022875,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 2,
+          "words": 0
+        },
+        {
+          "elapsed": 0.0635945,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 3,
+          "words": 0
+        },
+        {
+          "elapsed": 0.133218458,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 4,
+          "words": 0
+        },
+        {
+          "elapsed": 0.5203415,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 5,
+          "words": 0
+        },
+        {
+          "elapsed": 0.590213875,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 6,
+          "words": 0
+        },
+        {
+          "elapsed": 1.400505583,
+          "lines": 1,
+          "phase": {
+            "kind": "done"
+          },
+          "revision": 7,
+          "words": 22
+        }
+      ],
+      "staleEditIgnored": true,
+      "cleanAtCompletion": true,
+      "workspace": {
+        "entries": 1,
+        "exports": [
+          {
+            "bytes": 247,
+            "format": "md",
+            "sha256": "15eb2230a9c34a620f37c73da12265066d1db696b6eb269298a78622f37bc581"
+          },
+          {
+            "bytes": 188,
+            "format": "srt",
+            "sha256": "63f69ff27621486034bd09d2ecc308b593c3e189708a12390b806ffea17d13df"
+          },
+          {
+            "bytes": 196,
+            "format": "vtt",
+            "sha256": "b6310a5b6d1bbc4044280bb3319da2faef02476ad1929f90e7547536e643a86e"
+          },
+          {
+            "bytes": 141,
+            "format": "txt",
+            "sha256": "57d0dea64101984d13dbe45a7151994885a7319b531dac5ebbce8ea3f072124c"
+          },
+          {
+            "bytes": 4140,
+            "format": "json",
+            "sha256": "c67182e1f8ac641fd722e089e7181a42dbb70f3e43793bca68919fe83e657db4"
+          }
+        ],
+        "isolatedPreferencePersisted": true,
+        "staleRowRejected": true,
+        "stats": {
+          "avgSeconds": 0.0,
+          "avgSpeakers": 1.0,
+          "meetingCount": 1,
+          "speakerSum": 1,
+          "thisWeekCount": 1,
+          "totalSeconds": 0.0,
+          "totalWords": 22,
+          "weeklyTrend": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "glossary": {
+        "biasTermsAtAdmission": [
+          "소버린"
+        ],
+        "isolatedRelaunch": true,
+        "learnedWrong": "and",
+        "nativeWordEditLearned": true,
+        "originalArchivePreserved": true
+      },
+      "archive": {
+        "bytes": 234,
+        "inlineEditDidNotAutosave": true,
+        "reopenDidNotClaimWritableTarget": true,
+        "sha256": "59490bcaadf8cf1d119e8f7f7c1f251ff524aa6505dd8db2909c8df96aa1b63d",
+        "sourcePreserved": true
+      }
+    },
+    "words": 22,
+    "transcript": [
+      "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    ],
+    "elapsedSeconds": 2.038,
+    "runtimeLayout": {
+      "decoder": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-fdiw02o1/Madi UI Parity.app/Contents/MacOS/madi-audio-decode",
+      "transcribe": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-fdiw02o1/Madi UI Parity.app/Contents/MacOS/transcribe",
+      "translate2b": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-fdiw02o1/Madi UI Parity.app/Contents/MacOS/translate-engine-2b",
+      "translate4b": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-fdiw02o1/Madi UI Parity.app/Contents/MacOS/translate-engine-4b",
+      "assetsDirectory": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-fdiw02o1/Madi UI Parity.app/Contents/Resources/assets-small"
+    },
+    "sourceSHA256Before": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "sourceSHA256After": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "engineSHA256": "e6d55b695348e8116e4be5ad3bcdcc17ceeac4842f7d9980e2a524454b5a91dd",
+    "decoderSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "relocatedOutsideRepository": true,
+    "sourceHead": "50ce8a411417c6fa310a4bbb9cce86bc7fbf8856",
+    "sourceDirty": true,
+    "evidenceKind": "local uncommitted vocabulary integration candidate with relocated debug runtime; isolated glossary learning/admission and headless native owners, not renderer IPC or native UI acceptance",
+    "ownedTemporaryFoldersRemoved": true
+  },
+  "nativeUI": {
+    "host": "macOS 27.2 arm64, actual CUA interactions",
+    "toolbar": "AppKit NSToolbar with NSWindowToolbarStyle::Preference; native SF Symbols, selectable item identifiers and localized labels",
+    "lifetime": "main-thread-only retained owner; no unsafe Send/Sync; explicit app-exit teardown",
+    "passed": [
+      "All five toolbar buttons update matching content and centered title",
+      "Accessibility activation moves selection highlight; initial candidate left highlight on Recording and was corrected",
+      "Cmd+W/Cmd+, preserves Model content and selected toolbar item",
+      "Native toolbar labels update with Korean -> English -> Japanese -> Korean; no native object rebuild",
+      "Original and candidate Recording screenshots both 984x1000 at 2x; configured outer size 492x500 pt",
+      "Input-source popup still opens native options; canceled without changing source"
+    ],
+    "fontProbe": {
+      "command": "swift -e 'import AppKit; for style in [NSFont.TextStyle.body, .caption1, .headline] { let font = NSFont.preferredFont(forTextStyle: style); print(style.rawValue, font.pointSize) }'",
+      "body": 13,
+      "caption1": 10,
+      "headline": 13
+    },
+    "knownDifferences": [
+      "Save folder/button row is approximately 6 pt too short",
+      "Slash-containing diagnostic path text wraps differently",
+      "Remaining small row/control metrics and complete light/dark pixel comparison are open"
+    ],
+    "notRun": [
+      "Complete keyboard/accessibility matrix",
+      "Full model transfer/cancellation and populated glossary UI",
+      "All locale/theme/device/multi-monitor combinations",
+      "Live capture, translation/AI/captions and Windows native UI acceptance"
+    ],
+    "fullUIParity": "NOT_PASS",
+    "captures": {
+      "out/native-ui-2026-11-04/tauri-settings-native-recording.jpg": {
+        "bytes": 62335,
+        "sha256": "f27d63ec31b890a9242c8e0ab31909d85d32c433856c41cc09b94460f26c0a16"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-recording.txt": {
+        "bytes": 3455,
+        "sha256": "307ed63b64aa6bb858170da583a41d96d83bcd7ee3b95672c355e7748de31865"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-save.jpg": {
+        "bytes": 83154,
+        "sha256": "2d6ab598894ee097d8b27d1f15970d61040a1e4c76d3d0677803da1e2cadf551"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-save.txt": {
+        "bytes": 1925,
+        "sha256": "41b75a92a8b2aa452748f5a9a6df0fe399581b52a5c7d1f1b7121942dbe7584a"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-translation.jpg": {
+        "bytes": 76749,
+        "sha256": "db67d7301ac603a2ce911c8162b1132f11120152e00949e90665a28ef47464f5"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-translation.txt": {
+        "bytes": 2560,
+        "sha256": "f0038aee108d23093a07f5c4708f33289877662bb6a01c2af950707755da76e5"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-glossary.jpg": {
+        "bytes": 92431,
+        "sha256": "26d024e53228df700feb433456a3349706f64ea4294c5bbb4979f1b63041af0e"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-glossary.txt": {
+        "bytes": 1843,
+        "sha256": "ba155d038f21f02513f01f0a30af3ba515acc3853f91f33db352fa816ea2eea8"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-model.jpg": {
+        "bytes": 58116,
+        "sha256": "49cdd3053210e7d4d6ffe34b0017c67f55ff494ea31fbe5d165fc47fb364823b"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-model.txt": {
+        "bytes": 946,
+        "sha256": "940e111e9bf67bb0e2d42d489f0edd12684af8019d374b721db6020f9ae9d41a"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-reopened.jpg": {
+        "bytes": 58229,
+        "sha256": "788c604fdefb738f932c93b4cbb71d83ffdec22e51bc7d38985dec04c58ae441"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-reopened.txt": {
+        "bytes": 1072,
+        "sha256": "7c49268a0c0365c308111cced5de878a95ed06791013d13b1fce62a9ee66860d"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-english.jpg": {
+        "bytes": 93742,
+        "sha256": "9764ee131412337be148431219f796da0663ba8b86ca15f46dd382b31d042f8a"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-english.txt": {
+        "bytes": 3459,
+        "sha256": "cdf76172791088bf4d5d20f4abedbdeef86c0fd7cc8fb855e68bc622b08ae397"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-japanese.jpg": {
+        "bytes": 87068,
+        "sha256": "e9d08b6ad93305d5a77958ac1a9ad716ca509955cfaa5f3c84428e47ac24c703"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-japanese.txt": {
+        "bytes": 3735,
+        "sha256": "4bb921e75f41989586f0686c64a3e13c358788722ea6cdf5a688cda79e84b410"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-korean-restored.jpg": {
+        "bytes": 80038,
+        "sha256": "69c1c38b5d474d808d7a62f917e8273694ef2c865d071ea1cca55c3be508e88c"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-korean-restored.txt": {
+        "bytes": 3455,
+        "sha256": "307ed63b64aa6bb858170da583a41d96d83bcd7ee3b95672c355e7748de31865"
+      },
+      "out/native-ui-2026-11-04/swift-settings-recording.jpg": {
+        "bytes": 64494,
+        "sha256": "49526646b809318c59e23779d5486e938bee5ce73132c9318843269d5e0709c9"
+      },
+      "out/native-ui-2026-11-04/swift-settings-save.jpg": {
+        "bytes": 78900,
+        "sha256": "61c79df3e05dfd1cc7f67e2b6b87ad950e2be56f2c5a60efb973b7e54f11017e"
+      },
+      "out/native-ui-2026-11-04/tauri-settings-native-source-popup.txt": {
+        "bytes": 3827,
+        "sha256": "ce27d24eb5997a9a25a7a9e95c8538ec6b0e205064944f6f7fbebcc936434252"
+      }
+    }
+  },
+  "logs": {
+    "tests": {
+      "sha256": "365aa8a31356b59f9e60008259866df5ea5a22a1d0faddcd84b38621995e911c"
+    },
+    "frontend-tests": {
+      "sha256": "a3618e23851e552234dddefb1e61f89571bdc2dabd4c3081645538b7d26e27e3"
+    },
+    "clippy": {
+      "sha256": "27169e8f491c42204f22364eb9113efbb0e6938de58e988d6efcc87db2bdd406"
+    },
+    "build": {
+      "sha256": "33c5fcd49d0027d4cb706b729ebb079e161155231ef81dec52a9b794a6163e53"
+    },
+    "package": {
+      "sha256": "d3cd205647ad291e3705ee9fe646bf382fe603e60849cb04c29029c06dab8cd9"
+    },
+    "native-probe": {
+      "sha256": "87c9a6b3c9c9455126be26b98738c597f5821aad0a42f493eadd1e49d8f887b6"
+    }
+  },
+  "productRelease": false,
+  "scope": "Native macOS Settings toolbar and form refinement candidate; not full UI acceptance or release certification"
+}
