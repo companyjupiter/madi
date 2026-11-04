@@ -77,7 +77,8 @@ export function SettingsWindow() {
   useEffect(() => {if(tab==='translation') act(()=>manageModels({type:'refreshTranslation'}));},[tab]);
   const tabs = (Object.keys(tabNames) as Tab[]).filter(name=>name!=='translation'||models?.translationEngineAvailable);
   const symbol = (key: string) => {const image=metadata?.artwork?.[key];return image?<i aria-hidden style={{width:image.width,height:image.height,maskImage:`url(${image.dataUrl})`}}/>:null;};
-  const note=(key:string,values?:Record<string,string>)=><p className="settings-note">{t(key,values)}</p>;
+  // AppKit permits a word wrap after path separators without changing the text.
+  const note=(key:string,values?:Record<string,string>)=><p className="settings-note">{t(key,values).split(/(?<=\/)/u).map((part,index)=><span key={index}>{part}<wbr/></span>)}</p>;
   const button=(key:string,action:()=>Promise<unknown>,inline=false)=>{const content=<button className="settings-action" onClick={()=>act(action)}>{t(key)}</button>;return inline?content:<div className="settings-button-row">{content}</div>;};
   const toggle=(key:string,value:boolean,change:(value:boolean)=>void,disabled=false,help?:string)=><Toggle label={t(key)} value={value} change={change} disabled={disabled} help={help&&t(help)}/>;
   const translationAvailable=Boolean(models?.translationEngineAvailable&&locations?.translationInstalled);

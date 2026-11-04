@@ -147,3 +147,10 @@ clean. This verifies the earlier setup/presentation revision, not these expanded
 settings contracts. CI artifact receipts retain the failed attempts as well.
 Local
 settings-contract proof is in `../evidence/macos-settings-contract-2026-11-04.json`.
+
+The form follow-up gives toggle and button rows their own spacing and permits
+line breaks after path separators without changing the source string. Actual
+Save-tab comparison now aligns the folder row/diagnostics section and the
+`Madi/` diagnostic-path line break. Fine button/control metrics and the complete
+visual matrix still remain open. Frontend build, four frontend tests, debug app
+and strict packaging pass; see `../evidence/macos-settings-form-2026-11-04.json`.
