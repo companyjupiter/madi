@@ -15,6 +15,21 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- In-process macOS capture candidate: AVAudioEngine/ScreenCaptureKit and the
+  original converter link into the Rust host with per-capture IDs, bounded PCM
+  ingress, acknowledged stop and late-callback rejection. Eight native replay
+  cases match 1,664,512 Swift PCM samples and 32 segments, with simultaneous
+  cancellation/drop and missing-file cleanup. The copied app checks its linked
+  replay, original usage strings and audio-input entitlement. Real devices,
+  permissions, mixing/pause and the live executor/UI remain open; see
+  `runtime/NATIVE_CAPTURE_BRIDGE.md`.
+
+- Segmenter revision `9685cb4` passes desktop CI `41771408788`: 101 macOS /
+  93 Windows Rust tests and four frontend tests, including live Swift and pinned
+  segmenter gates. Downloaded clean-source executable/package/runtime/notice
+  hashes are verified in `evidence/desktop-ci-9685cb4-2026-11-04.json`. This
+  receipt precedes the new native capture bridge above.
+
 - Live PCM windowing foundation: the unchanged Swift segmenter and Rust match
   225 sequences / 24,347 snapshots / 2,676 segments, including exact PCM hashes,
   offset bits, speech flags, previews, mutable settings and final tails. Sixteen

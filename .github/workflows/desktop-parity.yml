@@ -118,6 +118,7 @@ jobs:
           python3 scripts/check_korean_numbers_parity.py
           python3 scripts/check_text_passes_parity.py
           python3 scripts/check_segmenter_parity.py
+          python3 scripts/check_capture_bridge_parity.py
           python3 scripts/check_asset_manifest_parity.py
           python3 scripts/check_model_setup_parity.py
           python3 scripts/check_model_gate_parity.py
@@ -184,6 +185,7 @@ jobs:
             out/korean-numbers-parity/report.json
             out/text-passes-parity/report.json
             out/segmenter-parity/report.json
+            out/capture-bridge-parity/report.json
             out/asset-manifest-parity/report.json
             out/model-setup-parity/report.json
             out/model-gate-parity/report.json

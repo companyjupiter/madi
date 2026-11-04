@@ -120,6 +120,31 @@ fn audio_inputs(
 }
 
 fn main() {
+    #[cfg(all(target_os = "macos", debug_assertions))]
+    {
+        let arguments: Vec<_> = std::env::args_os().skip(1).collect();
+        if arguments
+            .first()
+            .is_some_and(|argument| argument == "--native-capture-replay")
+        {
+            let result = match arguments.as_slice() {
+                [_, path] => {
+                    madi_platform::audio_capture::verify_replay(std::path::Path::new(path))
+                }
+                _ => Err(std::io::Error::other(
+                    "native capture replay requires one file",
+                )),
+            };
+            match result {
+                Ok(receipt) => println!("{receipt}"),
+                Err(error) => {
+                    eprintln!("{error}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+    }
     #[cfg(target_os = "macos")]
     if std::env::args_os().skip(1).eq(["--runtime-layout"]) {
         match madi_platform::runtime_bundle::bundled() {

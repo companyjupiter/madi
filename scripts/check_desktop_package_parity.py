@@ -28,6 +28,9 @@ def main():
     info = plistlib.loads((bundle / "Contents/Info.plist").read_bytes())
     assert info["CFBundleIdentifier"] == "tv.devart.madi.parity"
     assert info["LSMinimumSystemVersion"] == "14.0"
+    source_info = plistlib.loads((ROOT / "apps/macos/Sovereign/Info.plist").read_bytes())
+    capture_usage_keys = ["NSMicrophoneUsageDescription", "NSScreenCaptureUsageDescription", "NSAudioCaptureUsageDescription"]
+    assert all(info[key] == source_info[key] for key in capture_usage_keys)
     executable_name = info["CFBundleExecutable"]
     original_helper = bundle / "Contents/MacOS/madi-audio-decode"
     signature = subprocess.run(["codesign", "--verify", "--deep", "--strict", str(bundle)], capture_output=True, text=True)
@@ -35,6 +38,12 @@ def main():
         raise SystemExit(signature.stderr)
     description = subprocess.run(["codesign", "-d", "--verbose=2", str(bundle)], capture_output=True, text=True, check=True)
     assert "Signature=adhoc" in description.stderr
+    entitlements = plistlib.loads(subprocess.check_output(["codesign", "-d", "--entitlements", "-", "--xml", str(bundle)], stderr=subprocess.DEVNULL))
+    assert entitlements.get("com.apple.security.device.audio-input") is True
+    assert not entitlements.get("com.apple.security.app-sandbox", False)
+    libraries = subprocess.check_output(["otool", "-L", str(bundle / "Contents/MacOS" / executable_name)], text=True).splitlines()[1:]
+    for line in libraries:
+        assert not any(path in line for path in ("/Users/", "/Applications/", "/opt/homebrew/")), line
     runtime_assets = json.loads((ROOT / "design/parity/runtime-assets-reference.json").read_text())
     bundled_assets = bundle / "Contents/Resources/assets-small"
     for asset in runtime_assets["files"]:
@@ -90,7 +99,10 @@ def main():
         assert wav.is_relative_to(scratch.resolve())
         with wave.open(str(wav), "rb") as output:
             assert (output.getnchannels(), output.getsampwidth(), output.getframerate(), output.getnframes()) == (1, 2, 16000, 16000)
-            assert any(output.readframes(16000))
+            frames = output.readframes(16000)
+            assert any(frames)
+        capture = json.loads(subprocess.check_output([str(executable), "--native-capture-replay", str(source)], cwd=root, env=environment, timeout=45))
+        assert capture == dict(sampleCount=16000, pcmSHA256=hashlib.sha256(frames).hexdigest(), stopped=True, devicesOpened=False)
         assert digest(source) == original_hash
         # Remove only the copied helper temporarily: installed resolution must
         # fail instead of using the original checkout's development helper.
@@ -124,6 +136,10 @@ def main():
     report = {
         "schemaVersion": 1, "status": "passed", "bundleIdentifier": info["CFBundleIdentifier"],
         "minimumSystemVersion": info["LSMinimumSystemVersion"], "signature": "ad-hoc; deep strict verification passed",
+        "captureUsageDescriptionsMatch": capture_usage_keys,
+        "captureAudioInputEntitlement": True,
+        "developerLibraryDependenciesAbsent": True,
+        "relocatedNativeCaptureReplay": capture,
         "relocatedLookup": "passed", "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
         "missingHelperFailsClosed": True,
         "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",

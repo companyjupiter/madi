@@ -1,4 +1,9 @@
 fn main() {
+    // madi-platform's in-process Swift capture bridge uses the OS Swift runtime.
+    // Link arguments on an rlib do not propagate to this final executable.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
+    }
     let attributes =
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
             "settings_open",

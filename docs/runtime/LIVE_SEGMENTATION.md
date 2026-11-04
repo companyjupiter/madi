@@ -57,8 +57,9 @@ The pinned reference is `design/parity/segmenter-reference.json`.
 
 ## Required next connections
 
-1. Add native sample delivery with the original converter/channel/mixing policy,
-   including system audio, microphone choice and pause/drop behavior.
+1. Connect the new in-process macOS sample bridge (`NATIVE_CAPTURE_BRIDGE.md`)
+   with the original channel/mixing policy and pause/drop behavior. Native
+   converter/callback replay is verified; device acceptance remains open.
 2. Preserve `AudioCapture` preview cadence, rotating preview files and unique
    per-session segment ownership. Keep final segments available for corrections;
    remove only the retired capture's own directory.

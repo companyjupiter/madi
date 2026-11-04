@@ -1,5 +1,7 @@
 //! Native adapters. Unsupported platforms are explicit, never simulated.
 pub mod asr_config;
+#[cfg(target_os = "macos")]
+pub mod audio_capture;
 pub mod audio_devices;
 pub mod engine_process;
 pub mod file_session;

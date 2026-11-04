@@ -2,7 +2,8 @@
 
 Source: `apps/macos/Sovereign/Session/SessionCoordinator.swift` at Madi
 `c1390c750f2506e556a277421e146d80195ab797`. The deterministic port lives in
-`crates/madi-core/src/session.rs`; it is not connected to the desktop host yet.
+`crates/madi-core/src/session.rs`. The file executor is connected to the desktop
+host; the live capture effect executor remains to be connected.
 
 The state machine owns phase, elapsed time and resource identities. A serialized
 OS adapter executes returned effects in order and returns completions using the
@@ -64,5 +65,8 @@ native engine lifetime and owned-file cleanup. Live capture effects and
 storage/UI wiring remain open.
 
 The portable live [PCM windowing layer](LIVE_SEGMENTATION.md) now has independent
-unchanged-Swift comparison for exact segments, previews and tails. It is not
-yet a native capture adapter or the live effect executor.
+unchanged-Swift comparison for exact segments, previews and tails. The macOS
+[in-process capture bridge](NATIVE_CAPTURE_BRIDGE.md) now provides ID-bound
+native PCM delivery and acknowledged stop, verified through file replay and
+the copied app. Mixing/pause, segment files and live effect dispatch remain
+required; synthetic replay is not microphone/system-device acceptance.

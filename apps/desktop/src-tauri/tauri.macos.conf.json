@@ -8,6 +8,6 @@
       "../../../out/desktop-native/translate-engine-4b"
     ],
     "resources": { "../../../out/desktop-native/resources/": "" },
-    "macOS": { "minimumSystemVersion": "14.0", "signingIdentity": "-" }
+    "macOS": { "minimumSystemVersion": "14.0", "signingIdentity": "-", "infoPlist": "Info.plist", "entitlements": "Capture.entitlements" }
   }
 }
