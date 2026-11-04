@@ -3,8 +3,10 @@
 `madi-platform::audio_capture` links a small Swift static library into the Rust
 host. It retains AVAudioEngine, ScreenCaptureKit and the unchanged shipping
 `Resampler.swift` / `AudioDevices.swift`. Mixing, pauses, segmentation, WAV
-ownership and live engine scheduling remain Rust responsibilities; they are not
-implemented by this bridge. The recording button is not connected yet.
+ownership and live engine scheduling remain Rust responsibilities. Mixing,
+pause, segmentation and WAV ownership are implemented by the separate [capture pipeline](CAPTURE_PIPELINE.md),
+now exercised from native replay; live engine scheduling and the recording
+button are not connected yet.
 
 This follows the migration plan's allowance for a thin native API bridge. The
 capture code must run in Madi's process so ScreenCaptureKit's
@@ -70,6 +72,8 @@ Both 4096- and 997-frame delivery are compared. The reference uses unchanged
 shipping Resampler, Segmenter and WAV constants. The candidate uses the linked
 native converter, bounded ingress, borrowed callback ABI, Rust receiver and
 Rust segmenter, including converter drain and final tail.
+The candidate also writes every segment through the owned WAV pipeline and
+checks its PCM/offset/speech fields against the reference and its directory cleanup.
 
 Eight cases compare every PCM chunk length, full PCM SHA-256, segment PCM,
 offset bits, body count and speech flag: 1,664,512 samples and 32 segments match
@@ -82,6 +86,7 @@ queue overflow, single error and preservation of the terminal acknowledgement.
 The relocated `.app` check invokes its own linked capture replay using only
 system tools on PATH and compares PCM with the bundled decoder. It verifies
 permission strings/entitlement, no developer dylib paths and strict signatures.
+Its native replay now verifies the final segment WAV and owned-directory cleanup.
 Local evidence is recorded in `../evidence/macos-native-capture-2026-11-04.json`.
 
 Still **NOT_RUN**: microphone/system hardware, TCC prompts, physical device

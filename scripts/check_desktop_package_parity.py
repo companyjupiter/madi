@@ -102,7 +102,9 @@ def main():
             frames = output.readframes(16000)
             assert any(frames)
         capture = json.loads(subprocess.check_output([str(executable), "--native-capture-replay", str(source)], cwd=root, env=environment, timeout=45))
-        assert capture == dict(sampleCount=16000, pcmSHA256=hashlib.sha256(frames).hexdigest(), stopped=True, devicesOpened=False)
+        assert capture == dict(sampleCount=16000, pcmSHA256=hashlib.sha256(frames).hexdigest(), stopped=True, devicesOpened=False,
+                               segments=[dict(name="seg00000.wav", offsetBits="0000000000000000", hadSpeech=True,
+                                              wavBytes=32044, wavSHA256=digest(wav))], ownedDirectoryCleaned=True)
         assert digest(source) == original_hash
         # Remove only the copied helper temporarily: installed resolution must
         # fail instead of using the original checkout's development helper.
@@ -150,7 +152,7 @@ def main():
         "helperSHA256": digest(original_helper), "helperBytes": original_helper.stat().st_size,
         "archive": str(archive.relative_to(ROOT)), "archiveSHA256": digest(archive),
         "productRelease": False, "notarized": False,
-        "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation",
+        "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation",
     }
     (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))

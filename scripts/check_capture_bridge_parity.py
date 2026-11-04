@@ -78,6 +78,7 @@ def main():
         "segments": sum(len(case["segments"]) for case in actual),
         "cancelBeforeStartCases": len(cases) + 1, "concurrentDropCases": len(cases) + 1,
         "missingFileFailure": True, "fixtures": fixtures,
+        "ownedWavPipeline": True, "segmentDirectoryCleanup": True,
         "resultSHA256": hashlib.sha256(normalized).hexdigest(),
         "sourceSHA256": {source: hashlib.sha256((ROOT / source).read_bytes()).hexdigest() for source in SOURCES},
         "linkedLibraries": libraries.splitlines()[1:],

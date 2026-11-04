@@ -15,13 +15,26 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Rust post-converter capture and owned WAV pipeline now match the actual
+  shipping AudioCapture methods over 113 sequences / 6,337 operations: 727
+  committed segments, 519 previews and 3,164 bit-exact Float level events.
+  Mixing/clamping, strict two-second stall, pause/drop, final tail versus abort,
+  whole-input preview accounting, rotation and directory cleanup are covered.
+  Native replay and the packaged debug probe use this pipeline. Real capture,
+  live engine scheduling and the recording UI remain open; see
+  `runtime/CAPTURE_PIPELINE.md` and `evidence/capture-pipeline-2026-11-04.json`.
+  Local checks pass 111 Rust tests, four frontend tests, clippy and formatting;
+  both deliberate arithmetic mutations fail their targeted regressions and pass
+  after restoration. The rebuilt 96.20 MiB app passes strict relocation and
+  native-to-owned-WAV cleanup checks. New-revision CI is pending.
+
 - In-process macOS capture candidate: AVAudioEngine/ScreenCaptureKit and the
   original converter link into the Rust host with per-capture IDs, bounded PCM
   ingress, acknowledged stop and late-callback rejection. Eight native replay
   cases match 1,664,512 Swift PCM samples and 32 segments, with simultaneous
   cancellation/drop and missing-file cleanup. The copied app checks its linked
   replay, original usage strings and audio-input entitlement. Real devices,
-  permissions, mixing/pause and the live executor/UI remain open; see
+  permissions and the live executor/UI remain open; see
   `runtime/NATIVE_CAPTURE_BRIDGE.md`.
 
   Revision `c2289f0` passes desktop push CI `41773521959` and PR CI

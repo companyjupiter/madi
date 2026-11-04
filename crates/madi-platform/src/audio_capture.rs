@@ -216,6 +216,7 @@ pub fn pump_verification_run_loop(_: objc2::MainThreadMarker) {
 /// converter without creating AVAudioEngine, SCStream, a window or permissions.
 #[cfg(debug_assertions)]
 pub fn verify_replay(path: &std::path::Path) -> io::Result<serde_json::Value> {
+    use crate::capture_pipeline::{CapturePipeline, Event as PipelineEvent};
     use sha2::{Digest, Sha256};
     use std::time::{Duration, Instant};
     let main = objc2::MainThreadMarker::new()
@@ -225,6 +226,40 @@ pub fn verify_replay(path: &std::path::Path) -> io::Result<serde_json::Value> {
     let mut samples = 0;
     let mut digest = Sha256::new();
     let mut fault = None;
+    let mut pipeline = CapturePipeline::new(
+        madi_core::capture_stream::Configuration::default(),
+        &std::env::temp_dir(),
+    )?;
+    let directory = pipeline.directory().to_owned();
+    pipeline.start();
+    let mut segments = Vec::new();
+    fn record_wavs(
+        events: Vec<PipelineEvent>,
+        segments: &mut Vec<serde_json::Value>,
+    ) -> io::Result<()> {
+        for event in events {
+            match event {
+                PipelineEvent::Segment {
+                    offset,
+                    wav,
+                    had_speech,
+                } => {
+                    let data = std::fs::read(wav.path())?;
+                    segments.push(
+                        serde_json::json!({"name":wav.path().file_name().and_then(|n| n.to_str()),
+                        "offsetBits":format!("{:016x}",offset.to_bits()),"hadSpeech":had_speech,
+                        "wavBytes":data.len(),"wavSHA256":format!("{:x}",Sha256::digest(data))}),
+                    );
+                }
+                PipelineEvent::Level(_) => {}
+                PipelineEvent::WriteFailed { error, .. } => return Err(error),
+                PipelineEvent::Preview { .. } => {
+                    return Err(io::Error::other("unexpected replay preview"));
+                }
+            }
+        }
+        Ok(())
+    }
     let deadline = Instant::now() + Duration::from_secs(30);
     while Instant::now() < deadline {
         pump_verification_run_loop(main);
@@ -236,9 +271,10 @@ pub fn verify_replay(path: &std::path::Path) -> io::Result<serde_json::Value> {
                     pcm,
                 } if started => {
                     samples += pcm.len();
-                    for sample in pcm {
+                    for sample in &pcm {
                         digest.update(sample.to_le_bytes());
                     }
+                    record_wavs(pipeline.ingest(&pcm, true), &mut segments)?;
                 }
                 Event::Fault(message) => {
                     fault.get_or_insert(message);
@@ -250,8 +286,13 @@ pub fn verify_replay(path: &std::path::Path) -> io::Result<serde_json::Value> {
                     if !started {
                         return Err(io::Error::other("capture stopped without readiness"));
                     }
+                    record_wavs(pipeline.stop(), &mut segments)?;
+                    drop(pipeline);
+                    if directory.exists() {
+                        return Err(io::Error::other("capture replay segment directory leaked"));
+                    }
                     return Ok(
-                        serde_json::json!({"sampleCount":samples,"pcmSHA256":format!("{:x}",digest.finalize()),"stopped":true,"devicesOpened":false}),
+                        serde_json::json!({"sampleCount":samples,"pcmSHA256":format!("{:x}",digest.finalize()),"stopped":true,"devicesOpened":false,"segments":segments,"ownedDirectoryCleaned":true}),
                     );
                 }
                 _ => return Err(io::Error::other("unexpected capture verification event")),

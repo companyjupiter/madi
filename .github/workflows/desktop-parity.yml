@@ -23,6 +23,9 @@ on:
       - 'apps/macos/Sovereign/Engine/EnginePathPolicy.swift'
       - 'apps/macos/Sovereign/Transcript/**'
       - 'apps/macos/Sovereign/Audio/AudioDevices.swift'
+      - 'apps/macos/Sovereign/Audio/AudioCapture.swift'
+      - 'apps/macos/Sovereign/Audio/SystemAudioCapture.swift'
+      - 'apps/macos/Sovereign/Session/SessionCoordinator.swift'
       - 'apps/macos/Sovereign/Audio/AudioDecode.swift'
       - 'apps/macos/Sovereign/Audio/Resampler.swift'
       - 'apps/macos/Sovereign/Audio/Segmenter.swift'
@@ -125,6 +128,7 @@ jobs:
           python3 scripts/check_text_passes_parity.py
           python3 scripts/check_segmenter_parity.py
           python3 scripts/check_capture_bridge_parity.py
+          python3 scripts/check_capture_pipeline_parity.py
           python3 scripts/check_asset_manifest_parity.py
           python3 scripts/check_model_setup_parity.py
           python3 scripts/check_model_gate_parity.py
@@ -152,6 +156,7 @@ jobs:
           python scripts/check_korean_numbers_parity.py --rust-only
           python scripts/check_text_passes_parity.py --rust-only
           python scripts/check_segmenter_parity.py --rust-only
+          python scripts/check_capture_pipeline_parity.py --rust-only
           python scripts/check_asset_manifest_parity.py --rust-only
           python scripts/check_model_setup_parity.py --rust-only
           python scripts/check_model_gate_parity.py --rust-only
@@ -192,6 +197,7 @@ jobs:
             out/text-passes-parity/report.json
             out/segmenter-parity/report.json
             out/capture-bridge-parity/report.json
+            out/capture-pipeline-parity/report.json
             out/asset-manifest-parity/report.json
             out/model-setup-parity/report.json
             out/model-gate-parity/report.json

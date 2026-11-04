@@ -2,6 +2,7 @@
 fn main() {
     use madi_core::segmenter::{Configuration, Segmenter};
     use madi_platform::audio_capture::{Capture, Event, pump_verification_run_loop};
+    use madi_platform::capture_pipeline::{CapturePipeline, Event as PipelineEvent};
     use serde_json::{Value, json};
     use sha2::{Digest, Sha256};
     use std::{
@@ -31,6 +32,35 @@ fn main() {
             ..Configuration::default()
         })
         .unwrap();
+        let scratch = tempfile::tempdir().unwrap();
+        let mut pipeline = CapturePipeline::new(
+            madi_core::capture_stream::Configuration::default(),
+            scratch.path(),
+        )
+        .unwrap();
+        let segment_directory = pipeline.directory().to_owned();
+        pipeline.start();
+        let mut written_segments = Vec::new();
+        let describe_wav = |event| match event {
+            PipelineEvent::Segment {
+                offset,
+                wav,
+                had_speech,
+            } => {
+                let data = std::fs::read(wav.path()).unwrap();
+                assert_eq!(&data[..4], b"RIFF");
+                assert_eq!(
+                    data.len(),
+                    u32::from_le_bytes(data[40..44].try_into().unwrap()) as usize + 44
+                );
+                Some(
+                    json!({"offsetBits":format!("{:016x}",offset.to_bits()),"sampleCount":(data.len()-44)/2,
+                    "hadSpeech":had_speech,"pcmSHA256":format!("{:x}",Sha256::digest(&data[44..]))}),
+                )
+            }
+            PipelineEvent::Level(_) => None,
+            event => panic!("unexpected native pipeline output: {event:?}"),
+        };
         let mut digest = Sha256::new();
         let mut sample_count = 0;
         let mut chunks = Vec::new();
@@ -64,10 +94,18 @@ fn main() {
                             digest.update(n.to_le_bytes());
                         }
                         segments.extend(segmenter.push(&pcm).into_iter().map(&describe));
+                        written_segments.extend(
+                            pipeline
+                                .ingest(&pcm, microphone)
+                                .into_iter()
+                                .filter_map(&describe_wav),
+                        );
                     }
                     Event::Fault(message) => events.push(format!("fault:{message}")),
                     Event::Stopped => {
                         segments.extend(segmenter.flush().into_iter().map(&describe));
+                        written_segments
+                            .extend(pipeline.stop().into_iter().filter_map(&describe_wav));
                         events.push("stopped".into());
                         done = true;
                     }
@@ -84,6 +122,19 @@ fn main() {
                 cancel_done = true;
             }
         }
+        let mut expected_written = segments.clone();
+        for segment in &mut expected_written {
+            segment.as_object_mut().unwrap().remove("bodyCount");
+        }
+        assert_eq!(
+            written_segments, expected_written,
+            "native ingress to owned WAV differs"
+        );
+        drop(pipeline);
+        assert!(
+            !segment_directory.exists(),
+            "owned segment directory leaked"
+        );
         output.push(json!({"name":case["name"],"sampleCount":sample_count,"pcmSHA256":format!("{:x}",digest.finalize()),
             "chunks":chunks,"segments":segments,"events":events,"cancelEvents":cancel_events}));
     }
