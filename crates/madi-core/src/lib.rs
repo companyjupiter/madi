@@ -1,5 +1,6 @@
 //! Product state shared by both desktop hosts. UI code submits intent only.
 pub mod assets;
+pub mod caption;
 pub mod capture_stream;
 pub mod dna;
 pub mod glossary;

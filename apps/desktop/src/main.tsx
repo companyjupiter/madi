@@ -12,6 +12,7 @@ import { PreferencesProvider, usePreferences, type UILanguage } from './preferen
 import { SetupIntentQueue } from './SetupIntentQueue';
 import { SettingsWindow } from './SettingsWindow';
 import { openSettings } from './settings';
+import { CaptionWindow } from './CaptionWindow';
 import './theme.generated.css';
 import './styles.css';
 
@@ -342,4 +343,6 @@ function SetupScreen({ start, startLive, pending }: { start: () => void; startLi
   </main>;
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><PreferencesProvider>{location.hash === '#settings' ? <SettingsWindow /> : <App />}</PreferencesProvider></StrictMode>);
+const captionWindow = location.hash === '#caption-staff' || location.hash === '#caption-patient';
+if (captionWindow) document.documentElement.dataset.window = 'caption';
+createRoot(document.getElementById('root')!).render(<StrictMode>{captionWindow ? <CaptionWindow /> : <PreferencesProvider>{location.hash === '#settings' ? <SettingsWindow /> : <App />}</PreferencesProvider>}</StrictMode>);

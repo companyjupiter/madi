@@ -11,6 +11,10 @@ compile_error!(
 
 use madi_core::setup::{SetupCommand, SetupState};
 use tauri::Manager;
+mod caption_host;
+use caption_host::{
+    CaptionHost, caption_close, caption_resize, caption_snapshot, caption_status, caption_toggle,
+};
 mod files_host;
 mod glossary_host;
 mod models_host;
@@ -171,7 +175,11 @@ fn main() {
         }
         return;
     }
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+    builder
+        .manage(CaptionHost::default())
         .manage(SetupHost::default())
         .manage(GlossaryHost::default())
         .manage(FilesHost::default())
@@ -238,6 +246,11 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            caption_status,
+            caption_toggle,
+            caption_snapshot,
+            caption_close,
+            caption_resize,
             settings_open,
             settings_metadata,
             settings_model_locations,

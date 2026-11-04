@@ -11,6 +11,7 @@ on:
       - 'rust-toolchain.toml'
       - 'scripts/*parity.py'
       - 'scripts/prepare_desktop_native.mjs'
+      - 'scripts/record_desktop_build.py'
       - 'scripts/prepare_desktop_runtime.mjs'
       - 'scripts/sync_desktop_resources.py'
       - 'engine/**'
@@ -44,6 +45,8 @@ on:
       - 'apps/macos/Tests/AudioDecodeLimitTests.swift'
       - 'apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatter*Tests.swift'
       - 'apps/macos/Sovereign/UI/ContentView.swift'
+      - 'apps/macos/Sovereign/UI/CaptionOverlay.swift'
+      - 'apps/macos/Sovereign/Transcript/SpeakerID.swift'
       - 'apps/macos/Sovereign/UI/L10n.swift'
       - 'apps/macos/Sovereign/UI/SettingsView.swift'
       - 'apps/macos/Sovereign/UI/ClinicDisplaySupport.swift'
@@ -115,7 +118,7 @@ jobs:
           python scripts/sync_desktop_resources.py
           git diff --exit-code -- apps/desktop/public/assets apps/desktop/src/strings.generated.json apps/desktop/src/model-strings.generated.json apps/desktop/src/settings-strings.generated.json design/parity/asset-reference.json
           cargo fmt --all --check
-          cargo test --locked -p madi-core -p madi-protocol -p madi-platform
+          cargo test --locked -p madi-core -p madi-protocol -p madi-platform -p madi-desktop
           cargo clippy --locked --workspace --all-targets -- -D warnings
           node --test tests/parity/setup_intent_queue.test.mjs tests/parity/desktop_ipc_contract.test.mjs
       - name: Check Windows shared-open archive replacement
@@ -147,6 +150,7 @@ jobs:
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_client_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_committed_translation_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_cache_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_caption_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -183,6 +187,7 @@ jobs:
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_client_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_committed_translation_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_cache_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_caption_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -238,6 +243,9 @@ jobs:
             out/translation-cache-parity/result.json
             out/translation-cache-parity/native-result.json
             out/translation-cache-parity/swift.json
+            out/caption-parity/report.json
+            out/caption-parity/result.json
+            out/caption-parity/swift.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json

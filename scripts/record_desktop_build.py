@@ -22,7 +22,8 @@ report = {
     "productRelease": False,
     "nativeUIParity": "not-verified",
     "fileTranscription": "native timed owner connected; native screen interaction not verified",
-    "recording": "not-connected",
+    "recording": "native capture/shared file-live owner connected; device and full UI matrix not verified",
+    "captions": "staff/patient native windows connected; visual, focus and multi-monitor parity not verified",
     "preferences": "native isolated setup/presentation restoration connected; real-user migration and native UI not verified",
     "workspace": "macOS panel, isolated preferences, native scan/open/export connected; native UI not verified",
 }

@@ -6,6 +6,8 @@
     "main"
   ],
   "permissions": [
+    "allow-caption-status",
+    "allow-caption-toggle",
     "allow-preferences-snapshot",
     "allow-preferences-command",
     "allow-settings-command",

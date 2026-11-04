@@ -36,3 +36,10 @@ same job later fails the FAQ reference file hash because of Windows checkout
 line endings, so the whole job is not green. See
 `../evidence/windows-cache-checkout-2026-11-05.json`. The local Mac build does not
 execute the Windows-only branch.
+
+The subsequent `d37d945` run 41892947166 completes both platform jobs, including
+the Windows standalone executable. Windows passes 142 unit tests, the explicit
+shared-reader probe and all 50 concurrent repetitions. The downloaded binary's
+hash and clean source provenance are verified in
+`../evidence/desktop-ci-d37d945-2026-11-05.json`. The original intermittent
+failure's specific handle identity remains untraced.

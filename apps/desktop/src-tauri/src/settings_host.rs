@@ -23,11 +23,11 @@ fn show(app: &tauri::AppHandle) -> Result<(), String> {
 pub fn close_window(window: &tauri::WebviewWindow) {
     // Swift's AppDelegate terminates after the last visible window closes.
     // Tauri retains the hidden Settings WebView; it must not keep the app alive.
-    let another_visible = window
-        .app_handle()
-        .webview_windows()
-        .values()
-        .any(|other| other.label() != window.label() && other.is_visible().unwrap_or(false));
+    let another_visible = window.app_handle().webview_windows().values().any(|other| {
+        matches!(other.label(), "main" | "settings")
+            && other.label() != window.label()
+            && other.is_visible().unwrap_or(false)
+    });
     if another_visible {
         let _ = window.hide();
     } else {

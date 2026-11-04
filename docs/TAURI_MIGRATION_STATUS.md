@@ -15,6 +15,29 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Staff/patient caption overlays now connect the shared file/live snapshots and
+  preference owner to native windows and separate renderer capabilities. The
+  original interim-translation-off decision is retained. A bounded two-line
+  projection keeps the true tail age; stale callbacks and panel failures cannot
+  automatically reopen disabled captions. Original Swift computations match
+  1,500 cases, and deliberate source-pairing/age mutations are detected. Local
+  validation passes 174 Rust tests (28 core, 127 platform, 14 protocol, 5 desktop),
+  five frontend contract/queue tests, formatting, clippy and the rebuilt macOS
+  app plus relocated package/native-capture replay (17 direct notices). See
+  `runtime/CAPTION_OVERLAY.md` and
+  `evidence/macos-caption-overlay-2026-11-05.json`. Native visual, focus, drag,
+  Spaces/fullscreen and monitor acceptance remain NOT_RUN while the Mac is
+  locked; Windows caption compilation/reference checks await the next CI run.
+
+- Desktop CI at `d37d945` is green on macOS 15 and Windows 2022. Downloaded
+  executable/package hashes, clean source manifests and reference result bytes
+  were verified, including the native Swift cache result on macOS 15. That host
+  has seven Unicode mapping differences from the portable baseline; its native
+  result equals the original Swift result. Mac passes 169 Rust tests; Windows
+  passes 142, the shared-reader replacement probe and all 50 archive repeats.
+  Both standalone builds finish. See `evidence/desktop-ci-d37d945-2026-11-05.json`.
+  This verdict covers the cache/archive fixes, before the caption integration.
+
 - Windows `885317f` passes 142 Rust tests, the shared-reader replacement probe
   (legacy persist reproduces OS error 5), and 50 concurrent archive repetitions.
   Its cache result bytes also match the pinned reference. The job then fails a
@@ -22,8 +45,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   An isolated autocrlf checkout reproduces the mismatch without changing JSON
   values; a file-specific LF rule restores the exact pinned hash. Failure reports
   now retain the differing fields. See
-  `evidence/windows-cache-checkout-2026-11-05.json`. This checkout fix requires
-  a new remote verdict; Windows standalone build was not reached in that run.
+  `evidence/windows-cache-checkout-2026-11-05.json`. The later `d37d945` verdict
+  above verifies the fix; Windows standalone build was not reached in `885317f`.
 
 - Desktop CI for `6e90399` and `fb69224` exposed two remaining platform issues:
   macOS 15 Swift lowercase differs from Rust for some Unicode scalars, and the
@@ -32,8 +55,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   Windows std::fs::rename checkpoint replacement with a shared-reader regression,
   and join-before-panic test cleanup. Local Mac 27 validation passes 169 tests,
   all 394 native/portable cache cases, formatting/clippy and rebuilt app/package
-  checks. Corrected macOS 15 and Windows behavior requires the next actual CI
-  verdict; no remote pass is claimed. See
+  checks. The later `d37d945` CI verdict above verifies both platforms. See
   `evidence/platform-cache-compatibility-2026-11-05.json` and
   `runtime/WINDOWS_ARCHIVE_REPLACEMENT.md`.
 
@@ -63,7 +85,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   disables interim translation and committed token streaming in
   `LiveFeatureWiring.swift`; the candidate preserves those product decisions.
   Porting the dormant interim producer is future redesign work. Committed caption
-  fallback and ambiguous FAQ source-column matching remain open.
+  UI acceptance and ambiguous FAQ source-column matching remain open.
   Native GUI checking remains unavailable
   while the Mac is locked. The final local source passes 168 Rust tests
   (27/127/14), formatting, clippy, both cache comparisons and the existing
@@ -90,8 +112,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   Its relocated package/decoder/capture replay also passes. `c996b2c` desktop CI
   passes on macOS (161 tests) and Windows (133 tests plus 50 archive repeats),
   with downloaded binaries, packages and committed/client result bytes verified
-  in `evidence/desktop-ci-c996b2c-2026-11-05.json`. The cache follow-up requires
-  its own CI verdict.
+  in `evidence/desktop-ci-c996b2c-2026-11-05.json`. The cache follow-up is verified
+  by the later `d37d945` receipt above.
 
 - The native translation client now executes the shipping queue/prompt/output
   state through the shared DNA broker. Its 165 Swift scenarios / 6,767 operations

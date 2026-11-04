@@ -6,6 +6,7 @@ import { MiddleText } from './MiddleText';
 import { useTranscriptFollow } from './useTranscriptFollow';
 import './transcript.css';
 import { usePreferences } from './preferences';
+import { useCaptionControl } from './captions';
 import { LiveControls, LiveMic, NativeSymbol, liveLabel, phaseLabel } from './LiveControls';
 
 type Props = { workspace: ReactNode; snapshot: FileSnapshot; artwork: FileArtwork | null; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; leave: (close?: boolean) => void; control: (command: LiveControl) => void; permission: (action: 'openSettings' | 'restart') => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
@@ -21,7 +22,8 @@ function speakerColor(speaker: number) { return `var(--speaker-${((speaker % 8) 
 // This is the connected file-view candidate. AI tools, playback,
 // confidence review and native visual parity remain separate migration gates.
 export function FileTranscript({ workspace, snapshot: state, artwork, language, text, reset, leave, control, permission, edit, copy, rename }: Props) {
-  const { presentation: { contentMode: content, fontSize }, send } = usePreferences();
+  const { state: preferences, presentation: { contentMode: content, fontSize }, send } = usePreferences();
+  const captions = useCaptionControl();
   const setContent = (value: boolean) => send({ type: 'contentMode', value });
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -92,11 +94,13 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
         <button className="font-smaller" title={text('Smaller text')} onClick={() => send({ type: 'smallerText' })}>A</button>
         <span className="font-size">{Math.trunc(fontSize)}</span>
         <button className="font-larger" title={text('Larger text')} onClick={() => send({ type: 'largerText' })}>A</button>
+        {Boolean(preferences.setup.translateTargets?.length) && <button className={`caption-toggle${captions.enabled ? ' active' : ''}`} aria-pressed={captions.enabled} onClick={captions.toggle} title={captions.enabled ? l('자막 오버레이 끄기', 'Turn off caption overlay') : l('자막 오버레이 — 화면 위 실시간 번역 자막 창', 'Caption overlay — a floating live-translation window')}><NativeSymbol artwork={artwork} name={captions.enabled ? 'captionOn' : 'caption'} /></button>}
         <div className="transcript-mode" role="group" aria-label={text('Content: clean transcript · Detail: timecodes, confidence, overlap')}>
           <button aria-pressed={content} onClick={() => setContent(true)}>{text('Content')}</button>
           <button aria-pressed={!content} onClick={() => setContent(false)}>{text('Detail')}</button>
         </div>
       </div>
+      {captions.failed && <div className="transcript-error" role="alert">{l('자막 창을 열 수 없습니다.', 'The caption window could not open.', '字幕ウィンドウを開けませんでした。')}</div>}
       <div className={`transcript-reader${hasTranscript ? ' has-lines' : ''}${follow.badge.scrolled ? ' scrolled' : ''}`}>
       <div className="transcript-scroll" ref={follow.viewport}>
         <div className={`transcript-scroll-content${hasTranscript ? '' : ' empty-layout'}`} ref={follow.contents}>

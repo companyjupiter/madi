@@ -263,6 +263,7 @@ pub(crate) fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
                         }
                     });
                 }
+                crate::caption_host::file_changed(&events, &snapshot);
                 let _ = events.emit_to("main", "file-session-changed", snapshot);
             },
         )

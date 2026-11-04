@@ -76,6 +76,7 @@ pub async fn service(app: &tauri::AppHandle) -> Result<PreferencesService, Strin
             });
         }
         let _ = events.emit_to("main", "setup-changed", &snapshot.setup);
+        crate::caption_host::preferences_changed(&events, &snapshot);
         for label in ["main", "settings"] {
             let _ = events.emit_to(label, "preferences-changed", &snapshot);
         }

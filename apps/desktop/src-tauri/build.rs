@@ -6,6 +6,11 @@ fn main() {
     }
     let attributes =
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+            "caption_status",
+            "caption_toggle",
+            "caption_snapshot",
+            "caption_close",
+            "caption_resize",
             "settings_open",
             "settings_metadata",
             "settings_model_locations",

@@ -66,6 +66,14 @@ pub fn artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
 pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
     Ok(BTreeMap::from([
         (
+            "caption".into(),
+            render_symbol("captions.bubble", 12.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
+            "captionOn".into(),
+            render_symbol("captions.bubble.fill", 12.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
             "follow".into(),
             render_symbol("arrow.down", 11.0, unsafe { NSFontWeightSemibold })?,
         ),
@@ -102,6 +110,22 @@ pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static st
     ]))
 }
 
+pub fn caption_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
+    Ok(BTreeMap::from([
+        (
+            "caption".into(),
+            render_symbol("captions.bubble.fill", 12.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
+            "close".into(),
+            render_symbol("xmark", 11.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
+            "mic".into(),
+            render_symbol("mic.fill", 10.0, unsafe { NSFontWeightRegular })?,
+        ),
+    ]))
+}
 pub fn settings_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
     [
         ("recording", "mic"),
