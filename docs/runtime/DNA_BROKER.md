@@ -83,7 +83,9 @@ than being converted into an invalid timer.
   before/after input hashes. This is transport execution evidence, not a
   translation quality assessment.
 
-Next integration work includes TranslateEngine's turn queue, prompts, output
-policy, repair retries, prefix registration, interim/committed revision guards,
-caption pressure and busy signals, stop-time backfill, and all other DNA clients.
+The pure turn queue, prompt and output policies now have their own Swift
+differential in `TRANSLATION_POLICY.md`. Next integration work includes their
+TranslateEngine client owner, repair retries, prefix registration, interim/committed
+revision guards, caption pressure and busy signals, stop-time backfill, and all other
+DNA clients.
 Actual WebView/native screen comparison and Windows GPU execution remain open.

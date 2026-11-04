@@ -15,6 +15,18 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Pure translation scheduling, prompt and output policies now match 3,574 live
+  Swift oracle cases, including 6,300 queue operations. Unicode grapheme boundaries,
+  reserved interim admission, revision replacement, example reuse/echo/replay,
+  retry scripts, runaway bounds and guarantee interval bits are preserved. Six
+  intentional mutations are detected and restored. See
+  `runtime/TRANSLATION_POLICY.md` and
+  `evidence/macos-translation-policy-2026-11-05.json`. The translation client,
+  broker connection, revision acceptance, interim display and stop-time backfill
+  are still unconnected; these checks are not end-to-end translation acceptance.
+  The final local snapshot passes 141 Rust tests (23/104/14), formatting,
+  workspace clippy, the live Swift comparison and the pinned-reference comparison.
+
 - The shared native DNA broker now has one resident process, caption-first/FIFO
   scheduling, caption-pressure admission, prefix registration, queued cancellation
   and bounded watchdog recovery. Its 760 policy cases match unchanged shipping
@@ -27,6 +39,12 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   two clients, a prefix registration and three turns in one reaped process;
   full before/after model and executable hashes match. Evidence:
   `evidence/macos-dna-broker-2026-11-05.json`.
+  Its revision `672de1e` also completes macOS/Windows Desktop CI successfully:
+  141/113 Rust tests, 50 Windows archive repetitions and all 760 DNA policy cases
+  pass. Downloaded executable/package/runtime hashes and preview/DNA result bytes
+  are verified against clean build manifests in
+  `evidence/desktop-ci-672de1e-2026-11-05.json`. This receipt precedes the pure
+  translation policies above; their CI must be assessed at their own revision.
 
 - Preview revision `a29470d` passed Windows Rust tests and 50 archive repeats,
   but its preview comparison stopped while Python decoded UTF-8 Swift source

@@ -13,6 +13,7 @@ pub mod settings;
 pub mod setup;
 pub mod text_passes;
 pub mod transcript;
+pub mod translation;
 pub mod workspace;
 
 pub mod segmenter;
