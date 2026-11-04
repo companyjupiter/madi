@@ -12,6 +12,7 @@ compile_error!(
 use madi_core::setup::{SetupCommand, SetupState};
 use tauri::Manager;
 mod files_host;
+mod glossary_host;
 mod models_host;
 mod setup_host;
 mod workspace_host;
@@ -19,6 +20,7 @@ use files_host::{
     FilesHost, file_artwork, file_copy_line, file_edit, file_rename_speaker, file_reset,
     file_snapshot, file_start,
 };
+use glossary_host::{GlossaryHost, glossary_command, glossary_snapshot};
 use models_host::{models_artwork, models_command, models_snapshot};
 use setup_host::{
     SetupHost, choose_file, preferences_command, preferences_snapshot, settings_command,
@@ -137,6 +139,7 @@ fn main() {
     }
     tauri::Builder::default()
         .manage(SetupHost::default())
+        .manage(GlossaryHost::default())
         .manage(FilesHost::default())
         .manage(WorkspaceHost::default())
         .on_webview_event(setup_host::handle_drop)
@@ -190,6 +193,8 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            glossary_snapshot,
+            glossary_command,
             settings_command,
             preferences_snapshot,
             preferences_command,

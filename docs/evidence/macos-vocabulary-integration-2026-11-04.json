@@ -1,0 +1,465 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-04",
+  "sourceHead": "8ddd3c396f25fa5cc859aef516c25abd3e870657",
+  "sourceDirty": true,
+  "sourceSHA256": {
+    ".github/workflows/desktop-parity.yml": "41db45ccb068325d54cb8f13874c48c4476dad71ca57c06364ae26edafe7688e",
+    "apps/desktop/src-tauri/src/files_host.rs": "5d38a8d4036459b7f61cd6cb7386103911cf0e667aa03c539d424d391c2f7890",
+    "apps/desktop/src-tauri/src/glossary_host.rs": "7373557b5478be2b46677e86679ed6ecaa373398b9e796ba54c8beed2ff9083a",
+    "apps/desktop/src-tauri/src/main.rs": "8b5d9be1fe095f052982960be902a809e7d0ea0e802f03977e3fc3cc5081b7da",
+    "apps/desktop/src-tauri/src/models_host.rs": "29ede5be9c164d83c698e9c42b7168bd3da0c749250117e41c356cc376dd97ba",
+    "crates/madi-core/examples/personal_vocabulary_oracle.rs": "baebff24b24d4218c6adcb3345f09e73737309955d63f4af31f1902a7ac2b6f7",
+    "crates/madi-core/src/glossary.rs": "ede1579cb15967b8f3ca4b0a71d115c49ae2b32d8b62c0c542bea0c940487fd5",
+    "crates/madi-core/src/lib.rs": "0c2b9118e225ebd782bf04bb5036ece4f2a7d967f6f01d17cea82058d131db87",
+    "crates/madi-core/src/personal_vocabulary.rs": "5fb0a7f40412cf3c76afede8d6a068a77d254a1d6341ad9fef2cc30ec0a7f465",
+    "crates/madi-core/src/transcript/mod.rs": "75bc2daf0aa26a6b859813943af9d896ca8e5f3c159b787a12156911ef73d3fc",
+    "crates/madi-platform/examples/file_workflow_smoke.rs": "21fabbccc558eeb899138aaf740ca97a829b8842e9bf5166ab7bc13bfcc588fb",
+    "crates/madi-platform/examples/glossary_bridge.rs": "8ca72153677fda9bf0cf282997f059dc974601cd779b33aa4c8d63a71dd2b7d6",
+    "crates/madi-platform/src/file_workflow.rs": "0b8aa09f844ad52ccc8db83fb5346a53066724a32f86841cf476527ca2c92e0e",
+    "crates/madi-platform/src/file_workflow/tests.rs": "36c443fd5844f725cf144c340a746ad12838530e869a5ca312543ee152535c51",
+    "crates/madi-platform/src/glossary_service.rs": "e101b3d1a0eacefd916cc15a8a77de6ac6475ea779003731de2c3dbefe4aced4",
+    "crates/madi-platform/src/lib.rs": "0dce0d5f9c24f11f4029a55159174f40b41f12d0b8f661d8a8498d5424a0b3bf",
+    "design/parity/personal-vocabulary-reference.json": "1dda105aefc5b984753e4396048b1c9cf18fe79306a80e31b774c90eeaf389b3",
+    "scripts/check_glossary_parity.py": "6be2866320fbc064e33ae25d7d1b7b458afccf2cf2a579a310e789f4a5f795a1",
+    "scripts/check_personal_vocabulary_parity.py": "71ab9c652e4624ec5c83f8b11e7f24232ee4edbb8272f078e8fc6110336cd73f",
+    "tests/parity/PersonalVocabularyOracle.swift": "7526978cb62e43aace9cd627f34b9e39390d6597a45fadf59a007391fe0f3023"
+  },
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "checks": {
+    "rustTests": [
+      12,
+      66,
+      14
+    ],
+    "totalTests": 92,
+    "queueTests": 2,
+    "clippy": "PASS",
+    "rustfmt": "PASS",
+    "frontendBuild": "PASS",
+    "debugAppBuild": "PASS",
+    "strictRelocationPackage": "PASS"
+  },
+  "vocabulary": {
+    "cases": 193,
+    "queries": 5390,
+    "pairs": 4063,
+    "corpusSHA256": "c999e7d2d20858811cef5df3588cc348df6ff55484c96c95bf72f41cdbfee6d6",
+    "resultSHA256": "63f19949fd5f473d0c0527df07a9c7fb37d161e040b442255359fafd8eaa5801",
+    "canonicalBiasTieCases": [
+      "random-101"
+    ],
+    "sources": {
+      "apps/macos/Sovereign/Transcript/PersonalVocabulary.swift": "eebabc92c01543d73d608da3478977019698785e7fbb4ab726988a605a48340a",
+      "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+      "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "Pure vocabulary learning/matching, display correction and prompt policy; native owner, file effects and UI remain separate"
+  },
+  "portableVocabulary": {
+    "cases": 193,
+    "queries": 5390,
+    "pairs": 4063,
+    "corpusSHA256": "c999e7d2d20858811cef5df3588cc348df6ff55484c96c95bf72f41cdbfee6d6",
+    "resultSHA256": "63f19949fd5f473d0c0527df07a9c7fb37d161e040b442255359fafd8eaa5801",
+    "canonicalBiasTieCases": [
+      "random-101"
+    ],
+    "sources": {
+      "apps/macos/Sovereign/Transcript/PersonalVocabulary.swift": "eebabc92c01543d73d608da3478977019698785e7fbb4ab726988a605a48340a",
+      "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+      "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68"
+    },
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "scope": "Pure vocabulary learning/matching, display correction and prompt policy; native owner, file effects and UI remain separate"
+  },
+  "glossary": {
+    "cases": 254,
+    "states": 4799,
+    "corpusSHA256": "060e11c60a39d94913fd1817b30961ed126a54479df6378a05018205e5483c93",
+    "resultSHA256": "690aabb4ba69e0e18e47a041ea685091965f73e61a4ca1cba44627f4fa5b87c2",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+      "apps/macos/Sovereign/UI/GlossarySettingsView.swift": "8b2bfcc01e2d49c3a65ff684d49889f1e75098e4f5fc2bcab16270e2d66e34b1"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "nativeFoundationBridgeRun": true,
+    "scope": "Glossary storage, schema restoration and mutations only; no matcher, learning integration, persistent owner or Settings UI"
+  },
+  "portableGlossary": {
+    "cases": 254,
+    "states": 4799,
+    "corpusSHA256": "060e11c60a39d94913fd1817b30961ed126a54479df6378a05018205e5483c93",
+    "resultSHA256": "690aabb4ba69e0e18e47a041ea685091965f73e61a4ca1cba44627f4fa5b87c2",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+      "apps/macos/Sovereign/UI/GlossarySettingsView.swift": "8b2bfcc01e2d49c3a65ff684d49889f1e75098e4f5fc2bcab16270e2d66e34b1"
+    },
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "nativeFoundationBridgeRun": false,
+    "scope": "Glossary storage, schema restoration and mutations only; no matcher, learning integration, persistent owner or Settings UI"
+  },
+  "nativeWorkflow": {
+    "cleanAtShutdown": true,
+    "modelSizeMtimeUnchanged": true,
+    "passed": true,
+    "preferences": {
+      "isolatedRelaunch": true,
+      "nativeFileAdmission": true,
+      "overlapDisabledForAdmittedFile": true,
+      "restored": {
+        "effectiveWindowSeconds": 10.0,
+        "multiTranslateForcesAccurate": true,
+        "presentation": {
+          "appearance": "system",
+          "contentMode": false,
+          "fontSize": 18.0,
+          "uiLanguage": "ja"
+        },
+        "revision": 0,
+        "settings": {
+          "aiReconcileEnabled": false,
+          "caption": {
+            "minScaleFactor": 0.9,
+            "panelWidth": 760.0,
+            "patientFontSize": 46.0,
+            "patientLangOverride": null,
+            "patientPanelEnabled": false,
+            "patientScreenIndex": null,
+            "staffFontSize": 26.0
+          },
+          "debugCapture": false,
+          "livePreviewEnabled": true,
+          "liveWindowSeconds": 10.0,
+          "translateTailSeconds": 3.0,
+          "vadConfThreshold": 0.55
+        },
+        "setup": {
+          "audioSource": "mic",
+          "diarize": true,
+          "inputDeviceId": null,
+          "inputLanguage": "English",
+          "meetingMode": "lecture",
+          "osd": true,
+          "revision": 0,
+          "speakerCount": 0,
+          "stagedFile": null,
+          "translateTargets": [
+            "Chinese",
+            "English",
+            "Japanese",
+            "Korean"
+          ]
+        }
+      }
+    },
+    "schema": 3,
+    "sourcePreserved": true,
+    "sourceSha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "workflow": {
+      "observations": [
+        {
+          "elapsed": 0.001696041,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 1,
+          "words": 0
+        },
+        {
+          "elapsed": 0.001713041,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 2,
+          "words": 0
+        },
+        {
+          "elapsed": 0.06637925,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 3,
+          "words": 0
+        },
+        {
+          "elapsed": 0.116404166,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 4,
+          "words": 0
+        },
+        {
+          "elapsed": 0.469807958,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 5,
+          "words": 0
+        },
+        {
+          "elapsed": 0.559113375,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 6,
+          "words": 0
+        },
+        {
+          "elapsed": 1.336848208,
+          "lines": 1,
+          "phase": {
+            "kind": "done"
+          },
+          "revision": 7,
+          "words": 22
+        }
+      ],
+      "staleEditIgnored": true,
+      "cleanAtCompletion": true,
+      "workspace": {
+        "entries": 1,
+        "exports": [
+          {
+            "bytes": 247,
+            "format": "md",
+            "sha256": "15eb2230a9c34a620f37c73da12265066d1db696b6eb269298a78622f37bc581"
+          },
+          {
+            "bytes": 188,
+            "format": "srt",
+            "sha256": "63f69ff27621486034bd09d2ecc308b593c3e189708a12390b806ffea17d13df"
+          },
+          {
+            "bytes": 196,
+            "format": "vtt",
+            "sha256": "b6310a5b6d1bbc4044280bb3319da2faef02476ad1929f90e7547536e643a86e"
+          },
+          {
+            "bytes": 141,
+            "format": "txt",
+            "sha256": "57d0dea64101984d13dbe45a7151994885a7319b531dac5ebbce8ea3f072124c"
+          },
+          {
+            "bytes": 4140,
+            "format": "json",
+            "sha256": "c67182e1f8ac641fd722e089e7181a42dbb70f3e43793bca68919fe83e657db4"
+          }
+        ],
+        "isolatedPreferencePersisted": true,
+        "staleRowRejected": true,
+        "stats": {
+          "avgSeconds": 0.0,
+          "avgSpeakers": 1.0,
+          "meetingCount": 1,
+          "speakerSum": 1,
+          "thisWeekCount": 1,
+          "totalSeconds": 0.0,
+          "totalWords": 22,
+          "weeklyTrend": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "glossary": {
+        "biasTermsAtAdmission": [
+          "소버린"
+        ],
+        "isolatedRelaunch": true,
+        "learnedWrong": "and",
+        "nativeWordEditLearned": true,
+        "originalArchivePreserved": true
+      },
+      "archive": {
+        "bytes": 234,
+        "inlineEditDidNotAutosave": true,
+        "reopenDidNotClaimWritableTarget": true,
+        "sha256": "59490bcaadf8cf1d119e8f7f7c1f251ff524aa6505dd8db2909c8df96aa1b63d",
+        "sourcePreserved": true
+      }
+    },
+    "words": 22,
+    "transcript": [
+      "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    ],
+    "elapsedSeconds": 1.946,
+    "runtimeLayout": {
+      "decoder": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-cs5xw18p/Madi UI Parity.app/Contents/MacOS/madi-audio-decode",
+      "transcribe": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-cs5xw18p/Madi UI Parity.app/Contents/MacOS/transcribe",
+      "translate2b": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-cs5xw18p/Madi UI Parity.app/Contents/MacOS/translate-engine-2b",
+      "translate4b": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-cs5xw18p/Madi UI Parity.app/Contents/MacOS/translate-engine-4b",
+      "assetsDirectory": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-cs5xw18p/Madi UI Parity.app/Contents/Resources/assets-small"
+    },
+    "sourceSHA256Before": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "sourceSHA256After": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "engineSHA256": "adf69a670ff96a567760c966122a1dcbbb14dc0bd233ee2274e4deb048b4f542",
+    "decoderSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "relocatedOutsideRepository": true,
+    "sourceHead": "8ddd3c396f25fa5cc859aef516c25abd3e870657",
+    "sourceDirty": true,
+    "evidenceKind": "local uncommitted vocabulary integration candidate with relocated debug runtime; isolated glossary learning/admission and headless native owners, not renderer IPC or native UI acceptance",
+    "ownedTemporaryFoldersRemoved": true
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957392,
+        "sha256": "adf69a670ff96a567760c966122a1dcbbb14dc0bd233ee2274e4deb048b4f542"
+      },
+      "translate-engine-2b": {
+        "bytes": 1575744,
+        "sha256": "34795c20da441bc7baf249f4a2ca12766e04016bad05fd7303b2da4356486de0"
+      },
+      "translate-engine-4b": {
+        "bytes": 1575600,
+        "sha256": "fc0c8687300de8dd51f7a67493a57090eb2a677a730395cbd0e95fe6c21e85eb"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "helperBytes": 150816,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "878297dde195816f975584a609e8712415d930ed18d8008d8404a5a2b7c2f6bb",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "signedDesktopBinary": {
+    "bytes": 60110752,
+    "sha256": "9b65a5455e0cf6c625188fdd70c8df6cc6c4cfa109dbda77bf8a2f8e49d4b21e",
+    "retainedArchiveMatch": true
+  },
+  "build": {
+    "schemaVersion": 1,
+    "sourceHead": "8ddd3c396f25fa5cc859aef516c25abd3e870657",
+    "sourceDirty": true,
+    "sourceStatus": [
+      " M .github/workflows/desktop-parity.yml",
+      " M apps/desktop/src-tauri/src/files_host.rs",
+      " M apps/desktop/src-tauri/src/main.rs",
+      " M apps/desktop/src-tauri/src/models_host.rs",
+      " M crates/madi-core/src/glossary.rs",
+      " M crates/madi-core/src/lib.rs",
+      " M crates/madi-core/src/transcript/mod.rs",
+      " M crates/madi-platform/examples/file_workflow_smoke.rs",
+      " M crates/madi-platform/src/file_workflow.rs",
+      " M crates/madi-platform/src/file_workflow/tests.rs",
+      " M crates/madi-platform/src/lib.rs",
+      " M docs/runtime/GLOSSARY.md",
+      " M scripts/check_glossary_parity.py",
+      "?? apps/desktop/src-tauri/src/glossary_host.rs",
+      "?? crates/madi-core/examples/personal_vocabulary_oracle.rs",
+      "?? crates/madi-core/src/personal_vocabulary.rs",
+      "?? crates/madi-platform/examples/glossary_bridge.rs",
+      "?? crates/madi-platform/src/glossary_service.rs",
+      "?? design/parity/personal-vocabulary-reference.json",
+      "?? docs/evidence/desktop-ci-8ddd3c3-2026-11-04.json",
+      "?? docs/evidence/desktop-ci-d12687b-2026-11-04.json",
+      "?? scripts/check_personal_vocabulary_parity.py",
+      "?? tests/parity/PersonalVocabularyOracle.swift"
+    ],
+    "host": "macOS-27.2-arm64-arm-64bit-Mach-O",
+    "binary": "target/debug/madi-desktop",
+    "bytes": 60462144,
+    "sha256": "72f3e2680c0cd4fbb587067122ecc8778f92912a1ca2bacd5b58e0d5ae68ff69",
+    "productRelease": false,
+    "nativeUIParity": "not-verified",
+    "fileTranscription": "native timed owner connected; native screen interaction not verified",
+    "recording": "not-connected",
+    "preferences": "native isolated setup/presentation restoration connected; real-user migration and native UI not verified",
+    "workspace": "macOS panel, isolated preferences, native scan/open/export connected; native UI not verified"
+  },
+  "limitations": [
+    "Settings tab controls and native pixel/interaction comparison remain incomplete",
+    "Stable-line translation timing and combined Korean number formatting pass are not connected",
+    "Real-user glossary import/relaunch and renderer IPC acceptance NOT_RUN",
+    "Live capture, full translation/correction and Windows GPU/native product adapters remain incomplete",
+    "One original equal-hit canonical prompt tie is checked against valid source spellings, not a unique byte output"
+  ],
+  "relatedCI": [
+    "docs/evidence/desktop-ci-d12687b-2026-11-04.json",
+    "docs/evidence/desktop-ci-8ddd3c3-2026-11-04.json"
+  ]
+}

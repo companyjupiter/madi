@@ -123,6 +123,9 @@ impl<'de> Deserialize<'de> for Glossary {
     }
 }
 impl Glossary {
+    pub fn entries(&self) -> impl Iterator<Item = &Entry> {
+        self.entries.values()
+    }
     pub fn learn(&mut self, wrong: &str, right: &str) -> Result<(), &'static str> {
         if wrong.is_empty() || right.is_empty() || wrong.nfc().eq(right.nfc()) {
             return Ok(());

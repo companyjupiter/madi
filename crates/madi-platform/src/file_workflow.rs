@@ -3,16 +3,24 @@
 use crate::{
     asr_config::FileSettings,
     file_session::{Configuration, FileSession, RunId, UpdateKind},
+    glossary_service::GlossaryService,
     media_file,
     session_archive::SessionArchiveWriter,
 };
 use madi_core::{
+    personal_vocabulary,
     session::{Failure, Phase},
-    transcript::{Features, Line, SpeakerNumbers, TranscriptStore, archive},
+    transcript::{Features, Line, SpeakerNumbers, TranscriptStore, Uuid, archive},
 };
 use madi_protocol::{stream::Output, transcribe::Event};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, io, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io,
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::{
     sync::{Mutex, mpsc, oneshot, watch},
     task::JoinHandle,
@@ -116,6 +124,7 @@ pub enum Edit {
     },
 }
 enum Command {
+    Glossary(GlossaryService, oneshot::Sender<io::Result<()>>),
     Export {
         generation: u64,
         path: PathBuf,
@@ -202,6 +211,8 @@ impl FileWorkflow {
                 changed: Box::new(changed),
                 state,
                 store: TranscriptStore::default(),
+                glossary: None,
+                user_edited_lines: BTreeSet::new(),
                 run: None,
                 render: None,
                 fix: None,
@@ -222,6 +233,15 @@ impl FileWorkflow {
     }
     pub fn snapshot(&self) -> Snapshot {
         self.owner.snapshot.borrow().clone()
+    }
+    /// Attach the app-owned glossary before admission or a saved-file edit.
+    pub async fn set_glossary(&self, glossary: GlossaryService) -> io::Result<()> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::Glossary(glossary, reply))
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
     }
     /// Queue a persisted setting change without creating a detached async task.
     pub fn archive_settings_changed(&self, settings: ArchiveSettings) -> io::Result<()> {
@@ -358,6 +378,8 @@ struct Worker {
     changed: Box<dyn Fn(Snapshot) + Send + Sync>,
     state: Snapshot,
     store: TranscriptStore,
+    glossary: Option<GlossaryService>,
+    user_edited_lines: BTreeSet<Uuid>,
     run: Option<RunId>,
     render: Option<Instant>,
     fix: Option<Instant>,
@@ -404,6 +426,7 @@ impl Worker {
         // All disk work is joined before another command can reach clear.
         self.archive_writer = Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default()));
         self.store.reset();
+        self.user_edited_lines.clear();
         let revision = self.state.revision;
         let generation = self.state.generation.wrapping_add(1);
         self.state = Snapshot {
@@ -427,6 +450,18 @@ impl Worker {
         self.checkpoint = None;
         self.store.flush_pending_speaker_fix_rebuild();
         self.store.finalize();
+        if let Some(glossary) = &self.glossary {
+            glossary.with_value(|glossary| {
+                for line in self.store.lines().to_vec() {
+                    if !self.user_edited_lines.contains(&line.id)
+                        && let Some(text) =
+                            personal_vocabulary::corrected_line_text(&line, glossary)
+                    {
+                        self.store.edit_line(line.id, &text, None);
+                    }
+                }
+            });
+        }
         self.state.partial.clear();
         self.auto_save().await;
         self.publish();
@@ -512,6 +547,9 @@ impl Worker {
         loop {
             tokio::select! {
                 command=self.input.recv()=>match command {
+                    Some(Command::Glossary(glossary, reply))=>{
+                        self.glossary=Some(glossary);let _=reply.send(Ok(()));
+                    },
                     Some(Command::Export {generation,path,format,settings,reply})=>{
                         let result=if generation!=self.state.generation || self.store.lines().is_empty(){Ok(())}else{
                             let lines=self.store.lines().to_vec();let names=self.state.speaker_names.clone();
@@ -554,7 +592,7 @@ impl Worker {
                         let _=reply.send(result);
                     },
                     Some(Command::Edit {generation,edit,reply})=>{
-                        let result=if generation==self.state.generation {self.edit(edit)} else {Ok(self.state.clone())};
+                        let result=if generation==self.state.generation {self.edit(edit).await} else {Ok(self.state.clone())};
                         let _=reply.send(result);
                     },
                     Some(Command::Shutdown)|None=>return Ok(()),
@@ -635,6 +673,27 @@ impl Worker {
         Ok(self.state.clone())
     }
     fn ingest(&mut self, event: Event) {
+        let event = match event {
+            Event::Word {
+                t0,
+                t1,
+                text,
+                confidence,
+            } => Event::Word {
+                t0,
+                t1,
+                confidence,
+                text: self.glossary.as_ref().map_or_else(
+                    || text.clone(),
+                    |glossary| {
+                        glossary.with_value(|glossary| {
+                            personal_vocabulary::correct_incoming_text(&text, confidence, glossary)
+                        })
+                    },
+                ),
+            },
+            event => event,
+        };
         match &event {
             Event::ProgressTotal(total) => self.state.chunks_total = *total,
             Event::ProgressChunk(done) => {
@@ -652,16 +711,40 @@ impl Worker {
             self.render = Some(Instant::now() + Duration::from_millis(33));
         }
     }
-    fn edit(&mut self, edit: Edit) -> io::Result<Snapshot> {
+    async fn edit(&mut self, edit: Edit) -> io::Result<Snapshot> {
         let invalid = || io::Error::new(io::ErrorKind::InvalidInput, "invalid transcript identity");
+        let mut learn = None;
         match edit {
             Edit::Line { id, text } => {
-                self.store
-                    .edit_line(id.parse().map_err(|_| invalid())?, &text, None);
+                let id = id.parse::<Uuid>().map_err(|_| invalid())?;
+                let before = self
+                    .store
+                    .lines()
+                    .iter()
+                    .find(|line| line.id == id)
+                    .map(Line::text);
+                self.user_edited_lines.insert(id);
+                if self.store.edit_line(id, &text, None)
+                    && let Some(before) = before
+                {
+                    learn = Some((personal_vocabulary::diff(&before, &text), false));
+                }
             }
             Edit::Word { id, index, text } => {
-                self.store
-                    .edit_word(id.parse().map_err(|_| invalid())?, index, &text);
+                let id = id.parse::<Uuid>().map_err(|_| invalid())?;
+                let before = self
+                    .store
+                    .lines()
+                    .iter()
+                    .find(|line| line.id == id)
+                    .and_then(|line| line.words.get(index))
+                    .map(|word| word.text.clone());
+                if self.store.edit_word(id, index, &text)
+                    && let Some(before) = before
+                    && !personal_vocabulary::canonically_equal(&before, &text)
+                {
+                    learn = Some((personal_vocabulary::diff(&before, &text), true));
+                }
             }
             Edit::Translation { id, language, text } => {
                 self.store.set_translation(
@@ -683,6 +766,14 @@ impl Worker {
                     self.publish();
                 }
             }
+        }
+        if let Some((corrections, force)) = learn
+            && let Some(glossary) = &self.glossary
+            && let Err(error) = glossary.learn(corrections, force).await
+        {
+            // The successful transcript edit is not discarded when optional
+            // glossary persistence fails. The owner retains its last saved rules.
+            eprintln!("personal glossary learning: {error}");
         }
         self.schedule();
         Ok(self.state.clone())

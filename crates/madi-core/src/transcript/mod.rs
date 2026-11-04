@@ -9,7 +9,7 @@ pub use line::{Line, SegmentStatus, text_revision};
 use serde::{Deserialize, Serialize};
 pub use speakers::{SpeakerNumbers, UNKNOWN_SPEAKER};
 pub use store::{Features, TranscriptStore};
-use uuid::Uuid;
+pub use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Word {

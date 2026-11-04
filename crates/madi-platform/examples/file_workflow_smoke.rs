@@ -96,8 +96,35 @@ async fn main() -> io::Result<()> {
         .take_file()
         .await?
         .ok_or_else(|| io::Error::other("restored file admission missing"))?;
+    use madi_core::{glossary::Glossary, personal_vocabulary};
+    use madi_platform::glossary_service::{
+        GlossaryService, SettingsCommand as GlossaryCommand, Store as GlossaryStore,
+    };
+    let glossary_path = preferences_directory.path().join("glossary.json");
+    let mut legacy_glossary = Glossary::default();
+    for _ in 0..2 {
+        legacy_glossary
+            .learn("소버림", "소버린")
+            .map_err(io::Error::other)?;
+    }
+    let initial_glossary = GlossaryService::new(
+        GlossaryStore::load(glossary_path.clone(), legacy_glossary)?,
+        |_| {},
+    )?;
+    initial_glossary
+        .settings(GlossaryCommand::Enabled(true))
+        .await?;
+    initial_glossary.shutdown().await?;
+    let glossary = GlossaryService::new(
+        GlossaryStore::load(glossary_path.clone(), Glossary::default())?,
+        |_| {},
+    )?;
+    let terms = personal_vocabulary::bias_terms(&glossary.current().await?.glossary);
+    if terms != ["소버린"] {
+        return Err(io::Error::other("glossary relaunch/prompt mismatch"));
+    }
     let restored_settings =
-        FileSettings::from_setup(&restored_setup, 0, Vec::new()).map_err(io::Error::other)?;
+        FileSettings::from_setup(&restored_setup, 0, terms.clone()).map_err(io::Error::other)?;
     if selected_source != source
         || restored_settings.language_token != Some(50259)
         || restored_settings.osd
@@ -126,6 +153,7 @@ async fn main() -> io::Result<()> {
             let _ = events.send((began.elapsed().as_secs_f64(), snapshot));
         },
     )?;
+    workflow.set_glossary(glossary.clone()).await?;
     let execution = async {
         let started = workflow
             .start(selected_source, restored_settings, None)
@@ -156,6 +184,36 @@ async fn main() -> io::Result<()> {
             .ok_or_else(|| io::Error::other("completion archive missing"))?;
         let archive_bytes = std::fs::read(&saved)?;
         let archive_sha = format!("{:x}", Sha256::digest(&archive_bytes));
+        let (word_index, original_word) = done.lines[0]
+            .line
+            .words
+            .iter()
+            .enumerate()
+            .find(|(_, word)| !personal_vocabulary::diff(&word.text, "Evidence").is_empty())
+            .ok_or_else(|| io::Error::other("no eligible native word for learning probe"))?;
+        let learned_pair = personal_vocabulary::diff(&original_word.text, "Evidence").remove(0);
+        workflow
+            .edit(
+                started.generation,
+                Edit::Word {
+                    id: line_id.to_string(),
+                    index: word_index,
+                    text: "Evidence".into(),
+                },
+            )
+            .await?;
+        let learned = glossary.current().await?;
+        if !learned.glossary.entries().any(|entry| {
+            entry.wrong == learned_pair.wrong
+                && entry.right == learned_pair.right
+                && entry.hits == 1
+        }) || GlossaryStore::load(glossary_path.clone(), Glossary::default())?.value()
+            != &learned.glossary
+        {
+            return Err(io::Error::other(
+                "native transcript edit was not durably learned",
+            ));
+        }
         let changed_text = format!("{} [probe edit]", done.lines[0].text);
         workflow
             .edit(
@@ -297,14 +355,17 @@ async fn main() -> io::Result<()> {
         }
         Ok(
             json!({"observations":observations,"completed":done,"edited":edited,"reset":reset,"staleEditIgnored":true,"cleanAtCompletion":true,
+                "glossary":{"isolatedRelaunch":true,"biasTermsAtAdmission":terms,"nativeWordEditLearned":true,"learnedWrong":learned_pair.wrong,"originalArchivePreserved":true},
                 "workspace":{"entries":list.entries.len(),"stats":stats.stats,"staleRowRejected":true,"isolatedPreferencePersisted":true,"exports":exports},
                 "archive":{"bytes":archive_bytes.len(),"sha256":archive_sha,"reopened":reopened,"sourcePreserved":true,"inlineEditDidNotAutosave":true,"reopenDidNotClaimWritableTarget":true}}),
         )
     };
     let result = tokio::time::timeout(Duration::from_secs(120), execution).await;
     let shutdown = workflow.shutdown().await;
+    let glossary_shutdown = glossary.shutdown().await;
     let result = result.map_err(io::Error::other)??;
     shutdown?;
+    glossary_shutdown?;
     let preserved = original_sha == format!("{:x}", Sha256::digest(std::fs::read(&source)?));
     let model_after = std::fs::metadata(&args[2])?;
     let model_unchanged = model_before.len() == model_after.len()

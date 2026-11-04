@@ -149,6 +149,14 @@ pub fn on_run_event(app: &tauri::AppHandle, event: &tauri::RunEvent) {
         if let Err(error) = app.state::<crate::files_host::FilesHost>().shutdown().await {
             eprintln!("file shutdown: {error}");
         }
+        // File edits finish their accepted learning writes before its owner exits.
+        if let Err(error) = app
+            .state::<crate::glossary_host::GlossaryHost>()
+            .shutdown()
+            .await
+        {
+            eprintln!("glossary shutdown: {error}");
+        }
         if let Err(error) = app
             .state::<crate::workspace_host::WorkspaceHost>()
             .shutdown()

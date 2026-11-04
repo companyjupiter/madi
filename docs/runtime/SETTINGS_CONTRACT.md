@@ -58,7 +58,7 @@ because their controls have narrower ranges. Nonfinite values fail validation.
 | Caption sizes/patient options | Strict decode, original clamp/optional-binding behavior | Native caption panels, monitor enumeration and Settings UI |
 | Debug capture/VAD threshold | Exact AppStorage restore and command validation | Session diagnostic bundles, review presentation and Settings UI |
 | Auto-save/folder/export | Existing workspace owner and file archive/export effects | Settings-specific folder panel text and bindings |
-| Glossary/model management | Existing source inventory; first-run model service is available | Glossary learning/matching/persistence and settings-specific download/reveal actions |
+| Glossary/model management | Shared glossary persistence, edit learning, incoming/final correction and prompt candidate; first-run model service | Settings controls, stable-line/number passes and settings-specific download/reveal actions |
 
 ## Verification
 

@@ -94,6 +94,9 @@ def main():
         (OUT / 'swift.json').write_bytes(canonical(swift))
         for index, (expected, actual) in enumerate(zip(swift, rust, strict=True)):
             assert expected == actual, f'Glossary mismatch case {index}: inspect out/glossary-parity/{{swift,rust}}.json'
+        subprocess.run(['cargo', 'build', '--locked', '-p', 'madi-platform', '--example', 'glossary_bridge'], cwd=ROOT, check=True)
+        native = json.loads(subprocess.check_output([str(ROOT / 'target/debug/examples/glossary_bridge')], input=canonical([case['raw'] for case in cases]), cwd=ROOT))
+        assert native == [case['states'][0]['stored'] for case in swift], 'Native Foundation glossary restoration mismatch'
     report = dict(cases=len(cases), states=sum(1 + len(c['operations']) for c in cases),
                   corpusSHA256=digest(payload), resultSHA256=digest(canonical(rust)),
                   sources={path.relative_to(ROOT).as_posix(): digest(path.read_bytes()) for path in [STORE, VIEW]})
@@ -102,6 +105,7 @@ def main():
     else:
         assert report == json.loads(REFERENCE.read_text()), 'Pinned glossary reference changed'
     report.update(status='passed', nativeSwiftRun=not args.rust_only,
+                  nativeFoundationBridgeRun=not args.rust_only,
                   scope='Glossary storage, schema restoration and mutations only; no matcher, learning integration, persistent owner or Settings UI')
     (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

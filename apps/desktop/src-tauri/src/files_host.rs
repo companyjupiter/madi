@@ -284,13 +284,22 @@ pub async fn start_native(
     path: std::path::PathBuf,
     setup: SetupState,
 ) -> Result<Snapshot, String> {
+    let glossary = crate::glossary_host::service(app).await?;
     let worker = service(app)?;
+    worker
+        .set_glossary(glossary.clone())
+        .await
+        .map_err(|error| error.to_string())?;
     #[cfg(target_os = "macos")]
     let memory = madi_platform::model_presentation::physical_memory();
     #[cfg(not(target_os = "macos"))]
     let memory = 0;
-    // The overlap toggle is session-only; vocabulary remains separate migration work.
-    let settings = madi_platform::asr_config::FileSettings::from_setup(&setup, memory, Vec::new())
+    let saved_glossary = glossary
+        .current()
+        .await
+        .map_err(|error| error.to_string())?;
+    let terms = madi_core::personal_vocabulary::bias_terms(&saved_glossary.glossary);
+    let settings = madi_platform::asr_config::FileSettings::from_setup(&setup, memory, terms)
         .map_err(str::to_owned)?;
     #[cfg(target_os = "macos")]
     let admission_error = (!madi_platform::model_assets::fast_size_matches(
@@ -385,8 +394,17 @@ pub async fn file_edit(
         .map_err(|_| "file state unavailable")?
         .clone()
         .ok_or("no file session")?;
-    worker
-        .edit(generation, edit)
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn(async move {
+        let glossary = crate::glossary_host::service(&app).await?;
+        worker
+            .set_glossary(glossary)
+            .await
+            .map_err(|error| error.to_string())?;
+        worker
+            .edit(generation, edit)
+            .await
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }

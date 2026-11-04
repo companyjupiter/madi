@@ -15,12 +15,31 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
-- Personal glossary value candidate: unchanged Swift storage and the original
+- Personal vocabulary integration candidate: successful file line/word edits
+  now learn through one isolated persistent owner, including when auto-apply is
+  disabled. Incoming words, final display overlays and native file prompt terms
+  use the same current glossary. Exact Swift matching/prompt comparison passes
+  193 cases / 5,390 queries / 4,063 edit/similarity pairs; a single nondeterministic
+  canonical prompt tie is explicitly bounded to the original surface spellings.
+  Native Foundation restore matches all 254 storage cases. Local tests pass 92
+  Rust tests (12/66/14), both portable references, clippy, frontend/debug app and
+  strict relocation/package checks with 16 notices. The relocated Metal probe
+  restores a synthetic glossary, admits its prompt, produces 22 words, durably
+  learns an actual native-word edit and passes all five exports with preserved
+  source/model/archive data and cleanup. Settings controls, stable-line timing,
+  the combined number pass, live capture and real-user/native-UI acceptance
+  remain open. See `runtime/GLOSSARY.md` and
+  `evidence/macos-vocabulary-integration-2026-11-04.json`.
+
+- The preceding personal glossary value revision: unchanged Swift storage and the original
   Settings row ordering match 254 decode/mutation cases / 4,799 states. Schema
   migration, canonical Unicode keys, disabled learning, retargeting, removals
   and numeric limits are covered. Core tests (12), portable reference, formatting
-  and workspace clippy pass. This value is not yet connected to persistence,
-  `PersonalVocabulary`, file edits/ingest/prompts or the Settings UI. See
+  and workspace clippy pass. Revision `8ddd3c3` passes desktop CI `41752275613`
+  with 88/80 Rust tests and clean hash-verified binaries/package/runtime/notices.
+  Its glossary report was retained in CI logs but omitted from artifact upload;
+  the verified receipt records that distinction and the upload manifest is fixed.
+  The integrations above were not part of that revision. See
   `runtime/GLOSSARY.md` and `evidence/macos-glossary-value-2026-11-04.json`.
 
 - Settings contract candidate: schema-2 migration adds the original live/translation,
@@ -38,6 +57,10 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   Two frontend regressions also verify commit-before-start ordering and prevent
   queued file admission after a failed preference save; the previous queue
   fails the error regression.
+  Revision `d12687b` passes desktop CI `41751342797` on macOS 15 / Windows Server
+  2022 with 87/79 Rust tests, two frontend queue tests, all references and builds.
+  Downloaded binaries/package/runtime/notices match clean provenance in
+  `evidence/desktop-ci-d12687b-2026-11-04.json`.
 
 - Setup/presentation candidate: the start-screen selections, language/appearance,
   transcript mode and font size now restore through a native serialized store.

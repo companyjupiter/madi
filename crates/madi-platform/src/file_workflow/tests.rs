@@ -22,6 +22,205 @@ while not (root/'finish').exists(): time.sleep(.01)
 print('<<FLUSH_END>>',flush=True)
 "#;
 
+const GLOSSARY_WORDS: &str = r#"
+(root/'prompt').write_text(os.environ.get('PROMPT',''),encoding='utf-8')
+print('SPK 0 2 5 1',flush=True)
+print('=== WORD TIMESTAMPS ===',flush=True)
+print('[0.0s-0.4s] 소버림 «conf 0.2»',flush=True)
+print('[0.5s-0.9s] 회의록. «conf 0.95»',flush=True)
+print('<<SEG_END>>',flush=True)
+"#;
+
+#[tokio::test]
+async fn archived_word_edits_learn_while_disabled_then_feed_prompt_and_incoming_correction() {
+    use crate::glossary_service::{GlossaryService, SettingsCommand, Store};
+    use madi_core::{glossary::Glossary, personal_vocabulary};
+    let (root, configuration, source) = fixture("", &format!("{GLOSSARY_WORDS}\n{HOLD}"));
+    let path = root.path().join("glossary.json");
+    let glossary = GlossaryService::new(
+        Store::load(path.clone(), Glossary::default()).unwrap(),
+        |_| {},
+    )
+    .unwrap();
+    let workflow = FileWorkflow::new(configuration, |_| {}).unwrap();
+    workflow.set_glossary(glossary.clone()).await.unwrap();
+    let archive = root.path().join("original.md");
+    let content = "- **[00:00] Name** 소버림 회의록.\n";
+    std::fs::write(&archive, content).unwrap();
+    for index in 0..2 {
+        let opened = workflow
+            .open_archive(workflow.snapshot().generation, archive.clone())
+            .await
+            .unwrap();
+        let line = &opened.lines[0].line;
+        let edit = if index == 0 {
+            Edit::Word {
+                id: line.id.to_string(),
+                index: 0,
+                text: line.words[0].text.replace("소버림", "소버린"),
+            }
+        } else {
+            Edit::Line {
+                id: line.id.to_string(),
+                text: opened.lines[0].text.replace("소버림", "소버린"),
+            }
+        };
+        workflow.edit(opened.generation, edit).await.unwrap();
+    }
+    assert!(!glossary.snapshot().glossary.enabled);
+    assert_eq!(
+        glossary.snapshot().glossary.exact("소버림").unwrap().hits,
+        2
+    );
+    assert_eq!(std::fs::read_to_string(&archive).unwrap(), content);
+    let old_generation = workflow.snapshot().generation;
+    workflow.reset(old_generation).await.unwrap();
+    let revision = glossary.snapshot().revision;
+    workflow
+        .edit(
+            old_generation,
+            Edit::Line {
+                id: "00000000-0000-0000-0000-000000000001".into(),
+                text: "stale".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(glossary.snapshot().revision, revision);
+    glossary
+        .settings(SettingsCommand::Enabled(true))
+        .await
+        .unwrap();
+    let admitted = glossary.current().await.unwrap();
+    let terms = personal_vocabulary::bias_terms(&admitted.glossary);
+    assert_eq!(terms, ["소버린"]);
+    workflow
+        .start(
+            source,
+            FileSettings {
+                bias_terms: terms,
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let streamed = state_when(&workflow, |state| {
+        state
+            .lines
+            .first()
+            .is_some_and(|line| line.line.words.len() == 2)
+    })
+    .await;
+    assert_eq!(streamed.lines[0].line.words[0].text, "소버린");
+    assert_eq!(streamed.lines[0].line.words[1].text, "회의록.");
+    marker(&root.path().join("handler-ready")).await;
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("prompt")).unwrap(),
+        "소버린"
+    );
+    std::fs::write(root.path().join("finish"), "finish").unwrap();
+    let done = state_when(&workflow, |state| state.phase == ViewPhase::Done).await;
+    assert_eq!(streamed.lines[0].line.words, done.lines[0].line.words);
+    workflow.shutdown().await.unwrap();
+    glossary.shutdown().await.unwrap();
+    assert_eq!(
+        Store::load(path, Glossary::default())
+            .unwrap()
+            .value()
+            .exact("소버림")
+            .unwrap()
+            .hits,
+        2
+    );
+    cleaned(root.path()).await;
+}
+
+#[tokio::test]
+async fn late_glossary_correction_preserves_words_and_manual_same_text_edits() {
+    use crate::glossary_service::{GlossaryService, SettingsCommand, Store};
+    use madi_core::glossary::Glossary;
+    for manual in [false, true] {
+        let (root, configuration, source) = fixture("", &format!("{GLOSSARY_WORDS}\n{HOLD}"));
+        let mut fallback = Glossary::default();
+        for _ in 0..2 {
+            fallback.learn("소버림", "소버린").unwrap();
+        }
+        let glossary = GlossaryService::new(
+            Store::load(root.path().join("glossary.json"), fallback).unwrap(),
+            |_| {},
+        )
+        .unwrap();
+        let workflow = FileWorkflow::with_archive(
+            configuration,
+            Some(ArchiveSettings {
+                enabled: true,
+                folder: root.path().join("saved"),
+            }),
+            |_| {},
+        )
+        .unwrap();
+        workflow.set_glossary(glossary.clone()).await.unwrap();
+        workflow
+            .start(source, FileSettings::default(), None)
+            .await
+            .unwrap();
+        let streamed = state_when(&workflow, |state| {
+            state
+                .lines
+                .first()
+                .is_some_and(|line| line.line.words.len() == 2)
+        })
+        .await;
+        assert_eq!(streamed.lines[0].line.words[0].text, "소버림");
+        if manual {
+            workflow
+                .edit(
+                    streamed.generation,
+                    Edit::Line {
+                        id: streamed.lines[0].line.id.to_string(),
+                        text: streamed.lines[0].text.clone(),
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        glossary
+            .settings(SettingsCommand::Enabled(true))
+            .await
+            .unwrap();
+        marker(&root.path().join("handler-ready")).await;
+        std::fs::write(root.path().join("finish"), "finish").unwrap();
+        let expected = if manual {
+            "소버림 회의록."
+        } else {
+            "소버린 회의록."
+        };
+        let done = state_when(&workflow, |state| {
+            state.phase == ViewPhase::Done
+                && state
+                    .lines
+                    .first()
+                    .is_some_and(|line| line.text == expected)
+        })
+        .await;
+        assert_eq!(streamed.lines[0].line.words, done.lines[0].line.words);
+        assert_eq!(streamed.lines[0].line.id, done.lines[0].line.id);
+        let saved = std::fs::read_to_string(done.archive.transcript.as_ref().unwrap()).unwrap();
+        assert!(
+            saved.contains(if manual {
+                "*소버림* 회의록."
+            } else {
+                expected
+            }),
+            "{saved}"
+        );
+        workflow.shutdown().await.unwrap();
+        glossary.shutdown().await.unwrap();
+        cleaned(root.path()).await;
+    }
+}
+
 async fn state_when(workflow: &FileWorkflow, test: impl Fn(&Snapshot) -> bool) -> Snapshot {
     timeout(Duration::from_secs(10), async {
         let mut changes = workflow.owner.snapshot.clone();
