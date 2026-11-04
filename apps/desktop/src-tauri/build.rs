@@ -6,6 +6,8 @@ fn main() {
     }
     let attributes =
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+            "playback_snapshot",
+            "playback_toggle",
             "caption_status",
             "caption_toggle",
             "caption_snapshot",

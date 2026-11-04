@@ -82,6 +82,7 @@ pub struct Snapshot {
     pub generation: u64,
     pub phase: ViewPhase,
     pub file_name: String,
+    pub has_source_media: bool,
     pub size_label: String,
     pub chunks_done: i64,
     pub chunks_total: i64,
@@ -121,6 +122,7 @@ impl Default for Snapshot {
             generation: 0,
             phase: ViewPhase::Idle,
             file_name: String::new(),
+            has_source_media: false,
             size_label: String::new(),
             chunks_done: 0,
             chunks_total: 0,
@@ -187,6 +189,10 @@ enum Command {
         format: crate::transcript_export::Format,
         settings: madi_core::transcript::export::EditorSettings,
         reply: oneshot::Sender<io::Result<()>>,
+    },
+    PlaybackSource {
+        generation: u64,
+        reply: oneshot::Sender<io::Result<Option<PathBuf>>>,
     },
     RenderExport {
         generation: u64,
@@ -275,6 +281,7 @@ impl FileWorkflow {
                 output,
                 changed: Box::new(changed),
                 state,
+                source_media: None,
                 store: TranscriptStore::default(),
                 glossary: None,
                 preferences: None,
@@ -365,6 +372,22 @@ impl FileWorkflow {
                 settings,
                 reply,
             })
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
+    }
+    /// Bounded projection for native playback reconciliation. Avoid cloning all
+    /// transcript lines on every meter/preview update on the main thread.
+    pub fn playback_identity(&self) -> (u64, bool) {
+        let state = self.owner.snapshot.borrow();
+        (state.generation, state.has_source_media)
+    }
+    /// Resolve only the source admitted by the native file picker. This path
+    /// never enters a renderer payload and expires when the session is reset.
+    pub async fn playback_source(&self, generation: u64) -> io::Result<Option<PathBuf>> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::PlaybackSource { generation, reply })
             .map_err(|_| closed())?;
         result.await.map_err(|_| closed())?
     }
@@ -498,6 +521,7 @@ struct Worker {
     output: watch::Sender<Snapshot>,
     changed: Box<dyn Fn(Snapshot) + Send + Sync>,
     state: Snapshot,
+    source_media: Option<PathBuf>,
     store: TranscriptStore,
     glossary: Option<GlossaryService>,
     preferences: Option<PreferencesService>,
@@ -578,6 +602,7 @@ impl Worker {
         self.countdown = None;
         // All disk work is joined before another command can reach clear.
         self.archive_writer = Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default()));
+        self.source_media = None;
         self.store.reset();
         self.text_passes.reset();
         let revision = self.state.revision;
@@ -761,6 +786,12 @@ impl Worker {
                         let result=self.open_archive(generation,path).await;
                         let _=reply.send(result);
                     },
+                    Some(Command::PlaybackSource {generation,reply})=>{
+                        let path = if generation == self.state.generation && !self.closing {
+                            self.source_media.clone()
+                        } else { None };
+                        let _ = reply.send(Ok(path));
+                    },
                     Some(Command::Start {path,settings,admission_error,reply})=>{
                         let result=self.start(path,settings,admission_error).await;
                         let _=reply.send(result);
@@ -886,6 +917,8 @@ impl Worker {
         self.store.features = Features::for_language(settings.language_token);
         self.state.speaker_island_absorption = self.store.features.speaker_island_absorption;
         let file = media_file::summary(&path);
+        self.source_media = Some(path.clone());
+        self.state.has_source_media = true;
         self.state.file_name = file.name;
         self.state.size_label = file.size_label;
         let run = self

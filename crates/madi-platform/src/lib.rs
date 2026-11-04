@@ -11,6 +11,8 @@ pub mod file_session;
 pub mod file_workflow;
 pub mod glossary_service;
 #[cfg(target_os = "macos")]
+pub mod line_playback;
+#[cfg(target_os = "macos")]
 pub mod live_session;
 pub mod media_file;
 pub mod model_assets;

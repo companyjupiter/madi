@@ -10,7 +10,7 @@ export interface TranscriptLine {
   editedTranslations: string[]; suppressedTranslations: string[];
 }
 export interface FileSnapshot {
-  revision: number; generation: number;
+  revision: number; generation: number; hasSourceMedia: boolean;
   phase: { kind: 'idle' | 'processing' | 'done' | 'engineStarting' | 'ready' | 'recording' | 'paused' | 'flushing' } | { kind: 'countingDown'; remaining: number } | { kind: 'error'; message: string };
   live: { source: 'mic' | 'system' | 'both'; inputDevice: string | null; seconds: number; meter: number; captureEndedReason: string | null } | null;
   permissionIssue: 'microphoneDenied' | 'systemAudioDenied' | 'systemAudioRestartRequired' | null; admissionPending: boolean;
@@ -21,14 +21,14 @@ export interface FileSnapshot {
   speakerNames: Record<string, string>; partial: string; speakerIslandAbsorption: boolean;
   archive: { enabled: boolean; folder: string | null; transcript: string | null; error: string | null };
 }
-export type FileArtwork = Record<'follow' | 'folder' | 'export' | 'play' | 'cancel' | 'plus' | 'warning' | 'micChevron' | 'caption' | 'captionOn', { dataUrl: string; width: number; height: number }>;
+export type FileArtwork = Record<'follow' | 'folder' | 'export' | 'play' | 'cancel' | 'plus' | 'warning' | 'micChevron' | 'caption' | 'captionOn' | 'linePlay' | 'linePause', { dataUrl: string; width: number; height: number }>;
 export const fileArtwork = () => invoke<FileArtwork | null>('file_artwork');
 export type FileEdit =
   | { type: 'line'; id: string; text: string }
   | { type: 'word'; id: string; index: number; text: string }
   | { type: 'translation'; id: string; language: string; text: string }
   | { type: 'speakerName'; speaker: number; name: string };
-export const emptyFile: FileSnapshot = { revision: 0, generation: 0, phase: { kind: 'idle' }, live: null, permissionIssue: null, admissionPending: false, fileName: '', sizeLabel: '', chunksDone: 0, chunksTotal: 0, translationQueueDepth: 0, translationQueuedLines: 0, translationBacklog: 0, translationBackfillRemaining: 0, lines: [], speakerNumbers: { numbers: {} }, speakerNames: {}, partial: '', speakerIslandAbsorption: false, archive: { enabled: false, folder: null, transcript: null, error: null } };
+export const emptyFile: FileSnapshot = { revision: 0, generation: 0, hasSourceMedia: false, phase: { kind: 'idle' }, live: null, permissionIssue: null, admissionPending: false, fileName: '', sizeLabel: '', chunksDone: 0, chunksTotal: 0, translationQueueDepth: 0, translationQueuedLines: 0, translationBacklog: 0, translationBackfillRemaining: 0, lines: [], speakerNumbers: { numbers: {} }, speakerNames: {}, partial: '', speakerIslandAbsorption: false, archive: { enabled: false, folder: null, transcript: null, error: null } };
 export const fileSnapshot = () => browserFixture ? Promise.resolve(emptyFile) : invoke<FileSnapshot>('file_snapshot');
 export const startFile = () => invoke<FileSnapshot>('file_start');
 export const resetFile = (generation: number) => invoke<FileSnapshot>('file_reset', { generation });

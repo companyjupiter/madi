@@ -176,6 +176,13 @@ impl FilesHost {
             .and_then(|service| service.as_ref().map(FileWorkflow::snapshot))
             .unwrap_or_default()
     }
+    pub fn playback_identity(&self) -> (u64, bool) {
+        self.service
+            .lock()
+            .ok()
+            .and_then(|service| service.as_ref().map(FileWorkflow::playback_identity))
+            .unwrap_or_default()
+    }
     pub async fn shutdown(&self) -> Result<(), String> {
         self.closed.store(true, Ordering::Release);
         let service = self
@@ -263,6 +270,7 @@ pub(crate) fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
                         }
                     });
                 }
+                crate::playback_host::file_changed(&events);
                 crate::caption_host::file_changed(&events, &snapshot);
                 let _ = events.emit_to("main", "file-session-changed", snapshot);
             },
@@ -348,6 +356,7 @@ pub fn file_snapshot(
     let snapshot = host.snapshot();
     // Bootstrap caption state from the same snapshot returned to the renderer,
     // including idle/restored state before a native workflow callback exists.
+    crate::playback_host::file_changed(window.app_handle());
     crate::caption_host::file_changed(window.app_handle(), &snapshot);
     Ok(snapshot)
 }

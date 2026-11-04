@@ -55,6 +55,7 @@ let specs: [(String, String, CGFloat, NSFont.Weight)] = [
     ("play", "play.fill", 15, .regular), ("cancel", "xmark", 15, .semibold),
     ("plus", "plus", 15, .semibold), ("warning", "exclamationmark.triangle", 40, .regular),
     ("micChevron", "chevron.down", 9, .medium),
+    ("linePlay", "play.circle", 12, .regular), ("linePause", "pause.circle.fill", 12, .regular),
     ("caption", "captions.bubble", 12, .regular), ("captionOn", "captions.bubble.fill", 12, .regular),
     ("overlay.caption", "captions.bubble.fill", 12, .regular),
     ("overlay.close", "xmark", 11, .regular), ("overlay.mic", "mic.fill", 10, .regular)]
@@ -86,7 +87,7 @@ FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: resul
         assert result['pixelHeight'] == math.ceil(art['height'] * 2)
         symbols[key] = dict(width=art['width'], height=art['height'], **result)
     report = dict(schemaVersion=1, status='passed', physicalMemory=actual['physicalMemory'],
-                  sizes=actual['sizes'], liveFallbackTitles=actual['liveFallbackTitles'], fallbackTitleCases=3, symbols=symbols, byteCountCases=9, symbolCases=18,
+                  sizes=actual['sizes'], liveFallbackTitles=actual['liveFallbackTitles'], fallbackTitleCases=3, symbols=symbols, byteCountCases=9, symbolCases=20,
                   scope='Live native Foundation formatting and NSImage symbol dimensions plus nonempty transparent owned PNGs; no SwiftUI/WebView pixel or interaction comparison')
     (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))

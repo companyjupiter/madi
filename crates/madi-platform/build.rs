@@ -4,6 +4,7 @@ fn main() {
     println!("cargo:rerun-if-changed=native/AudioDecodeMain.swift");
     println!("cargo:rerun-if-changed=native/AudioCaptureBridge.swift");
     println!("cargo:rerun-if-changed=native/UnicodeBridge.swift");
+    println!("cargo:rerun-if-changed=native/LinePlaybackBridge.swift");
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
         return;
     }
@@ -65,7 +66,12 @@ fn main() {
     if env::var("PROFILE").as_deref() == Ok("debug") {
         command.args(["-D", "MADI_CAPTURE_REPLAY"]);
     }
-    for name in ["Resampler.swift", "WavWriter.swift", "AudioDevices.swift"] {
+    for name in [
+        "Resampler.swift",
+        "WavWriter.swift",
+        "AudioDevices.swift",
+        "LinePlayer.swift",
+    ] {
         let source = audio.join(name);
         println!("cargo:rerun-if-changed={}", source.display());
         command.arg(source);
@@ -73,6 +79,7 @@ fn main() {
     let result = command
         .arg("native/AudioCaptureBridge.swift")
         .arg("native/UnicodeBridge.swift")
+        .arg("native/LinePlaybackBridge.swift")
         .arg("-o")
         .arg(out.join("libMadiAudioCapture.a"))
         .output()

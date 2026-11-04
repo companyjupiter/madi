@@ -6,6 +6,8 @@
     "main"
   ],
   "permissions": [
+    "allow-playback-snapshot",
+    "allow-playback-toggle",
     "allow-caption-status",
     "allow-caption-toggle",
     "allow-preferences-snapshot",

@@ -133,7 +133,12 @@ pub fn on_run_event(app: &tauri::AppHandle, event: &tauri::RunEvent) {
         .shutdown
         .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
     {
-        Ok(_) => api.prevent_exit(),
+        Ok(_) => {
+            api.prevent_exit();
+            // Stop media immediately; accepted persistence/engine work may take
+            // longer to drain before the final exit event.
+            crate::playback_host::shutdown(app);
+        }
         Err(2) => return,
         Err(_) => {
             api.prevent_exit();

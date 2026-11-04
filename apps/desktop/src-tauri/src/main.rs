@@ -15,6 +15,8 @@ mod caption_host;
 use caption_host::{
     CaptionHost, caption_close, caption_resize, caption_snapshot, caption_status, caption_toggle,
 };
+mod playback_host;
+use playback_host::{PlaybackHost, playback_snapshot, playback_toggle};
 mod files_host;
 mod glossary_host;
 mod models_host;
@@ -180,6 +182,7 @@ fn main() {
     let builder = builder.plugin(tauri_nspanel::init());
     builder
         .manage(CaptionHost::default())
+        .manage(PlaybackHost::default())
         .manage(SetupHost::default())
         .manage(GlossaryHost::default())
         .manage(FilesHost::default())
@@ -246,6 +249,8 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            playback_snapshot,
+            playback_toggle,
             caption_status,
             caption_toggle,
             caption_snapshot,
@@ -299,6 +304,7 @@ fn main() {
             }
             #[cfg(target_os = "macos")]
             if matches!(event, tauri::RunEvent::Exit) {
+                playback_host::shutdown(app);
                 madi_platform::settings_toolbar::shutdown();
             }
         });

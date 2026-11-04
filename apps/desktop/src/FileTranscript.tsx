@@ -7,6 +7,7 @@ import { useTranscriptFollow } from './useTranscriptFollow';
 import './transcript.css';
 import { usePreferences } from './preferences';
 import { useCaptionControl } from './captions';
+import { useLinePlayback } from './playback';
 import { LiveControls, LiveMic, NativeSymbol, liveLabel, phaseLabel } from './LiveControls';
 
 type Props = { workspace: ReactNode; snapshot: FileSnapshot; artwork: FileArtwork | null; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; leave: (close?: boolean) => void; control: (command: LiveControl) => void; permission: (action: 'openSettings' | 'restart') => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
@@ -19,11 +20,12 @@ function timecode(seconds: number, hours = false) {
 }
 function speakerColor(speaker: number) { return `var(--speaker-${((speaker % 8) + 8) % 8})`; }
 
-// This is the connected file-view candidate. AI tools, playback,
+// This is the connected file-view candidate. AI tools,
 // confidence review and native visual parity remain separate migration gates.
 export function FileTranscript({ workspace, snapshot: state, artwork, language, text, reset, leave, control, permission, edit, copy, rename }: Props) {
   const { state: preferences, presentation: { contentMode: content, fontSize }, send } = usePreferences();
   const captions = useCaptionControl();
+  const playback = useLinePlayback(state.generation);
   const setContent = (value: boolean) => send({ type: 'contentMode', value });
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -118,7 +120,7 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
             const continuation = previous?.speaker === line.speaker && line.start - previous.end < 2.5;
             return <article key={line.id} className={`transcript-row${continuation ? ' continuation' : ''}`}>
               <header className="transcript-row-header">
-                {!continuation && <>{speakerHeader(line.speaker, line)}<time>{timecode(line.start, true)}</time>{line.editedText !== null && <span className="transcript-edited">{text('Edited')}</span>}</>}
+                {!continuation && <>{speakerHeader(line.speaker, line)}<time>{timecode(line.start, true)}</time>{state.hasSourceMedia && <button className={`transcript-line-play${playback.playingLine === line.id ? ' active' : ''}`} aria-pressed={playback.playingLine === line.id} title={l('이 구간 오디오 재생', 'Play this segment’s audio')} onClick={() => playback.toggle(line)}><NativeSymbol artwork={artwork} name={playback.playingLine === line.id ? 'linePause' : 'linePlay'} /></button>}{line.editedText !== null && <span className="transcript-edited">{text('Edited')}</span>}</>}
                 <div className="transcript-actions">
                   <button title={text('Copy this line')} onClick={() => copy(line.id)}><Icon name="squares" /></button>
                   <button title={text('Edit this line')} disabled={line.id === lockedLine} onClick={() => beginEdit(line)}><Icon name="pen" /></button>

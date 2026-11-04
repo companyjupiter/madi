@@ -366,6 +366,102 @@ async fn cleaned(root: &Path) {
 }
 
 #[tokio::test]
+async fn playback_source_is_native_owned_and_expires_with_its_session() {
+    let (root, configuration, original) = fixture("", WORDS);
+    let original_bytes = std::fs::read(&original).unwrap();
+    let workflow = FileWorkflow::new(configuration, |_| {}).unwrap();
+    assert!(!workflow.snapshot().has_source_media);
+    assert!(workflow.playback_source(0).await.unwrap().is_none());
+    let first = workflow
+        .start(original.clone(), FileSettings::default(), None)
+        .await
+        .unwrap();
+    assert!(first.has_source_media);
+    let done = state_when(&workflow, |s| s.phase == ViewPhase::Done).await;
+    assert!(done.has_source_media);
+    assert_eq!(workflow.playback_identity(), (done.generation, true));
+    assert_eq!(
+        workflow.playback_source(first.generation).await.unwrap(),
+        Some(original.clone())
+    );
+    assert!(
+        workflow
+            .playback_source(first.generation + 1)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let json = serde_json::to_string(&done).unwrap();
+    let encoded_path = serde_json::to_string(&original).unwrap();
+    assert!(!json.contains(&encoded_path));
+    let rejected = workflow
+        .start(
+            root.path().join("unselected.wav"),
+            FileSettings::default(),
+            Some("model unavailable".into()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected.generation, first.generation);
+    assert!(rejected.has_source_media);
+    assert_eq!(
+        workflow.playback_source(first.generation).await.unwrap(),
+        Some(original.clone())
+    );
+    let archive = root.path().join("read-only.md");
+    std::fs::write(&archive, "- **[00:01] Name** archived").unwrap();
+    let opened = workflow
+        .open_archive(first.generation, archive.clone())
+        .await
+        .unwrap();
+    assert_ne!(opened.generation, first.generation);
+    assert!(!opened.has_source_media);
+    assert!(
+        workflow
+            .playback_source(first.generation)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        workflow
+            .playback_source(opened.generation)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let next = workflow
+        .start(original.clone(), FileSettings::default(), None)
+        .await
+        .unwrap();
+    assert!(next.has_source_media);
+    let reset = workflow.reset(next.generation).await.unwrap();
+    assert!(!reset.has_source_media);
+    assert_eq!(workflow.playback_identity(), (reset.generation, false));
+    assert!(
+        workflow
+            .playback_source(next.generation)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        workflow
+            .playback_source(reset.generation)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    workflow.shutdown().await.unwrap();
+    assert_eq!(std::fs::read(&original).unwrap(), original_bytes);
+    assert_eq!(
+        std::fs::read_to_string(&archive).unwrap(),
+        "- **[00:01] Name** archived"
+    );
+    assert_eq!(scratch_count(root.path()), 0);
+}
+
+#[tokio::test]
 async fn archive_checkpoints_finish_and_reopen_keep_session_ownership() {
     let (root, configuration, original) = fixture("", &format!("{WORDS}\n{HOLD}"));
     let folder = root.path().join("archives");

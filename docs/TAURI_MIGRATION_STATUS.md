@@ -15,6 +15,20 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Native file-line playback is connected through a private source-path owner,
+  generation-checked main-thread AVPlayer adapter and the original detail-row
+  play/pause controls. The unchanged shipping LinePlayer supplies seek/toggle
+  behavior; reset, archive opening, replacement and quit retire playback. The
+  host reads a bounded source identity instead of copying the whole transcript
+  for meter updates. Source/lifetime tests and three deliberate mutations pass.
+  Local suites pass 179 Rust tests, strict clippy, five IPC/queue checks, 20 native
+  artwork cases and the rebuilt app/package checks. Actual native automatic
+  boundary tests FAIL on this Mac: an independent original and minimal AVPlayer
+  reproduce a CoreAudio output-start timeout, error -66681. Explicit stop/drop
+  and same-line toggle pass. Native UI comparison is NOT_RUN while locked.
+  See `runtime/LINE_PLAYBACK.md` and
+  `evidence/macos-line-playback-2026-11-05.json`. This is not playback acceptance.
+
 - Caption window lifetime now follows the original controller: patient disable
   releases the patient window, while hiding the whole overlay preserves both.
   Re-enable waits for native destruction; fresh instance generations reject old
@@ -28,7 +42,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   callback is now also bootstrapped from the common file snapshot; the artwork
   oracle covers all 18 symbols without removing old checks. The Mac 15 artifact's
   1,500 caption results match original Swift and their pinned bytes are verified.
-  New CI is required for these fixes; native window interaction remains NOT_RUN.
+  Both push and PR CI at `d1e5032` now report success on macOS 15 and Windows
+  2022 (runs 41905723699 and 41905730555). This is the caption follow-up before
+  line playback; native window interaction remains NOT_RUN.
 
 - Staff/patient caption overlays now connect the shared file/live snapshots and
   preference owner to native windows and separate renderer capabilities. The

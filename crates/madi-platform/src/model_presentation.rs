@@ -66,6 +66,14 @@ pub fn artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
 pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
     Ok(BTreeMap::from([
         (
+            "linePlay".into(),
+            render_symbol("play.circle", 12.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
+            "linePause".into(),
+            render_symbol("pause.circle.fill", 12.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
             "caption".into(),
             render_symbol("captions.bubble", 12.0, unsafe { NSFontWeightRegular })?,
         ),

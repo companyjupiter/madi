@@ -40,6 +40,8 @@
 .transcript-row.continuation { margin-top: 12px; }
 .transcript-row-header { display: flex; align-items: center; gap: 6px; min-height: 17px; }
 .transcript-row-header time { font-size: 12px; font-weight: 500; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.transcript-line-play { display: inline-flex; padding: 0; border: 0; background: none; color: var(--text-tertiary); }
+.transcript-line-play.active { color: var(--accent); }
 .transcript-edited { font-size: 10px; color: var(--text-tertiary); }
 .transcript-actions { display: flex; gap: 16px; margin-left: auto; color: var(--text-secondary); }
 .transcript-actions button { display: flex; }

@@ -56,7 +56,8 @@ The caption source is also bootstrapped from the common file snapshot endpoint,
 so restored/idle snapshots do not depend on a macOS-only workflow callback. The
 first caption CI (`cd0526f`) passed 147 Windows Rust tests but failed strict
 clippy because that callback was the only production reference. The shared
-bootstrap corrects that dependency; the new Windows verdict is still required.
+bootstrap corrects that dependency. Both push and PR CI at `d1e5032` now
+report successful macOS 15 and Windows 2022 jobs.
 The same run passed 174 Mac Rust tests and the 1,500-case native Swift caption
 comparison, then failed because the old artwork oracle only listed 13 symbols.
 That exact failure was reproduced locally; the oracle now compares all 18
