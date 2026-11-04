@@ -16,7 +16,7 @@ use caption_host::{
     CaptionHost, caption_close, caption_resize, caption_snapshot, caption_status, caption_toggle,
 };
 mod playback_host;
-use playback_host::{PlaybackHost, playback_snapshot, playback_toggle};
+use playback_host::{PlaybackHost, playback_snapshot, playback_toggle, review_command};
 mod files_host;
 mod glossary_host;
 mod models_host;
@@ -249,6 +249,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            review_command,
             playback_snapshot,
             playback_toggle,
             caption_status,

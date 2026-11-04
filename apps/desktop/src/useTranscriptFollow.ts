@@ -68,6 +68,24 @@ export function useTranscriptFollow(lines: LineRef[], generation: number, isLive
     publish();
   }
 
+  function jumpToLine(id: string) {
+    const view = viewport.current, body = contents.current;
+    if (!view || !body) return;
+    cancelAnimation(); model.current.programmaticJump();
+    const began = performance.now(); jumpUntil.current = began + 400;
+    const row = body.querySelector<HTMLElement>(`[data-line-id="${CSS.escape(id)}"]`) ?? Array.from(body.querySelectorAll<HTMLElement>('[data-line-ids]')).find(node => node.dataset.lineIds?.split(',').includes(id));
+    if (!row) { publish(); return; }
+    const rect = row.getBoundingClientRect(), frame = view.getBoundingClientRect();
+    const start = view.scrollTop;
+    const end = Math.max(0, Math.min(view.scrollHeight - view.clientHeight, start + rect.top - frame.top + rect.height / 2 - view.clientHeight / 2));
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - began) / 250);
+      view.scrollTop = start + (end - start) * easeOut(progress); measure();
+      animation.current = progress < 1 ? requestAnimationFrame(tick) : null;
+    };
+    animation.current = requestAnimationFrame(tick); publish();
+  }
+
   useLayoutEffect(() => {
     cancelAnimation();
     model.current.reset(); priorLines.current = null; jumpUntil.current = 0;
@@ -107,5 +125,5 @@ export function useTranscriptFollow(lines: LineRef[], generation: number, isLive
       view.removeEventListener('scroll', measure); view.removeEventListener('wheel', wheel);
     };
   }, []);
-  return { viewport, contents, badge, jumpToTail };
+  return { viewport, contents, badge, jumpToTail, jumpToLine };
 }

@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { browserFixture } from './bridge';
-import type { TranscriptLine } from './files';
+import type { TranscriptLine, ReviewWord } from './files';
 
-interface Status { revision: number; generation: number; playingLine: string | null }
+interface Review { isListening: boolean; index: number; count: number; current: ReviewWord | null; scrollTick: number; scrollTarget: string | null; barIndex: number }
+const emptyReview: Review = { isListening: false, index: 0, count: 0, current: null, scrollTick: 0, scrollTarget: null, barIndex: 0 };
+interface Status { revision: number; generation: number; playingLine: string | null; review: Review }
 export function useLinePlayback(generation: number) {
-  const [status, setStatus] = useState<Status>({ revision: 0, generation: 0, playingLine: null });
+  const [status, setStatus] = useState<Status>({ revision: 0, generation: 0, playingLine: null, review: emptyReview });
   const pending = useRef(Promise.resolve());
   const receive = (next: Status) => setStatus(old => old.revision > next.revision ? old : next);
   useEffect(() => {
@@ -25,5 +27,11 @@ export function useLinePlayback(generation: number) {
     const request = { generation, id: line.id, from: line.start, to: line.end };
     pending.current = pending.current.then(() => invoke<void>('playback_toggle', request)).catch(error => console.error('line playback:', error));
   };
-  return { playingLine: status.generation === generation ? status.playingLine : null, toggle };
+  const reviewCommand = (command: { type: 'visibility'; visible: boolean } | { type: 'toggle' | 'stop' } | { type: 'jump'; delta: number }) => {
+    if (browserFixture) return;
+    const request = { generation, command };
+    pending.current = pending.current.then(() => invoke<void>('review_command', request)).catch(error => console.error('listen review:', error));
+  };
+  return { playingLine: status.generation === generation ? status.playingLine : null,
+    review: status.generation === generation ? status.review : emptyReview, reviewCommand, toggle };
 }

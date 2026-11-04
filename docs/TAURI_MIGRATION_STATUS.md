@@ -15,6 +15,21 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Low-confidence word review now connects native queue state, word links, the
+  edit popover, manual review bar and file-only listen controls. Strict threshold,
+  Foundation whitespace, grapheme spacing and original navigation match 800
+  controller cases / 24,000 transitions plus 400 popover cases. Manual bar and
+  listening cursors stay separate; hidden observers and retired callbacks cannot
+  auto-advance. Threshold-only changes and immediate word edits are covered.
+  Five deliberate policy/lifecycle mutations are detected. Local validation
+  passes 183 Rust tests (29 core, 129 platform, 14 protocol, 11 desktop), strict
+  clippy, five IPC/queue tests, 27 native artwork configurations, frontend/app
+  build and relocated package checks. Both native and portable review oracles
+  are wired into CI; CI for this slice is pending. Native playback retains the
+  preceding FAIL, while end-to-end review, popover geometry/focus, implicit font
+  sizing and default animation comparison remain NOT_RUN. See
+  `runtime/WORD_REVIEW.md` and `evidence/macos-word-review-2026-11-05.json`.
+
 - Native file-line playback is connected through a private source-path owner,
   generation-checked main-thread AVPlayer adapter and the original detail-row
   play/pause controls. The unchanged shipping LinePlayer supplies seek/toggle
@@ -27,7 +42,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   reproduce a CoreAudio output-start timeout, error -66681. Explicit stop/drop
   and same-line toggle pass. Native UI comparison is NOT_RUN while locked.
   See `runtime/LINE_PLAYBACK.md` and
-  `evidence/macos-line-playback-2026-11-05.json`. This is not playback acceptance.
+  `evidence/macos-line-playback-2026-11-05.json`. Both push and PR CI at
+  `64a156c` completed successfully on macOS 15 and Windows 2022 (41913316579
+  and 41913327455). This is not playback acceptance.
 
 - Caption window lifetime now follows the original controller: patient disable
   releases the patient window, while hiding the whole overlay preserves both.
@@ -893,21 +910,20 @@ controls, settings model lifecycle and all product end-to-end gates remain open.
 Follow-up ownership/lock fixes and failed-attempt context are recorded in
 `evidence/macos-model-download-ownership-2026-11-04.json`.
 
-The Rust transcript model preserves the original merge/group/edit policies with
-live Swift differential evidence. The timed file owner now connects native
-selection/start, progress, transcript/edit state, back/close cancellation and
-AppKit copy/name commands to the file-screen candidate. Native click/visual
-validation remains open; the candidate does not complete display caches,
-native follow validation/low-confidence review, settings/glossary/AI policy, playback
-or real-user migration acceptance. Workspace, exports and setup preferences now
-have connected candidates and synthetic/native CLI evidence above. The recording start action still emits a harness intent.
+The file/live workflow now connects native selection and recording, transcript
+state and edits, translation/cache backfill, archive/export, captions, line
+playback and low-confidence review candidates. Original Swift differential and
+lifecycle checks establish the specific code behaviors recorded above. Native
+click/visual validation, actual audio playback, full AI workflow and real-user
+migration acceptance remain open.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.
 2. Capture first-run/model lifecycle and remaining product screens, then implement
    them with the same state transitions and layout.
-3. Connect the session effect executor and engine process supervisor, first using
-   public file fixtures on this Mac; preserve the original user's data.
+3. Complete ASR/DNA concurrency, backlog and remaining AI workflow checks with
+   public fixtures; preserve the original user's data. Resolve actual native
+   playback output before accepting listen-review.
 4. Validate light/dark, ko/en/ja, resizing, fonts and system dialogs on native
    windows. Keep visual gates open until measured.
 5. Preserve the Windows CPU/PTX/build evidence; perform GPU/model and Windows 11

@@ -366,6 +366,98 @@ async fn cleaned(root: &Path) {
 }
 
 #[tokio::test]
+async fn review_threshold_and_word_edits_refresh_display_but_listening_uses_authoritative_words() {
+    use crate::preferences;
+    use madi_core::settings::SettingsCommand;
+    let engine = WORDS
+        .replace("conf 0.99", "conf 0.4")
+        .replace("conf 0.98", "conf 0.8");
+    let (root, configuration, original) = fixture("", &engine);
+    let before = std::fs::read(&original).unwrap();
+    let preferences = PreferencesService::new(
+        preferences::Store::load(
+            root.path().join("preferences.json"),
+            preferences::Preferences::from_legacy(preferences::Legacy::default()),
+        )
+        .unwrap(),
+        |_| {},
+    )
+    .unwrap();
+    let workflow = FileWorkflow::new(configuration, |_| {}).unwrap();
+    workflow.set_preferences(preferences.clone()).await.unwrap();
+    let started = workflow
+        .start(original.clone(), FileSettings::default(), None)
+        .await
+        .unwrap();
+    let done = state_when(&workflow, |s| s.phase == ViewPhase::Done).await;
+    assert_eq!(done.review_words.len(), 1);
+    assert_eq!(done.review_words[0].text, "Hello");
+    assert_eq!(done.lines[0].word_spacing, [false, true]);
+    preferences
+        .settings(SettingsCommand::VADThreshold(0.85))
+        .await
+        .unwrap();
+    let flagged = state_when(&workflow, |s| s.review_words.len() == 2).await;
+    assert_eq!(flagged.generation, started.generation);
+    let line = flagged.lines[0].line.id;
+    workflow
+        .edit(
+            started.generation,
+            Edit::Word {
+                id: line.to_string(),
+                index: 1,
+                text: "world.".into(),
+            },
+        )
+        .await
+        .unwrap();
+    let input = workflow
+        .review_input(started.generation)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(input.queue.len(), 1); // immediate authoritative edit, before any display deadline
+    assert_eq!(input.queue[0].word_index, 0);
+    assert_eq!(input.source, Some(original.clone()));
+    let updated = state_when(&workflow, |s| s.review_words.len() == 1).await;
+    assert_eq!(updated.lines[0].line.words[1].conf, 1.0);
+    workflow
+        .edit(
+            started.generation,
+            Edit::Word {
+                id: line.to_string(),
+                index: 0,
+                text: "Hi".into(),
+            },
+        )
+        .await
+        .unwrap();
+    let edited = state_when(&workflow, |s| s.review_words.is_empty()).await;
+    assert_eq!(edited.lines[0].text, "Hi world.");
+    assert!(
+        workflow
+            .review_input(started.generation)
+            .await
+            .unwrap()
+            .unwrap()
+            .queue
+            .is_empty()
+    );
+    workflow.reset(started.generation).await.unwrap();
+    assert!(
+        workflow
+            .review_input(started.generation)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    workflow.shutdown().await.unwrap();
+    preferences.shutdown().await.unwrap();
+    assert_eq!(std::fs::read(&original).unwrap(), before);
+    assert_eq!(scratch_count(root.path()), 0);
+}
+
+#[tokio::test]
 async fn playback_source_is_native_owned_and_expires_with_its_session() {
     let (root, configuration, original) = fixture("", WORDS);
     let original_bytes = std::fs::read(&original).unwrap();

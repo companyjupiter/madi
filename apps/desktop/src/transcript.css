@@ -92,3 +92,26 @@
 .transcript-error-actions { display: flex; gap: 8px; }
 .transcript-error-actions button { padding: 3px 8px; border-radius: 5px; background: var(--surface-raised); box-shadow: 0 1px 2px #0003; font-size: 13px; }
 .transcript-error-actions .primary { background: var(--accent); color: white; }
+
+.transcript-review-bar { display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding: 7px 16px; margin: 5px 20px; border-radius: 14px; background: rgb(217.005 130.9935 36.006 / .07); font-size: 12px; line-height: normal; }
+.transcript-review-bar button { display: inline-flex; flex-shrink: 0; color: var(--text-secondary); }
+.review-warning, .transcript-review-bar .listening, .review-playing { color: var(--low-conf); }
+.review-count, .review-index, .review-playing { white-space: nowrap; flex-shrink: 0; }
+.review-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.review-spacer { flex: 1; }
+.review-index { color: var(--text-tertiary); }
+.review-playing { font-size: 11px; font-variant-numeric: tabular-nums; }
+.transcript-body.has-review-words { user-select: none; }
+.review-word { display: inline; border: 0; padding: 0; background: transparent; color: #e0992a; font: inherit; letter-spacing: inherit; white-space: inherit; text-align: inherit; text-decoration: none; cursor: pointer; }
+.transcript-overlap { font-size: 11px; font-style: italic; }
+.transcript-row.review-focused::before { content: ''; position: absolute; inset: -4px -6px; background: rgb(217.005 130.9935 36.006 / .14); border-radius: 6px; pointer-events: none; z-index: -1; }
+.transcript-row.review-focused { isolation: isolate; }
+.word-review-popover { position: fixed; z-index: 40; box-sizing: border-box; width: 268px; min-width: 260px; display: flex; flex-direction: column; gap: 12px; padding: 14px; border: .5px solid var(--separator); border-radius: 9px; background: var(--surface); color: var(--text-primary); box-shadow: 0 5px 24px #0004; }
+.word-review-arrow { position: absolute; top: -5px; width: 9px; height: 9px; background: var(--surface); border-left: .5px solid var(--separator); border-top: .5px solid var(--separator); transform: translateX(-50%) rotate(45deg); pointer-events: none; }
+.word-review-popover.above .word-review-arrow { top: auto; bottom: -5px; transform: translateX(-50%) rotate(225deg); }
+.word-review-title { font-size: 11px; font-weight: 600; color: var(--text-tertiary); }
+.word-review-popover input { box-sizing: border-box; width: 240px; border: 1px solid var(--separator); background: var(--surface); color: var(--text-primary); border-radius: 5px; padding: 3px 5px; font: inherit; font-size: 14px; }
+.word-review-buttons { display: flex; align-items: center; gap: 8px; }
+.word-review-buttons > span { flex: 1; }
+.word-review-buttons button { display: inline-flex; align-items: center; justify-content: center; min-height: 22px; padding: 3px 7px; border-radius: 5px; border: .5px solid var(--separator); background: var(--surface); color: var(--text-primary); font-size: 13px; white-space: nowrap; }
+.word-review-buttons button.primary { background: var(--accent); color: white; border-color: transparent; }

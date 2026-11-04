@@ -430,6 +430,7 @@ mod tests {
         DisplayLine {
             text: text.clone(),
             source_revision: "unused".into(),
+            word_spacing: vec![],
             line: Line {
                 id: Uuid::from_u128(index),
                 speaker: 7,

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { interimContinuation } from './previewText';
 import { useShownInterim } from './useShownInterim';
 import type { FileArtwork, FileEdit, FileSnapshot, LiveControl, TranscriptLine } from './files';
@@ -8,6 +8,7 @@ import './transcript.css';
 import { usePreferences } from './preferences';
 import { useCaptionControl } from './captions';
 import { useLinePlayback } from './playback';
+import { useWordReview, WordReviewPopover } from './ReviewPanel';
 import { LiveControls, LiveMic, NativeSymbol, liveLabel, phaseLabel } from './LiveControls';
 
 type Props = { workspace: ReactNode; snapshot: FileSnapshot; artwork: FileArtwork | null; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; leave: (close?: boolean) => void; control: (command: LiveControl) => void; permission: (action: 'openSettings' | 'restart') => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
@@ -21,7 +22,7 @@ function timecode(seconds: number, hours = false) {
 function speakerColor(speaker: number) { return `var(--speaker-${((speaker % 8) + 8) % 8})`; }
 
 // This is the connected file-view candidate. AI tools,
-// confidence review and native visual parity remain separate migration gates.
+// native visual parity and actual listen-review remain separate migration gates.
 export function FileTranscript({ workspace, snapshot: state, artwork, language, text, reset, leave, control, permission, edit, copy, rename }: Props) {
   const { state: preferences, presentation: { contentMode: content, fontSize }, send } = usePreferences();
   const captions = useCaptionControl();
@@ -35,7 +36,20 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
   const interimSuffix = shownInterim && state.lines.length ? interimContinuation(state.lines.slice(-3).map(line => line.text).join(' '), shownInterim) : '';
   const hasTranscript = state.lines.length > 0 || shownInterim.length > 0;
   const liveTail = (last: boolean) => last && interimSuffix ? <span className="transcript-live-tail">{' ' + interimSuffix}</span> : null;
-  const follow = useTranscriptFollow(state.lines, state.generation, isLive, editing !== null);
+  const [focusedLine, setFocusedLine] = useState<string | null>(null);
+  const wordReview = useWordReview(state.reviewWords, state.generation, edit, id => { setFocusedLine(id); follow.jumpToLine(id); });
+  const follow = useTranscriptFollow(state.lines, state.generation, isLive, editing !== null || Boolean(wordReview.current));
+  const reviewVisible = !content && state.reviewWords.length > 0;
+  const reviewCommand = useRef(playback.reviewCommand);
+  useLayoutEffect(() => { reviewCommand.current = playback.reviewCommand; });
+  useEffect(() => {
+    reviewCommand.current({ type: 'visibility', visible: reviewVisible });
+  }, [state.generation, reviewVisible, state.reviewWords.length]);
+  useEffect(() => () => { reviewCommand.current({ type: 'visibility', visible: false }); }, []);
+  useLayoutEffect(() => {
+    if (playback.review.scrollTarget) { setFocusedLine(playback.review.scrollTarget); follow.jumpToLine(playback.review.scrollTarget); }
+  }, [state.generation, playback.review.scrollTick]);
+  const reviewIndex = Math.min(playback.review.barIndex, Math.max(0, state.reviewWords.length - 1));
   const l = (ko: string, en: string, ja = en) => liveLabel(language, ko, en, ja);
   const showFile = Boolean(state.fileName || (!state.live && state.phase.kind === 'processing') || (state.phase.kind === 'done' && state.lines.length));
   const waiting = !['idle', 'done', 'error'].includes(state.phase.kind);
@@ -63,7 +77,7 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
     }
     return result;
   }, [state.lines, state.speakerNumbers, state.speakerIslandAbsorption]);
-  useLayoutEffect(() => { setEditing(null); }, [state.generation]);
+  useLayoutEffect(() => { setEditing(null); setFocusedLine(null); }, [state.generation]);
   useLayoutEffect(() => {
     if (editor.current) { editor.current.style.height = 'auto'; editor.current.style.height = `${editor.current.scrollHeight}px`; }
   }, [draft, editing, fontSize]);
@@ -75,6 +89,7 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
     return <button className="transcript-speaker" onClick={() => rename(speaker)} disabled={speaker === 255} title={text('Click to name')}><i style={{ background: speakerColor(speaker) }} />{label}</button>;
   };
   return <main className="file-workspace">
+    {!content && <WordReviewPopover review={wordReview} total={state.reviewWords.length} artwork={artwork} l={l} />}
     <aside className="file-side-panel">
       <header className="file-side-header">
         <button onClick={() => leave()} title={text('Back to start')}><Icon name="chevron-left" size={22} /></button>
@@ -103,6 +118,15 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
         </div>
       </div>
       {captions.failed && <div className="transcript-error" role="alert">{l('자막 창을 열 수 없습니다.', 'The caption window could not open.', '字幕ウィンドウを開けませんでした。')}</div>}
+      {reviewVisible && <div className="transcript-review-bar">
+        <NativeSymbol artwork={artwork} name="reviewWarning" className="review-warning" />
+        <span className="review-count">{l(`검토 필요 ${state.reviewWords.length}개`, `${state.reviewWords.length} to review`, `要確認 ${state.reviewWords.length}件`)}</span>
+        <span className="review-current">· {state.reviewWords[reviewIndex].text}</span><span className="review-spacer" />
+        <span className="review-index">{reviewIndex + 1}/{state.reviewWords.length}</span>
+        {state.hasSourceMedia && <><button aria-pressed={playback.review.isListening} className={playback.review.isListening ? 'listening' : ''} onClick={() => playback.reviewCommand({ type: 'toggle' })} title={playback.review.isListening ? l('귀로 검토 멈춤', 'Stop listen-review') : l('저신뢰 단어 귀로 검토', 'Listen-review low-confidence words')}><NativeSymbol artwork={artwork} name={playback.review.isListening ? 'reviewPause' : 'reviewPlay'} /></button>{playback.review.isListening && playback.review.count > 0 && <span className="review-playing">{l(`재생 ${playback.review.index + 1}/${playback.review.count}`, `Playing ${playback.review.index + 1}/${playback.review.count}`, `再生 ${playback.review.index + 1}/${playback.review.count}`)}</span>}</>}
+        <button title={l('이전 검토 단어', 'Previous flagged word')} onClick={() => playback.reviewCommand({ type: 'jump', delta: -1 })}><NativeSymbol artwork={artwork} name="reviewUp" /></button>
+        <button title={l('다음 검토 단어', 'Next flagged word')} onClick={() => playback.reviewCommand({ type: 'jump', delta: 1 })}><NativeSymbol artwork={artwork} name="reviewDown" /></button>
+      </div>}
       <div className={`transcript-reader${hasTranscript ? ' has-lines' : ''}${follow.badge.scrolled ? ' scrolled' : ''}`}>
       <div className="transcript-scroll" ref={follow.viewport}>
         <div className={`transcript-scroll-content${hasTranscript ? '' : ' empty-layout'}`} ref={follow.contents}>
@@ -111,14 +135,14 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
           {(state.permissionIssue === 'systemAudioDenied' || state.permissionIssue === 'systemAudioRestartRequired') && <button className="primary" onClick={() => permission('restart')}>{l('Madi 다시 시작', 'Restart Madi', 'Madi を再起動')}</button>}
           {state.phase.message.includes('모델이 준비되지') && <button className="primary" onClick={() => window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'settings' }))}>{l('설정 열기', 'Open Settings')}</button>}
           <button onClick={reset}>{l('처음으로', 'Start over')}</button></div></div> : waiting ? <div className={`transcript-status${state.phase.kind === 'countingDown' ? ' countdown-status' : ''}`}><span>{state.phase.kind === 'countingDown' ? l(`곧 녹음이 시작됩니다 ${state.phase.remaining}`, `Recording starts in ${state.phase.remaining}`, `録音開始まで ${state.phase.remaining}`) : text('Your transcript will appear here shortly.')}</span><span className="loading-dots" aria-hidden>•••</span></div> : <div className="transcript-empty"><strong>{text('Nothing was transcribed')}</strong><span>{text('No speech was recognized. Go back with ‹ and try again.')}</span></div> : <>
-          {content ? <div className="transcript-blocks">{blocks.map(block => <article key={`block-${block.id}`} className="transcript-block">
+          {content ? <div className="transcript-blocks">{blocks.map(block => <article key={`block-${block.id}`} className="transcript-block" data-line-ids={block.lines.map(line => line.id).join(',')}>
             {multiSpeaker && speakerHeader(block.speaker)}
             <p className="transcript-body" onDoubleClick={() => setContent(false)}>{block.text}{liveTail(block.id === blocks.at(-1)?.id)}</p>
             {[...new Set(block.lines.flatMap(line => Object.keys(line.translations)))].sort().map(lang => <p className="transcript-translation" key={lang}>{block.lines.map(line => line.translations[lang]).filter(Boolean).join(' ')}</p>)}
           </article>)}</div> : <div className="transcript-details">{state.lines.map((line, index) => {
             const previous = state.lines[index - 1];
             const continuation = previous?.speaker === line.speaker && line.start - previous.end < 2.5;
-            return <article key={line.id} className={`transcript-row${continuation ? ' continuation' : ''}`}>
+            return <article key={line.id} data-line-id={line.id} className={`transcript-row${continuation ? ' continuation' : ''}${focusedLine === line.id || wordReview.current?.lineId === line.id ? ' review-focused' : ''}`}>
               <header className="transcript-row-header">
                 {!continuation && <>{speakerHeader(line.speaker, line)}<time>{timecode(line.start, true)}</time>{state.hasSourceMedia && <button className={`transcript-line-play${playback.playingLine === line.id ? ' active' : ''}`} aria-pressed={playback.playingLine === line.id} title={l('이 구간 오디오 재생', 'Play this segment’s audio')} onClick={() => playback.toggle(line)}><NativeSymbol artwork={artwork} name={playback.playingLine === line.id ? 'linePause' : 'linePlay'} /></button>}{line.editedText !== null && <span className="transcript-edited">{text('Edited')}</span>}</>}
                 <div className="transcript-actions">
@@ -129,7 +153,7 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
               {editing === line.id ? <><textarea autoFocus ref={editor} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
                 if (event.key === 'Escape') { event.preventDefault(); setEditing(null); }
                 if (event.key === 'Enter' && event.metaKey) { event.preventDefault(); saveEdit(); }
-              }} /><div className="transcript-edit-actions"><button onClick={saveEdit}>{text('Save')}</button><button onClick={() => setEditing(null)}>{text('Cancel')}</button></div></> : <p className="transcript-body" onDoubleClick={() => beginEdit(line)}>{line.text}{liveTail(index === state.lines.length - 1)}</p>}
+              }} /><div className="transcript-edit-actions"><button onClick={saveEdit}>{text('Save')}</button><button onClick={() => setEditing(null)}>{text('Cancel')}</button></div></> : <p className={`transcript-body${line.words.some(word => word.conf < (preferences.settings.vadConfThreshold ?? .55)) ? ' has-review-words' : ''}`} onDoubleClick={() => beginEdit(line)}>{line.words.map((word, wi) => <span key={word.id}>{line.wordSpacing[wi] ? ' ' : ''}{word.conf < (preferences.settings.vadConfThreshold ?? .55) ? <button className="review-word" onClick={() => wordReview.open(line.id, wi)}>{word.text}</button> : word.text}</span>)}{line.overlapSpeakers.map(speaker => <span key={speaker} className="transcript-overlap" style={{ color: speakerColor(speaker) }}>{l(`  ⟨+${name(speaker)} 겹침⟩`, `  ⟨+${name(speaker)} overlap⟩`, `  ⟨+${name(speaker)} 重なり⟩`)}</span>)}{liveTail(index === state.lines.length - 1)}</p>}
               {Object.entries(line.translations).map(([lang, value]) => <p className="transcript-translation" key={lang}>{value}</p>)}
               {Object.entries(line.staleTranslations).filter(([lang]) => !line.translations[lang]).map(([lang, value]) => <p className="transcript-translation stale" key={lang}>{value}</p>)}
             </article>;

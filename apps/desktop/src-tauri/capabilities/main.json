@@ -6,6 +6,7 @@
     "main"
   ],
   "permissions": [
+    "allow-review-command",
     "allow-playback-snapshot",
     "allow-playback-toggle",
     "allow-caption-status",

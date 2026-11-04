@@ -66,6 +66,36 @@ pub fn artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
 pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
     Ok(BTreeMap::from([
         (
+            "reviewWarning".into(),
+            render_symbol("exclamationmark.triangle.fill", 12.0, unsafe {
+                NSFontWeightRegular
+            })?,
+        ),
+        (
+            "reviewUp".into(),
+            render_symbol("chevron.up", 11.0, unsafe { NSFontWeightSemibold })?,
+        ),
+        (
+            "reviewDown".into(),
+            render_symbol("chevron.down", 11.0, unsafe { NSFontWeightSemibold })?,
+        ),
+        (
+            "reviewPlay".into(),
+            render_symbol("play.circle", 13.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
+            "reviewPause".into(),
+            render_symbol("pause.circle.fill", 13.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
+            "reviewPrevious".into(),
+            render_symbol("chevron.left", 13.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
+            "reviewNext".into(),
+            render_symbol("chevron.right", 13.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
             "linePlay".into(),
             render_symbol("play.circle", 12.0, unsafe { NSFontWeightRegular })?,
         ),

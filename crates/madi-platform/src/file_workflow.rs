@@ -73,6 +73,7 @@ pub struct DisplayLine {
     pub text: String,
     // Keep the full 64-bit revision intact across JavaScript serialization.
     pub source_revision: String,
+    pub word_spacing: Vec<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -87,6 +88,7 @@ pub struct Snapshot {
     pub chunks_done: i64,
     pub chunks_total: i64,
     pub lines: Vec<DisplayLine>,
+    pub review_words: Vec<madi_core::review::Span>,
     pub speaker_numbers: SpeakerNumbers,
     pub speaker_names: BTreeMap<i64, String>,
     pub partial: String,
@@ -100,6 +102,13 @@ pub struct Snapshot {
     pub translation_backlog: usize,
     pub translation_backfill_remaining: usize,
 }
+#[derive(Clone, Debug)]
+pub struct ReviewInput {
+    pub source: Option<PathBuf>,
+    pub queue: Vec<madi_core::review::Span>,
+    pub flagged: Vec<madi_core::review::Span>,
+}
+
 #[derive(Clone, Debug)]
 pub struct ArchiveSettings {
     pub enabled: bool,
@@ -127,6 +136,7 @@ impl Default for Snapshot {
             chunks_done: 0,
             chunks_total: 0,
             lines: Vec::new(),
+            review_words: Vec::new(),
             speaker_numbers: SpeakerNumbers::default(),
             speaker_names: BTreeMap::new(),
             partial: String::new(),
@@ -189,6 +199,10 @@ enum Command {
         format: crate::transcript_export::Format,
         settings: madi_core::transcript::export::EditorSettings,
         reply: oneshot::Sender<io::Result<()>>,
+    },
+    ReviewInput {
+        generation: u64,
+        reply: oneshot::Sender<io::Result<Option<ReviewInput>>>,
     },
     PlaybackSource {
         generation: u64,
@@ -282,6 +296,7 @@ impl FileWorkflow {
                 changed: Box::new(changed),
                 state,
                 source_media: None,
+                review_cache_key: None,
                 store: TranscriptStore::default(),
                 glossary: None,
                 preferences: None,
@@ -383,6 +398,14 @@ impl FileWorkflow {
     }
     /// Resolve only the source admitted by the native file picker. This path
     /// never enters a renderer payload and expires when the session is reset.
+    pub async fn review_input(&self, generation: u64) -> io::Result<Option<ReviewInput>> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::ReviewInput { generation, reply })
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
+    }
     pub async fn playback_source(&self, generation: u64) -> io::Result<Option<PathBuf>> {
         let (reply, result) = oneshot::channel();
         self.owner
@@ -522,6 +545,7 @@ struct Worker {
     changed: Box<dyn Fn(Snapshot) + Send + Sync>,
     state: Snapshot,
     source_media: Option<PathBuf>,
+    review_cache_key: Option<(u64, u64)>,
     store: TranscriptStore,
     glossary: Option<GlossaryService>,
     preferences: Option<PreferencesService>,
@@ -556,7 +580,19 @@ impl Worker {
         let dna_cleanup = self.translations.broker.wait().await;
         result.and(cleanup).and(dna_cleanup)
     }
+    fn review_threshold(&self) -> f64 {
+        self.preferences
+            .as_ref()
+            .map_or(0.55, |p| p.snapshot().settings.vad_conf_threshold)
+    }
     fn publish(&mut self) {
+        let threshold = self.review_threshold();
+        let key = (self.store.display_revision, threshold.to_bits());
+        if self.review_cache_key != Some(key) {
+            self.state.review_words =
+                madi_core::review::queue(self.store.display_lines(), threshold);
+            self.review_cache_key = Some(key);
+        }
         self.state.translation_queue_depth = self.translations.policy.depth;
         self.state.translation_queued_lines = self.translations.policy.queued_lines;
         self.state.translation_backlog = self.translations.policy.backlog_lines();
@@ -566,6 +602,7 @@ impl Worker {
             .display_lines()
             .iter()
             .map(|line| DisplayLine {
+                word_spacing: madi_core::review::word_spacing(line),
                 line: line.clone(),
                 text: line.text(),
                 source_revision: madi_core::transcript::text_revision(&line.text()).to_string(),
@@ -603,6 +640,7 @@ impl Worker {
         // All disk work is joined before another command can reach clear.
         self.archive_writer = Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default()));
         self.source_media = None;
+        self.review_cache_key = None;
         self.store.reset();
         self.text_passes.reset();
         let revision = self.state.revision;
@@ -751,7 +789,7 @@ impl Worker {
                     Some(Command::LiveControl {generation,command,reply})=>{let result=self.live_control(generation,command).await;let _=reply.send(result);},
                     Some(Command::Preferences(preferences, reply))=>{
                         self.preference_updates=Some(preferences.subscribe());
-                        self.preferences=Some(preferences);let _=reply.send(Ok(()));
+                        self.preferences=Some(preferences);self.publish();let _=reply.send(Ok(()));
                     },
                     Some(Command::Glossary(glossary, reply))=>{
                         self.glossary=Some(glossary);let _=reply.send(Ok(()));
@@ -785,6 +823,14 @@ impl Worker {
                     Some(Command::OpenArchive {generation,path,reply})=>{
                         let result=self.open_archive(generation,path).await;
                         let _=reply.send(result);
+                    },
+                    Some(Command::ReviewInput {generation,reply})=>{
+                        let input = (generation == self.state.generation && !self.closing).then(|| ReviewInput {
+                            source:self.source_media.clone(),
+                            queue:madi_core::review::queue(self.store.lines(), self.review_threshold()),
+                            flagged:madi_core::review::queue(self.store.display_lines(), self.review_threshold()),
+                        });
+                        let _=reply.send(Ok(input));
                     },
                     Some(Command::PlaybackSource {generation,reply})=>{
                         let path = if generation == self.state.generation && !self.closing {
@@ -865,7 +911,10 @@ impl Worker {
                 },
                 changed=async{self.preference_updates.as_mut().unwrap().changed().await},if preference_pending=>{
                     if changed.is_err() {self.preference_updates=None;}
-                    else if self.preferences.as_ref().is_some_and(|p|!p.has_translation_targets()) {self.stop_translation().await;self.publish();}
+                    else {
+                        if self.preferences.as_ref().is_some_and(|p|!p.has_translation_targets()) {self.stop_translation().await;}
+                        self.publish();
+                    }
                 },
                 _=deadline(self.fix)=>{
                     self.fix=None;

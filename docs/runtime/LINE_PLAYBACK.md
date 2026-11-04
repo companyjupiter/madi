@@ -26,7 +26,8 @@ the Swift endpoint, and destruction stops playback before releasing that callbac
 The Tauri main thread owns the player; generation checks reject old callbacks.
 React serializes rapid toggles and receives the native current-line projection.
 There is no continuous audio retained for live-session playback. Windows native
-playback and the review controller's playback integration remain unimplemented.
+playback remains unimplemented. The subsequent word-review candidate connects
+the review controller to this adapter; see `WORD_REVIEW.md`.
 
 The source-owner regression checks completion, admission failure, stale requests,
 archive opening, reset, unchanged original bytes and scratch cleanup. A host test
