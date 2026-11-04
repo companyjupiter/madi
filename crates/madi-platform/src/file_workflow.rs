@@ -24,28 +24,7 @@ use tokio::{
     time::Instant,
 };
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ViewPhase {
-    Idle,
-    CountingDown { remaining: u32 },
-    EngineStarting,
-    Ready,
-    Recording,
-    Paused,
-    Flushing,
-    Processing,
-    Done,
-    Error { message: String },
-}
-impl ViewPhase {
-    pub fn is_busy(&self) -> bool {
-        !matches!(self, Self::Idle | Self::Done | Self::Error { .. })
-    }
-    pub fn is_recording(&self) -> bool {
-        matches!(self, Self::Recording | Self::Paused)
-    }
-}
+pub use madi_core::pipeline_status::ViewPhase;
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LiveSnapshot {
@@ -89,6 +68,7 @@ pub struct Snapshot {
     pub chunks_total: i64,
     pub lines: Vec<DisplayLine>,
     pub review_words: Vec<madi_core::review::Span>,
+    pub status: madi_core::pipeline_status::Presentation,
     pub speaker_numbers: SpeakerNumbers,
     pub speaker_names: BTreeMap<i64, String>,
     pub partial: String,
@@ -137,6 +117,7 @@ impl Default for Snapshot {
             chunks_total: 0,
             lines: Vec::new(),
             review_words: Vec::new(),
+            status: Default::default(),
             speaker_numbers: SpeakerNumbers::default(),
             speaker_names: BTreeMap::new(),
             partial: String::new(),
@@ -297,6 +278,8 @@ impl FileWorkflow {
                 state,
                 source_media: None,
                 review_cache_key: None,
+                silence: None,
+                silence_tick: None,
                 store: TranscriptStore::default(),
                 glossary: None,
                 preferences: None,
@@ -546,6 +529,8 @@ struct Worker {
     state: Snapshot,
     source_media: Option<PathBuf>,
     review_cache_key: Option<(u64, u64)>,
+    silence: Option<madi_core::pipeline_status::SilenceWatch>,
+    silence_tick: Option<Instant>,
     store: TranscriptStore,
     glossary: Option<GlossaryService>,
     preferences: Option<PreferencesService>,
@@ -569,6 +554,16 @@ struct Worker {
     archive_settings: Option<ArchiveSettings>,
     archive_writer: Arc<std::sync::Mutex<SessionArchiveWriter>>,
 }
+// The shipping silence watch uses Date, so clock changes affect its elapsed
+// interval too. Tokio Instant still schedules polls; it is not the silence clock.
+fn status_wall_seconds() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or_else(
+            |error| -error.duration().as_secs_f64(),
+            |duration| duration.as_secs_f64(),
+        )
+}
 impl Worker {
     async fn execute(mut self) -> io::Result<()> {
         let result = self.run_loop().await;
@@ -579,6 +574,48 @@ impl Worker {
         self.translations.broker.shutdown();
         let dna_cleanup = self.translations.broker.wait().await;
         result.and(cleanup).and(dna_cleanup)
+    }
+    fn publish_status(&mut self) {
+        use madi_core::pipeline_status::{self, Signals, SilenceWatch};
+        if self.state.live.is_some()
+            && self.state.phase == ViewPhase::Recording
+            && self.silence.is_none()
+        {
+            self.silence = Some(SilenceWatch::new(status_wall_seconds()));
+            self.silence_tick = Some(Instant::now() + Duration::from_secs(3));
+        } else if !self.state.phase.is_recording() {
+            self.silence = None;
+            self.silence_tick = None;
+        }
+        #[cfg(target_os = "macos")]
+        let segments = self.live_preview.as_ref().map_or(0, |p| p.segments_pending);
+        #[cfg(not(target_os = "macos"))]
+        let segments = 0;
+        let signals = Signals {
+            phase: self.state.phase.clone(),
+            chunks_done: self.state.chunks_done,
+            chunks_total: self.state.chunks_total,
+            translate_backlog: self.state.translation_backlog,
+            translate_queued_lines: self.state.translation_queued_lines,
+            translate_queue_depth: self.state.translation_queue_depth,
+            backfill_remaining: self.state.translation_backfill_remaining,
+            segments_in_flight: segments,
+            mic_silent: self.silence.as_ref().is_some_and(|w| w.silent),
+            capture_ended_reason: self
+                .state
+                .live
+                .as_ref()
+                .and_then(|s| s.capture_ended_reason.clone()),
+            // Reconcile, forced-language correction and coverage/recovery
+            // producers remain separate migration work; never fabricate them.
+            ..Default::default()
+        };
+        let language = self
+            .preferences
+            .as_ref()
+            .map(|p| p.snapshot().presentation.ui_language)
+            .unwrap_or_default();
+        self.state.status = pipeline_status::presentation(&signals, language);
     }
     fn review_threshold(&self) -> f64 {
         self.preferences
@@ -597,6 +634,7 @@ impl Worker {
         self.state.translation_queued_lines = self.translations.policy.queued_lines;
         self.state.translation_backlog = self.translations.policy.backlog_lines();
         self.state.translation_backfill_remaining = self.translations.policy.backfill_remaining();
+        self.publish_status();
         self.state.lines = self
             .store
             .display_lines()
@@ -641,6 +679,8 @@ impl Worker {
         self.archive_writer = Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default()));
         self.source_media = None;
         self.review_cache_key = None;
+        self.silence = None;
+        self.silence_tick = None;
         self.store.reset();
         self.text_passes.reset();
         let revision = self.state.revision;
@@ -916,6 +956,14 @@ impl Worker {
                         self.publish();
                     }
                 },
+                _=deadline(self.silence_tick)=>{
+                    self.silence_tick=None;
+                    if let Some(watch)=&mut self.silence
+                        && watch.tick(&self.state.phase,status_wall_seconds()) {
+                        self.silence_tick=Some(Instant::now()+Duration::from_secs(3));
+                    }
+                    self.publish();
+                },
                 _=deadline(self.fix)=>{
                     self.fix=None;
                     self.store.flush_pending_speaker_fix_rebuild();
@@ -1188,6 +1236,9 @@ impl Worker {
                 if let Some(preview) = &mut self.live_preview {
                     preview.segments_pending += 1;
                 }
+                if self.render.is_none() {
+                    self.render = Some(Instant::now() + Duration::from_millis(33));
+                }
             }
             Live::Preview { offset, wav } => {
                 if let Some(preview) = &mut self.live_preview {
@@ -1204,6 +1255,9 @@ impl Worker {
                 }
             }
             Live::Level(level) => {
+                if let Some(watch) = &mut self.silence {
+                    watch.level(level, status_wall_seconds());
+                }
                 let now = Instant::now();
                 let release =
                     (-now.duration_since(self.last_meter).as_secs_f64() / 0.5).exp() as f32;

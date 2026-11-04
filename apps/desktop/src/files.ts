@@ -11,7 +11,9 @@ export interface TranscriptLine {
   editedTranslations: string[]; suppressedTranslations: string[];
 }
 export interface ReviewWord { lineId: string; wordIndex: number; text: string; t0: number; t1: number }
+export interface TranscriptStatus { pipeline: { kind: string; count?: number; percent?: number | null; message?: string }; warning: string | null; activity: string | null; gapTimes: string[] }
 export interface FileSnapshot {
+  status: TranscriptStatus;
   revision: number; generation: number; hasSourceMedia: boolean;
   phase: { kind: 'idle' | 'processing' | 'done' | 'engineStarting' | 'ready' | 'recording' | 'paused' | 'flushing' } | { kind: 'countingDown'; remaining: number } | { kind: 'error'; message: string };
   live: { source: 'mic' | 'system' | 'both'; inputDevice: string | null; seconds: number; meter: number; captureEndedReason: string | null } | null;
@@ -31,7 +33,7 @@ export type FileEdit =
   | { type: 'word'; id: string; index: number; text: string }
   | { type: 'translation'; id: string; language: string; text: string }
   | { type: 'speakerName'; speaker: number; name: string };
-export const emptyFile: FileSnapshot = { revision: 0, generation: 0, hasSourceMedia: false, phase: { kind: 'idle' }, live: null, permissionIssue: null, admissionPending: false, fileName: '', sizeLabel: '', chunksDone: 0, chunksTotal: 0, translationQueueDepth: 0, translationQueuedLines: 0, translationBacklog: 0, translationBackfillRemaining: 0, lines: [], reviewWords: [], speakerNumbers: { numbers: {} }, speakerNames: {}, partial: '', speakerIslandAbsorption: false, archive: { enabled: false, folder: null, transcript: null, error: null } };
+export const emptyFile: FileSnapshot = { status: { pipeline: { kind: 'idle' }, warning: null, activity: null, gapTimes: [] }, revision: 0, generation: 0, hasSourceMedia: false, phase: { kind: 'idle' }, live: null, permissionIssue: null, admissionPending: false, fileName: '', sizeLabel: '', chunksDone: 0, chunksTotal: 0, translationQueueDepth: 0, translationQueuedLines: 0, translationBacklog: 0, translationBackfillRemaining: 0, lines: [], reviewWords: [], speakerNumbers: { numbers: {} }, speakerNames: {}, partial: '', speakerIslandAbsorption: false, archive: { enabled: false, folder: null, transcript: null, error: null } };
 export const fileSnapshot = () => browserFixture ? Promise.resolve(emptyFile) : invoke<FileSnapshot>('file_snapshot');
 export const startFile = () => invoke<FileSnapshot>('file_start');
 export const resetFile = (generation: number) => invoke<FileSnapshot>('file_reset', { generation });

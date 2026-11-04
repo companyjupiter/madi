@@ -45,6 +45,7 @@ on:
       - 'apps/macos/Tests/AudioDecodeLimitTests.swift'
       - 'apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatter*Tests.swift'
       - 'apps/macos/Sovereign/UI/ContentView.swift'
+      - 'apps/macos/Sovereign/UI/StatusLine.swift'
       - 'apps/macos/Sovereign/UI/CaptionOverlay.swift'
       - 'apps/macos/Sovereign/Transcript/SpeakerID.swift'
       - 'apps/macos/Sovereign/UI/L10n.swift'
@@ -152,6 +153,7 @@ jobs:
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_cache_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_caption_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_review_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_pipeline_status_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -190,6 +192,7 @@ jobs:
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_cache_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_caption_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_review_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_pipeline_status_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -251,6 +254,9 @@ jobs:
             out/review-parity/report.json
             out/review-parity/rust-and-frontend.json
             out/review-parity/swift.json
+            out/pipeline-status-parity/report.json
+            out/pipeline-status-parity/result.json
+            out/pipeline-status-parity/swift.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json

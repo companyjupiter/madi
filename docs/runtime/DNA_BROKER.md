@@ -2,7 +2,7 @@
 
 `madi-platform::dna_broker` provides the native resident process required by
 translation, the action rail, summaries and Q&A. The native translation client
-is connected; its product session and other DNA consumers remain open. The
+is connected to the shared file/live session; other DNA consumers remain open. The
 broker does not expose arbitrary process launching through
 Tauri commands, and passing its tests does not establish translation or UI parity.
 
@@ -17,8 +17,8 @@ own session/line/revision checks when forwarding these events to a transcript.
 The process receives `SOV_NSTEPS=512`, with inherited `SOV_DEBUG` removed. One
 request is in flight. Committed captions (100) precede interim captions (80),
 live rail (30) and post-session work (10), with FIFO order within a priority.
-This FIFO is the shared broker policy; TranslateEngine's separate newest-first
-caption queue is still to be ported and connected.
+This FIFO is the shared broker policy; the connected translation client retains
+TranslateEngine's separate newest-first caption queue above it.
 
 Reported caption pressure holds background requests until pressure clears or
 their waiting time reaches 90 seconds at a pump opportunity. Caption-busy events
@@ -30,8 +30,8 @@ one protocol line incrementally. Prefix registration uses `%%PFX <slot> <text>`;
 only a matching `PFX_OK` completes that registration. Ordinary turns complete
 at `[perf] generation`, with empty replies reported as failure. The parser is
 reset per turn and preserves embedded newlines only when requested. Capability
-sets are replaced on every process launch/READY. The future translation client
-must gate `%%FP` and `%%MAX` as the shipping TranslateEngine does.
+sets are replaced on every process launch/READY. The connected translation client
+gates `%%FP` and `%%MAX` as the shipping TranslateEngine does.
 
 Cancelling pending requests completes each queued request with no result. It
 does not cancel an active turn. Detaching a client suppresses its later output;
@@ -89,7 +89,9 @@ process evidence in `TRANSLATION_POLICY.md` and `TRANSLATION_CLIENT.md`. Native
 attachments also retain ownership until the reply is received; cancelled queued
 replies detach automatically. Unavailable marks a terminal stopped generation
 when no READY will follow, so queues owned by clients can drain too.
-Next integration work includes session model admission, interim/committed
-revision guards, preview busy/aging admission, stop-time backfill and other DNA
-clients.
+Session model admission, committed revision guards, preview busy/aging admission
+and stop-time backfill now have connected owners and separate evidence in
+`COMMITTED_TRANSLATION.md` and `TRANSLATION_CACHE.md`. The shipping interim-
+translation-disabled policy is retained. Other DNA clients, full concurrent
+ASR/DNA acceptance and native UI comparison remain open.
 Actual WebView/native screen comparison and Windows GPU execution remain open.

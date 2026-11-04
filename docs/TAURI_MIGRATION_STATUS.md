@@ -15,6 +15,22 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Transcript-tail status now uses a native derived pipeline projection, preserving
+  the original priority and line-count semantics for file transcription, queued
+  translation, shed backlog and stop-time backfill. Native committed-segment and
+  silence signals distinguish listening/transcribing and drive warnings without
+  renderer polling. Three thousand original Swift cases cover all eleven state
+  kinds and ko/en/ja output. The 3-second silence watch uses raw >0.02 input and
+  strict >15-second wall-time elapsed checks; paused polls reset that interval.
+  A real owner/child-process test verifies silence without samples and recovery
+  after input. Local validation passes 185 Rust tests, strict clippy, five IPC/
+  queue checks, both status oracles and rebuilt app/relocated package checks.
+  Four deliberate policy/timer mutations are detected. CI for this slice is
+  pending. Native display and animation remain NOT_RUN. Coverage retry,
+  hang recovery and AI correction/reconcile producers remain unimplemented; their
+  presentation rules are tested but are not end-to-end features yet. See
+  `runtime/PIPELINE_STATUS.md` and `evidence/macos-pipeline-status-2026-11-05.json`.
+
 - Low-confidence word review now connects native queue state, word links, the
   edit popover, manual review bar and file-only listen controls. Strict threshold,
   Foundation whitespace, grapheme spacing and original navigation match 800
@@ -25,7 +41,10 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   passes 183 Rust tests (29 core, 129 platform, 14 protocol, 11 desktop), strict
   clippy, five IPC/queue tests, 27 native artwork configurations, frontend/app
   build and relocated package checks. Both native and portable review oracles
-  are wired into CI; CI for this slice is pending. Native playback retains the
+  are wired into CI. Both push/PR runs at `04bc473` pass macOS 15 and Windows
+  2022 (41920656521 / 41920663836). Downloaded PR merge artifacts verify 183 Mac
+  and 156 Windows tests, executable/reference hashes and native Swift review
+  results; see `evidence/desktop-ci-04bc473-2026-11-05.json`. Native playback retains the
   preceding FAIL, while end-to-end review, popover geometry/focus, implicit font
   sizing and default animation comparison remain NOT_RUN. See
   `runtime/WORD_REVIEW.md` and `evidence/macos-word-review-2026-11-05.json`.

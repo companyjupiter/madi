@@ -163,6 +163,27 @@ async fn late_old_source_is_rejected_and_only_edited_revision_is_saved() {
     let (root, w, p, source) = setup(true).await;
     let initial = start(&w, source).await;
     marker(&root.path().join("dna-turn-1-1")).await;
+    let waiting = until(&w, |s| s.status.activity.is_some()).await;
+    assert_eq!(waiting.phase, ViewPhase::Done);
+    assert_eq!(
+        waiting.status.pipeline,
+        madi_core::pipeline_status::Pipeline::Translating { count: 1 }
+    );
+    assert_eq!(
+        waiting.status.activity.as_deref(),
+        Some("번역 중 · 1줄 대기")
+    );
+    p.presentation(madi_core::preferences::PresentationCommand::UILanguage(
+        madi_core::preferences::UILanguage::Ja,
+    ))
+    .await
+    .unwrap();
+    let relabeled = until(&w, |s| {
+        s.status.activity.as_deref() == Some("翻訳中 · 1行待機")
+    })
+    .await;
+    assert_eq!(relabeled.generation, initial.generation);
+    assert_eq!(relabeled.lines[0].text, waiting.lines[0].text);
     let id = initial.lines[0].line.id;
     w.edit(
         initial.generation,
@@ -186,6 +207,11 @@ async fn late_old_source_is_rejected_and_only_edited_revision_is_saved() {
     })
     .await;
     assert!(final_state.lines[0].line.translations["English"].ends_with("Fresh reply."));
+    assert_eq!(
+        final_state.status.pipeline,
+        madi_core::pipeline_status::Pipeline::Completed
+    );
+    assert!(final_state.status.activity.is_none());
     let saved = std::fs::read_to_string(final_state.archive.transcript.as_ref().unwrap()).unwrap();
     assert!(!saved.contains("Previous reply."));
     assert!(saved.contains("Fresh reply."));
@@ -201,6 +227,11 @@ async fn reset_retires_translation_before_a_new_session_reuses_the_broker() {
     let reset = w.reset(initial.generation).await.unwrap();
     assert!(reset.lines.is_empty());
     assert_eq!(reset.translation_queue_depth, 0);
+    assert_eq!(
+        reset.status.pipeline,
+        madi_core::pipeline_status::Pipeline::Idle
+    );
+    assert!(reset.status.activity.is_none());
     assert_ne!(reset.generation, initial.generation);
     let second = start(&w, source).await;
     marker(&root.path().join("dna-turn-2-1")).await;
@@ -226,6 +257,7 @@ async fn settings_disable_reaps_a_pending_translation_without_more_asr_events() 
     .await
     .unwrap();
     let stopped = until(&w, |s| s.translation_queue_depth == 0).await;
+    assert!(stopped.status.activity.is_none());
     assert!(stopped.lines[0].line.translations.is_empty());
     p.settings(SettingsCommand::TranslationTarget {
         language: Language::English,

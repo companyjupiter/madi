@@ -132,6 +132,10 @@ for line in sys.stdin:
     workflow.start_live(request, None).await.unwrap();
     events.send(Event::Started).unwrap();
     let active = state(&workflow, |s| s.phase == ViewPhase::Recording).await;
+    assert_eq!(
+        active.status.pipeline,
+        madi_core::pipeline_status::Pipeline::Listening
+    );
     async fn read(path: PathBuf) -> serde_json::Value {
         timeout(Duration::from_secs(10), async {
             loop {
@@ -184,9 +188,17 @@ for line in sys.stdin:
     state(&workflow, |s| s.revision > revision).await;
     std::fs::write(root.path().join("release-preview-2"), "").unwrap();
     read(root.path().join("segment-1")).await;
+    state(&workflow, |s| {
+        s.status.pipeline == madi_core::pipeline_status::Pipeline::Transcribing
+    })
+    .await;
     assert!(!root.path().join("preview-3").exists());
     std::fs::write(root.path().join("release-segment-1"), "").unwrap();
     let third = read(root.path().join("preview-3")).await;
+    state(&workflow, |s| {
+        s.status.pipeline == madi_core::pipeline_status::Pipeline::Listening
+    })
+    .await;
     assert_eq!(third["forced"], "Hello world.");
     assert_eq!(third["name"], "preview-2.wav");
     std::fs::write(root.path().join("release-preview-3"), "").unwrap();
@@ -438,4 +450,59 @@ async fn shutdown_waits_for_capture_tail_engine_flush_and_atomic_archive() {
     );
     let owned = std::fs::read_to_string(root.path().join("engine-started")).unwrap();
     assert!(!std::path::Path::new(&owned).exists());
+}
+
+#[tokio::test]
+async fn silence_deadline_publishes_without_audio_and_audible_input_clears_it() {
+    let (_root, workflow) = setup();
+    let (capture, events, mut controls) = input();
+    workflow.start_live(request(capture), None).await.unwrap();
+    events.send(Event::Started).unwrap();
+    let active = state(&workflow, |s| s.phase == ViewPhase::Recording).await;
+    assert_eq!(active.status.activity.as_deref(), Some("듣는 중"));
+    let mut updates = workflow.owner.snapshot.clone();
+    let silent = timeout(Duration::from_secs(25), async {
+        loop {
+            let current = updates.borrow_and_update().clone();
+            if current.status.warning.is_some() {
+                break current;
+            }
+            updates.changed().await.unwrap();
+        }
+    })
+    .await
+    .expect("native silence deadline must publish without capture samples");
+    assert_eq!(
+        silent.status.warning.as_deref(),
+        Some("소리가 감지되지 않아요 — 마이크를 확인해주세요")
+    );
+    assert_eq!(
+        silent.status.pipeline,
+        madi_core::pipeline_status::Pipeline::Idle
+    );
+    assert!(silent.status.activity.is_none());
+    events.send(samples(1000)).unwrap();
+    state(&workflow, |s| {
+        s.status.warning.is_none() && s.status.activity.as_deref() == Some("듣는 중")
+    })
+    .await;
+    workflow
+        .live_control(active.generation, LiveControl::Stop)
+        .await
+        .unwrap();
+    control(&mut controls, Control::Stop).await;
+    events.send(Event::Stopped).unwrap();
+    let done = state(&workflow, |s| s.phase == ViewPhase::Done).await;
+    assert!(done.status.warning.is_none());
+    assert_eq!(
+        done.status.pipeline,
+        madi_core::pipeline_status::Pipeline::Completed
+    );
+    let reset = workflow.reset(done.generation).await.unwrap();
+    assert!(reset.status.warning.is_none());
+    assert_eq!(
+        reset.status.pipeline,
+        madi_core::pipeline_status::Pipeline::Idle
+    );
+    workflow.shutdown().await.unwrap();
 }

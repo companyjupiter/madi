@@ -8,8 +8,9 @@ import './transcript.css';
 import { usePreferences } from './preferences';
 import { useCaptionControl } from './captions';
 import { useLinePlayback } from './playback';
+import { LoadingDots, TranscriptStatus } from './TranscriptStatus';
 import { useWordReview, WordReviewPopover } from './ReviewPanel';
-import { LiveControls, LiveMic, NativeSymbol, liveLabel, phaseLabel } from './LiveControls';
+import { LiveControls, LiveMic, NativeSymbol, liveLabel } from './LiveControls';
 
 type Props = { workspace: ReactNode; snapshot: FileSnapshot; artwork: FileArtwork | null; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; leave: (close?: boolean) => void; control: (command: LiveControl) => void; permission: (action: 'openSettings' | 'restart') => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -56,7 +57,6 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
   const lockedLine = isLive ? state.lines.at(-1)?.id : undefined;
   const busy = state.phase.kind === 'processing';
   const progress = state.chunksTotal > 0 ? Math.trunc(state.chunksDone / state.chunksTotal * 100) : null;
-  const activity = progress === null ? text('Transcribing file') : language === 'ko' ? `파일 전사 중 · ${progress}%` : language === 'ja' ? `ファイル文字起こし中 · ${progress}%` : `Transcribing file · ${progress}%`;
   const fileStatus = busy ? progress === null ? text('Transcribing…') : language === 'ko' ? `전사 중 · ${progress}%` : language === 'ja' ? `文字起こし中 · ${progress}%` : `Transcribing · ${progress}%` : state.sizeLabel;
   const multiSpeaker = new Set(state.lines.map(line => line.speaker)).size > 1;
   const span = state.lines.length ? Math.max(0, state.lines.reduce((end, line) => Math.max(end, line.end), -Infinity) - state.lines.reduce((start, line) => Math.min(start, line.start), Infinity)) : 0;
@@ -134,7 +134,7 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
           {(state.permissionIssue === 'microphoneDenied' || state.permissionIssue === 'systemAudioDenied') && <button className="primary" onClick={() => permission('openSettings')}>{l('시스템 설정 열기', 'Open System Settings', 'システム設定を開く')}</button>}
           {(state.permissionIssue === 'systemAudioDenied' || state.permissionIssue === 'systemAudioRestartRequired') && <button className="primary" onClick={() => permission('restart')}>{l('Madi 다시 시작', 'Restart Madi', 'Madi を再起動')}</button>}
           {state.phase.message.includes('모델이 준비되지') && <button className="primary" onClick={() => window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'settings' }))}>{l('설정 열기', 'Open Settings')}</button>}
-          <button onClick={reset}>{l('처음으로', 'Start over')}</button></div></div> : waiting ? <div className={`transcript-status${state.phase.kind === 'countingDown' ? ' countdown-status' : ''}`}><span>{state.phase.kind === 'countingDown' ? l(`곧 녹음이 시작됩니다 ${state.phase.remaining}`, `Recording starts in ${state.phase.remaining}`, `録音開始まで ${state.phase.remaining}`) : text('Your transcript will appear here shortly.')}</span><span className="loading-dots" aria-hidden>•••</span></div> : <div className="transcript-empty"><strong>{text('Nothing was transcribed')}</strong><span>{text('No speech was recognized. Go back with ‹ and try again.')}</span></div> : <>
+          <button onClick={reset}>{l('처음으로', 'Start over')}</button></div></div> : waiting ? <div className={`transcript-status${state.phase.kind === 'countingDown' ? ' countdown-status' : ''}`}><span>{state.phase.kind === 'countingDown' ? l(`곧 녹음이 시작됩니다 ${state.phase.remaining}`, `Recording starts in ${state.phase.remaining}`, `録音開始まで ${state.phase.remaining}`) : text('Your transcript will appear here shortly.')}</span><LoadingDots /></div> : <div className="transcript-empty"><strong>{text('Nothing was transcribed')}</strong><span>{text('No speech was recognized. Go back with ‹ and try again.')}</span></div> : <>
           {content ? <div className="transcript-blocks">{blocks.map(block => <article key={`block-${block.id}`} className="transcript-block" data-line-ids={block.lines.map(line => line.id).join(',')}>
             {multiSpeaker && speakerHeader(block.speaker)}
             <p className="transcript-body" onDoubleClick={() => setContent(false)}>{block.text}{liveTail(block.id === blocks.at(-1)?.id)}</p>
@@ -158,9 +158,7 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
               {Object.entries(line.staleTranslations).filter(([lang]) => !line.translations[lang]).map(([lang, value]) => <p className="transcript-translation stale" key={lang}>{value}</p>)}
             </article>;
           })}</div>}
-          {state.live?.captureEndedReason && <div className="transcript-status transcript-tail-status" role="status">{state.live.captureEndedReason}</div>}
-          {state.phase.kind === 'flushing' && <div className="transcript-status transcript-tail-status">{phaseLabel(state, language)}<span className="loading-dots" aria-hidden>•••</span></div>}
-          {busy && <div className="transcript-status transcript-tail-status">{activity}<span className="loading-dots" aria-hidden>•••</span></div>}
+          <TranscriptStatus value={state.status} language={language} generation={state.generation} />
           {state.phase.kind === 'error' && <div className="transcript-error" role="alert">{state.phase.message}</div>}
           <div className="transcript-tail-clearance" />
         </>}
