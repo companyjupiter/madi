@@ -15,12 +15,30 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- The shared native DNA broker now has one resident process, caption-first/FIFO
+  scheduling, caption-pressure admission, prefix registration, queued cancellation
+  and bounded watchdog recovery. Its 760 policy cases match unchanged shipping
+  Swift. Real child-process tests cover late-response quarantine, restart limits,
+  callback resubmission, blocked stdin, closed stdout and reaping. See
+  `runtime/DNA_BROKER.md`; product translation/AI consumers and live-preview DNA
+  admission remain unconnected, so this is not product translation acceptance.
+  The final local workspace passes 141 Rust tests (23/104/14), formatting and
+  clippy. Two mutation trials are detected. The real Metal DNA3 4B probe serves
+  two clients, a prefix registration and three turns in one reaped process;
+  full before/after model and executable hashes match. Evidence:
+  `evidence/macos-dna-broker-2026-11-05.json`.
+
 - Preview revision `a29470d` passed Windows Rust tests and 50 archive repeats,
   but its preview comparison stopped while Python decoded UTF-8 Swift source
   with the runner's default cp1252 encoding. Explicit UTF-8 reads/writes now
   pass the same 1,409 cases under simulated cp1252 defaults and against native
   Swift. CI treats implicit text encodings in this check as errors. This is a
-  tooling fix; Windows package validation at the corrected revision is pending.
+  tooling fix. Corrected revision `cecb1f9` passes every macOS/Windows job step;
+  downloaded executables, preview results and the macOS archive are verified.
+  It has 127/104 Rust cases and 50 Windows archive repetitions, and the workflow
+  is now complete with a successful conclusion. This result precedes the DNA
+  broker changes above; see
+  `evidence/desktop-ci-cecb1f9-2026-11-05.json`.
   See `evidence/preview-ci-encoding-2026-11-05.json`.
 
 - Live previews now connect rotating capture WAVs, latest-only scheduling,

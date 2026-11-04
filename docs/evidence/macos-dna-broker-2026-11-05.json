@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T16:34:02.602242+00:00",
+  "baseHead": "cecb1f93e040e240e7621aacb85afea72d2f395d",
+  "scope": "Native shared DNA transport and policy; product consumers are not connected",
+  "sourceSHA256": {
+    "crates/madi-core/src/dna.rs": "5a61a1fc924a662087d1e58263eeb7a27dc51bfdc0d35ba4e2da6f9edb308b97",
+    "crates/madi-core/src/lib.rs": "e9fa9fc770d7ceded6ab90d24183c6b10ea8df7eec94335808f0bd714c681591",
+    "crates/madi-core/examples/dna_policy_oracle.rs": "51b728a8376b29c79c96ebeb39a3c6e11b2d6f640f446b3495383786ab9518f7",
+    "crates/madi-platform/src/dna_broker.rs": "a7f35e8fd866be8e0a707315681e1c4cc38b938be42806870782893cbe32cc52",
+    "crates/madi-platform/src/dna_broker/tests.rs": "80d3ceb01ae1a0755cd60821db57d8cdbf6b3cf14b932b061e2ee07b5c12c6a9",
+    "crates/madi-platform/src/lib.rs": "4e661dd416494ec8b6f86ecf05f05b18c1b79f0415198eaafb405adac813e452",
+    "crates/madi-platform/examples/dna_broker_smoke.rs": "43c170882afa0e8eb116738712ae1abfdf7f3b313ecfd83413b06b76f8630ed5",
+    "scripts/check_dna_broker_parity.py": "376ece8c155359e7235b37cf02f54858e478f01f1fc88407f67b4115efe8c866",
+    "design/parity/dna-broker-reference.json": "64765ffdc7ba48257cef9d3bdf7023f787153fe07a8df181750c3f645755bd18",
+    ".github/workflows/desktop-parity.yml": "aa20831c2cf878b2a7d9dcf5098c6ee10e512e8cdb1672aa39c0375eeda6cfde"
+  },
+  "originalSwiftSourcesUnchanged": true,
+  "workspaceTests": {
+    "core": 23,
+    "platform": 104,
+    "protocol": 14,
+    "total": 141
+  },
+  "brokerProcessTests": {
+    "macOS": 14,
+    "windowsExpected": 9,
+    "windowsExecution": "NOT_RUN at this revision",
+    "inheritedSOV_DEBUG": "1 during dedicated test run; fixtures verify removal and SOV_NSTEPS=512"
+  },
+  "formatAndWorkspaceClippy": "PASS",
+  "nativePolicy": {
+    "cases": 760,
+    "corpusSHA256": "41758416ab8d570edd37e4c41a734ca9242e6619cc6bc9889c8da5709b99cb17",
+    "resultSHA256": "7334085b60749bdbf7ec2667da1369ce7c1d05cc13b5b3e35e14bc7d2b165cc3",
+    "sources": {
+      "apps/macos/Sovereign/Engine/DNAEngineBroker.swift": "72f09bd90a23edc962b3db51e4c27e87ef769aad112ed8f3f0e52a493bb1ebb1",
+      "apps/macos/Sovereign/Engine/DNATurnBudget.swift": "3da57199338246aa0b5df540be0ef84c1674849fcfd6379718fab5b434776267",
+      "apps/macos/Sovereign/Engine/TranslateStreamParser.swift": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "Broker priority/pressure/FIFO selection, normalized wire text and watchdog budgets; process lifetime tested separately"
+  },
+  "portablePolicy": {
+    "cases": 760,
+    "corpusSHA256": "41758416ab8d570edd37e4c41a734ca9242e6619cc6bc9889c8da5709b99cb17",
+    "resultSHA256": "7334085b60749bdbf7ec2667da1369ce7c1d05cc13b5b3e35e14bc7d2b165cc3",
+    "sources": {
+      "apps/macos/Sovereign/Engine/DNAEngineBroker.swift": "72f09bd90a23edc962b3db51e4c27e87ef769aad112ed8f3f0e52a493bb1ebb1",
+      "apps/macos/Sovereign/Engine/DNATurnBudget.swift": "3da57199338246aa0b5df540be0ef84c1674849fcfd6379718fab5b434776267",
+      "apps/macos/Sovereign/Engine/TranslateStreamParser.swift": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6"
+    },
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "scope": "Broker priority/pressure/FIFO selection, normalized wire text and watchdog budgets; process lifetime tested separately"
+  },
+  "realMetalProbe": {
+    "backgroundAnswer": "Alpha\nBeta",
+    "capabilities": [
+      "fp",
+      "pfxcache"
+    ],
+    "clients": 2,
+    "completions": 4,
+    "engine": "translate-engine-4b-aarch64-apple-darwin",
+    "engineSHA256": "64be74aed0e23a650ede70ae7951f131b44f0c229e82d2ee68a74d089ff78a0e",
+    "finalCaptionBusy": false,
+    "forcedTranslation": "Hello. Nice to meet you.",
+    "inputModelUnchanged": true,
+    "model": "DNA3.0-4B.i1-Q4_K_M.gguf",
+    "modelBytes": 2783447424,
+    "modelSHA256": "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8",
+    "partialEvents": 9,
+    "prefixReady": "PFX_OK",
+    "processStarts": 1,
+    "reapedStops": 1,
+    "scope": "Shared native DNA broker with public text, not product translation or UI acceptance",
+    "status": "passed",
+    "translation": "Hello.",
+    "uiAcceptance": "NOT_RUN"
+  },
+  "mutations": [
+    {
+      "name": "caption-pressure",
+      "source": "crates/madi-core/src/dna.rs",
+      "exitCode": 1,
+      "detected": true,
+      "expectedFailure": "DNA broker reference changed",
+      "restoredSourceSHA256": "5a61a1fc924a662087d1e58263eeb7a27dc51bfdc0d35ba4e2da6f9edb308b97",
+      "logSHA256": "254d4d5bf7cb6396257ab9423ca62d6d32dca88f0a69a85bcf61fcb9edabcec6"
+    },
+    {
+      "name": "queued-failure",
+      "source": "crates/madi-platform/src/dna_broker.rs",
+      "exitCode": 101,
+      "detected": true,
+      "expectedFailure": "test result: FAILED",
+      "restoredSourceSHA256": "a7f35e8fd866be8e0a707315681e1c4cc38b938be42806870782893cbe32cc52",
+      "logSHA256": "a134a765222200b727f1407ad75c975ce627cf773537ffa913d10119fbd6e776"
+    }
+  ],
+  "logsSHA256": {
+    "madi-dna-final-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "madi-dna-final-tests.log": "f790fc3115d6a3f048d6adc960c5cce94b58697b10df9e8b8ef45002e05ae6c2",
+    "madi-dna-final-clippy.log": "a73c447e83249819f0606a743d49e58995a58f08fb2adee6c3391bb73b741818",
+    "madi-dna-final-native-parity.log": "7d4017318e125833734c06fe274d3972a26d5812851a7f99780f894fc809945d",
+    "madi-dna-final-reference.log": "4e2e5a709e6f48a9d3333206750f8f1d9423e0e6938b9d5f2e34cb3d981bb697",
+    "madi-dna-broker-tests.log": "145e5bd467f4e2637794f86ce58456a283985dcf6ef6f6439b1bc7fa592c3723",
+    "madi-dna-native.log": "6efdeb972d98dc7a281aae252cdaaaf4d737f83d31754162285038e83fc9cbe0"
+  },
+  "limitations": [
+    "Translation turn scheduling, output cleanup/repair, revision guards, interim cache and stop-time backfill remain unconnected",
+    "Caption pressure/busy integration with live ASR preview and other product DNA consumers remains open",
+    "Actual native/WebView visual and interaction comparison NOT_RUN because the Mac is locked",
+    "Windows real GPU execution and new broker CI results remain unverified",
+    "Positive finite timeout policy matches Swift; native owner rejects NUL/nonfinite timers, waits for reaping and bounds half-closed pipe failures"
+  ],
+  "nativeProbeBuild": {
+    "sourceSHA256": {
+      "crates/madi-core/src/dna.rs": "5a61a1fc924a662087d1e58263eeb7a27dc51bfdc0d35ba4e2da6f9edb308b97",
+      "crates/madi-platform/src/dna_broker.rs": "a7f35e8fd866be8e0a707315681e1c4cc38b938be42806870782893cbe32cc52",
+      "crates/madi-platform/examples/dna_broker_smoke.rs": "43c170882afa0e8eb116738712ae1abfdf7f3b313ecfd83413b06b76f8630ed5"
+    },
+    "executableSHA256": "6ad7a4561ebe8e19bcb27b94acee3f6ccc11854d1c5dd812d28b8ff9c0f584f7",
+    "executableHashScope": "Captured after cargo run started, before mutation trials. The later workspace test rebuilt the example path; this is the hash observed during the native probe, not the subsequently rebuilt file. Tested source hashes remain identical."
+  },
+  "toolchain": {
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1",
+    "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.2.0"
+  }
+}

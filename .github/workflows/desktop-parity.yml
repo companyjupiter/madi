@@ -17,6 +17,8 @@ on:
       - 'apps/macos/scripts/build_engine.sh'
       - 'tests/parity/**'
       - 'apps/macos/Sovereign/Engine/TranslateStreamParser.swift'
+      - 'apps/macos/Sovereign/Engine/DNAEngineBroker.swift'
+      - 'apps/macos/Sovereign/Engine/DNATurnBudget.swift'
       - 'apps/macos/Sovereign/Engine/EngineProtocol.swift'
       - 'apps/macos/Sovereign/Engine/PreviewEngine.swift'
       - 'apps/macos/Sovereign/Engine/TranslationStability.swift'
@@ -129,6 +131,7 @@ jobs:
           python3 scripts/check_asr_config_parity.py
           python3 scripts/check_live_config_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_preview_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_dna_broker_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -160,6 +163,7 @@ jobs:
           python scripts/check_asr_config_parity.py --rust-only
           python scripts/check_live_config_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_preview_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_dna_broker_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -203,6 +207,8 @@ jobs:
             out/live-config-parity/report.json
             out/preview-parity/report.json
             out/preview-parity/result.json
+            out/dna-broker-parity/report.json
+            out/dna-broker-parity/result.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json

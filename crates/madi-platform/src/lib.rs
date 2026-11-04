@@ -5,6 +5,7 @@ pub mod audio_capture;
 pub mod audio_devices;
 pub mod audio_permissions;
 pub mod capture_pipeline;
+pub mod dna_broker;
 pub mod engine_process;
 pub mod file_session;
 pub mod file_workflow;
