@@ -15,6 +15,14 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Preview revision `a29470d` passed Windows Rust tests and 50 archive repeats,
+  but its preview comparison stopped while Python decoded UTF-8 Swift source
+  with the runner's default cp1252 encoding. Explicit UTF-8 reads/writes now
+  pass the same 1,409 cases under simulated cp1252 defaults and against native
+  Swift. CI treats implicit text encodings in this check as errors. This is a
+  tooling fix; Windows package validation at the corrected revision is pending.
+  See `evidence/preview-ci-encoding-2026-11-05.json`.
+
 - Live previews now connect rotating capture WAVs, latest-only scheduling,
   language lock and committed-job priority to the shared workflow and gray
   transcript continuation. PreviewTrim, source agreement, seam deduplication

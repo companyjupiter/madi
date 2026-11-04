@@ -142,8 +142,8 @@ def main():
     if not args.rust_only and platform.system()!='Darwin': parser.error('Native Swift requires macOS')
     OUT.mkdir(parents=True,exist_ok=True)
     sources=[SWIFT/p for p in ('Engine/PreviewEngine.swift','Transcript/PreviewTrim.swift','Engine/TranslationStability.swift','Transcript/InterimDedupe.swift','UI/TranscriptView.swift','Engine/EngineProtocol.swift')]
-    source_gate=block(sources[2].read_text(), 'struct InterimSourceGate {')
-    typing=block(sources[4].read_text(), '    private func syncInterim(_ target: String) {').replace('private func','func',1)
+    source_gate=block(sources[2].read_text(encoding='utf-8'), 'struct InterimSourceGate {')
+    typing=block(sources[4].read_text(encoding='utf-8'), '    private func syncInterim(_ target: String) {').replace('private func','func',1)
     assert 'try? await Task.sleep(nanoseconds: 24_000_000)' in typing
     # Preserve every state transition; yield instead of sleeping between frames.
     typing=typing.replace('try? await Task.sleep(nanoseconds: 24_000_000)', 'await Task.yield()')
@@ -157,7 +157,7 @@ def main():
     (OUT/'result.json').write_bytes(encoded(actual))
     if not args.rust_only:
         driver=OUT/'PreviewOracle.swift'
-        driver.write_text('import Foundation\n'+source_gate+'\n'+DRIVER.replace('TYPEWRITER',typing))
+        driver.write_text('import Foundation\n'+source_gate+'\n'+DRIVER.replace('TYPEWRITER',typing),encoding='utf-8')
         binary=OUT/'swift-oracle'
         subprocess.run(['xcrun','swiftc','-parse-as-library',str(driver),*[str(sources[i]) for i in (0,1,3,5)],'-o',str(binary)],check=True)
         expected=json.loads(subprocess.check_output([str(binary)],input=payload))
@@ -165,10 +165,10 @@ def main():
         for i,(case,want,got) in enumerate(zip(cases(),expected,actual,strict=True)):
             assert want==got,json.dumps(dict(index=i,case=case,swift=want,actual=got),ensure_ascii=False,indent=2)
     report=dict(cases=len(cases()),corpusSHA256=hashlib.sha256(payload).hexdigest(),resultSHA256=hashlib.sha256(encoded(actual)).hexdigest(),sources={p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},typewriterTickMilliseconds=24)
-    if args.write_reference: REFERENCE.write_text(json.dumps(report,indent=2)+'\n')
-    else: assert report==json.loads(REFERENCE.read_text()),'Preview reference changed'
+    if args.write_reference: REFERENCE.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+    else: assert report==json.loads(REFERENCE.read_text(encoding='utf-8')),'Preview reference changed'
     report.update(status='passed',nativeSwiftRun=not args.rust_only,frontendRun=True)
-    (OUT/'report.json').write_text(json.dumps(report,indent=2)+'\n')
+    (OUT/'report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
     print(json.dumps(report,indent=2))
 
 
