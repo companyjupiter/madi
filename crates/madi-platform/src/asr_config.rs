@@ -1,10 +1,11 @@
-//! Typed native file-mode ASR launch configuration, derived from EngineProcess.
+//! Typed native file/live ASR launch configuration, derived from EngineProcess.
 //! These resources/options are resolved by Rust, not deserialized from WebView IPC.
 use crate::engine_process::Launch;
 use madi_core::setup::SetupState;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::OsString,
+    io,
     path::{Path, PathBuf},
 };
 
@@ -95,10 +96,45 @@ const OWNED_KEYS: &[&str] = &[
     "VOICEPRINTS",
 ];
 
-impl Resources {
-    /// `wav` must be retained by an owned PreparedAudio guard for the entire
-    /// engine lifetime. A session executor must enforce this ownership boundary.
-    pub fn file_launch(&self, wav: &Path, settings: &FileSettings) -> Result<Launch, &'static str> {
+#[derive(Clone, Debug)]
+pub struct LiveSettings {
+    pub common: FileSettings,
+    pub language_candidates: Vec<i64>,
+}
+impl LiveSettings {
+    pub fn from_setup(
+        setup: &SetupState,
+        physical_memory: u64,
+        bias_terms: Vec<String>,
+    ) -> Result<Self, &'static str> {
+        let mut candidates: BTreeSet<_> = setup
+            .translate_targets
+            .iter()
+            .filter_map(|name| match name.as_str() {
+                "English" => Some(50259),
+                "Chinese" => Some(50260),
+                "Korean" => Some(50264),
+                "Japanese" => Some(50266),
+                _ => None,
+            })
+            .collect();
+        if let Some(input) = setup.language_token() {
+            candidates.insert(input);
+        }
+        Ok(Self {
+            common: FileSettings::from_setup(setup, physical_memory, bias_terms)?,
+            language_candidates: if candidates.len() >= 2 {
+                candidates.into_iter().collect()
+            } else {
+                Vec::new()
+            },
+        })
+    }
+}
+
+impl FileSettings {
+    fn environment(&self) -> Result<BTreeMap<OsString, Option<OsString>>, &'static str> {
+        let settings = self;
         if settings.max_speakers == 0
             || settings.max_speakers > 8
             || settings
@@ -127,7 +163,6 @@ impl Resources {
         put("DIAR", if settings.diarize { "1" } else { "0" }.into());
         put("OSD", if settings.osd { "1" } else { "0" }.into());
         put("DIAR_MAXK", settings.max_speakers.to_string());
-        put("APP_FILE", "1".into());
         if settings.encoder_f16_cache {
             put("ENC_F16_CACHE", "1".into());
         }
@@ -143,6 +178,16 @@ impl Resources {
         if !settings.bias_terms.is_empty() {
             put("PROMPT", settings.bias_terms.join(" "));
         }
+        Ok(environment)
+    }
+}
+
+impl Resources {
+    /// `wav` must be retained by an owned PreparedAudio guard for the entire
+    /// engine lifetime. A session executor must enforce this ownership boundary.
+    pub fn file_launch(&self, wav: &Path, settings: &FileSettings) -> Result<Launch, &'static str> {
+        let mut environment = settings.environment()?;
+        environment.insert("APP_FILE".into(), Some("1".into()));
         Ok(Launch {
             executable: self.executable.clone(),
             working_directory: self.assets.clone(),
@@ -154,11 +199,125 @@ impl Resources {
             environment,
         })
     }
+
+    /// The live owner retains its CapturePipeline/OwnedWav directory through
+    /// engine teardown. This is native configuration, never a renderer path.
+    pub fn live_launch(
+        &self,
+        stream_directory: &Path,
+        settings: &LiveSettings,
+    ) -> io::Result<Launch> {
+        let root = stream_directory.canonicalize()?;
+        if !root.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "stream WAV root is not a directory",
+            ));
+        }
+        let path = root.to_str().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "stream WAV root is not UTF-8")
+        })?;
+        // Zig parses a platform-delimited path list and one-line stdin jobs.
+        let separator = if cfg!(windows) { ';' } else { ':' };
+        if path.contains(['\n', '\r', '\0', separator]) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "stream WAV root cannot be represented by the engine protocol",
+            ));
+        }
+        let mut environment = settings.common.environment().map_err(io::Error::other)?;
+        for (key, value) in [
+            ("STREAM", "1"),
+            ("AUDIO_CTX", "auto"),
+            ("PARTIALS", "1"),
+            ("STREAM_WAV_ROOTS", path),
+        ] {
+            environment.insert(key.into(), Some(value.into()));
+        }
+        if settings.language_candidates.len() >= 2 {
+            environment.insert(
+                "LANG_CANDIDATES".into(),
+                Some(
+                    settings
+                        .language_candidates
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(",")
+                        .into(),
+                ),
+            );
+        }
+        // SessionController.voiceprintsEnabled is false. Both VOICEPRINTS and
+        // DIAR_ANCHOR remain removed even if the parent shell provided them.
+        Ok(Launch {
+            executable: self.executable.clone(),
+            working_directory: self.assets.clone(),
+            // STREAM ignores the file operand; preserve the shipping placeholder.
+            arguments: vec![
+                self.model.as_os_str().to_owned(),
+                "/dev/null".into(),
+                self.bpe.as_os_str().to_owned(),
+            ],
+            environment,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn live_mode_uses_current_owned_root_and_clears_file_and_voiceprint_flags() {
+        let scratch = tempfile::tempdir().unwrap();
+        let resources = Resources {
+            executable: "engine".into(),
+            model: "model".into(),
+            bpe: "bpe".into(),
+            assets: "assets".into(),
+        };
+        let settings = LiveSettings::from_setup(
+            &SetupState {
+                input_language: Some(madi_core::setup::Language::English),
+                translate_targets: vec!["Korean".into(), "Japanese".into(), "Korean".into()],
+                ..SetupState::default()
+            },
+            24 << 30,
+            vec!["마디".into()],
+        )
+        .unwrap();
+        let launch = resources.live_launch(scratch.path(), &settings).unwrap();
+        for key in ["APP_FILE", "VOICEPRINTS", "DIAR_ANCHOR"] {
+            assert_eq!(
+                launch.environment.get(std::ffi::OsStr::new(key)),
+                Some(&None)
+            );
+        }
+        assert_eq!(
+            launch
+                .environment
+                .get(std::ffi::OsStr::new("LANG_CANDIDATES")),
+            Some(&Some("50259,50264,50266".into()))
+        );
+        assert_eq!(
+            launch
+                .environment
+                .get(std::ffi::OsStr::new("STREAM_WAV_ROOTS")),
+            Some(&Some(
+                scratch.path().canonicalize().unwrap().into_os_string()
+            ))
+        );
+        let bad = scratch.path().join(if cfg!(windows) {
+            "bad;root"
+        } else {
+            "bad:root"
+        });
+        std::fs::create_dir(&bad).unwrap();
+        assert_eq!(
+            resources.live_launch(&bad, &settings).err().unwrap().kind(),
+            io::ErrorKind::InvalidInput
+        );
+    }
     #[test]
     fn file_mode_removes_all_unset_mode_keys_and_rejects_invalid_options() {
         let resources = Resources {

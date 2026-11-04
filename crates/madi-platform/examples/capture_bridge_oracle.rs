@@ -27,6 +27,12 @@ fn main() {
         let mut abandoned = Capture::replay(path, chunk).unwrap();
         abandoned.stop();
         drop(abandoned);
+        // Exercise the actual Swift main-queue control markers, then cancel
+        // before conversion. These controls cannot affect the primary endpoint.
+        let mut controlled = Capture::replay(path, chunk).unwrap();
+        controlled.pause();
+        controlled.resume();
+        controlled.stop();
         let mut segmenter = Segmenter::new(Configuration {
             first_segment_seconds: 1.5,
             ..Configuration::default()
@@ -69,13 +75,15 @@ fn main() {
         let mut cancel_events = Vec::new();
         let mut done = false;
         let mut cancel_done = false;
+        let mut control_done = false;
+        let mut control_events = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(30);
         let describe = |seg: madi_core::segmenter::Segment| {
             let data: Vec<_> = seg.samples.iter().flat_map(|n| n.to_le_bytes()).collect();
             json!({"offsetBits":format!("{:016x}",seg.offset.to_bits()),"bodyCount":seg.body_count,
                 "sampleCount":seg.samples.len(),"hadSpeech":seg.had_speech,"pcmSHA256":format!("{:x}",Sha256::digest(data))})
         };
-        while !done || !cancel_done {
+        while !done || !cancel_done || !control_done {
             assert!(
                 Instant::now() < deadline,
                 "native capture did not terminate"
@@ -102,6 +110,7 @@ fn main() {
                         );
                     }
                     Event::Fault(message) => events.push(format!("fault:{message}")),
+                    Event::Paused | Event::Resumed => panic!("unrequested capture control"),
                     Event::Stopped => {
                         segments.extend(segmenter.flush().into_iter().map(&describe));
                         written_segments
@@ -121,7 +130,16 @@ fn main() {
                 cancel_events.push("stopped");
                 cancel_done = true;
             }
+            while let Ok(event) = controlled.try_next() {
+                assert!(!control_done);
+                control_done = event == Event::Stopped;
+                control_events.push(event);
+            }
         }
+        assert_eq!(
+            control_events,
+            [Event::Paused, Event::Resumed, Event::Stopped]
+        );
         let mut expected_written = segments.clone();
         for segment in &mut expected_written {
             segment.as_object_mut().unwrap().remove("bodyCount");

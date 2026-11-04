@@ -29,6 +29,21 @@ impl Default for Configuration {
     }
 }
 impl Configuration {
+    /// SessionController.start() derives the windows after multi-target policy.
+    pub fn from_settings(
+        settings: &crate::settings::Settings,
+        setup: &crate::setup::SetupState,
+    ) -> Self {
+        let window = settings.effective_window_seconds(setup);
+        Self {
+            source: setup.audio_source,
+            segment_seconds: window,
+            first_segment_seconds: window.min(1.5),
+            overlap_seconds: (window * 0.3).clamp(1.0, 3.0),
+            preview_enabled: settings.live_preview_enabled,
+            ..Self::default()
+        }
+    }
     fn window(&self) -> segmenter::Configuration {
         segmenter::Configuration {
             sample_rate: SAMPLE_RATE,

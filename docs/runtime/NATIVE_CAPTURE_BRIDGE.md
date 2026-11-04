@@ -82,6 +82,9 @@ drops another; the surviving endpoint still matches. A missing-file case checks
 failure followed by one terminal acknowledgement, without phantom readiness.
 Two Rust regressions cover borrowed-buffer copying, identity isolation, bounded
 queue overflow, single error and preservation of the terminal acknowledgement.
+The live executor adds pause/resume markers on the native main queue. All nine
+replay/cancellation cases also check their actual FFI marker order before Stop,
+without affecting the concurrent surviving capture.
 
 The relocated `.app` check invokes its own linked capture replay using only
 system tools on PATH and compares PCM with the bundled decoder. It verifies

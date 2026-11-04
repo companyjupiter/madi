@@ -61,12 +61,13 @@ The [native process adapter](ENGINE_PROCESS_ADAPTER.md) now implements tagged
 child supervision, ordered output, cancellation and owned JSONL cleanup. Its
 20-scenario Swift differential and real Metal file smoke are separate evidence;
 the [file effect executor](FILE_SESSION_EXECUTOR.md) now connects preparation,
-native engine lifetime and owned-file cleanup. Live capture effects and
-storage/UI wiring remain open.
+native engine lifetime and owned-file cleanup. The [live effect executor](LIVE_SESSION.md)
+now connects capture, blocking WAV publication and resident ASR with native
+replay evidence. Live product consumers and storage/UI wiring remain open.
 
 The portable live [PCM windowing layer](LIVE_SEGMENTATION.md) now has independent
 unchanged-Swift comparison for exact segments, previews and tails. The macOS
 [in-process capture bridge](NATIVE_CAPTURE_BRIDGE.md) now provides ID-bound
 native PCM delivery and acknowledged stop, verified through file replay and
-the copied app. Mixing/pause, segment files and live effect dispatch remain
-required; synthetic replay is not microphone/system-device acceptance.
+the copied app. Mixing/pause and owned segment files now feed the live executor;
+synthetic replay is not microphone/system-device acceptance.

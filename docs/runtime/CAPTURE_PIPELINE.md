@@ -4,7 +4,8 @@
 conversion to 16 kHz mono PCM16. `madi-platform::capture_pipeline` writes its
 outputs to one owned temporary directory. The same pipeline is now exercised
 from the linked native capture replay and the relocated Tauri app's debug probe.
-The product recording button and live effect executor are still unconnected.
+The native live effect executor is connected and verified with real ASR replay
+(`LIVE_SESSION.md`); the product recording button remains unconnected.
 
 ## Source behavior preserved
 
@@ -45,8 +46,8 @@ For normal shutdown, stop the native capture and drain its accepted events
 through `Stopped`; process the pipeline tail and successful segment files; only
 then acknowledge `Session::capture_stopped` so FLUSH cannot overtake the tail.
 Failed/cancelled admission uses `abort`, followed by native teardown, and does not
-feed a final segment. The upcoming live executor must apply the existing session
-generation and engine-token checks to these deliveries.
+feed a final segment. The live executor applies the existing session generation
+and engine-token checks to these deliveries.
 
 Each pipeline creates a unique directory under a trusted scratch parent. There
 is no arbitrary-path ownership constructor. `OwnedWav` leases retain that same
@@ -88,6 +89,7 @@ The eight native converter cases now also compare their owned WAV outputs and
 directory cleanup. The installed-bundle probe must produce the expected segment
 WAV and remove its owned directory using only the packaged runtime.
 
-Still **NOT_RUN**: live engine scheduling, recording UI, real microphone/system
+Native replay through the resident ASR executor now passes; see `LIVE_SESSION.md`.
+Still **NOT_RUN**: full product live scheduling, recording UI, real microphone/system
 input, permission denial, physical device switching, complete UI/UX parity and
 recording latency/memory acceptance. Release remains disabled.

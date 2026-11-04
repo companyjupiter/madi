@@ -77,6 +77,7 @@ def main():
         "cases": len(cases), "samples": sum(case["sampleCount"] for case in actual),
         "segments": sum(len(case["segments"]) for case in actual),
         "cancelBeforeStartCases": len(cases) + 1, "concurrentDropCases": len(cases) + 1,
+        "nativePauseResumeStopMarkerCases": len(cases) + 1,
         "missingFileFailure": True, "fixtures": fixtures,
         "ownedWavPipeline": True, "segmentDirectoryCleanup": True,
         "resultSHA256": hashlib.sha256(normalized).hexdigest(),

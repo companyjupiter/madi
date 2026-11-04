@@ -1,0 +1,11 @@
+{
+  "cases": 2406,
+  "corpusSHA256": "75a933be1e1452270fc973a760a9e0f6aa6f97568cf2a5b477110cb819ce3191",
+  "resultSHA256": "bd390fc75013be133d44d94553319602a6066aa46b22fbeeeba0f7107fef59dc",
+  "extractedSourceSHA256": "ade742abb182d12f3c523a7048eac4d19c21993efda43d742637f9f9ac77a86f",
+  "sources": {
+    "apps/macos/Sovereign/Engine/EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+    "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+    "apps/macos/Sovereign/Engine/EnginePathPolicy.swift": "d441d6cfb62106a8c075365469b1f9f3cfaedc6b56d75e845d81eccbdc9038c8"
+  }
+}

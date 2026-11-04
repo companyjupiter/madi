@@ -65,6 +65,13 @@ private final class DeliveryBudget: @unchecked Sendable {
         emit(mic ? 2 : 3, samples: samples)
     }
 
+    // Rust drops/mixes samples; these markers serialize pause/resume with the
+    // exact main-queue PCM ordering without stopping or restarting a device.
+    func pauseMarker(_ paused: Bool) {
+        guard !ending else { return }
+        emit(paused ? 6 : 7)
+    }
+
     nonisolated private func enqueue(_ samples: [Int16], mic: Bool, generation: UInt64? = nil) {
         guard !samples.isEmpty else { return }
         switch deliveryBudget.reserve(samples.count) {
@@ -261,6 +268,11 @@ func captureStop(_ id: UInt64) {
 @_cdecl("madi_capture_switch_input")
 func captureSwitchInput(_ id: UInt64, _ device: UInt32) {
     DispatchQueue.main.async { CaptureEndpoint.owners[id]?.switchInput(device) }
+}
+
+@_cdecl("madi_capture_pause_marker")
+func capturePauseMarker(_ id: UInt64, _ paused: UInt8) {
+    DispatchQueue.main.async { CaptureEndpoint.owners[id]?.pauseMarker(paused != 0) }
 }
 
 #if MADI_CAPTURE_REPLAY

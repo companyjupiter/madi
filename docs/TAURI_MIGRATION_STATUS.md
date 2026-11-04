@@ -9,11 +9,33 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
 | G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file transcript, workspace/export and five-tab Settings candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, native Settings toolbar/form match, complete transcript/workspace/AI/overlays |
-| G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, native decode/ASR, transcript/edit differentials, timed file workflow, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
+| G3 macOS core | Parsers, lifecycle, typed file/live configuration, native decode/ASR, transcript/edit differentials, timed file workflow, live executor with native replay and real ASR, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, live UI/preview/watchdog consumers, storage/migration, real audio devices, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
+
+- The macOS live executor now connects native capture to Rust-owned WAVs and the
+  resident ASR process. FIFO pause/resume markers preserve input ordering;
+  Stopped acknowledgement and tail delivery precede FLUSH. Seven process-backed
+  regressions cover startup, pause/tail retention, interruption, reset races,
+  premature engine completion and teardown faults. The real native-replay/Metal
+  probe yields three WAV jobs, 28 words, a finalized JFK transcript and exactly
+  one completion, with preserved source/model data and clean owned scratch.
+  2,406 live configurations match extracted shipping Swift. Current local tests
+  pass 119 Rust cases (21/84/14) and clippy. Recording UI, preview/watchdog/AI,
+  actual devices and Windows native capture remain open. See
+  `runtime/LIVE_SESSION.md` and `evidence/macos-live-session-2026-11-04.json`.
+
+- Capture-pipeline CI revision `ab6a88a` passed macOS but failed the Windows
+  pinned reference check. Windows checkout filtering reproduced six changed
+  source hashes due to missing LF attributes. `9490c40` fixes those attributes
+  and preserves mismatch details/results in CI artifacts; all nine source
+  hashes match under the same filtering locally. Both push `41799517167` and
+  PR `41799523899` reruns pass macOS and Windows, including the exact capture
+  reference. The downloaded push artifacts are verified in
+  `evidence/desktop-ci-9490c40-2026-11-04.json` (111/101 Rust tests plus 50
+  Windows archive repetitions). These runs precede the live-executor additions.
 
 - Rust post-converter capture and owned WAV pipeline now match the actual
   shipping AudioCapture methods over 113 sequences / 6,337 operations: 727
@@ -21,12 +43,12 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   Mixing/clamping, strict two-second stall, pause/drop, final tail versus abort,
   whole-input preview accounting, rotation and directory cleanup are covered.
   Native replay and the packaged debug probe use this pipeline. Real capture,
-  live engine scheduling and the recording UI remain open; see
+  full product live scheduling and the recording UI remain open; see
   `runtime/CAPTURE_PIPELINE.md` and `evidence/capture-pipeline-2026-11-04.json`.
   Local checks pass 111 Rust tests, four frontend tests, clippy and formatting;
   both deliberate arithmetic mutations fail their targeted regressions and pass
   after restoration. The rebuilt 96.20 MiB app passes strict relocation and
-  native-to-owned-WAV cleanup checks. New-revision CI is pending.
+  native-to-owned-WAV cleanup checks. The CI repair and receipt are above.
 
 - In-process macOS capture candidate: AVAudioEngine/ScreenCaptureKit and the
   original converter link into the Rust host with per-capture IDs, bounded PCM
@@ -34,7 +56,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   cases match 1,664,512 Swift PCM samples and 32 segments, with simultaneous
   cancellation/drop and missing-file cleanup. The copied app checks its linked
   replay, original usage strings and audio-input entitlement. Real devices,
-  permissions and the live executor/UI remain open; see
+  permissions and the recording UI remain open; see
   `runtime/NATIVE_CAPTURE_BRIDGE.md`.
 
   Revision `c2289f0` passes desktop push CI `41773521959` and PR CI

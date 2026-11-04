@@ -18,6 +18,8 @@ pub enum Event {
     Started,
     Samples { microphone: bool, pcm: Vec<i16> },
     Fault(String),
+    Paused,
+    Resumed,
     Stopped,
 }
 
@@ -43,6 +45,7 @@ unsafe extern "C" {
     fn madi_capture_start(id: u64, source: u32, device: u32, callback: Callback);
     fn madi_capture_stop(id: u64);
     fn madi_capture_switch_input(id: u64, device: u32);
+    fn madi_capture_pause_marker(id: u64, paused: u8);
     #[cfg(debug_assertions)]
     fn madi_capture_replay(id: u64, path: *const c_char, chunk: u32, callback: Callback);
     #[cfg(debug_assertions)]
@@ -102,6 +105,8 @@ extern "C" fn receive(
             };
             Event::Fault(message)
         }
+        6 => Event::Paused,
+        7 => Event::Resumed,
         _ => return 0,
     };
     owner.sender.send(event).is_ok() as u8
@@ -152,6 +157,16 @@ impl Capture {
     pub fn switch_input(&mut self, device: Option<u32>) {
         // SAFETY: the native registry looks up this unique, non-reused ID.
         unsafe { madi_capture_switch_input(self.id, device.unwrap_or(0)) };
+    }
+
+    /// Ordered with native PCM on main; input devices remain running.
+    pub fn pause(&mut self) {
+        // SAFETY: only this endpoint ID is addressed; native code borrows no data.
+        unsafe { madi_capture_pause_marker(self.id, 1) };
+    }
+    pub fn resume(&mut self) {
+        // SAFETY: the matching main-queue marker cannot address a newer endpoint.
+        unsafe { madi_capture_pause_marker(self.id, 0) };
     }
 
     /// Stops device input, not Rust segmentation. Drain through Stopped, flush
@@ -341,6 +356,28 @@ mod tests {
             1
         );
         assert_eq!(second.try_next().unwrap(), Event::Started);
+        for kind in [2, 6, 3, 7] {
+            assert_eq!(
+                receive(second.id, kind, pcm.as_ptr(), pcm.len(), std::ptr::null()),
+                1
+            );
+        }
+        assert!(matches!(
+            second.try_next().unwrap(),
+            Event::Samples {
+                microphone: true,
+                ..
+            }
+        ));
+        assert_eq!(second.try_next().unwrap(), Event::Paused);
+        assert!(matches!(
+            second.try_next().unwrap(),
+            Event::Samples {
+                microphone: false,
+                ..
+            }
+        ));
+        assert_eq!(second.try_next().unwrap(), Event::Resumed);
     }
 
     #[test]

@@ -121,6 +121,7 @@ jobs:
           python3 scripts/check_audio_devices_parity.py
           python3 scripts/check_media_file_parity.py
           python3 scripts/check_asr_config_parity.py
+          python3 scripts/check_live_config_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -150,6 +151,7 @@ jobs:
           python scripts/check_structured_parser_parity.py --rust-only
           python scripts/check_stream_process_parity.py --rust-only
           python scripts/check_asr_config_parity.py --rust-only
+          python scripts/check_live_config_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -190,6 +192,7 @@ jobs:
             out/audio-devices-parity/report.json
             out/media-file-parity/report.json
             out/asr-config-parity/report.json
+            out/live-config-parity/report.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json
