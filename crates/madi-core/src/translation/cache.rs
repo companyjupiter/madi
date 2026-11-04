@@ -28,20 +28,23 @@ pub fn faq_normalize(text: &str) -> Option<String> {
 }
 pub fn faq_normalize_with(text: &str, symbol: fn(char) -> bool) -> Option<String> {
     let lower = lowercase(text);
+    faq_normalize_lowered(&lower, symbol)
+}
+pub fn faq_normalize_lowered(lower: &str, symbol: fn(char) -> bool) -> Option<String> {
     let out: String = lower
         .chars()
         .filter(|c| !whitespace_and_newline(*c) && !symbol(*c))
         .collect();
     (out.graphemes(true).count() >= 4).then_some(out)
 }
-fn faq_key(text: &str, symbol: fn(char) -> bool) -> Option<String> {
-    faq_normalize_with(text, symbol).map(|s| s.nfc().collect())
+fn faq_key(text: &str, normalize: fn(&str) -> Option<String>) -> Option<String> {
+    normalize(text).map(|s| s.nfc().collect())
 }
 
 pub struct Faq {
     entries: Vec<Entry>,
     index: BTreeMap<String, usize>,
-    symbol: fn(char) -> bool,
+    normalize: fn(&str) -> Option<String>,
 }
 impl Default for Faq {
     fn default() -> Self {
@@ -50,13 +53,13 @@ impl Default for Faq {
 }
 impl Faq {
     pub fn new(entries: Vec<Entry>) -> Self {
-        Self::with_classifier(entries, faq_symbol)
+        Self::with_normalizer(entries, faq_normalize)
     }
-    pub fn with_classifier(entries: Vec<Entry>, symbol: fn(char) -> bool) -> Self {
+    pub fn with_normalizer(entries: Vec<Entry>, normalize: fn(&str) -> Option<String>) -> Self {
         let mut index = BTreeMap::new();
         for (i, entry) in entries.iter().enumerate() {
             for text in entry.values() {
-                if let Some(key) = faq_key(text, symbol) {
+                if let Some(key) = faq_key(text, normalize) {
                     index.insert(key, i);
                 }
             }
@@ -64,7 +67,7 @@ impl Faq {
         Self {
             entries,
             index,
-            symbol,
+            normalize,
         }
     }
     pub fn starter_entries() -> Vec<Entry> {
@@ -75,11 +78,11 @@ impl Faq {
         Self::new(Self::starter_entries())
     }
     pub fn lookup(&self, text: &str) -> Option<Entry> {
-        let key = faq_key(text, self.symbol)?;
+        let key = faq_key(text, self.normalize)?;
         let entry = &self.entries[*self.index.get(&key)?];
         let source = entry
             .iter()
-            .find(|(_, text)| faq_key(text, self.symbol).as_ref() == Some(&key))?
+            .find(|(_, text)| faq_key(text, self.normalize).as_ref() == Some(&key))?
             .0;
         let others: Entry = entry
             .iter()

@@ -15,6 +15,18 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Desktop CI for `6e90399` and `fb69224` exposed two remaining platform issues:
+  macOS 15 Swift lowercase differs from Rust for some Unicode scalars, and the
+  repeated Windows archive checkpoint test again returned OS error 5. The
+  compatibility follow-up adds a small native Swift case-conversion bridge,
+  Windows std::fs::rename checkpoint replacement with a shared-reader regression,
+  and join-before-panic test cleanup. Local Mac 27 validation passes 169 tests,
+  all 394 native/portable cache cases, formatting/clippy and rebuilt app/package
+  checks. Corrected macOS 15 and Windows behavior requires the next actual CI
+  verdict; no remote pass is claimed. See
+  `evidence/platform-cache-compatibility-2026-11-05.json` and
+  `runtime/WINDOWS_ARCHIVE_REPLACEMENT.md`.
+
 - The empty-cache backfill follow-up now closes consumed target keys even when
   the revision-guarded store rejects the empty text. A shed coalesced request
   followed by single-line cache reuse reproduced two remaining keys where only

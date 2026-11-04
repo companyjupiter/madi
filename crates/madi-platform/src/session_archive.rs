@@ -42,7 +42,7 @@ impl SessionArchiveWriter {
                 let parent = destination.parent().ok_or_else(invalid_name)?;
                 fs::create_dir_all(parent)?;
                 let file = prepared(parent, markdown.as_bytes())?;
-                file.persist(destination).map_err(|failure| failure.error)?;
+                replace_owned(file, destination)?;
                 destination.clone()
             } else {
                 validate_base(base)?;
@@ -171,6 +171,26 @@ fn prepared(folder: &Path, contents: &[u8]) -> io::Result<NamedTempFile> {
     file.as_file().sync_all()?;
     Ok(file)
 }
+#[cfg(not(target_os = "windows"))]
+fn replace_owned(file: NamedTempFile, destination: &Path) -> io::Result<()> {
+    file.persist(destination).map_err(|failure| failure.error)?;
+    Ok(())
+}
+#[cfg(target_os = "windows")]
+fn replace_owned(file: NamedTempFile, destination: &Path) -> io::Result<()> {
+    // tempfile 3.27 only uses MoveFileExW. Rust's pinned std::fs::rename also
+    // handles a shared-open destination through FileRenameInfoEx. Keep the
+    // temporary guard on failure, clear its temporary attribute, and never
+    // replace this atomic operation with deletion, copying or timed retries.
+    let (handle, path) = file.keep().map_err(|failure| failure.error)?;
+    let mut cleanup = tempfile::TempPath::try_from_path(path)?;
+    let result = fs::rename(&cleanup, destination);
+    if result.is_ok() {
+        cleanup.disable_cleanup(true);
+    }
+    drop(handle);
+    result
+}
 fn persist_new(mut file: NamedTempFile, folder: &Path, base: &str) -> io::Result<PathBuf> {
     let mut suffix = 1;
     loop {
@@ -298,10 +318,10 @@ mod tests {
                 })
             })
             .collect();
-        let results: Vec<_> = workers
-            .into_iter()
-            .map(|worker| worker.join().unwrap())
-            .collect();
+        // Join every worker before unwrapping a panic; otherwise TempDir drops
+        // while later workers still run and obscures the first failure with ENOENT.
+        let joined: Vec<_> = workers.into_iter().map(|worker| worker.join()).collect();
+        let results: Vec<_> = joined.into_iter().map(Result::unwrap).collect();
         let paths: std::collections::BTreeSet<_> = results.iter().map(|(path, _)| path).collect();
         assert_eq!(paths.len(), 12);
         for (path, index) in results {
@@ -311,6 +331,38 @@ mod tests {
             );
         }
         assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 12);
+    }
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn checkpoint_replaces_a_shared_open_destination_and_retains_the_old_reader() {
+        use std::io::Read;
+        let root = tempfile::tempdir().unwrap();
+        let mut writer = SessionArchiveWriter::default();
+        assert!(writer.save_transcript("old contents", root.path(), "record"));
+        let path = writer.transcript().unwrap().to_path_buf();
+        let mut reader = fs::File::open(&path).unwrap();
+        // Capture the old tempfile behavior on this actual Windows filesystem.
+        // The product assertion below requires the shared-open replacement,
+        // regardless of whether the legacy syscall also supports it here.
+        let legacy = prepared(root.path(), b"legacy probe")
+            .unwrap()
+            .persist(&path);
+        eprintln!(
+            "legacy shared-open persist: {:?}",
+            legacy.as_ref().err().map(|e| &e.error)
+        );
+        drop(legacy);
+        assert!(
+            writer.save_transcript("new contents", root.path(), "ignored"),
+            "shared-open checkpoint: {:?}",
+            writer.last_error()
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new contents");
+        let mut previous = String::new();
+        reader.read_to_string(&mut previous).unwrap();
+        assert_eq!(previous, "old contents");
+        assert_eq!(writer.transcript(), Some(path.as_path()));
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
     }
     #[test]
     fn failed_writes_do_not_advance_pointer_or_erase_prior_content() {

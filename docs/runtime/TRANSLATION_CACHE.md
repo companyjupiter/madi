@@ -41,7 +41,15 @@ fallback to the newest committed translation still needs implementation and UI
 acceptance.
 
 On macOS, normalization uses the installed CoreFoundation punctuation/symbol
-sets. The portable baseline is pinned to the measured macOS 27.2 Swift behavior;
+sets and a small static Swift case-conversion bridge. The macOS 15 CI comparison
+exposed different Unicode lowercase mappings from Rust's pinned table. Calling
+NSString lowercase is insufficient: it applies a contextual Greek final-sigma
+rule that Swift String.lowercased does not. The bridge uses the same Swift
+toolchain as the baseline, passes UTF-8 with explicit lengths (including NUL),
+and copies the result synchronously into Rust-owned storage. The remaining FAQ
+index, cache and persistence policy stays in Rust.
+
+The portable baseline is pinned to the measured macOS 27.2 Swift behavior;
 104 symbols absent from Rust's category table are included explicitly. CI compares
 native Rust with Swift on the same Mac and checks portable results against the
 pinned reference on both platforms. Differences between older native Unicode

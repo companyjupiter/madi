@@ -3,6 +3,7 @@ use std::{env, path::PathBuf, process::Command};
 fn main() {
     println!("cargo:rerun-if-changed=native/AudioDecodeMain.swift");
     println!("cargo:rerun-if-changed=native/AudioCaptureBridge.swift");
+    println!("cargo:rerun-if-changed=native/UnicodeBridge.swift");
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
         return;
     }
@@ -71,6 +72,7 @@ fn main() {
     }
     let result = command
         .arg("native/AudioCaptureBridge.swift")
+        .arg("native/UnicodeBridge.swift")
         .arg("-o")
         .arg(out.join("libMadiAudioCapture.a"))
         .output()

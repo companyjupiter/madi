@@ -118,6 +118,12 @@ jobs:
           cargo test --locked -p madi-core -p madi-protocol -p madi-platform
           cargo clippy --locked --workspace --all-targets -- -D warnings
           node --test tests/parity/setup_intent_queue.test.mjs tests/parity/desktop_ipc_contract.test.mjs
+      - name: Check Windows shared-open archive replacement
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo test --locked -p madi-platform session_archive::tests::checkpoint_replaces_a_shared_open_destination_and_retains_the_old_reader -- --exact --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Repeat Windows concurrent archive checkpoint regression
         if: runner.os == 'Windows'
         run: |
@@ -231,6 +237,7 @@ jobs:
             out/translation-cache-parity/report.json
             out/translation-cache-parity/result.json
             out/translation-cache-parity/native-result.json
+            out/translation-cache-parity/swift.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json
