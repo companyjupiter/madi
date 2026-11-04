@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { CaptionSnapshot } from './captions';
 import './caption.css';
+const generation = new URLSearchParams(location.search).get('captionGeneration') ?? '';
 
 function Symbol({ state, name }: { state: CaptionSnapshot; name: 'caption' | 'close' | 'mic' }) {
   const image = state.artwork?.[name];
@@ -59,9 +60,9 @@ export function CaptionWindow() {
   const root = useRef<HTMLDivElement>(null); const lastHeight = useRef(0);
   useEffect(() => {
     let active = true; let unlisten: (() => void) | undefined;
-    const receive = (next: CaptionSnapshot) => { if (active) setState(old => old && old.revision > next.revision ? old : next); };
+    const receive = (next: CaptionSnapshot) => { if (active && next.windowGeneration === generation) setState(old => old && old.revision > next.revision ? old : next); };
     void getCurrentWebviewWindow().listen<CaptionSnapshot>('caption-changed', event => receive(event.payload)).then(async cleanup => {
-      if (!active) { cleanup(); return; } unlisten = cleanup; receive(await invoke<CaptionSnapshot>('caption_snapshot'));
+      if (!active) { cleanup(); return; } unlisten = cleanup; receive(await invoke<CaptionSnapshot>('caption_snapshot', { generation }));
     }).catch(error => console.error('caption snapshot', error));
     return () => { active = false; unlisten?.(); };
   }, []);
@@ -70,9 +71,9 @@ export function CaptionWindow() {
     document.documentElement.lang = state.uiLanguage;
     const size = () => {
       const height = Math.max(80, Math.min(600, Math.ceil(element.getBoundingClientRect().height)));
-      if (height !== lastHeight.current) { lastHeight.current = height; void invoke('caption_resize', { height }).catch(error => console.error('caption size', error)); }
+      if (height !== lastHeight.current) { lastHeight.current = height; void invoke('caption_resize', { height, generation }).catch(error => console.error('caption size', error)); }
     };
     size(); const observer = new ResizeObserver(size); observer.observe(element); return () => observer.disconnect();
   }, [state?.uiLanguage, state !== null]);
-  return <div ref={root}>{state && <CaptionContent state={state} close={() => { void invoke('caption_close').catch(error => console.error('caption close', error)); }} />}</div>;
+  return <div ref={root}>{state && <CaptionContent state={state} close={() => { void invoke('caption_close', { generation }).catch(error => console.error('caption close', error)); }} />}</div>;
 }

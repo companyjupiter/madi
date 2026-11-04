@@ -10,7 +10,9 @@ use madi_platform::{
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Mutex};
 use tauri::{Emitter, Manager};
+mod lifecycle;
 mod native;
+use lifecycle::{Action, Windows};
 
 #[derive(Default)]
 struct State {
@@ -21,6 +23,7 @@ struct State {
     preferences: Option<Preferences>,
     file: Option<Source>,
     artwork: Option<Value>,
+    windows: Windows,
 }
 impl State {
     fn preferences_changed(&mut self, value: &Preferences) -> bool {
@@ -151,6 +154,7 @@ fn payload(state: &State, audience: Audience) -> Option<Value> {
     let lines = state.file.as_ref().map_or(&[][..], |s| s.lines.as_slice());
     Some(json!({
         "revision":state.revision, "enabled":state.enabled, "audience":audience,
+        "windowGeneration":state.windows.generation(audience),
         "uiLanguage":preferences.presentation.ui_language,
         "settings":preferences.settings.caption, "projection":caption::project(&context, lines.iter()),
         "artwork":state.artwork,
@@ -193,34 +197,58 @@ fn refresh(app: &tauri::AppHandle) -> Result<(), String> {
     if result.is_err() {
         // A failed patient-panel creation must not leave the staff button on
         // or retry creation on every microphone/translation callback.
-        let summary = {
+        let (summary, actions) = {
             let host = app.state::<CaptionHost>();
             let mut state = host.0.lock().map_err(|_| "caption state unavailable")?;
             state.fail();
-            status(&state)
+            (
+                status(&state),
+                [
+                    state.windows.release(Audience::Staff),
+                    state.windows.release(Audience::Patient),
+                ],
+            )
         };
-        for label in ["caption-staff", "caption-patient"] {
-            let _ = native::hide(app, label);
+        for (label, action) in ["caption-staff", "caption-patient"]
+            .into_iter()
+            .zip(actions)
+        {
+            if action == Action::Release {
+                let _ = release(app, label);
+            } else {
+                let _ = native::hide(app, label);
+            }
         }
         let _ = app.emit_to("main", "caption-status-changed", summary);
     }
     result
 }
 fn refresh_panels(app: &tauri::AppHandle) -> Result<(), String> {
-    let (enabled, layout, settings, staff, patient, summary) = {
+    let (actions, layout, settings, staff, patient, summary) = {
         let host = app.state::<CaptionHost>();
         let mut state = host.0.lock().map_err(|_| "caption state unavailable")?;
         if state.artwork.is_none() {
             state.artwork = native::artwork()?;
         }
         let layout = std::mem::take(&mut state.layout_dirty);
-        (
-            state.enabled,
-            layout,
+        let settings = state
+            .preferences
+            .as_ref()
+            .map(|p| p.settings.caption.clone());
+        let enabled = state.enabled && settings.is_some();
+        let patient_enabled = settings.as_ref().is_some_and(|s| s.patient_panel_enabled);
+        let actions = [
             state
-                .preferences
-                .as_ref()
-                .map(|p| p.settings.caption.clone()),
+                .windows
+                .action(Audience::Staff, enabled, patient_enabled),
+            state
+                .windows
+                .action(Audience::Patient, enabled, patient_enabled),
+        ];
+        (
+            actions,
+            layout,
+            settings,
             payload(&state, Audience::Staff),
             payload(&state, Audience::Patient),
             status(&state),
@@ -228,25 +256,61 @@ fn refresh_panels(app: &tauri::AppHandle) -> Result<(), String> {
     };
     app.emit_to("main", "caption-status-changed", summary)
         .map_err(|e| e.to_string())?;
-    for (label, audience, value) in [
+    for ((label, audience, value), action) in [
         ("caption-staff", Audience::Staff, staff),
         ("caption-patient", Audience::Patient, patient),
-    ] {
-        let show = enabled
-            && settings
-                .as_ref()
-                .is_some_and(|s| audience == Audience::Staff || s.patient_panel_enabled);
-        if !show {
-            native::hide(app, label)?;
-            continue;
-        }
-        native::show(app, label, audience, settings.as_ref().unwrap(), layout)?;
-        if let Some(value) = value {
-            app.emit_to(label, "caption-changed", value)
-                .map_err(|e| e.to_string())?;
+    ]
+    .into_iter()
+    .zip(actions)
+    {
+        match action {
+            Action::Hide => native::hide(app, label)?,
+            Action::Release => release(app, label)?,
+            Action::Show(generation) => {
+                native::show(
+                    app,
+                    label,
+                    audience,
+                    &generation,
+                    settings.as_ref().unwrap(),
+                    layout,
+                )?;
+                if let Some(value) = value {
+                    app.emit_to(label, "caption-changed", value)
+                        .map_err(|e| e.to_string())?;
+                }
+            }
         }
     }
     Ok(())
+}
+fn release(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+    if !native::release(app, label)? {
+        window_destroyed(app, label);
+    }
+    Ok(())
+}
+/// RunEvent::Destroyed arrives after Tauri removes the old label from its
+/// window/webview maps. Defer recreation until the entire event has unwound.
+pub fn window_destroyed(app: &tauri::AppHandle, label: &str) {
+    let Ok(audience) = audience(label) else {
+        return;
+    };
+    {
+        let host = app.state::<CaptionHost>();
+        let Ok(mut state) = host.0.lock() else {
+            return;
+        };
+        match state.windows.destroyed(audience) {
+            None => return,
+            Some(false) => state.fail(),
+            Some(true) => state.revision += 1,
+        }
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        dispatch(&app);
+    });
 }
 #[tauri::command]
 pub async fn caption_status(window: tauri::WebviewWindow) -> Result<Value, String> {
@@ -279,20 +343,29 @@ pub async fn caption_toggle(window: tauri::WebviewWindow) -> Result<Value, Strin
     caption_status(window).await
 }
 #[tauri::command]
-pub async fn caption_snapshot(window: tauri::WebviewWindow) -> Result<Value, String> {
+pub async fn caption_snapshot(
+    window: tauri::WebviewWindow,
+    generation: String,
+) -> Result<Value, String> {
     let audience = audience(window.label())?;
     let host = window.state::<CaptionHost>();
     let state = host.0.lock().map_err(|_| "caption state unavailable")?;
+    if !state.windows.accepts(audience, &generation) {
+        return Err("retired caption window".into());
+    }
     payload(&state, audience).ok_or("caption preferences unavailable".into())
 }
 #[tauri::command]
-pub async fn caption_close(window: tauri::WebviewWindow) -> Result<(), String> {
+pub async fn caption_close(window: tauri::WebviewWindow, generation: String) -> Result<(), String> {
     if window.label() != "caption-staff" {
         return Err("unsupported caption close".into());
     }
     {
         let host = window.state::<CaptionHost>();
         let mut state = host.0.lock().map_err(|_| "caption state unavailable")?;
+        if !state.windows.accepts(Audience::Staff, &generation) {
+            return Err("retired caption window".into());
+        }
         state.enabled = false;
         state.revision += 1;
     }
@@ -300,8 +373,12 @@ pub async fn caption_close(window: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 #[tauri::command]
-pub async fn caption_resize(window: tauri::WebviewWindow, height: f64) -> Result<(), String> {
-    audience(window.label())?;
+pub async fn caption_resize(
+    window: tauri::WebviewWindow,
+    height: f64,
+    generation: String,
+) -> Result<(), String> {
+    let audience = audience(window.label())?;
     if !height.is_finite() || !(80.0..=600.0).contains(&height) {
         return Err("invalid caption height".into());
     }
@@ -310,6 +387,16 @@ pub async fn caption_resize(window: tauri::WebviewWindow, height: f64) -> Result
     window
         .app_handle()
         .run_on_main_thread(move || {
+            // Recheck on the native thread: destruction can happen after IPC
+            // admission but before this queued resize executes.
+            if !app
+                .state::<CaptionHost>()
+                .0
+                .lock()
+                .is_ok_and(|state| state.windows.accepts(audience, &generation))
+            {
+                return;
+            }
             if let Err(error) = native::resize(&app, &label, height) {
                 eprintln!("caption size: {error}");
             }

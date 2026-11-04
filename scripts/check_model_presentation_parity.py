@@ -54,7 +54,10 @@ let specs: [(String, String, CGFloat, NSFont.Weight)] = [
     ("error", "exclamationmark.triangle.fill", 11, .regular), ("follow", "arrow.down", 11, .semibold), ("folder", "folder", 26, .light), ("export", "square.and.arrow.up", 12, .semibold),
     ("play", "play.fill", 15, .regular), ("cancel", "xmark", 15, .semibold),
     ("plus", "plus", 15, .semibold), ("warning", "exclamationmark.triangle", 40, .regular),
-    ("micChevron", "chevron.down", 9, .medium)]
+    ("micChevron", "chevron.down", 9, .medium),
+    ("caption", "captions.bubble", 12, .regular), ("captionOn", "captions.bubble.fill", 12, .regular),
+    ("overlay.caption", "captions.bubble.fill", 12, .regular),
+    ("overlay.close", "xmark", 11, .regular), ("overlay.mic", "mic.fill", 10, .regular)]
 let symbols = Dictionary(uniqueKeysWithValues: specs.map { key, name, points, weight in
     let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)!.withSymbolConfiguration(.init(pointSize: points, weight: weight))!
     return (key, ["width": image.size.width, "height": image.size.height])
@@ -65,7 +68,7 @@ let titles = [0.0, 1735689600.0, 1793800800.0].map { "회의 " + df.string(from:
 let result: [String: Any] = ["liveFallbackTitles": titles, "physicalMemory": ProcessInfo.processInfo.physicalMemory,
     "sizes": bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }, "symbols": symbols]
 FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]))
-''')
+''', encoding='utf-8')
     binary = OUT / 'swift-model-presentation'
     subprocess.run(['swiftc', str(source), '-o', str(binary)], check=True)
     expected = json.loads(subprocess.check_output([str(binary)]))
@@ -73,7 +76,7 @@ FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: resul
     actual = json.loads(subprocess.check_output([str(ROOT / 'target/debug/examples/model_presentation_oracle')]))
     for key in ('physicalMemory', 'sizes', 'liveFallbackTitles'): assert actual[key] == expected[key], key
     symbols = {}
-    artwork = actual['artwork'] | actual['transcriptArtwork']
+    artwork = actual['artwork'] | actual['transcriptArtwork'] | {'overlay.' + key: value for key, value in actual['captionArtwork'].items()}
     assert artwork.keys() == expected['symbols'].keys()
     for key, art in artwork.items():
         assert {k: art[k] for k in ('width', 'height')} == expected['symbols'][key]
@@ -83,9 +86,9 @@ FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: resul
         assert result['pixelHeight'] == math.ceil(art['height'] * 2)
         symbols[key] = dict(width=art['width'], height=art['height'], **result)
     report = dict(schemaVersion=1, status='passed', physicalMemory=actual['physicalMemory'],
-                  sizes=actual['sizes'], liveFallbackTitles=actual['liveFallbackTitles'], fallbackTitleCases=3, symbols=symbols, byteCountCases=9, symbolCases=13,
+                  sizes=actual['sizes'], liveFallbackTitles=actual['liveFallbackTitles'], fallbackTitleCases=3, symbols=symbols, byteCountCases=9, symbolCases=18,
                   scope='Live native Foundation formatting and NSImage symbol dimensions plus nonempty transparent owned PNGs; no SwiftUI/WebView pixel or interaction comparison')
-    (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+    (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
 
 if __name__ == '__main__':

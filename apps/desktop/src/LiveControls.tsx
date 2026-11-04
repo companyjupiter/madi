@@ -7,6 +7,7 @@ type Language = 'ko' | 'en' | 'ja';
 export function liveLabel(language: Language, ko: string, en: string, ja = en) { return language === 'ko' ? ko : language === 'ja' ? ja : en; }
 export function NativeSymbol({ artwork, name, className = '' }: { artwork: FileArtwork | null; name: keyof FileArtwork; className?: string }) {
   const symbol = artwork?.[name];
+  if (!symbol && (name === 'caption' || name === 'captionOn')) return <svg aria-hidden width="12" height="12" viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M2 2h12v9H7l-3 3v-3H2zM4 5h8M4 8h6" />{name === 'captionOn' && <path d="M2 2h12v9H7l-3 3v-3H2z" fill="currentColor" fillOpacity="0.2" />}</svg>;
   return symbol ? <span aria-hidden className={`asset-icon ${className}`} style={{ width: symbol.width, height: symbol.height, maskImage: `url(${symbol.dataUrl})` }} /> : null;
 }
 export function phaseLabel(state: FileSnapshot, language: Language) {

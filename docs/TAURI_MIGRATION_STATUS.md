@@ -15,6 +15,21 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Caption window lifetime now follows the original controller: patient disable
+  releases the patient window, while hiding the whole overlay preserves both.
+  Re-enable waits for native destruction; fresh instance generations reject old
+  snapshot/close/resize work. Eight desktop tests and two deliberate lifecycle
+  mutations validate the ownership rules. Strict clippy, frontend build/contracts,
+  18 native artwork cases, app build and relocated package checks pass locally.
+  See `evidence/macos-caption-lifecycle-2026-11-05.json`.
+  `cd0526f` CI passed 174 Mac and 147 Windows Rust tests, but the jobs failed:
+  Windows found a callback reachable only through the macOS workflow, and macOS
+  found the new caption symbols missing from the old 13-symbol oracle. The
+  callback is now also bootstrapped from the common file snapshot; the artwork
+  oracle covers all 18 symbols without removing old checks. The Mac 15 artifact's
+  1,500 caption results match original Swift and their pinned bytes are verified.
+  New CI is required for these fixes; native window interaction remains NOT_RUN.
+
 - Staff/patient caption overlays now connect the shared file/live snapshots and
   preference owner to native windows and separate renderer capabilities. The
   original interim-translation-off decision is retained. A bounded two-line
@@ -27,7 +42,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   `runtime/CAPTION_OVERLAY.md` and
   `evidence/macos-caption-overlay-2026-11-05.json`. Native visual, focus, drag,
   Spaces/fullscreen and monitor acceptance remain NOT_RUN while the Mac is
-  locked; Windows caption compilation/reference checks await the next CI run.
+  locked. The subsequent CI failure and follow-up are described above.
 
 - Desktop CI at `d37d945` is green on macOS 15 and Windows 2022. Downloaded
   executable/package hashes, clean source manifests and reference result bytes

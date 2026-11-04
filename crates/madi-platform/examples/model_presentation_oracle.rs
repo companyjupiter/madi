@@ -15,6 +15,7 @@ fn main() {
             "liveFallbackTitles": titles,
             "artwork": model_presentation::artwork().expect("native system artwork"),
             "transcriptArtwork": model_presentation::transcript_artwork().expect("native transcript artwork"),
+            "captionArtwork": model_presentation::caption_artwork().expect("native caption artwork"),
         })
     );
 }

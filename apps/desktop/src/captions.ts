@@ -4,7 +4,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { browserFixture } from './bridge';
 import type { SessionSettings } from './settings';
 export interface CaptionSnapshot {
-  revision: number; enabled: boolean; audience: 'staff' | 'patient'; uiLanguage: 'ko' | 'en' | 'ja';
+  revision: number; windowGeneration: string; enabled: boolean; audience: 'staff' | 'patient'; uiLanguage: 'ko' | 'en' | 'ja';
   settings: SessionSettings['caption'];
   artwork: Record<string, { dataUrl: string; width: number; height: number }> | null;
   projection: {

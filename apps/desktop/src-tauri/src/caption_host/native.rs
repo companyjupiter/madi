@@ -1,6 +1,5 @@
 use madi_core::{caption::Audience, settings::CaptionSettings};
 use serde_json::Value;
-#[cfg(not(target_os = "macos"))]
 use tauri::Manager;
 
 #[cfg(target_os = "macos")]
@@ -46,6 +45,7 @@ pub fn show(
     app: &tauri::AppHandle,
     label: &str,
     audience: Audience,
+    generation: &str,
     settings: &CaptionSettings,
     layout: bool,
 ) -> Result<(), String> {
@@ -70,7 +70,9 @@ pub fn show(
             panel
         } else {
             PanelBuilder::<_, MadiCaptionPanel>::new(app, label)
-                .url(tauri::WebviewUrl::App(format!("index.html#{label}").into()))
+                .url(tauri::WebviewUrl::App(
+                    format!("index.html?captionGeneration={generation}#{label}").into(),
+                ))
                 .title("Madi captions")
                 .size(tauri::LogicalSize::new(width, initial_height).into())
                 .level(PanelLevel::Status)
@@ -142,7 +144,9 @@ pub fn show(
             tauri::WebviewWindowBuilder::new(
                 app,
                 label,
-                tauri::WebviewUrl::App(format!("index.html#{label}").into()),
+                tauri::WebviewUrl::App(
+                    format!("index.html?captionGeneration={generation}#{label}").into(),
+                ),
             )
             .title("Madi captions")
             .inner_size(width, initial_height)
@@ -197,6 +201,29 @@ pub fn show(
             window.show().map_err(|e| e.to_string())?;
         }
         Ok(())
+    }
+}
+/// Restore Tauri ownership before asynchronous destruction. The host keeps
+/// this label retired until RunEvent::Destroyed confirms native removal.
+pub fn release(app: &tauri::AppHandle, label: &str) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    let window = {
+        tauri_nspanel::objc2::MainThreadMarker::new().ok_or("caption must run on main thread")?;
+        if let Ok(panel) = app.get_webview_panel(label) {
+            panel.hide();
+            panel.to_window().or_else(|| app.get_webview_window(label))
+        } else {
+            app.get_webview_window(label)
+        }
+    };
+    #[cfg(not(target_os = "macos"))]
+    let window = app.get_webview_window(label);
+    if let Some(window) = window {
+        window.hide().map_err(|e| e.to_string())?;
+        window.destroy().map_err(|e| e.to_string())?;
+        Ok(true)
+    } else {
+        Ok(false)
     }
 }
 pub fn resize(app: &tauri::AppHandle, label: &str, height: f64) -> Result<(), String> {

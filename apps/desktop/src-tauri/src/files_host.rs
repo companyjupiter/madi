@@ -345,7 +345,11 @@ pub fn file_snapshot(
     if window.label() != "main" {
         return Err("unsupported window".into());
     }
-    Ok(host.snapshot())
+    let snapshot = host.snapshot();
+    // Bootstrap caption state from the same snapshot returned to the renderer,
+    // including idle/restored state before a native workflow callback exists.
+    crate::caption_host::file_changed(window.app_handle(), &snapshot);
+    Ok(snapshot)
 }
 #[tauri::command]
 pub async fn file_start(
