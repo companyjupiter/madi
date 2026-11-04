@@ -640,3 +640,5 @@ async fn hang_watchdog_preserves_live_speaker_namespace_and_publishes_recovery_w
     workflow.shutdown().await.unwrap();
     assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
 }
+
+mod metal_recovery_probe;

@@ -9,11 +9,24 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
 | G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file/live transcript, transport, workspace/export and five-tab Settings candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, native Settings toolbar/form match, complete transcript/workspace/AI/overlays |
-| G3 macOS core | Parsers, lifecycle, typed file/live configuration, native decode/ASR, transcript/edit differentials, shared file/live workflow and provisional previews, W1/W2 native recovery owners, native replay and real ASR, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, complete live UI and preview visual acceptance, remaining AI clients and real-model recovery/concurrency acceptance, storage/migration, system/mixed audio and hardware matrix, complete model UI lifecycle, AI policy and product end-to-end |
+| G3 macOS core | Parsers, lifecycle, typed file/live configuration, native decode/ASR, transcript/edit differentials, shared file/live workflow and provisional previews, W1/W2 native recovery owners, native replay and real ASR, installed Metal SIGSTOP recovery, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, complete live UI and preview visual acceptance, remaining AI clients, natural model-hang/concurrency acceptance, storage/migration, system/mixed audio and hardware matrix, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
+
+- An opt-in macOS test now compares normal public JFK transcription against an
+  actual installed Metal ASR process suspended with SIGSTOP. The unaccelerated
+  watchdog replaces it after 49.828 seconds. All 24 words in four lines, word
+  times/confidence, speakers, three owned WAV hashes and saved Markdown match
+  exactly. Reopening, recovery-warning reset, audio cleanup and child reaping
+  pass; input/model/engine hashes are unchanged. This uses scripted PCM and
+  opens no microphone. Two initial harness failures (canonical temporary path
+  and a listening indicator suppressed by normal silence detection) are retained
+  in the evidence. No production recovery behavior changed in this probe.
+  Naturally occurring GPU stalls, microphone recovery and native UI acceptance
+  remain open. See `evidence/macos-metal-hang-recovery-2026-11-05.json` and the
+  opt-in instructions in `runtime/HANG_WATCHDOG.md`.
 
 - Live ASR hang recovery now connects the original five-second W2 poll and
   strict >45-second progress rule. Recording and paused capture survive engine
@@ -28,8 +41,13 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   detected. Local validation passes 195 Rust tests (32 core, 138 platform,
   14 protocol, 11 desktop), strict clippy, five IPC checks, both W2 oracles,
   unchanged W1 reference, app build and relocated package checks. This slice's
-  CI is pending. Actual stuck-model/device recovery and native visual/interaction
-  acceptance remain NOT_RUN; remaining AI clients and Windows native integration
+  CI passes on both platforms for push/PR head `44115b5` (41933939284 /
+  41933948405). Downloaded PR merge artifacts verify 195 Mac / 159 Windows
+  tests, clean source, executable/package hashes, pinned W2 results and native
+  Swift equality; see `evidence/desktop-ci-44115b5-2026-11-05.json`.
+  The later installed-engine SIGSTOP probe is described above. Natural model
+  hangs, device recovery and native visual/interaction acceptance remain NOT_RUN;
+  remaining AI clients and Windows native integration
   remain open. See `runtime/HANG_WATCHDOG.md` and
   `evidence/macos-hang-watchdog-2026-11-05.json`.
 
