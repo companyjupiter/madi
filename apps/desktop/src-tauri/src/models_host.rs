@@ -128,7 +128,7 @@ pub fn on_run_event(app: &tauri::AppHandle, event: &tauri::RunEvent) {
     let Some(host) = app.try_state::<ModelsHost>() else {
         return;
     };
-    let Some(service) = &host.service else { return };
+    let service = host.service.clone();
     match host
         .shutdown
         .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
@@ -140,10 +140,12 @@ pub fn on_run_event(app: &tauri::AppHandle, event: &tauri::RunEvent) {
             return;
         }
     }
-    let service = service.clone();
     let app = app.clone();
     let code = code.unwrap_or(0);
     tauri::async_runtime::spawn(async move {
+        if let Err(error) = app.state::<crate::setup_host::SetupHost>().shutdown().await {
+            eprintln!("preferences shutdown: {error}");
+        }
         if let Err(error) = app.state::<crate::files_host::FilesHost>().shutdown().await {
             eprintln!("file shutdown: {error}");
         }
@@ -154,7 +156,9 @@ pub fn on_run_event(app: &tauri::AppHandle, event: &tauri::RunEvent) {
         {
             eprintln!("workspace shutdown: {error}");
         }
-        if let Err(error) = service.shutdown().await {
+        if let Some(service) = service
+            && let Err(error) = service.shutdown().await
+        {
             eprintln!("model shutdown: {error}");
         }
         app.state::<ModelsHost>()

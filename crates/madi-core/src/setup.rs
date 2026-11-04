@@ -1,7 +1,8 @@
 //! Start-screen selection rules from ContentView and SessionController.
-//! Persistence and capture admission are separate migration steps.
+//! Native preference storage and capture admission live in the platform layer.
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
+use unicode_normalization::UnicodeNormalization;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Language {
@@ -9,6 +10,45 @@ pub enum Language {
     English,
     Japanese,
     Korean,
+}
+
+impl Language {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Chinese => "Chinese",
+            Self::English => "English",
+            Self::Japanese => "Japanese",
+            Self::Korean => "Korean",
+        }
+    }
+    pub fn token(self) -> i64 {
+        match self {
+            Self::Chinese => 50260,
+            Self::English => 50259,
+            Self::Japanese => 50266,
+            Self::Korean => 50264,
+        }
+    }
+    pub fn from_token(token: i64) -> Option<Self> {
+        match token {
+            50260 => Some(Self::Chinese),
+            50259 => Some(Self::English),
+            50266 => Some(Self::Japanese),
+            50264 => Some(Self::Korean),
+            _ => None,
+        }
+    }
+}
+/// Swift Set<String> keeps the first spelling of canonically equal strings;
+/// its sorted projection is the start screen's collapsed output label order.
+pub fn sorted_targets(values: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut unique = BTreeMap::new();
+    for value in values {
+        unique
+            .entry(value.nfc().collect::<String>())
+            .or_insert(value);
+    }
+    unique.into_values().collect()
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -44,7 +84,11 @@ pub struct StagedFile {
 pub struct SetupState {
     pub revision: u64,
     pub input_language: Option<Language>,
-    pub translate_targets: BTreeSet<Language>,
+    /// Preserve a positive legacy token that the four-choice UI cannot label.
+    /// It stays native-owned and is cleared by an explicit language selection.
+    #[serde(skip)]
+    pub restored_language_token: Option<i64>,
+    pub translate_targets: Vec<String>,
     pub meeting_mode: MeetingMode,
     pub diarize: bool,
     /// Existing persistence values: 0 (auto), 2, 3, 4, 5 (five or more).
@@ -61,7 +105,8 @@ impl Default for SetupState {
         Self {
             revision: 0,
             input_language: None,
-            translate_targets: BTreeSet::new(),
+            restored_language_token: None,
+            translate_targets: Vec::new(),
             meeting_mode: MeetingMode::General,
             diarize: true,
             speaker_count: 0,
@@ -92,16 +137,26 @@ impl SetupState {
             SetupCommand::ClearStagedFile => self.staged_file = None,
             SetupCommand::InputLanguage(language) => {
                 self.input_language = language;
+                self.restored_language_token = None;
                 if let Some(language) = language {
-                    self.translate_targets.remove(&language);
+                    self.translate_targets
+                        .retain(|value| value != language.name());
                 }
             }
             SetupCommand::ToggleTarget(language) => {
                 if self.input_language == Some(language) {
                     return Err("input language cannot also be an output target");
                 }
-                if !self.translate_targets.remove(&language) && self.translate_targets.len() < 3 {
-                    self.translate_targets.insert(language);
+                if let Some(index) = self
+                    .translate_targets
+                    .iter()
+                    .position(|value| value == language.name())
+                {
+                    self.translate_targets.remove(index);
+                } else if self.translate_targets.len() < 3 {
+                    self.translate_targets.push(language.name().into());
+                    self.translate_targets =
+                        sorted_targets(std::mem::take(&mut self.translate_targets));
                 }
             }
             SetupCommand::ClearTargets => self.translate_targets.clear(),
@@ -131,6 +186,12 @@ impl SetupState {
         }
         self.revision += 1;
         Ok(())
+    }
+
+    pub fn language_token(&self) -> Option<i64> {
+        self.input_language
+            .map(Language::token)
+            .or(self.restored_language_token)
     }
 
     /// The removed 1-speaker option migrated to separation off, unless the
@@ -184,11 +245,11 @@ mod tests {
             state.apply(SetupCommand::ToggleTarget(language)).unwrap();
         }
         assert_eq!(state.translate_targets.len(), 3);
-        assert!(!state.translate_targets.contains(&Language::Chinese));
+        assert!(!state.translate_targets.contains(&"Chinese".to_owned()));
         state
             .apply(SetupCommand::InputLanguage(Some(Language::Korean)))
             .unwrap();
-        assert!(!state.translate_targets.contains(&Language::Korean));
+        assert!(!state.translate_targets.contains(&"Korean".to_owned()));
         let snapshot = state.clone();
         assert!(
             state
@@ -199,10 +260,7 @@ mod tests {
         state
             .apply(SetupCommand::ToggleTarget(Language::English))
             .unwrap();
-        assert_eq!(
-            state.translate_targets,
-            BTreeSet::from([Language::Japanese])
-        );
+        assert_eq!(state.translate_targets, vec!["Japanese".to_owned()]);
     }
 
     #[test]

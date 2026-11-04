@@ -1,7 +1,7 @@
 //! Typed native file-mode ASR launch configuration, derived from EngineProcess.
 //! These resources/options are resolved by Rust, not deserialized from WebView IPC.
 use crate::engine_process::Launch;
-use madi_core::setup::{Language, SetupState};
+use madi_core::setup::SetupState;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -20,7 +20,7 @@ pub struct Resources {
 pub struct FileSettings {
     pub diarize: bool,
     pub osd: bool,
-    pub language_token: Option<u32>,
+    pub language_token: Option<i64>,
     pub max_speakers: u8,
     pub fixed_speakers: Option<u8>,
     pub vad_probability: Option<f64>,
@@ -63,12 +63,7 @@ impl FileSettings {
         Ok(Self {
             diarize: setup.diarize,
             osd,
-            language_token: setup.input_language.map(|language| match language {
-                Language::English => 50259,
-                Language::Chinese => 50260,
-                Language::Korean => 50264,
-                Language::Japanese => 50266,
-            }),
+            language_token: setup.language_token(),
             max_speakers,
             fixed_speakers,
             vad_probability: Some(vad_probability),

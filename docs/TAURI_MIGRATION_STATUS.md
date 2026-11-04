@@ -15,6 +15,23 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Setup/presentation candidate: the start-screen selections, language/appearance,
+  transcript mode and font size now restore through a native serialized store.
+  The Swift preference domain is read-only; transient paths and device IDs are
+  excluded. Actual Swift initializers/AppStorage getters match 432 cases / 3,024
+  font steps, including legacy coercions, preset overrides, four targets and
+  unknown positive tokens. Atomic failure, equal-value first save, canceled IPC,
+  owned shutdown and isolated relaunch have tests. Local checks pass 84 Rust
+  tests (11/59/14), clippy, frontend and ASR configuration parity. Per-window
+  AppKit appearance avoids Tauri's app-wide macOS theme override. Native visual,
+  first-paint and real-user preference migration acceptance remain **NOT_RUN**.
+  The 93.50 MiB debug app passes strict relocation/package checks with 16 notices.
+  Synthetic settings survive an owner restart and feed the actual bundled
+  decoder/Metal engine: 22 JFK words, workspace/archive and five exports pass;
+  original source/model data and temporary cleanup are preserved. See
+  `runtime/PREFERENCES.md` and `evidence/macos-preferences-2026-11-04.json`;
+  the full Settings UI remains open. CI for this new candidate is pending.
+
 - Workspace/export candidate: the macOS file screen now connects the fixed right
   panel, native folder selection, generation-bound saved meeting opening,
   isolated auto-save preferences and five manual export formats. Live Swift
@@ -35,7 +52,10 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   first-checkpoint refresh when a new session reuses a removed filename. The
   folder regression fails before the fix (one entry instead of two), then all
   seven workspace tests, clippy and the rebuilt/relocated package pass. CI for
-  that follow-up is pending. See
+  that follow-up passed at `caf062c` in desktop CI `41744113022`: 79 macOS /
+  71 Windows tests, all gates and builds. Downloaded executable, archive, runtime
+  and 16 notice hashes match clean build provenance
+  (`evidence/desktop-ci-caf062c-2026-11-04.json`). See
   `evidence/macos-workspace-refresh-2026-11-04.json` and
   `runtime/WORKSPACE_AND_EXPORTS.md`.
 - Archive foundation: Markdown/plain export and lossy reopen match unchanged
@@ -412,8 +432,9 @@ live Swift differential evidence. The timed file owner now connects native
 selection/start, progress, transcript/edit state, back/close cancellation and
 AppKit copy/name commands to the file-screen candidate. Native click/visual
 validation remains open; the candidate does not complete display caches,
-native follow validation/low-confidence review, settings/glossary/AI policy, playback, workspace
-or persistence. The recording start action still emits a harness intent.
+native follow validation/low-confidence review, settings/glossary/AI policy, playback
+or real-user migration acceptance. Workspace, exports and setup preferences now
+have connected candidates and synthetic/native CLI evidence above. The recording start action still emits a harness intent.
 
 1. Finish native setup behavior: verify real device selection/popup placement, keyboard
    behavior and file staging. Compare each with the original app.

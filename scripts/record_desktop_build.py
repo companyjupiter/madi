@@ -23,6 +23,7 @@ report = {
     "nativeUIParity": "not-verified",
     "fileTranscription": "native timed owner connected; native screen interaction not verified",
     "recording": "not-connected",
+    "preferences": "native isolated setup/presentation restoration connected; real-user migration and native UI not verified",
     "workspace": "macOS panel, isolated preferences, native scan/open/export connected; native UI not verified",
 }
 out = ROOT / "out/desktop-build/report.json"

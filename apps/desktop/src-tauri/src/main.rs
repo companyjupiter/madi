@@ -10,7 +10,6 @@ compile_error!(
 );
 
 use madi_core::setup::{SetupCommand, SetupState};
-use std::sync::Mutex;
 use tauri::Manager;
 mod files_host;
 mod models_host;
@@ -21,7 +20,7 @@ use files_host::{
     file_snapshot, file_start,
 };
 use models_host::{models_artwork, models_command, models_snapshot};
-use setup_host::{SetupHost, choose_file};
+use setup_host::{SetupHost, choose_file, preferences_command, preferences_snapshot};
 use workspace_host::{
     WorkspaceHost, workspace_choose_folder, workspace_command, workspace_export, workspace_open,
     workspace_snapshot,
@@ -72,33 +71,29 @@ fn set_macos_background(window: &tauri::WebviewWindow, theme: tauri::Theme) -> t
 }
 
 #[tauri::command]
-fn setup_snapshot(
-    window: tauri::WebviewWindow,
-    state: tauri::State<'_, Mutex<SetupHost>>,
-) -> Result<SetupState, String> {
+async fn setup_snapshot(window: tauri::WebviewWindow) -> Result<SetupState, String> {
     if window.label() != "main" {
         return Err("unsupported window".into());
     }
-    state
-        .lock()
-        .map(|state| state.snapshot.clone())
-        .map_err(|_| "setup state unavailable".into())
+    Ok(setup_host::service(window.app_handle())
+        .await?
+        .snapshot()
+        .setup)
 }
-
 #[tauri::command]
-fn setup_command(
+async fn setup_command(
     window: tauri::WebviewWindow,
     command: SetupCommand,
-    state: tauri::State<'_, Mutex<SetupHost>>,
 ) -> Result<SetupState, String> {
     if window.label() != "main" {
         return Err("unsupported window".into());
     }
-    let mut state = state
-        .lock()
-        .map_err(|_| "setup state unavailable".to_owned())?;
-    state.apply(command)?;
-    Ok(state.snapshot.clone())
+    setup_host::service(window.app_handle())
+        .await?
+        .setup(command)
+        .await
+        .map(|value| value.setup)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -139,7 +134,7 @@ fn main() {
         return;
     }
     tauri::Builder::default()
-        .manage(Mutex::new(SetupHost::default()))
+        .manage(SetupHost::default())
         .manage(FilesHost::default())
         .manage(WorkspaceHost::default())
         .on_webview_event(setup_host::handle_drop)
@@ -154,17 +149,47 @@ fn main() {
                 configure_macos_window(&window, true)?;
                 let themed = window.clone();
                 window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::ThemeChanged(theme) = event
-                        && let Err(error) = set_macos_background(&themed, *theme)
-                    {
-                        eprintln!("failed to update window background: {error}");
+                    if let tauri::WindowEvent::ThemeChanged(_) = event {
+                        let update = || -> Result<(), String> {
+                            // Window events run on the main thread. Respect a
+                            // saved per-window override when macOS theme changes.
+                            let dark = unsafe {
+                                madi_platform::preferences::window_is_dark(
+                                    themed.ns_window().map_err(|error| error.to_string())?,
+                                )
+                            }?;
+                            set_macos_background(
+                                &themed,
+                                if dark {
+                                    tauri::Theme::Dark
+                                } else {
+                                    tauri::Theme::Light
+                                },
+                            )
+                            .map_err(|error| error.to_string())
+                        };
+                        if let Err(error) = update() {
+                            eprintln!("failed to update window background: {error}");
+                        }
                     }
                 });
             }
-            window.show()?;
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = setup_host::service(&handle).await {
+                    eprintln!("preferences: {error}");
+                }
+                // Initial native appearance was queued before this show. A bad
+                // preference file still opens the window to expose the error.
+                let _ = handle.run_on_main_thread(move || {
+                    let _ = window.show();
+                });
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            preferences_snapshot,
+            preferences_command,
             setup_snapshot,
             setup_command,
             audio_inputs,

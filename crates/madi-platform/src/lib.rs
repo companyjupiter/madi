@@ -10,6 +10,8 @@ pub mod model_download;
 #[cfg(target_os = "macos")]
 pub mod model_presentation;
 pub mod model_setup_service;
+pub mod preferences;
+pub mod preferences_service;
 pub mod prepared_audio;
 #[cfg(target_os = "macos")]
 pub mod runtime_bundle;

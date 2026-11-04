@@ -3,6 +3,7 @@ import type { FileArtwork, FileEdit, FileSnapshot, TranscriptLine } from './file
 import { MiddleText } from './MiddleText';
 import { useTranscriptFollow } from './useTranscriptFollow';
 import './transcript.css';
+import { usePreferences } from './preferences';
 
 type Props = { workspace: ReactNode; snapshot: FileSnapshot; artwork: FileArtwork | null; language: 'ko' | 'en' | 'ja'; text: (key: string) => string; reset: () => void; edit: (edit: FileEdit) => void; copy: (id: string) => void; rename: (speaker: number) => void };
 function Icon({ name, size = 16 }: { name: string; size?: number }) {
@@ -17,8 +18,8 @@ function speakerColor(speaker: number) { return `var(--speaker-${((speaker % 8) 
 // This is the connected file-view candidate. AI tools, playback,
 // confidence review and native visual parity remain separate migration gates.
 export function FileTranscript({ workspace, snapshot: state, artwork, language, text, reset, edit, copy, rename }: Props) {
-  const [content, setContent] = useState(true);
-  const [fontSize, setFontSize] = useState(16);
+  const { presentation: { contentMode: content, fontSize }, send } = usePreferences();
+  const setContent = (value: boolean) => send({ type: 'contentMode', value });
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -76,9 +77,9 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
     </aside>
     <section className="transcript-pane" style={{ '--transcript-font-size': `${fontSize}px` } as CSSProperties}>
       <div className="transcript-toolbar">
-        <button className="font-smaller" title={text('Smaller text')} onClick={() => setFontSize(value => Math.max(12, value - 2))}>A</button>
-        <span className="font-size">{fontSize}</span>
-        <button className="font-larger" title={text('Larger text')} onClick={() => setFontSize(value => Math.min(34, value + 2))}>A</button>
+        <button className="font-smaller" title={text('Smaller text')} onClick={() => send({ type: 'smallerText' })}>A</button>
+        <span className="font-size">{Math.trunc(fontSize)}</span>
+        <button className="font-larger" title={text('Larger text')} onClick={() => send({ type: 'largerText' })}>A</button>
         <div className="transcript-mode" role="group" aria-label={text('Content: clean transcript · Detail: timecodes, confidence, overlap')}>
           <button aria-pressed={content} onClick={() => setContent(true)}>{text('Content')}</button>
           <button aria-pressed={!content} onClick={() => setContent(false)}>{text('Detail')}</button>

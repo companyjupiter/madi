@@ -12,7 +12,7 @@ export interface InputDevices {
 export interface SetupState {
   revision: number;
   inputLanguage: Language | null;
-  translateTargets: Language[];
+  translateTargets: string[];
   meetingMode: MeetingMode;
   diarize: boolean;
   speakerCount: number;

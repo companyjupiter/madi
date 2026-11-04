@@ -1,5 +1,6 @@
 //! Headless probe of the same timed file owner used by the Tauri host.
-//! Native dialogs, clipboard, web rendering and user settings are not exercised.
+//! Native dialogs, clipboard, web rendering and real user settings are not exercised.
+//! Setup restoration uses only a temporary preference file and synthetic legacy data.
 use madi_platform::{
     asr_config::{FileSettings, Resources},
     file_session::Configuration,
@@ -31,6 +32,68 @@ async fn main() -> io::Result<()> {
     let archive_directory = tempfile::Builder::new()
         .prefix("madi-archive-probe-")
         .tempdir_in(&args[5])?;
+    let preferences_directory = tempfile::Builder::new()
+        .prefix("madi-preferences-probe-")
+        .tempdir_in(&args[5])?;
+    let preferences_path = preferences_directory.path().join("preferences.json");
+    use madi_core::preferences::{
+        Legacy, Preferences as SetupPreferences, PresentationCommand, UILanguage,
+    };
+    use madi_platform::{
+        preferences::Store as SetupStore, preferences_service::PreferencesService,
+    };
+    let imported = SetupPreferences::from_legacy(Legacy {
+        language_token_id: 50259,
+        translate_targets: vec![
+            "Korean".into(),
+            "English".into(),
+            "Chinese".into(),
+            "Japanese".into(),
+        ],
+        meeting_mode: "lecture".into(),
+        diarize_enabled: Some(true),
+        transcript_view_mode: Some(false),
+        transcript_font_size: Some(18.0),
+        ..Legacy::default()
+    });
+    let initial = PreferencesService::new(
+        SetupStore::load(preferences_path.clone(), imported)?,
+        |_| {},
+    )?;
+    initial.stage(source.clone()).await?;
+    initial
+        .presentation(PresentationCommand::UILanguage(UILanguage::Ja))
+        .await?;
+    initial.shutdown().await?;
+    let restored = PreferencesService::new(
+        SetupStore::load(
+            preferences_path,
+            SetupPreferences::from_legacy(Legacy::default()),
+        )?,
+        |_| {},
+    )?;
+    let restored_snapshot = restored.snapshot();
+    if restored_snapshot.setup.staged_file.is_some()
+        || restored_snapshot.setup.input_device_id.is_some()
+        || restored_snapshot.setup.translate_targets.len() != 4
+        || !restored_snapshot.setup.diarize
+        || restored_snapshot.presentation.content_mode
+        || restored_snapshot.presentation.font_size != 18.0
+        || restored_snapshot.presentation.ui_language != UILanguage::Ja
+    {
+        return Err(io::Error::other("isolated preference restoration failed"));
+    }
+    restored.stage(source.clone()).await?;
+    let (selected_source, restored_setup) = restored
+        .take_file()
+        .await?
+        .ok_or_else(|| io::Error::other("restored file admission missing"))?;
+    let restored_settings =
+        FileSettings::from_setup(&restored_setup, true, 0, Vec::new()).map_err(io::Error::other)?;
+    if selected_source != source || restored_settings.language_token != Some(50259) {
+        return Err(io::Error::other("restored settings not admitted"));
+    }
+    restored.shutdown().await?;
     let (events, mut updates) = tokio::sync::mpsc::unbounded_channel();
     let began = Instant::now();
     let workflow = FileWorkflow::with_archive(
@@ -54,7 +117,7 @@ async fn main() -> io::Result<()> {
     )?;
     let execution = async {
         let started = workflow
-            .start(source.clone(), FileSettings::default(), None)
+            .start(selected_source, restored_settings, None)
             .await?;
         let mut observations = Vec::new();
         let done = loop {
@@ -239,7 +302,7 @@ async fn main() -> io::Result<()> {
     println!(
         "{}",
         serde_json::to_string_pretty(
-            &json!({"schema":2,"passed":preserved && model_unchanged && clean,"sourceSha256":original_sha,"sourcePreserved":preserved,"modelSizeMtimeUnchanged":model_unchanged,"cleanAtShutdown":clean,"workflow":result})
+            &json!({"schema":3,"preferences":{"restored":restored_snapshot,"nativeFileAdmission":true,"isolatedRelaunch":true},"passed":preserved && model_unchanged && clean,"sourceSha256":original_sha,"sourcePreserved":preserved,"modelSizeMtimeUnchanged":model_unchanged,"cleanAtShutdown":clean,"workflow":result})
         )?
     );
     if !preserved || !model_unchanged || !clean {

@@ -32,7 +32,7 @@ impl Default for Features {
     }
 }
 impl Features {
-    pub fn for_language(token: Option<u32>) -> Self {
+    pub fn for_language(token: Option<i64>) -> Self {
         let selected_non_english = token.is_some_and(|token| token != 50259);
         Self {
             speaker_island_absorption: selected_non_english,

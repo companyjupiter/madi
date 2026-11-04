@@ -1,91 +1,178 @@
 use crate::files_host::FilesHost;
-use madi_core::setup::{SetupCommand, SetupState};
-use madi_platform::file_workflow::ViewPhase;
-use madi_platform::media_file;
-use std::{path::PathBuf, sync::Mutex};
+use madi_core::{
+    preferences::{Appearance, PresentationCommand},
+    setup::SetupState,
+};
+use madi_platform::{
+    file_workflow::ViewPhase,
+    media_file, preferences,
+    preferences_service::{PreferencesService, Snapshot},
+};
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
 use tauri::{Emitter, Manager};
 
 #[derive(Default)]
 pub struct SetupHost {
-    pub snapshot: SetupState,
-    // Native file authority is deliberately absent from serialized SetupState.
-    selected: Option<PathBuf>,
-    picker_open: bool,
+    service: tauri::async_runtime::Mutex<Option<PreferencesService>>,
+    closed: AtomicBool,
+    pub picker_open: AtomicBool,
 }
-
 impl SetupHost {
-    pub fn take_staged_file(&mut self) -> Option<(PathBuf, SetupState)> {
-        if self.picker_open {
-            return None;
-        }
-        let path = self.selected.take()?;
-        self.snapshot
-            .apply(SetupCommand::ClearStagedFile)
-            .expect("clear native selection");
-        Some((path, self.snapshot.clone()))
-    }
-    pub fn apply(&mut self, command: SetupCommand) -> Result<(), &'static str> {
-        self.snapshot.apply(command)?;
-        if self.snapshot.staged_file.is_none() {
-            self.selected = None;
+    pub async fn shutdown(&self) -> Result<(), String> {
+        self.closed.store(true, Ordering::Release);
+        let service = self.service.lock().await.clone();
+        if let Some(service) = service {
+            service
+                .shutdown()
+                .await
+                .map_err(|error| error.to_string())?;
         }
         Ok(())
     }
-
-    fn stage(&mut self, path: PathBuf) {
-        self.snapshot.staged_file = Some(media_file::summary(&path));
-        self.selected = Some(path);
-        self.snapshot.revision += 1;
-    }
 }
-
+pub async fn service(app: &tauri::AppHandle) -> Result<PreferencesService, String> {
+    let host = app.state::<SetupHost>();
+    let mut slot = host.service.lock().await;
+    if host.closed.load(Ordering::Acquire) {
+        return Err("application is closing".into());
+    }
+    if let Some(service) = slot.as_ref() {
+        return Ok(service.clone());
+    }
+    let path = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?
+        .join("preferences.json");
+    let store = tauri::async_runtime::spawn_blocking(move || {
+        preferences::Store::load(path, preferences::legacy()?)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    if host.closed.load(Ordering::Acquire) {
+        return Err("application is closing".into());
+    }
+    let events = app.clone();
+    let appearance = store.value().presentation.appearance;
+    // The callback is serialized by the owner; only changed appearance values
+    // dispatch a main-thread update. Disk commits precede every publication.
+    let theme = std::sync::Mutex::new(appearance);
+    let worker = PreferencesService::new(store, move |snapshot| {
+        if let Ok(mut previous) = theme.lock()
+            && *previous != snapshot.presentation.appearance
+        {
+            *previous = snapshot.presentation.appearance;
+            let appearance = *previous;
+            let app = events.clone();
+            let _ = events.run_on_main_thread(move || {
+                if let Err(error) = apply_appearance(&app, appearance) {
+                    eprintln!("appearance: {error}");
+                }
+            });
+        }
+        let _ = events.emit_to("main", "setup-changed", &snapshot.setup);
+        let _ = events.emit_to("main", "preferences-changed", &snapshot);
+    })
+    .map_err(|error| error.to_string())?;
+    let initial = app.clone();
+    app.run_on_main_thread(move || {
+        if let Err(error) = apply_appearance(&initial, appearance) {
+            eprintln!("appearance: {error}");
+        }
+    })
+    .map_err(|error| error.to_string())?;
+    *slot = Some(worker.clone());
+    Ok(worker)
+}
+fn apply_appearance(app: &tauri::AppHandle, appearance: Appearance) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        #[cfg(target_os = "macos")]
+        {
+            // The callback runs on the main thread and the handle keeps its
+            // NSWindow alive. Never use Tauri's app-wide macOS set_theme here.
+            let dark = unsafe {
+                preferences::set_window_appearance(
+                    window.ns_window().map_err(|error| error.to_string())?,
+                    appearance,
+                )
+            }?;
+            crate::set_macos_background(
+                &window,
+                if dark {
+                    tauri::Theme::Dark
+                } else {
+                    tauri::Theme::Light
+                },
+            )
+            .map_err(|error| error.to_string())?;
+        }
+        #[cfg(not(target_os = "macos"))]
+        window
+            .set_theme(match appearance {
+                Appearance::System => None,
+                Appearance::Light => Some(tauri::Theme::Light),
+                Appearance::Dark => Some(tauri::Theme::Dark),
+            })
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+#[tauri::command]
+pub async fn preferences_snapshot(window: tauri::WebviewWindow) -> Result<Snapshot, String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    Ok(service(window.app_handle()).await?.snapshot())
+}
+#[tauri::command]
+pub async fn preferences_command(
+    window: tauri::WebviewWindow,
+    command: PresentationCommand,
+) -> Result<Snapshot, String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    service(window.app_handle())
+        .await?
+        .presentation(command)
+        .await
+        .map_err(|error| error.to_string())
+}
 #[tauri::command]
 pub async fn choose_file(window: tauri::WebviewWindow) -> Result<SetupState, String> {
     if window.label() != "main" {
         return Err("unsupported window".into());
     }
     let app = window.app_handle().clone();
+    let worker = service(&app).await?;
+    let host = app.state::<SetupHost>();
+    if app.state::<FilesHost>().snapshot().phase == ViewPhase::Processing
+        || host.picker_open.swap(true, Ordering::AcqRel)
     {
-        let managed = app.state::<Mutex<SetupHost>>();
-        let mut host = managed.lock().map_err(|_| "setup state unavailable")?;
-        if host.picker_open || app.state::<FilesHost>().snapshot().phase == ViewPhase::Processing {
-            return Ok(host.snapshot.clone());
-        }
-        host.picker_open = true;
+        return Ok(worker.snapshot().setup);
     }
     let (sender, mut receiver) = tauri::async_runtime::channel(1);
     let callback_app = app.clone();
-    let dispatched = app.run_on_main_thread(move || {
-        // AppKit runs its modal loop on the main thread. Never hold our state
-        // lock across that loop, which can dispatch other application events.
+    if let Err(error) = app.run_on_main_thread(move || {
         let picked = media_file::choose();
-        let managed = callback_app.state::<Mutex<SetupHost>>();
-        let result = managed
-            .lock()
-            .map_err(|_| "setup state unavailable".to_owned())
-            .and_then(|mut host| {
-                host.picker_open = false;
-                picked.map_err(str::to_owned)
-            });
-        // Keep the selection/start operation owned even if the web request is
-        // cancelled while AppKit's modal loop is open.
+        callback_app
+            .state::<SetupHost>()
+            .picker_open
+            .store(false, Ordering::Release);
         tauri::async_runtime::spawn(async move {
-            let result = match result {
+            let result = match picked {
                 Ok(Some(path)) => route_selection(&callback_app, path).await,
-                Ok(None) => callback_app
-                    .state::<Mutex<SetupHost>>()
-                    .lock()
-                    .map(|host| host.snapshot.clone())
-                    .map_err(|_| "setup state unavailable".into()),
-                Err(error) => Err(error),
+                Ok(None) => Ok(worker.snapshot().setup),
+                Err(error) => Err(error.to_owned()),
             };
             let _ = sender.try_send(result);
         });
-    });
-    if let Err(error) = dispatched {
-        if let Ok(mut host) = app.state::<Mutex<SetupHost>>().lock() {
-            host.picker_open = false;
-        }
+    }) {
+        host.picker_open.store(false, Ordering::Release);
         return Err(error.to_string());
     }
     receiver
@@ -93,25 +180,22 @@ pub async fn choose_file(window: tauri::WebviewWindow) -> Result<SetupState, Str
         .await
         .ok_or_else(|| "media picker closed without a result".to_owned())?
 }
-
 async fn route_selection(app: &tauri::AppHandle, path: PathBuf) -> Result<SetupState, String> {
+    let worker = service(app).await?;
     let file = app.state::<FilesHost>().snapshot();
-    let setup = {
-        let managed = app.state::<Mutex<SetupHost>>();
-        let mut host = managed.lock().map_err(|_| "setup state unavailable")?;
-        if host.picker_open || file.phase == ViewPhase::Processing {
-            return Ok(host.snapshot.clone());
-        }
-        if file.phase == ViewPhase::Idle && file.lines.is_empty() {
-            host.stage(path);
-            let snapshot = host.snapshot.clone();
-            let _ = app.emit_to("main", "setup-changed", &snapshot);
-            return Ok(snapshot);
-        }
-        host.snapshot.clone()
-    };
-    // On the working screen Swift starts the selected file immediately. The
-    // workflow serializes concurrent selections and ignores starts while busy.
+    if app.state::<SetupHost>().picker_open.load(Ordering::Acquire)
+        || file.phase == ViewPhase::Processing
+    {
+        return Ok(worker.snapshot().setup);
+    }
+    if file.phase == ViewPhase::Idle && file.lines.is_empty() {
+        return worker
+            .stage(path)
+            .await
+            .map(|value| value.setup)
+            .map_err(|error| error.to_string());
+    }
+    let setup = worker.snapshot().setup;
     crate::files_host::start_native(app, path, setup.clone()).await?;
     Ok(setup)
 }

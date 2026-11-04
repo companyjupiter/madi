@@ -8,15 +8,10 @@ import { WorkspacePanel } from './WorkspacePanel';
 import { workspaceSnapshot, watchWorkspace, workspaceCommand, chooseWorkspaceFolder, openWorkspaceEntry, exportWorkspace, type WorkspaceSnapshot } from './workspace';
 import { copyLine, renameSpeaker, editFile, fileArtwork, fileSnapshot, resetFile, startFile, watchFile, type FileArtwork, type FileEdit, type FileSnapshot } from './files';
 import { modelArtwork, modelCommand, modelSnapshot, watchModels, type ModelArtwork, type ModelCommand, type ModelSnapshot } from './models';
-import strings from './strings.generated.json';
+import { PreferencesProvider, usePreferences, type UILanguage } from './preferences';
 import './theme.generated.css';
 import './styles.css';
 
-type UILanguage = 'ko' | 'en' | 'ja';
-const parameters = new URLSearchParams(location.search);
-const uiLanguage: UILanguage = parameters.get('lang') === 'en' ? 'en' : parameters.get('lang') === 'ja' ? 'ja' : 'ko';
-const table = strings as Record<string, Record<UILanguage, string>>;
-const text = (english: string) => table[english]?.[uiLanguage] ?? english;
 const labels: Record<Language, Record<UILanguage, string>> = {
   Korean: { ko: '한국어', en: 'Korean', ja: '韓国語' },
   English: { ko: '영어', en: 'English', ja: 'English' },
@@ -24,7 +19,6 @@ const labels: Record<Language, Record<UILanguage, string>> = {
   Japanese: { ko: '일본어', en: 'Japanese', ja: 'Japanese' },
 };
 // Japanese follows the current central table, including English fallbacks.
-const languageLabel = (language: Language) => labels[language][uiLanguage];
 const inputLanguages: Array<Language | null> = [null, 'Korean', 'English', 'Chinese', 'Japanese'];
 const outputLanguages: Language[] = ['Korean', 'English', 'Chinese', 'Japanese'];
 const modes: Array<[MeetingMode, string]> = [['general', 'General'], ['oneOnOne', '1:1'], ['standup', 'Standup'], ['interview', 'Interview'], ['lecture', 'Lecture']];
@@ -34,6 +28,7 @@ function Icon({ name, size }: { name: string; size: number }) {
 }
 
 function App() {
+  const { language: uiLanguage } = usePreferences();
   const [models, setModels] = useState<ModelSnapshot | null | undefined>(undefined);
   const [artwork, setArtwork] = useState<ModelArtwork | null>(null);
   const [error, setError] = useState('');
@@ -77,6 +72,7 @@ function App() {
 }
 
 function FileSessionScreen() {
+  const { language: uiLanguage, text } = usePreferences();
   const [state, setState] = useState<FileSnapshot | null>(null);
   const [artwork, setArtwork] = useState<FileArtwork | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
@@ -139,6 +135,8 @@ function FileSessionScreen() {
 }
 
 function SetupScreen({ start }: { start: () => void }) {
+  const { language: uiLanguage, text } = usePreferences();
+  const languageLabel = (language: string) => labels[language as Language]?.[uiLanguage] ?? language;
   const [state, setState] = useState<SetupState | null>(null);
   const [inputs, setInputs] = useState<InputDevices>({ supported: false, devices: [], defaultInputId: null });
   const [open, setOpen] = useState<string | null>(null);
@@ -300,7 +298,7 @@ function SetupScreen({ start }: { start: () => void }) {
               <Icon name="folder-plus" size={24} /><span>{text('Choose file or drag & drop')}</span>
             </button>}
             <button className={`cta ${state.stagedFile ? '' : 'unavailable'}`} aria-disabled={!state.stagedFile}
-              onClick={() => { if (state.stagedFile) start(); }}>{text('Start from file')}</button>
+              onClick={() => { if (state.stagedFile) { queue.current = queue.current.then(() => start()).catch(reason => setError(String(reason))); } }}>{text('Start from file')}</button>
             <div className="or-divider"><span /><span>or</span><span /></div>
             <div className="record-row">
               {picker('mic', micLabel, <>
@@ -324,10 +322,4 @@ function SetupScreen({ start }: { start: () => void }) {
   </main>;
 }
 
-document.documentElement.lang = uiLanguage;
-const appearance = parameters.get('theme');
-const media = matchMedia('(prefers-color-scheme: dark)');
-const applyAppearance = () => { document.documentElement.dataset.theme = appearance === 'light' || appearance === 'dark' ? appearance : media.matches ? 'dark' : 'light'; };
-applyAppearance();
-media.addEventListener('change', applyAppearance);
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode><PreferencesProvider><App /></PreferencesProvider></StrictMode>);

@@ -324,16 +324,28 @@ pub async fn file_start(
     if window.label() != "main" {
         return Err("unsupported window".into());
     }
-    let selected = {
-        let managed = app.state::<Mutex<SetupHost>>();
-        let mut setup = managed.lock().map_err(|_| "setup state unavailable")?;
-        setup.take_staged_file()
-    };
-    let Some((path, setup)) = selected else {
-        return Ok(app.state::<FilesHost>().snapshot());
-    };
-    let _ = app.emit_to("main", "setup-changed", &setup);
-    start_native(&app, path, setup).await
+    // Once accepted, file admission remains owned even if the renderer drops
+    // its reply while the settings queue commits the final selection.
+    tauri::async_runtime::spawn(async move {
+        if app
+            .state::<SetupHost>()
+            .picker_open
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Ok(app.state::<FilesHost>().snapshot());
+        }
+        let selected = crate::setup_host::service(&app)
+            .await?
+            .take_file()
+            .await
+            .map_err(|error| error.to_string())?;
+        let Some((path, setup)) = selected else {
+            return Ok(app.state::<FilesHost>().snapshot());
+        };
+        start_native(&app, path, setup).await
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 #[tauri::command]
 pub async fn file_reset(
