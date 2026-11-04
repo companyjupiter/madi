@@ -26,7 +26,36 @@ recording or flush rejects a competing file selection/admission.
   Native level events use the original half-second peak release. The workspace
   pane hides while recording/paused; the last transcript line is not editable.
   Completed live sessions use the shared transcript edits, exports and archive
-  opening flow. Live summaries, previews and the remaining analysis UI are open.
+  opening flow. Live summaries and the remaining analysis UI are open.
+
+## Provisional transcription
+
+The capture pipeline's rotating preview WAVs now feed the same resident engine
+through a latest-only scheduler. Selected-language recording arms immediately;
+auto-language recording waits for the committed lane's language lock. Both the
+presentation owner and native executor enforce committed-job priority. The
+executor also checks generation, Recording phase, one in-flight preview and the
+owned WAV root before accepting a request. Rejected admissions retain the newest
+snapshot for the next event, without marking an unsubmitted job in flight.
+
+`PreviewTrim` and `InterimSourceGate` preserve the shipping forced-prefix and
+agreement rules, including provisional first paint, the stall escape, Unicode
+grapheme counting and the 512-character display bound. Only an agreed prefix can
+extend displayed committed words. `preview-fp` capability gates the protocol
+extension; invalid delimiter/control content falls back to an unforced request.
+Preview words remain outside TranscriptStore, archives and all exports. Closed
+segment partials also populate the live hypothesis after overlap-word trimming.
+
+The transcript renders the hypothesis as a gray inline continuation of the last
+committed row/block, or as a standalone paragraph before the first commit. The
+frontend ports InterimDedupe's seam alignment and the original 24ms grapheme
+progression, including immediate replacement and long-jump behavior. Swift
+source comparisons cover both backend policy and frontend transitions; actual
+WebView/native visual equality is still a separate acceptance gate.
+
+The DNA caption lane is not connected, so its busy/2s-or-4s starvation admission
+signal remains open with the AI migration. The current connected path always
+preserves committed-transcript priority and uses one resident ASR model.
 
 ## Finish, preservation and close
 
@@ -57,6 +86,15 @@ No real microphone transcript or audio is included in repository evidence.
   test verifies cancelled/late/duplicate callback isolation without OS prompts.
 - Mutations that retain the cancelled admission identity, bypass graceful quit,
   or omit the fallback title each fail their targeted workflow regression.
+- Preview policy and frontend progression match 1,409 native Swift cases. Two
+  additional real-process tests cover latest-only scheduling, committed
+  priority, language lock, pause, run/root validation, forced-prefix transport,
+  preview control quarantine, export/archive exclusion and owned cleanup.
+- `live_preview_smoke` feeds the public JFK fixture through the native converter
+  and the actual Metal engine: unforced preview, forced-prefix preview, committed
+  decode and FLUSH all run in one process. Both previews leave zero committed
+  lines; the final decode creates the expected transcript. Source/model data
+  remain unchanged and the owned scratch is empty after teardown.
 - `live_workflow_smoke` uses the public JFK fixture, native AVAudioFile conversion
   and real Metal ASR through this owner. It checks 3/2/1 and live phases, final
   archive serialization and independent reopen, line edits in five export
@@ -71,6 +109,7 @@ No real microphone transcript or audio is included in repository evidence.
   exited the app. No new OS permission was granted by the agent.
 - Fresh-install denied/granted/restart TCC scenarios, system/mixed hardware,
   deterministic native resume/hot-swap/quit-during-recording, full pixel parity,
-  preview admission, watchdog, audio retention, AI and Windows capture remain
+  live-preview visual/timing acceptance, DNA admission, watchdog, audio retention,
+  AI and Windows capture remain
   **NOT_RUN / incomplete**. This is an experimental debug candidate, not a
   completed migration or a distributable release.

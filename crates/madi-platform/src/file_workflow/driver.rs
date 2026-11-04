@@ -142,4 +142,16 @@ impl Driver {
             }
         }
     }
+    #[cfg(target_os = "macos")]
+    pub async fn preview(
+        &self,
+        run: RunId,
+        wav: crate::capture_pipeline::OwnedWav,
+        forced: String,
+    ) -> io::Result<bool> {
+        match (self, run) {
+            (Self::Live(live), RunId::Live(run)) => live.preview(run, wav, forced).await,
+            _ => Ok(false),
+        }
+    }
 }

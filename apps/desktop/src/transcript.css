@@ -50,6 +50,8 @@
 .transcript-edit-actions button { border: 1px solid var(--separator); border-radius: 5px; padding: 2px 8px; background: var(--surface-raised); }
 .transcript-translation { font-size: calc(var(--transcript-font-size) * .875); color: var(--text-primary); opacity: .85; letter-spacing: -.2px; white-space: pre-wrap; }
 .transcript-translation.stale { color: var(--text-tertiary); }
+.transcript-live-tail { color: var(--text-tertiary); }
+.transcript-first-preview { color: var(--text-secondary); }
 .transcript-status { display: flex; align-items: center; gap: 5px; color: var(--text-tertiary); font-size: 14px; font-weight: 400; letter-spacing: -.28px; min-height: 21px; }
 .transcript-tail-status { margin-top: 30px; }
 .loading-dots { letter-spacing: 2px; padding-top: 4px; animation: transcript-loading 1s ease-in-out infinite alternate; }

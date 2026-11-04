@@ -1,4 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { interimContinuation } from './previewText';
+import { useShownInterim } from './useShownInterim';
 import type { FileArtwork, FileEdit, FileSnapshot, LiveControl, TranscriptLine } from './files';
 import { MiddleText } from './MiddleText';
 import { useTranscriptFollow } from './useTranscriptFollow';
@@ -25,6 +27,10 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
   const [draft, setDraft] = useState('');
   const editor = useRef<HTMLTextAreaElement>(null);
   const isLive = state.phase.kind === 'recording' || state.phase.kind === 'paused';
+  const shownInterim = useShownInterim(state.partial, state.generation);
+  const interimSuffix = shownInterim && state.lines.length ? interimContinuation(state.lines.slice(-3).map(line => line.text).join(' '), shownInterim) : '';
+  const hasTranscript = state.lines.length > 0 || shownInterim.length > 0;
+  const liveTail = (last: boolean) => last && interimSuffix ? <span className="transcript-live-tail">{' ' + interimSuffix}</span> : null;
   const follow = useTranscriptFollow(state.lines, state.generation, isLive, editing !== null);
   const l = (ko: string, en: string, ja = en) => liveLabel(language, ko, en, ja);
   const showFile = Boolean(state.fileName || (!state.live && state.phase.kind === 'processing') || (state.phase.kind === 'done' && state.lines.length));
@@ -91,17 +97,17 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
           <button aria-pressed={!content} onClick={() => setContent(false)}>{text('Detail')}</button>
         </div>
       </div>
-      <div className={`transcript-reader${state.lines.length ? ' has-lines' : ''}${follow.badge.scrolled ? ' scrolled' : ''}`}>
+      <div className={`transcript-reader${hasTranscript ? ' has-lines' : ''}${follow.badge.scrolled ? ' scrolled' : ''}`}>
       <div className="transcript-scroll" ref={follow.viewport}>
-        <div className={`transcript-scroll-content${state.lines.length ? '' : ' empty-layout'}`} ref={follow.contents}>
-        {state.lines.length === 0 ? state.phase.kind === 'error' ? <div className="transcript-error-empty" role="alert"><NativeSymbol artwork={artwork} name="warning" /><p>{state.phase.message}</p><div className="transcript-error-actions">
+        <div className={`transcript-scroll-content${hasTranscript ? '' : ' empty-layout'}`} ref={follow.contents}>
+        {state.lines.length === 0 ? shownInterim ? <><p className="transcript-body transcript-first-preview">{shownInterim}</p><div className="transcript-tail-clearance" /></> : state.phase.kind === 'error' ? <div className="transcript-error-empty" role="alert"><NativeSymbol artwork={artwork} name="warning" /><p>{state.phase.message}</p><div className="transcript-error-actions">
           {(state.permissionIssue === 'microphoneDenied' || state.permissionIssue === 'systemAudioDenied') && <button className="primary" onClick={() => permission('openSettings')}>{l('시스템 설정 열기', 'Open System Settings', 'システム設定を開く')}</button>}
           {(state.permissionIssue === 'systemAudioDenied' || state.permissionIssue === 'systemAudioRestartRequired') && <button className="primary" onClick={() => permission('restart')}>{l('Madi 다시 시작', 'Restart Madi', 'Madi を再起動')}</button>}
           {state.phase.message.includes('모델이 준비되지') && <button className="primary" onClick={() => window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'settings' }))}>{l('설정 열기', 'Open Settings')}</button>}
           <button onClick={reset}>{l('처음으로', 'Start over')}</button></div></div> : waiting ? <div className={`transcript-status${state.phase.kind === 'countingDown' ? ' countdown-status' : ''}`}><span>{state.phase.kind === 'countingDown' ? l(`곧 녹음이 시작됩니다 ${state.phase.remaining}`, `Recording starts in ${state.phase.remaining}`, `録音開始まで ${state.phase.remaining}`) : text('Your transcript will appear here shortly.')}</span><span className="loading-dots" aria-hidden>•••</span></div> : <div className="transcript-empty"><strong>{text('Nothing was transcribed')}</strong><span>{text('No speech was recognized. Go back with ‹ and try again.')}</span></div> : <>
           {content ? <div className="transcript-blocks">{blocks.map(block => <article key={`block-${block.id}`} className="transcript-block">
             {multiSpeaker && speakerHeader(block.speaker)}
-            <p className="transcript-body" onDoubleClick={() => setContent(false)}>{block.text}</p>
+            <p className="transcript-body" onDoubleClick={() => setContent(false)}>{block.text}{liveTail(block.id === blocks.at(-1)?.id)}</p>
             {[...new Set(block.lines.flatMap(line => Object.keys(line.translations)))].sort().map(lang => <p className="transcript-translation" key={lang}>{block.lines.map(line => line.translations[lang]).filter(Boolean).join(' ')}</p>)}
           </article>)}</div> : <div className="transcript-details">{state.lines.map((line, index) => {
             const previous = state.lines[index - 1];
@@ -117,7 +123,7 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
               {editing === line.id ? <><textarea autoFocus ref={editor} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
                 if (event.key === 'Escape') { event.preventDefault(); setEditing(null); }
                 if (event.key === 'Enter' && event.metaKey) { event.preventDefault(); saveEdit(); }
-              }} /><div className="transcript-edit-actions"><button onClick={saveEdit}>{text('Save')}</button><button onClick={() => setEditing(null)}>{text('Cancel')}</button></div></> : <p className="transcript-body" onDoubleClick={() => beginEdit(line)}>{line.text}</p>}
+              }} /><div className="transcript-edit-actions"><button onClick={saveEdit}>{text('Save')}</button><button onClick={() => setEditing(null)}>{text('Cancel')}</button></div></> : <p className="transcript-body" onDoubleClick={() => beginEdit(line)}>{line.text}{liveTail(index === state.lines.length - 1)}</p>}
               {Object.entries(line.translations).map(([lang, value]) => <p className="transcript-translation" key={lang}>{value}</p>)}
               {Object.entries(line.staleTranslations).filter(([lang]) => !line.translations[lang]).map(([lang, value]) => <p className="transcript-translation stale" key={lang}>{value}</p>)}
             </article>;

@@ -18,6 +18,9 @@ on:
       - 'tests/parity/**'
       - 'apps/macos/Sovereign/Engine/TranslateStreamParser.swift'
       - 'apps/macos/Sovereign/Engine/EngineProtocol.swift'
+      - 'apps/macos/Sovereign/Engine/PreviewEngine.swift'
+      - 'apps/macos/Sovereign/Engine/TranslationStability.swift'
+      - 'apps/macos/Sovereign/UI/TranscriptView.swift'
       - 'apps/macos/Sovereign/Engine/EngineEvents.swift'
       - 'apps/macos/Sovereign/Engine/EngineProcess.swift'
       - 'apps/macos/Sovereign/Engine/EnginePathPolicy.swift'
@@ -125,6 +128,7 @@ jobs:
           python3 scripts/check_media_file_parity.py
           python3 scripts/check_asr_config_parity.py
           python3 scripts/check_live_config_parity.py
+          python3 scripts/check_preview_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -155,6 +159,7 @@ jobs:
           python scripts/check_stream_process_parity.py --rust-only
           python scripts/check_asr_config_parity.py --rust-only
           python scripts/check_live_config_parity.py --rust-only
+          python scripts/check_preview_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -196,6 +201,8 @@ jobs:
             out/media-file-parity/report.json
             out/asr-config-parity/report.json
             out/live-config-parity/report.json
+            out/preview-parity/report.json
+            out/preview-parity/result.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json

@@ -6,6 +6,7 @@ pub mod korean_numbers;
 pub mod model_setup;
 pub mod personal_vocabulary;
 pub mod preferences;
+pub mod preview;
 pub mod session;
 pub mod settings;
 pub mod setup;

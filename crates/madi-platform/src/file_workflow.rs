@@ -5,6 +5,8 @@ use crate::{
     media_file, preferences_service::PreferencesService, session_archive::SessionArchiveWriter,
 };
 mod driver;
+#[cfg(target_os = "macos")]
+mod live_preview;
 use driver::{Driver, Kind as UpdateKind, RunId};
 use madi_core::{
     personal_vocabulary,
@@ -271,6 +273,8 @@ impl FileWorkflow {
                 last_meter: Instant::now(),
                 #[cfg(target_os = "macos")]
                 pending_live: None,
+                #[cfg(target_os = "macos")]
+                live_preview: None,
                 archive_settings,
                 archive_writer: Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default())),
             }
@@ -490,6 +494,8 @@ struct Worker {
     last_meter: Instant,
     #[cfg(target_os = "macos")]
     pending_live: Option<crate::live_session::Request>,
+    #[cfg(target_os = "macos")]
+    live_preview: Option<live_preview::LivePreview>,
     archive_settings: Option<ArchiveSettings>,
     archive_writer: Arc<std::sync::Mutex<SessionArchiveWriter>>,
 }
@@ -526,6 +532,10 @@ impl Worker {
         }
     }
     fn clear(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            self.live_preview = None;
+        }
         self.run = None;
         self.pending_failure = None;
         self.checkpoint = None;
@@ -554,6 +564,10 @@ impl Worker {
         };
     }
     async fn finish(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            self.live_preview = None;
+        }
         self.checkpoint = None;
         self.store.flush_pending_speaker_fix_rebuild();
         self.store.finalize();
@@ -759,6 +773,8 @@ impl Worker {
                         UpdateKind::Live(event)=>self.live_event(event),
                         _=>(),
                     }
+                    #[cfg(target_os="macos")]
+                    self.pump_preview().await;
                 },
                 _=deadline(self.fix)=>{
                     self.fix=None;
@@ -972,6 +988,10 @@ impl Worker {
                 meter: 0.0,
                 capture_ended_reason: None,
             });
+            self.live_preview = Some(live_preview::LivePreview::new(
+                request.capture.preview_enabled,
+                request.settings.common.language_token.is_some(),
+            ));
             self.last_meter = Instant::now();
             self.run = Some(
                 self.session
@@ -1015,6 +1035,16 @@ impl Worker {
     fn live_event(&mut self, event: crate::live_session::UpdateKind) {
         use crate::live_session::UpdateKind as Live;
         match event {
+            Live::Segment { .. } => {
+                if let Some(preview) = &mut self.live_preview {
+                    preview.segments_pending += 1;
+                }
+            }
+            Live::Preview { offset, wav } => {
+                if let Some(preview) = &mut self.live_preview {
+                    preview.scheduler.feed(wav, offset);
+                }
+            }
             Live::RecordingStarted => {
                 self.checkpoint = Some(Instant::now() + Duration::from_secs(30));
             }
@@ -1061,12 +1091,15 @@ impl Worker {
                 }
             }
             Live::WriteFailed { name, message, .. } => eprintln!("capture write {name}: {message}"),
-            // Preview policy/watchdog/AI remain distinct consumers; mutable
-            // preview slots must never be fed blindly into the committed lane.
+            // Watchdog and AI policies remain separate consumers.
             _ => {}
         }
     }
     fn ingest(&mut self, event: Event) {
+        #[cfg(target_os = "macos")]
+        if self.preview_event(&event) {
+            return;
+        }
         let event = match event {
             Event::Word {
                 t0,

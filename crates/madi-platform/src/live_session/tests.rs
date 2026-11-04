@@ -105,15 +105,19 @@ async fn next(session: &mut LiveSession) -> Update {
         .expect("live session closed early")
 }
 async fn until(session: &mut LiveSession, predicate: impl Fn(&UpdateKind) -> bool) -> Vec<Update> {
-    let mut updates = Vec::new();
-    loop {
-        let update = next(session).await;
-        let done = predicate(&update.kind);
-        updates.push(update);
-        if done {
-            return updates;
+    timeout(Duration::from_secs(15), async {
+        let mut updates = Vec::new();
+        loop {
+            let update = next(session).await;
+            let done = predicate(&update.kind);
+            updates.push(update);
+            if done {
+                return updates;
+            }
         }
-    }
+    })
+    .await
+    .expect("expected live event; clock ticks do not extend the deadline")
 }
 async fn terminal(session: &mut LiveSession) -> Vec<Update> {
     until(session, |kind| {
@@ -145,6 +149,192 @@ fn samples(count: usize, sample: i16) -> CaptureEvent {
     CaptureEvent::Samples {
         microphone: true,
         pcm: vec![sample; count],
+    }
+}
+
+#[tokio::test]
+async fn preview_transport_checks_language_committed_backlog_pause_run_root_and_capability() {
+    for forced_capability in [true, false] {
+        let (root, configuration) = fixture(
+        &r#"
+print('[caps] preview-fp',flush=True)
+print('[stream] ready',flush=True)
+p=0
+for line in sys.stdin:
+    line=line.rstrip('\n')
+    if line=='FLUSH':print('<<FLUSH_END>>',flush=True);break
+    if line.startswith('PREVIEW '):
+        p+=1;(root/('command-'+str(p))).write_text(line)
+        while not (root/('release-preview-'+str(p))).exists():time.sleep(.005)
+        print('<<PREVIEW_BEGIN>>\n=== WORD TIMESTAMPS ===\n[0s-1s] ephemeral\n<<PREVIEW_END>>',flush=True)
+    else:
+        print('[lang] locked token 50259',flush=True)
+        while not (root/'release-segment').exists():time.sleep(.005)
+        print('<<SEG_END>>',flush=True)
+"#.replace("print('[caps] preview-fp',flush=True)",if forced_capability {"print('[caps] preview-fp',flush=True)"}else{""}),
+    );
+        let mut session = LiveSession::new(configuration).unwrap();
+        let (input, events, mut controls) = input();
+        let mut request = request(input);
+        request.capture.preview_enabled = true;
+        request.capture.first_segment_seconds = 4.;
+        let run = session.start(request).await.unwrap().unwrap();
+        events.send(CaptureEvent::Started).unwrap();
+        until(&mut session, |k| matches!(k, UpdateKind::RecordingStarted)).await;
+        events.send(samples(16000, 4000)).unwrap();
+        let updates = until(&mut session, |k| matches!(k, UpdateKind::Preview { .. })).await;
+        let wav = updates
+            .into_iter()
+            .find_map(|u| {
+                if let UpdateKind::Preview { wav, .. } = u.kind {
+                    Some(wav)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert!(
+            !session
+                .preview(run, wav.clone(), String::new())
+                .await
+                .unwrap(),
+            "auto language must lock first"
+        );
+        events.send(samples(48000, 4000)).unwrap();
+        until(&mut session, |k| {
+            matches!(
+                k,
+                UpdateKind::Output(Output::Stdout(transcribe::Event::LanguageDetected(_)))
+            )
+        })
+        .await;
+        assert!(
+            !session
+                .preview(run, wav.clone(), String::new())
+                .await
+                .unwrap(),
+            "committed decode retains priority after language lock"
+        );
+        std::fs::write(root.path().join("release-segment"), "").unwrap();
+        until(&mut session, |k| {
+            matches!(
+                k,
+                UpdateKind::Output(Output::Stdout(transcribe::Event::SegmentEnd))
+            )
+        })
+        .await;
+        assert!(
+            !session
+                .preview(RunId(run.0 + 1), wav.clone(), String::new())
+                .await
+                .unwrap()
+        );
+        let mut foreign =
+            CapturePipeline::new(capture_stream::Configuration::default(), root.path()).unwrap();
+        foreign.start();
+        foreign.ingest(&[4000; 160], true);
+        let foreign = foreign
+            .stop()
+            .into_iter()
+            .find_map(|event| {
+                if let PipelineEvent::Segment { wav, .. } = event {
+                    Some(wav)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        assert!(
+            !session.preview(run, foreign, String::new()).await.unwrap(),
+            "foreign owned roots must still be rejected"
+        );
+        assert!(
+            session
+                .preview(run, wav.clone(), "\u{200b}line\nsafe\u{200b}".into())
+                .await
+                .unwrap()
+        );
+        marker(&root.path().join("command-1")).await;
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("command-1"))
+                .unwrap()
+                .ends_with(" %%FP line safe"),
+            forced_capability
+        );
+        assert!(
+            !session
+                .preview(run, wav.clone(), String::new())
+                .await
+                .unwrap(),
+            "one preview in flight"
+        );
+        session.pause(run).unwrap();
+        control(&mut controls, Control::Pause).await;
+        events.send(CaptureEvent::Paused).unwrap();
+        until(&mut session, |k| {
+            matches!(k, UpdateKind::Phase(Phase::Paused))
+        })
+        .await;
+        std::fs::write(root.path().join("release-preview-1"), "").unwrap();
+        until(&mut session, |k| {
+            matches!(
+                k,
+                UpdateKind::Output(Output::Stdout(transcribe::Event::PreviewEnd))
+            )
+        })
+        .await;
+        assert!(
+            !session
+                .preview(run, wav.clone(), String::new())
+                .await
+                .unwrap(),
+            "no paused preview submission"
+        );
+        session.resume(run).unwrap();
+        control(&mut controls, Control::Resume).await;
+        events.send(CaptureEvent::Resumed).unwrap();
+        until(&mut session, |k| {
+            matches!(k, UpdateKind::Phase(Phase::Recording))
+        })
+        .await;
+        assert!(
+            session
+                .preview(run, wav.clone(), "bad %%FP controls".into())
+                .await
+                .unwrap()
+        );
+        marker(&root.path().join("command-2")).await;
+        assert!(
+            !std::fs::read_to_string(root.path().join("command-2"))
+                .unwrap()
+                .contains("%%FP")
+        );
+        std::fs::write(root.path().join("release-preview-2"), "").unwrap();
+        until(&mut session, |k| {
+            matches!(
+                k,
+                UpdateKind::Output(Output::Stdout(transcribe::Event::PreviewEnd))
+            )
+        })
+        .await;
+        session.stop(run).unwrap();
+        control(&mut controls, Control::Stop).await;
+        events.send(CaptureEvent::Stopped).unwrap();
+        let terminal = terminal(&mut session).await;
+        assert!(matches!(
+            terminal.last().unwrap().kind,
+            UpdateKind::Finished
+        ));
+        assert!(
+            !session
+                .preview(run, wav.clone(), String::new())
+                .await
+                .unwrap()
+        );
+        session.shutdown().await.unwrap();
+        let path = wav.directory().to_owned();
+        drop(wav);
+        assert!(!path.exists());
     }
 }
 

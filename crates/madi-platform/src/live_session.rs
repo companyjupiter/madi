@@ -88,6 +88,12 @@ enum Command {
     Resume(RunId),
     Stop(RunId),
     InputDevice(RunId, Option<u32>),
+    Preview {
+        run: RunId,
+        wav: OwnedWav,
+        forced: String,
+        reply: oneshot::Sender<io::Result<bool>>,
+    },
     Reset(oneshot::Sender<()>),
     Shutdown,
 }
@@ -120,6 +126,10 @@ impl LiveSession {
                 flush_sent: None,
                 pipeline_token: None,
                 clock_tick: None,
+                segments_pending: 0,
+                preview_lease: None,
+                language_locked: false,
+                preview_forced_prefix: false,
             }
             .execute(),
         );
@@ -153,6 +163,25 @@ impl LiveSession {
         self.commands
             .send(Command::InputDevice(run, device))
             .map_err(|_| closed())
+    }
+    /// Only an owned capture lease can cross this boundary. Renderer paths and
+    /// retired runs cannot submit a PREVIEW or compete with committed work.
+    pub(crate) async fn preview(
+        &self,
+        run: RunId,
+        wav: OwnedWav,
+        forced: String,
+    ) -> io::Result<bool> {
+        let (reply, received) = oneshot::channel();
+        self.commands
+            .send(Command::Preview {
+                run,
+                wav,
+                forced,
+                reply,
+            })
+            .map_err(|_| closed())?;
+        received.await.map_err(|_| closed())?
     }
     /// Ack follows native stop, engine reap and release of this owner's WAVs.
     /// Other native consumers can retain explicit OwnedWav leases after reset.
@@ -257,6 +286,10 @@ struct Worker {
     flush_sent: Option<Token>,
     pipeline_token: Option<Token>,
     clock_tick: Option<Instant>,
+    segments_pending: usize,
+    preview_lease: Option<OwnedWav>,
+    language_locked: bool,
+    preview_forced_prefix: bool,
 }
 impl Worker {
     fn now(&self) -> f64 {
@@ -312,6 +345,9 @@ impl Worker {
                         // Retire the old run before installing any replacement paths.
                         let effects = self.core.reset(); self.effects(effects).await?;
                         self.pipeline.take(); self.retained.clear(); self.request.take();
+                        self.preview_lease.take(); self.segments_pending=0;
+                        self.language_locked=request.settings.common.language_token.is_some();
+                        self.preview_forced_prefix=false;
                         let config = request.capture.clone();
                         let parent = self.configuration.scratch_parent.clone();
                         let pipeline = tokio::task::spawn_blocking(move || CapturePipeline::new(config, &parent)).await.map_err(io::Error::other)?;
@@ -328,6 +364,10 @@ impl Worker {
                         if let Some((_,capture))=&mut self.capture {capture.control(Control::InputDevice(device));}
                     }
                     Some(Command::Pause(_) | Command::Resume(_) | Command::Stop(_) | Command::InputDevice(..)) => {}
+                    Some(Command::Preview {run,wav,forced,reply}) => {
+                        let result=self.submit_preview(run,wav,&forced);
+                        let _=reply.send(result);
+                    }
                     Some(Command::Reset(reply)) => {
                         let effects = self.core.reset(); self.effects(effects).await?;
                         self.retained.clear(); self.pipeline.take(); self.request.take(); self.flush_sent = None;
@@ -382,6 +422,55 @@ impl Worker {
             }),
         });
         Ok(())
+    }
+    fn submit_preview(&mut self, run: RunId, wav: OwnedWav, forced: &str) -> io::Result<bool> {
+        if run != self.run
+            || *self.core.phase() != Phase::Recording
+            || !self.language_locked
+            || self.segments_pending != 0
+            || self.preview_lease.is_some()
+            || !self
+                .request
+                .as_ref()
+                .is_some_and(|request| request.capture.preview_enabled)
+        {
+            return Ok(false);
+        }
+        // processing owns the pipeline during WAV publication; the root itself
+        // is independently retained by the request's immutable segment leases.
+        let expected = self
+            .pipeline
+            .as_ref()
+            .map(CapturePipeline::directory)
+            .or_else(|| self.retained.first().map(OwnedWav::directory));
+        if expected != Some(wav.directory()) {
+            return Ok(false);
+        }
+        let path = wav
+            .path()
+            .to_str()
+            .ok_or_else(|| io::Error::other("non UTF-8 preview WAV"))?;
+        let one = forced.replace('\n', " ");
+        // Foundation whitespacesAndNewlines additionally includes U+200B.
+        let one = one.trim_matches(|c: char| c.is_whitespace() || c == '\u{200b}');
+        // EngineProcess rejects protocol controls even if a future hypothesis
+        // includes CR/NUL; those hypotheses fall back to an unforced preview.
+        let suffix = if self.preview_forced_prefix
+            && !one.is_empty()
+            && !one.contains("%%FP")
+            && !one.contains(['\r', '\0'])
+        {
+            format!(" %%FP {one}")
+        } else {
+            String::new()
+        };
+        self.engine
+            .as_ref()
+            .ok_or_else(|| io::Error::other("missing preview engine"))?
+            .1
+            .send_line(&format!("PREVIEW {path}{suffix}"))?;
+        self.preview_lease = Some(wav);
+        Ok(true)
     }
     async fn capture_event(&mut self, token: Token, event: CaptureEvent) -> io::Result<()> {
         let effects = match event {
@@ -457,6 +546,7 @@ impl Worker {
                         .ok_or_else(|| io::Error::other("missing live engine"))?
                         .1;
                     engine.send_line(&format!("{offset:.3} {path}"))?;
+                    self.segments_pending += 1;
                     self.retained.push(wav.clone());
                     self.emit(UpdateKind::Segment {
                         offset,
@@ -515,6 +605,18 @@ impl Worker {
                 self.core.engine_exited(token, code, self.now())
             }
             EngineEvent::Protocol(output) => {
+                match &output {
+                    Output::Stdout(transcribe::Event::LanguageDetected(_)) => {
+                        self.language_locked = true
+                    }
+                    Output::Stdout(transcribe::Event::SegmentEnd) => {
+                        self.segments_pending = self.segments_pending.saturating_sub(1)
+                    }
+                    Output::Stdout(transcribe::Event::PreviewEnd) => {
+                        self.preview_lease.take();
+                    }
+                    _ => (),
+                }
                 let ordinary = matches!(&output, Output::Stdout(event) if !matches!(event, transcribe::Event::Other(_)));
                 let (accepted, effects) = self.core.engine_event(token, ordinary);
                 if accepted {
@@ -523,6 +625,7 @@ impl Worker {
                 effects
             }
             EngineEvent::Capabilities(caps) => {
+                self.preview_forced_prefix = caps.iter().any(|cap| cap == "preview-fp");
                 self.emit(UpdateKind::Capabilities(caps));
                 Vec::new()
             }
@@ -670,6 +773,7 @@ impl Worker {
                                     .and(Err(io::Error::other(format!("{operation}: {message}"))));
                             }
                         }
+                        self.preview_lease.take();
                         result
                     } else {
                         Ok(())
