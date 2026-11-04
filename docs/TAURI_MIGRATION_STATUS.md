@@ -26,8 +26,18 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   The actual decoder/Metal engine yields 22 JFK words, then passes temporary
   workspace/statistics, isolated preference persistence and all five exports;
   source/model data and owned temporary cleanup are verified. The local receipt
-  is `evidence/macos-workspace-exports-2026-11-04.json`; CI for this candidate
-  is pending. See `runtime/WORKSPACE_AND_EXPORTS.md`.
+  is `evidence/macos-workspace-exports-2026-11-04.json`. Revision `3fea691`
+  passed desktop CI `41742398830` on macOS 15 / Windows Server 2022 with 78/70
+  tests, all live/pinned references, builds and macOS package checks. Downloaded
+  executables, archive, internal runtime and 16 notices match the hashes; both
+  build trees and retained diffs are clean (`evidence/desktop-ci-3fea691-2026-11-04.json`).
+  A follow-up restores Swift's rescan on same-folder selection and
+  first-checkpoint refresh when a new session reuses a removed filename. The
+  folder regression fails before the fix (one entry instead of two), then all
+  seven workspace tests, clippy and the rebuilt/relocated package pass. CI for
+  that follow-up is pending. See
+  `evidence/macos-workspace-refresh-2026-11-04.json` and
+  `runtime/WORKSPACE_AND_EXPORTS.md`.
 - Archive foundation: Markdown/plain export and lossy reopen match unchanged
   Swift in 284 cases including 1,566 real fixture words. The session writer matches
   48 real-file sequences / 825 states; concurrency checks preserve 12 simultaneous

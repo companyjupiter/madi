@@ -70,7 +70,10 @@ enum Command {
     },
     ShowStats(bool),
     Reload,
-    Saved(PathBuf),
+    Saved {
+        path: PathBuf,
+        session: u64,
+    },
     Shutdown,
 }
 type Scan = Arc<dyn Fn(&Path) -> io::Result<Vec<Node>> + Send + Sync>;
@@ -194,8 +197,11 @@ impl Workspace {
     pub fn reload(&self) -> io::Result<()> {
         self.send(Command::Reload)
     }
-    pub fn note_saved(&self, path: &Path) -> io::Result<()> {
-        self.send(Command::Saved(path.to_owned()))
+    pub fn note_saved(&self, path: &Path, session: u64) -> io::Result<()> {
+        self.send(Command::Saved {
+            path: path.to_owned(),
+            session,
+        })
     }
     fn send(&self, command: Command) -> io::Result<()> {
         self.owner.commands.send(command).map_err(|_| closed())
@@ -258,7 +264,7 @@ struct Worker {
     statistics: Statistics,
     stats_wanted: bool,
     stats_token: u64,
-    last_saved: Option<PathBuf>,
+    last_saved: Option<(u64, PathBuf)>,
 }
 impl Worker {
     fn publish(&mut self) {
@@ -308,6 +314,9 @@ impl Worker {
         if root_revision.is_some_and(|revision| revision != self.state.root_revision) {
             return Ok(self.state.clone());
         }
+        // Swift WorkspaceTree.setRoot reloads even when the selected URL is
+        // unchanged; reselecting a folder also refreshes external file changes.
+        let folder_selected = change.folder.is_some();
         let store = self.store.clone();
         let value = tokio::task::spawn_blocking(move || {
             let mut store = store
@@ -327,7 +336,7 @@ impl Worker {
         .map_err(io::Error::other)??;
         self.state.auto_save = value.auto_save;
         self.state.error = None;
-        if self.state.folder != value.folder {
+        if folder_selected {
             self.state.folder = value.folder;
             self.state.folder_name = folder_name(&self.state.folder);
             self.state.root_revision = self.state.root_revision.wrapping_add(1);
@@ -350,9 +359,10 @@ impl Worker {
                     let _ = reply.send(result);
                 }
                 Command::Reload => self.reload(),
-                Command::Saved(path) => {
-                    if self.last_saved.as_ref() != Some(&path) {
-                        self.last_saved = Some(path);
+                Command::Saved { path, session } => {
+                    let checkpoint = (session, path);
+                    if self.last_saved.as_ref() != Some(&checkpoint) {
+                        self.last_saved = Some(checkpoint);
                         self.reload();
                     } else if self.stats_wanted {
                         self.stats();
@@ -546,15 +556,73 @@ mod tests {
             .unwrap();
         assert_eq!(disabled.generation, first.generation);
         assert!(!disabled.auto_save);
-        workspace.note_saved(&folder.join("meeting.md")).unwrap();
+        workspace.note_saved(&folder.join("meeting.md"), 1).unwrap();
         let after = workspace.change(None, Change::default()).await.unwrap();
         assert_ne!(after.generation, first.generation);
-        workspace.note_saved(&folder.join("meeting.md")).unwrap();
+        workspace.note_saved(&folder.join("meeting.md"), 1).unwrap();
         let unchanged = workspace.change(None, Change::default()).await.unwrap();
         assert_eq!(unchanged.generation, after.generation);
+        // If the old archive was removed externally, a new session can allocate
+        // the same filename. Its first checkpoint must still refresh the list.
+        workspace.note_saved(&folder.join("meeting.md"), 2).unwrap();
+        let next_session = workspace.change(None, Change::default()).await.unwrap();
+        assert_ne!(next_session.generation, unchanged.generation);
         workspace.shutdown().await.unwrap();
         assert!(!Store::load(path, prefs).unwrap().value().auto_save);
     }
+    #[tokio::test]
+    async fn reselecting_the_same_folder_refreshes_files_and_invalidates_old_rows() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = root.path().join("workspace");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("meeting.md"), "existing").unwrap();
+        let scan = Arc::new(|folder: &Path| {
+            let mut nodes = vec![node(folder)];
+            let added = folder.join("new.md");
+            if added.exists() {
+                let mut extra = node(folder);
+                extra.name = "new.md".into();
+                extra.path = added;
+                nodes.push(extra);
+            }
+            Ok(nodes)
+        });
+        let prefs = Preferences::from_legacy(Default::default(), folder.clone());
+        let workspace = Workspace::with_backend(
+            Store::load(root.path().join("prefs.json"), prefs).unwrap(),
+            |_| {},
+            scan,
+            Arc::new(|_| Stats::default()),
+        );
+        let first = ready(&workspace).await;
+        assert_eq!(first.entries.len(), 1);
+        std::fs::write(folder.join("new.md"), "externally added").unwrap();
+        workspace
+            .change(
+                Some(first.root_revision),
+                Change {
+                    folder: Some(folder),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let refreshed = ready(&workspace).await;
+        assert_eq!(refreshed.entries.len(), 2);
+        assert_ne!(refreshed.generation, first.generation);
+        assert!(
+            workspace
+                .resolve(first.generation, &first.entries[0].id)
+                .is_none()
+        );
+        assert!(
+            workspace
+                .resolve(refreshed.generation, &refreshed.entries[1].id)
+                .is_some()
+        );
+        workspace.shutdown().await.unwrap();
+    }
+
     #[tokio::test]
     async fn late_statistics_cannot_replace_new_folder_or_hidden_tab() {
         let root = tempfile::tempdir().unwrap();

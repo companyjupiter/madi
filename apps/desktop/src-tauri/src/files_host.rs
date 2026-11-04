@@ -231,7 +231,7 @@ pub(crate) fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
                         && previous.as_ref() != Some(&key)
                     {
                         *previous = Some(key);
-                        let _ = workspace.note_saved(path);
+                        let _ = workspace.note_saved(path, snapshot.generation);
                     }
                 }
                 let setup = snapshot.phase == madi_platform::file_workflow::ViewPhase::Idle

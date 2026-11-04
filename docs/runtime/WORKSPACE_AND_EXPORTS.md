@@ -12,8 +12,10 @@ geometry, text, animation, accessibility/focus, file dialogs and the SwiftUI
 export-format confirmation dialog require native comparison. The web format
 popover and loading spinner are provisional presentations. The native Mac is
 locked at the last refused UI operation; no capture workaround has been used.
-Recording/live summary, AI tools, settings UI, playback, start-screen recent
-items, Windows workspace adapters and full product behavior remain open.
+Recording/live summary, AI tools, settings UI, playback, Windows workspace
+adapters and full product behavior remain open. The shipping start screen removed
+recent items in its rev.4 redesign (`ContentView.swift:1052`); they are not a missing
+port feature and are not reintroduced.
 
 ## Ownership and settings
 
@@ -52,12 +54,15 @@ levels and at most 2,000 entries per directory **before sorting**. The flat list
 includes all Markdown transcripts, including summary siblings, newest mtime first.
 Statistics exclude summary siblings and unparseable text. They reread the file's
 modification date, so a checkpoint update is reflected without rescanning the tree.
+Selecting the same folder again does rescan, matching `WorkspaceTree.setRoot`.
 Nonfinite imported timecodes are rejected before display formatting.
 
 `NSCalendar` supplies local week boundaries, including DST/year transitions.
 `NSNumberFormatter` supplies the system-locale word count. The aggregate and its
-average values match `WorkspaceAnalytics`; a same-path checkpoint refreshes an
-open statistics tab without inventing a recent-list reload.
+average values match `WorkspaceAnalytics`; a same-path checkpoint in the same
+session refreshes an
+open statistics tab without inventing a recent-list reload. A new session refreshes
+the list even if an externally deleted filename can be reused.
 
 ## Export behavior
 
