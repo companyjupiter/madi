@@ -77,7 +77,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--rust-only',action='store_true');parser.add_argument('--update-reference',action='store_true');args=parser.parse_args()
     if args.rust_only and args.update_reference: raise SystemExit('A live Swift run is required to update the reference')
     OUT.mkdir(parents=True,exist_ok=True)
-    corpus=cases(); sources={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCES}
+    corpus=cases(); sources={p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCES}
     subprocess.run(['cargo','build','--locked','-p','madi-platform','--example','preferences_oracle'],cwd=ROOT,check=True)
     exe=ROOT/('target/debug/examples/preferences_oracle'+('.exe' if os.name=='nt' else ''))
     def rust(values,normalized=False):return json.loads(subprocess.check_output([str(exe)]+(['--normalized'] if normalized else []),input=json.dumps(values,ensure_ascii=False).encode()))
