@@ -19,5 +19,6 @@ apps/macos/Sovereign/UI/ContentView.swift text eol=lf
 apps/macos/Sovereign/UI/L10n.swift text eol=lf
 apps/macos/Sovereign/UI/SettingsView.swift text eol=lf
 apps/macos/Sovereign/UI/ClinicDisplaySupport.swift text eol=lf
+apps/macos/Sovereign/UI/GlossarySettingsView.swift text eol=lf
 apps/macos/Sovereign/SovereignApp.swift text eol=lf
 apps/macos/Sovereign/Audio/AudioSource.swift text eol=lf

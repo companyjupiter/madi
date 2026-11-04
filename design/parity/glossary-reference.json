@@ -1,0 +1,10 @@
+{
+  "cases": 254,
+  "states": 4799,
+  "corpusSHA256": "060e11c60a39d94913fd1817b30961ed126a54479df6378a05018205e5483c93",
+  "resultSHA256": "690aabb4ba69e0e18e47a041ea685091965f73e61a4ca1cba44627f4fa5b87c2",
+  "sources": {
+    "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+    "apps/macos/Sovereign/UI/GlossarySettingsView.swift": "8b2bfcc01e2d49c3a65ff684d49889f1e75098e4f5fc2bcab16270e2d66e34b1"
+  }
+}

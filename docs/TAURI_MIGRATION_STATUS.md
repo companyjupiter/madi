@@ -15,6 +15,14 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Personal glossary value candidate: unchanged Swift storage and the original
+  Settings row ordering match 254 decode/mutation cases / 4,799 states. Schema
+  migration, canonical Unicode keys, disabled learning, retargeting, removals
+  and numeric limits are covered. Core tests (12), portable reference, formatting
+  and workspace clippy pass. This value is not yet connected to persistence,
+  `PersonalVocabulary`, file edits/ingest/prompts or the Settings UI. See
+  `runtime/GLOSSARY.md` and `evidence/macos-glossary-value-2026-11-04.json`.
+
 - Settings contract candidate: schema-2 migration adds the original live/translation,
   diagnostics/review and caption preferences. Settings language, device and OSD
   changes remain transient; unrelated durable writes preserve the saved token.
