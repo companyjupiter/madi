@@ -20,6 +20,21 @@ fn show(app: &tauri::AppHandle) -> Result<(), String> {
         .and_then(|_| window.set_focus())
         .map_err(|error| error.to_string())
 }
+pub fn close_window(window: &tauri::WebviewWindow) {
+    // Swift's AppDelegate terminates after the last visible window closes.
+    // Tauri retains the hidden Settings WebView; it must not keep the app alive.
+    let another_visible = window
+        .app_handle()
+        .webview_windows()
+        .values()
+        .any(|other| other.label() != window.label() && other.is_visible().unwrap_or(false));
+    if another_visible {
+        let _ = window.hide();
+    } else {
+        // ExitRequested joins live capture/ASR/archive before the loop ends.
+        window.app_handle().exit(0);
+    }
+}
 pub fn install(app: &mut tauri::App) -> tauri::Result<()> {
     let window = app
         .get_webview_window("settings")
@@ -28,7 +43,7 @@ pub fn install(app: &mut tauri::App) -> tauri::Result<()> {
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
-            let _ = hidden.hide();
+            close_window(&hidden);
         }
     });
     let menu = tauri::menu::Menu::default(app.handle())?;

@@ -4,6 +4,33 @@
 // ordered; stop acknowledges only after an in-flight start and SCStream stop.
 import AVFoundation
 import ScreenCaptureKit
+import CoreGraphics
+
+// Permission prompts precede countdown and native capture creation. Rust owns
+// the request identity; status 4 checks cancellation before opening OS UI.
+typealias PermissionCallback = @convention(c) (UInt64, UInt32) -> UInt8
+@_cdecl("madi_audio_permission_request")
+func audioPermissionRequest(_ id: UInt64, _ kind: UInt32, _ callback: @escaping PermissionCallback) {
+    DispatchQueue.main.async {
+        guard callback(id, 4) != 0 else { return }
+        if kind == 0 {
+            switch AVCaptureDevice.authorizationStatus(for: .audio) {
+            case .denied, .restricted: _ = callback(id, 1)
+            case .notDetermined:
+                AVCaptureDevice.requestAccess(for: .audio) { granted in
+                    DispatchQueue.main.async { _ = callback(id, granted ? 0 : 1) }
+                }
+            default: _ = callback(id, 0)
+            }
+        } else if CGPreflightScreenCaptureAccess() {
+            _ = callback(id, 0)
+        } else {
+            // Match shipping preflight: a first grant requires relaunch, even
+            // if the OS immediately reports access after the prompt.
+            _ = callback(id, CGRequestScreenCaptureAccess() ? 3 : 2)
+        }
+    }
+}
 
 typealias CaptureCallback = @convention(c) (UInt64, UInt32, UnsafePointer<Int16>?, Int,
                                           UnsafePointer<CChar>?) -> UInt8

@@ -16,7 +16,7 @@ impl Scripted {
         }
     }
 }
-fn input() -> (
+pub(crate) fn input() -> (
     Input,
     mpsc::UnboundedSender<CaptureEvent>,
     mpsc::UnboundedReceiver<Control>,
@@ -32,7 +32,7 @@ fn input() -> (
         receive,
     )
 }
-fn request(input: Input) -> Request {
+pub(crate) fn request(input: Input) -> Request {
     Request {
         settings: LiveSettings {
             common: Default::default(),
@@ -42,7 +42,7 @@ fn request(input: Input) -> Request {
         input,
     }
 }
-fn fixture(script: &str) -> (tempfile::TempDir, Configuration) {
+pub(crate) fn fixture(script: &str) -> (tempfile::TempDir, Configuration) {
     let root = tempfile::tempdir().unwrap();
     let output = std::process::Command::new(
         std::env::var_os("MADI_TEST_PYTHON").unwrap_or_else(|| "python3".into()),

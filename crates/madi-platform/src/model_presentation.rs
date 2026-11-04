@@ -3,7 +3,7 @@
 use objc2::{AnyThread, MainThreadMarker};
 use objc2_app_kit::{
     NSBitmapImageFileType, NSBitmapImageRep, NSCalibratedRGBColorSpace, NSFontWeightLight,
-    NSFontWeightRegular, NSFontWeightSemibold, NSGraphicsContext, NSImage,
+    NSFontWeightMedium, NSFontWeightRegular, NSFontWeightSemibold, NSGraphicsContext, NSImage,
     NSImageSymbolConfiguration,
 };
 use objc2_foundation::{
@@ -76,6 +76,28 @@ pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static st
         (
             "export".into(),
             render_symbol("square.and.arrow.up", 12.0, unsafe { NSFontWeightSemibold })?,
+        ),
+        (
+            "play".into(),
+            render_symbol("play.fill", 15.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
+            "cancel".into(),
+            render_symbol("xmark", 15.0, unsafe { NSFontWeightSemibold })?,
+        ),
+        (
+            "plus".into(),
+            render_symbol("plus", 15.0, unsafe { NSFontWeightSemibold })?,
+        ),
+        (
+            "warning".into(),
+            render_symbol("exclamationmark.triangle", 40.0, unsafe {
+                NSFontWeightRegular
+            })?,
+        ),
+        (
+            "micChevron".into(),
+            render_symbol("chevron.down", 9.0, unsafe { NSFontWeightMedium })?,
         ),
     ]))
 }

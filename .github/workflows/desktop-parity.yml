@@ -63,6 +63,9 @@ defaults:
     # Fail at the first failing native command on Windows as well as macOS.
     shell: bash
 
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
 jobs:
   desktop:
     strategy:

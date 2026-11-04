@@ -7,6 +7,18 @@ use std::{
 };
 use tempfile::{Builder, NamedTempFile};
 
+/// TitleGenerator.fallbackTitle uses the current native locale/calendar/timezone.
+#[cfg(target_os = "macos")]
+pub fn live_fallback_title(date: f64) -> String {
+    use objc2_foundation::{NSDate, NSDateFormatter, NSString};
+    let formatter = NSDateFormatter::new();
+    formatter.setDateFormat(Some(&NSString::from_str("yyyy-MM-dd HHmm")));
+    format!(
+        "회의 {}",
+        formatter.stringFromDate(&NSDate::dateWithTimeIntervalSince1970(date))
+    )
+}
+
 #[derive(Debug, Default)]
 pub struct SessionArchiveWriter {
     transcript: Option<PathBuf>,

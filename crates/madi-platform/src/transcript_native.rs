@@ -10,6 +10,61 @@ pub struct RenameLabels {
     pub cancel: String,
 }
 
+pub fn confirm(
+    title: &str,
+    message: &str,
+    accept: &str,
+    cancel: &str,
+) -> Result<bool, &'static str> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn};
+        use objc2_foundation::NSString;
+        let main = objc2::MainThreadMarker::new().ok_or("confirmation requires main thread")?;
+        let alert = NSAlert::new(main);
+        alert.setMessageText(&NSString::from_str(title));
+        alert.setInformativeText(&NSString::from_str(message));
+        alert.addButtonWithTitle(&NSString::from_str(accept));
+        alert
+            .addButtonWithTitle(&NSString::from_str(cancel))
+            .setKeyEquivalent(&NSString::from_str("\u{1b}"));
+        Ok(alert.runModal() == NSAlertFirstButtonReturn)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (title, message, accept, cancel);
+        Err("native confirmation is not implemented on this platform")
+    }
+}
+
+pub fn audio_permission_settings(
+    issue: crate::audio_permissions::Issue,
+) -> Result<(), &'static str> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSWorkspace;
+        use objc2_foundation::{NSString, NSURL};
+        let _ = objc2::MainThreadMarker::new().ok_or("permission settings require main thread")?;
+        let url = match issue {
+            crate::audio_permissions::Issue::MicrophoneDenied => {
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            }
+            _ => "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        };
+        let url = NSURL::URLWithString(&NSString::from_str(url)).ok_or("invalid settings URL")?;
+        if NSWorkspace::sharedWorkspace().openURL(&url) {
+            Ok(())
+        } else {
+            Err("could not open audio permission settings")
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = issue;
+        Err("audio permission settings are not implemented on this platform")
+    }
+}
+
 pub fn copy(text: &str) -> Result<(), &'static str> {
     #[cfg(target_os = "macos")]
     {

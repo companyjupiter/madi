@@ -1,6 +1,6 @@
 use crate::setup_host::SetupHost;
 use madi_core::setup::SetupState;
-use madi_platform::file_workflow::{Edit, FileWorkflow, Snapshot};
+use madi_platform::file_workflow::{Edit, FileWorkflow, LiveControl, Snapshot};
 use std::sync::{
     Mutex,
     atomic::{AtomicBool, Ordering},
@@ -362,6 +362,214 @@ pub async fn file_start(
     .await
     .map_err(|error| error.to_string())?
 }
+#[tauri::command]
+pub async fn live_start(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<Snapshot, String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    #[cfg(target_os = "macos")]
+    return tauri::async_runtime::spawn(async move {
+        if app.state::<SetupHost>().picker_open.load(Ordering::Acquire) {
+            return Ok(app.state::<FilesHost>().snapshot());
+        }
+        let preferences = crate::setup_host::service(&app).await?;
+        let current = preferences.snapshot();
+        if current.setup.staged_file.is_some() {
+            return Ok(app.state::<FilesHost>().snapshot());
+        }
+        let glossary = crate::glossary_host::service(&app).await?;
+        let terms = madi_core::personal_vocabulary::bias_terms(
+            &glossary
+                .current()
+                .await
+                .map_err(|e| e.to_string())?
+                .glossary,
+        );
+        let worker = service(&app)?;
+        worker
+            .set_preferences(preferences)
+            .await
+            .map_err(|e| e.to_string())?;
+        worker
+            .set_glossary(glossary)
+            .await
+            .map_err(|e| e.to_string())?;
+        let request = madi_platform::live_session::Request {
+            settings: madi_platform::asr_config::LiveSettings::from_setup(
+                &current.setup,
+                madi_platform::model_presentation::physical_memory(),
+                terms,
+            )
+            .map_err(str::to_owned)?,
+            capture: madi_core::capture_stream::Configuration::from_settings(
+                &current.settings,
+                &current.setup,
+            ),
+            input: madi_platform::live_session::Input::Devices {
+                device: madi_platform::audio_devices::capture_id(
+                    current.setup.input_device_id.as_deref(),
+                )
+                .map_err(|e| e.to_string())?,
+            },
+        };
+        let admission_error = (!madi_platform::model_assets::fast_size_matches(
+            &model_locations(&app)?.transcription_model(),
+            madi_core::assets::TRANSCRIPTION,
+        ))
+        .then(|| {
+            "음성 인식 모델이 준비되지 않았어요. 설정(⌘,) → 모델에서 먼저 다운로드해주세요."
+                .to_owned()
+        });
+        worker
+            .start_live(request, admission_error)
+            .await
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err("native live capture is not implemented on this platform".into())
+    }
+}
+
+#[tauri::command]
+pub async fn live_control(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    generation: u64,
+    command: LiveControl,
+) -> Result<Snapshot, String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    #[cfg(target_os = "macos")]
+    return tauri::async_runtime::spawn(async move {
+        let worker = service(&app)?;
+        let current = worker.snapshot();
+        if current.generation != generation {
+            return Ok(current);
+        }
+        if let LiveControl::InputDevice(device) = &command {
+            if !current.phase.is_recording() {
+                return Ok(current);
+            }
+            madi_platform::audio_devices::capture_id(device.as_deref())
+                .map_err(|e| e.to_string())?;
+            crate::setup_host::service(&app)
+                .await?
+                .setup(madi_core::setup::SetupCommand::InputDevice(device.clone()))
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        worker
+            .live_control(generation, command)
+            .await
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, generation, command);
+        Err("native live capture is not implemented on this platform".into())
+    }
+}
+
+#[tauri::command]
+pub async fn file_leave(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    generation: u64,
+    close: bool,
+) -> Result<Snapshot, String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    tauri::async_runtime::spawn(async move {
+        let worker = service(&app)?;
+        let current = worker.snapshot();
+        if current.generation != generation { return Ok(current); }
+        let stop = current.phase.is_recording();
+        let discard = !current.lines.is_empty() && current.archive.transcript.is_none() && current.file_name.is_empty()
+            && !matches!(current.phase, madi_platform::file_workflow::ViewPhase::Processing | madi_platform::file_workflow::ViewPhase::Flushing | madi_platform::file_workflow::ViewPhase::CountingDown {..});
+        if stop || discard {
+            let ko = crate::setup_host::service(&app).await?.snapshot().presentation.ui_language == madi_core::preferences::UILanguage::Ko;
+            let labels = if stop {
+                if ko { ("녹음이 진행 중이에요", "정지하면 여기까지의 기록이 정리돼요. 자동저장이 켜져 있으면 파일로 저장됩니다.", "정지하기", "계속 녹음") }
+                else { ("Recording in progress", "Stopping wraps up what's captured so far. If auto-save is on, it's written to a file.", "Stop", "Keep recording") }
+            } else if close {
+                if ko { ("저장되지 않은 기록이 있어요", "자동저장이 꺼져 있어 닫으면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요.", "삭제하고 닫기", "취소") }
+                else { ("You have an unsaved transcript", "Auto-save is off, so closing discards this transcript. You can Export to save it first.", "Discard and close", "Cancel") }
+            } else if ko { ("저장되지 않은 기록이 있어요", "자동저장이 꺼져 있어 나가면 이 기록은 사라져요. 내보내기로 먼저 저장할 수 있어요.", "삭제하고 나가기", "취소") }
+            else { ("You have an unsaved transcript", "Auto-save is off, so leaving discards this transcript. You can Export to save it first.", "Discard and leave", "Cancel") };
+            if app.state::<FilesHost>().dialog_open.swap(true, Ordering::AcqRel) { return Ok(worker.snapshot()); }
+            let (sender, mut receiver) = tauri::async_runtime::channel(1);
+            let dialog_app = app.clone();
+            if let Err(error) = app.run_on_main_thread(move || {
+                let result = madi_platform::transcript_native::confirm(labels.0, labels.1, labels.2, labels.3).map_err(str::to_owned);
+                dialog_app.state::<FilesHost>().dialog_open.store(false, Ordering::Release);
+                let _ = sender.try_send(result);
+            }) {
+                app.state::<FilesHost>().dialog_open.store(false, Ordering::Release);
+                return Err(error.to_string());
+            }
+            if !receiver.recv().await.ok_or("confirmation closed without a result")?? { return Ok(worker.snapshot()); }
+        }
+        #[cfg(target_os = "macos")]
+        if stop { return worker.live_control(generation, LiveControl::Stop).await.map_err(|e|e.to_string()); }
+        worker.reset(generation).await.map_err(|e|e.to_string())
+    }).await.map_err(|e|e.to_string())?
+}
+
+use madi_platform::audio_permissions::Action as PermissionAction;
+
+#[tauri::command]
+pub async fn live_permission_action(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    generation: u64,
+    action: PermissionAction,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("unsupported window".into());
+    }
+    let current = app.state::<FilesHost>().snapshot();
+    if current.generation != generation {
+        return Ok(());
+    }
+    let Some(issue) = current.permission_issue else {
+        return Ok(());
+    };
+    match action {
+        PermissionAction::Restart
+            if issue != madi_platform::audio_permissions::Issue::MicrophoneDenied =>
+        {
+            app.request_restart()
+        }
+        PermissionAction::OpenSettings => {
+            let (sender, mut receiver) = tauri::async_runtime::channel(1);
+            app.run_on_main_thread(move || {
+                let _ = sender.try_send(
+                    madi_platform::transcript_native::audio_permission_settings(issue)
+                        .map_err(str::to_owned),
+                );
+            })
+            .map_err(|e| e.to_string())?;
+            return receiver
+                .recv()
+                .await
+                .ok_or("permission settings worker stopped")?;
+        }
+        _ => (),
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn file_reset(
     window: tauri::WebviewWindow,

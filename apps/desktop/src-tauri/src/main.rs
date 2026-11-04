@@ -22,8 +22,8 @@ use settings_host::{
 };
 mod workspace_host;
 use files_host::{
-    FilesHost, file_artwork, file_copy_line, file_edit, file_rename_speaker, file_reset,
-    file_snapshot, file_start,
+    FilesHost, file_artwork, file_copy_line, file_edit, file_leave, file_rename_speaker,
+    file_reset, file_snapshot, file_start, live_control, live_permission_action, live_start,
 };
 use glossary_host::{GlossaryHost, glossary_command, glossary_snapshot};
 use models_host::{models_artwork, models_command, models_snapshot};
@@ -183,6 +183,16 @@ fn main() {
             let window = app
                 .get_webview_window("main")
                 .ok_or("main window missing")?;
+            // The shipping standalone app exits when its last window closes.
+            // Keep the WebView/main loop alive until ExitRequested has joined
+            // capture tail, ASR flush and the final archive write.
+            let closing = window.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    settings_host::close_window(&closing);
+                }
+            });
             #[cfg(target_os = "macos")]
             {
                 madi_platform::prepared_audio::bundled_helper()?;
@@ -248,6 +258,10 @@ fn main() {
             file_snapshot,
             file_artwork,
             file_start,
+            file_leave,
+            live_start,
+            live_control,
+            live_permission_action,
             file_reset,
             file_edit,
             file_copy_line,

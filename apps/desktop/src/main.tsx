@@ -6,7 +6,7 @@ import { ModelGate } from './ModelGate';
 import { FileTranscript } from './FileTranscript';
 import { WorkspacePanel } from './WorkspacePanel';
 import { workspaceSnapshot, watchWorkspace, workspaceCommand, chooseWorkspaceFolder, openWorkspaceEntry, exportWorkspace, type WorkspaceSnapshot } from './workspace';
-import { copyLine, renameSpeaker, editFile, fileArtwork, fileSnapshot, resetFile, startFile, watchFile, type FileArtwork, type FileEdit, type FileSnapshot } from './files';
+import { copyLine, renameSpeaker, editFile, startLive, controlLive, leaveFile, permissionAction, fileArtwork, fileSnapshot, resetFile, startFile, watchFile, type FileArtwork, type FileEdit, type FileSnapshot } from './files';
 import { modelArtwork, modelCommand, modelSnapshot, watchModels, type ModelArtwork, type ModelCommand, type ModelSnapshot } from './models';
 import { PreferencesProvider, usePreferences, type UILanguage } from './preferences';
 import { SetupIntentQueue } from './SetupIntentQueue';
@@ -128,7 +128,7 @@ function FileSessionScreen() {
   }
   if (error) return <pre className="harness-error" role="alert">{error}</pre>;
   if (!state) return null;
-  if (state.phase.kind === 'idle' && !state.lines.length) return <SetupScreen start={() => perform(startFile)} />;
+  if (state.phase.kind === 'idle' && !state.lines.length) return <SetupScreen start={() => perform(startFile)} startLive={() => perform(startLive)} pending={state.admissionPending} />;
   return <FileTranscript snapshot={state} artwork={artwork} language={uiLanguage} text={text}
     workspace={workspace && <WorkspacePanel state={workspace} artwork={artwork} language={uiLanguage} text={text} hasLines={state.lines.length > 0}
       open={id => perform(() => openWorkspaceEntry(workspace.generation, id, state.generation))}
@@ -137,12 +137,15 @@ function FileSessionScreen() {
       chooseFolder={() => changeWorkspace(chooseWorkspaceFolder)}
       exportFile={format => { void exportWorkspace(format, state.generation).catch(reason => setError(String(reason))); }} />}
     reset={() => perform(() => resetFile(state.generation))}
+    leave={close => perform(() => leaveFile(state.generation, close))}
+    control={command => perform(() => controlLive(state.generation, command))}
+    permission={action => { void permissionAction(state.generation, action).catch(reason => setError(String(reason))); }}
     copy={id => { void copyLine(state.generation, id).catch(reason => setError(String(reason))); }}
     rename={speaker => perform(() => renameSpeaker(state.generation, speaker, text))}
     edit={(edit: FileEdit) => perform(() => editFile(state.generation, edit))} />;
 }
 
-function SetupScreen({ start }: { start: () => void }) {
+function SetupScreen({ start, startLive, pending }: { start: () => void; startLive: () => void; pending: boolean }) {
   const { language: uiLanguage, text } = usePreferences();
   const languageLabel = (language: string) => labels[language as Language]?.[uiLanguage] ?? language;
   const [state, setState] = useState<SetupState | null>(null);
@@ -153,6 +156,15 @@ function SetupScreen({ start }: { start: () => void }) {
   const [dropTargeted, setDropTargeted] = useState(false);
   const [queue] = useState(() => new SetupIntentQueue(reason => setError(String(reason))));
   const root = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (event.metaKey && !event.altKey && !event.ctrlKey && !event.repeat && event.key.toLowerCase() === 'r' && state && !state.stagedFile && !pending) {
+        event.preventDefault(); void queue.enqueue(startLive);
+      }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [state, pending, queue, startLive]);
   useEffect(() => {
     let active = true;
     let unlisten: (() => void) | undefined;
@@ -320,8 +332,8 @@ function SetupScreen({ start }: { start: () => void }) {
                 <hr />
                 {(['system', 'both'] as const).map(value => <button key={value} className="option" aria-pressed={state.audioSource === value} onClick={() => { send({ type: 'audioSource', value }); setOpen(null); }}>{text(value === 'system' ? 'System audio' : 'Mic + system')}<span className="menu-check" aria-hidden>{state.audioSource === value ? '✓' : ''}</span></button>)}
               </>, true)}
-              <button className={`cta ${state.stagedFile ? 'unavailable' : ''}`} aria-disabled={!!state.stagedFile}
-                onClick={() => { if (!state.stagedFile) window.dispatchEvent(new CustomEvent('madi-parity-intent', { detail: 'start-recording' })); }}>{text('Start recording now')}</button>
+              <button className={`cta ${state.stagedFile ? 'unavailable' : ''}`} aria-disabled={!!state.stagedFile || pending}
+                onClick={() => { if (!state.stagedFile && !pending) void queue.enqueue(startLive); }}>{text('Start recording now')}</button>
             </div>
           </div>
         </section>

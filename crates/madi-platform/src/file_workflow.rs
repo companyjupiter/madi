@@ -1,13 +1,11 @@
-//! File-session presentation owner. Native hosts supply paths/configuration;
+//! Shared file/live presentation owner. Native hosts supply paths/configuration;
 //! web commands only address the current generation and transcript identities.
 use crate::{
-    asr_config::FileSettings,
-    file_session::{Configuration, FileSession, RunId, UpdateKind},
-    glossary_service::GlossaryService,
-    media_file,
-    preferences_service::PreferencesService,
-    session_archive::SessionArchiveWriter,
+    asr_config::FileSettings, file_session::Configuration, glossary_service::GlossaryService,
+    media_file, preferences_service::PreferencesService, session_archive::SessionArchiveWriter,
 };
+mod driver;
+use driver::{Driver, Kind as UpdateKind, RunId};
 use madi_core::{
     personal_vocabulary,
     session::{Failure, Phase},
@@ -27,9 +25,41 @@ use tokio::{
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ViewPhase {
     Idle,
+    CountingDown { remaining: u32 },
+    EngineStarting,
+    Ready,
+    Recording,
+    Paused,
+    Flushing,
     Processing,
     Done,
     Error { message: String },
+}
+impl ViewPhase {
+    pub fn is_busy(&self) -> bool {
+        !matches!(self, Self::Idle | Self::Done | Self::Error { .. })
+    }
+    pub fn is_recording(&self) -> bool {
+        matches!(self, Self::Recording | Self::Paused)
+    }
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveSnapshot {
+    pub source: madi_core::setup::AudioSource,
+    pub input_device: Option<String>,
+    pub seconds: f64,
+    pub meter: f32,
+    pub capture_ended_reason: Option<String>,
+}
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "camelCase")]
+pub enum LiveControl {
+    Pause,
+    Resume,
+    Stop,
+    CancelCountdown,
+    InputDevice(Option<String>),
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -58,6 +88,9 @@ pub struct Snapshot {
     pub partial: String,
     pub speaker_island_absorption: bool,
     pub archive: ArchiveSnapshot,
+    pub live: Option<LiveSnapshot>,
+    pub permission_issue: Option<crate::audio_permissions::Issue>,
+    pub admission_pending: bool,
 }
 #[derive(Clone, Debug)]
 pub struct ArchiveSettings {
@@ -90,6 +123,9 @@ impl Default for Snapshot {
             partial: String::new(),
             speaker_island_absorption: false,
             archive: ArchiveSnapshot::default(),
+            live: None,
+            permission_issue: None,
+            admission_pending: false,
         }
     }
 }
@@ -120,6 +156,18 @@ pub enum Edit {
     },
 }
 enum Command {
+    #[cfg(target_os = "macos")]
+    StartLive {
+        request: crate::live_session::Request,
+        admission_error: Option<String>,
+        reply: oneshot::Sender<io::Result<Snapshot>>,
+    },
+    #[cfg(target_os = "macos")]
+    LiveControl {
+        generation: u64,
+        command: LiveControl,
+        reply: oneshot::Sender<io::Result<Snapshot>>,
+    },
     Preferences(PreferencesService, oneshot::Sender<io::Result<()>>),
     Glossary(GlossaryService, oneshot::Sender<io::Result<()>>),
     Export {
@@ -189,7 +237,7 @@ impl FileWorkflow {
         archive_settings: Option<ArchiveSettings>,
         changed: impl Fn(Snapshot) + Send + Sync + 'static,
     ) -> io::Result<Self> {
-        let session = FileSession::new(configuration.clone())?;
+        let session = Driver::new(configuration.clone())?;
         let (commands, input) = mpsc::unbounded_channel();
         let mut state = Snapshot::default();
         state.archive.enabled = archive_settings
@@ -216,6 +264,13 @@ impl FileWorkflow {
                 fix: None,
                 pending_failure: None,
                 checkpoint: None,
+                permission: None,
+                countdown: None,
+                closing: false,
+                #[cfg(target_os = "macos")]
+                last_meter: Instant::now(),
+                #[cfg(target_os = "macos")]
+                pending_live: None,
                 archive_settings,
                 archive_writer: Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default())),
             }
@@ -345,6 +400,40 @@ impl FileWorkflow {
             .map_err(|_| closed())?;
         result.await.map_err(|_| closed())?
     }
+    #[cfg(target_os = "macos")]
+    pub async fn start_live(
+        &self,
+        request: crate::live_session::Request,
+        admission_error: Option<String>,
+    ) -> io::Result<Snapshot> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::StartLive {
+                request,
+                admission_error,
+                reply,
+            })
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
+    }
+    #[cfg(target_os = "macos")]
+    pub async fn live_control(
+        &self,
+        generation: u64,
+        command: LiveControl,
+    ) -> io::Result<Snapshot> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::LiveControl {
+                generation,
+                command,
+                reply,
+            })
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
+    }
     pub async fn edit(&self, generation: u64, edit: Edit) -> io::Result<Snapshot> {
         let (reply, result) = oneshot::channel();
         self.owner
@@ -380,7 +469,7 @@ async fn deadline(time: Option<Instant>) {
 }
 struct Worker {
     configuration: Configuration,
-    session: FileSession,
+    session: Driver,
     input: mpsc::UnboundedReceiver<Command>,
     output: watch::Sender<Snapshot>,
     changed: Box<dyn Fn(Snapshot) + Send + Sync>,
@@ -394,12 +483,20 @@ struct Worker {
     fix: Option<Instant>,
     pending_failure: Option<String>,
     checkpoint: Option<Instant>,
+    permission: Option<JoinHandle<io::Result<Option<crate::audio_permissions::Issue>>>>,
+    countdown: Option<Instant>,
+    closing: bool,
+    #[cfg(target_os = "macos")]
+    last_meter: Instant,
+    #[cfg(target_os = "macos")]
+    pending_live: Option<crate::live_session::Request>,
     archive_settings: Option<ArchiveSettings>,
     archive_writer: Arc<std::sync::Mutex<SessionArchiveWriter>>,
 }
 impl Worker {
     async fn execute(mut self) -> io::Result<()> {
         let result = self.run_loop().await;
+        self.cancel_admission().await;
         // Keep the async owner alive until native children and owned WAVs exit.
         let cleanup = self.session.shutdown().await;
         result.and(cleanup)
@@ -432,6 +529,7 @@ impl Worker {
         self.run = None;
         self.pending_failure = None;
         self.checkpoint = None;
+        self.countdown = None;
         // All disk work is joined before another command can reach clear.
         self.archive_writer = Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default()));
         self.store.reset();
@@ -490,6 +588,14 @@ impl Worker {
             .into_owned();
         let writer = self.archive_writer.clone();
         let saved = tokio::task::spawn_blocking(move || {
+            #[cfg(target_os = "macos")]
+            let base = if base.is_empty() {
+                crate::session_archive::live_fallback_title(
+                    objc2_foundation::NSDate::date().timeIntervalSince1970(),
+                )
+            } else {
+                base
+            };
             let mut writer = writer
                 .lock()
                 .map_err(|_| io::Error::other("archive writer unavailable"))?;
@@ -506,6 +612,11 @@ impl Worker {
                     self.state.archive.write_revision =
                         self.state.archive.write_revision.wrapping_add(1);
                 }
+                if self.state.live.is_some()
+                    && let Some(path) = &path
+                {
+                    self.state.size_label = media_file::summary(path).size_label;
+                }
                 self.state.archive.transcript = path;
                 self.state.archive.error = error;
             }
@@ -514,7 +625,7 @@ impl Worker {
         }
     }
     async fn open_archive(&mut self, generation: u64, path: PathBuf) -> io::Result<Snapshot> {
-        if generation != self.state.generation || self.state.phase == ViewPhase::Processing {
+        if generation != self.state.generation || self.busy() {
             return Ok(self.state.clone());
         }
         let source = path.clone();
@@ -549,8 +660,13 @@ impl Worker {
     }
     async fn run_loop(&mut self) -> io::Result<()> {
         loop {
+            let permission_pending = self.permission.is_some();
             tokio::select! {
-                command=self.input.recv()=>match command {
+                command=self.input.recv(),if !self.closing=>match command {
+                    #[cfg(target_os="macos")]
+                    Some(Command::StartLive {request,admission_error,reply})=>{let result=self.start_live(request,admission_error).await;let _=reply.send(result);},
+                    #[cfg(target_os="macos")]
+                    Some(Command::LiveControl {generation,command,reply})=>{let result=self.live_control(generation,command).await;let _=reply.send(result);},
                     Some(Command::Preferences(preferences, reply))=>{
                         self.preferences=Some(preferences);let _=reply.send(Ok(()));
                     },
@@ -592,7 +708,8 @@ impl Worker {
                         let _=reply.send(result);
                     },
                     Some(Command::Reset {generation,reply})=>{
-                        let result=if generation==self.state.generation {
+                        let result=if generation==self.state.generation && !self.state.phase.is_recording() {
+                            self.cancel_admission().await;
                             self.clear(); self.publish();
                             self.session.reset().await.map(|()|self.state.clone())
                         }else {Ok(self.state.clone())};
@@ -602,7 +719,14 @@ impl Worker {
                         let result=if generation==self.state.generation {self.edit(edit).await} else {Ok(self.state.clone())};
                         let _=reply.send(result);
                     },
-                    Some(Command::Shutdown)|None=>return Ok(()),
+                    Some(Command::Shutdown)|None=>{
+                        #[cfg(target_os="macos")]
+                        if self.state.live.is_some() && (self.state.phase.is_recording() || self.state.phase==ViewPhase::Flushing) {
+                            if self.state.phase.is_recording() && let Some(run)=self.run {self.session.control(run,LiveControl::Stop)?;}
+                            self.closing=true; continue;
+                        }
+                        return Ok(());
+                    },
                 },
                 update=self.session.next()=>{
                     let Some(update)=update else {return Err(closed())};
@@ -610,20 +734,29 @@ impl Worker {
                     match update.kind {
                         UpdateKind::Output(Output::Stdout(event))=>self.ingest(event),
                         UpdateKind::Phase(Phase::Processing)=>{self.state.phase=ViewPhase::Processing;self.publish();},
-                        UpdateKind::Phase(Phase::Error(failure))=>{self.pending_failure=Some(failure_message(&failure,&self.state.file_name));},
-                        UpdateKind::Finished=>{self.state.phase=ViewPhase::Done;self.finish().await;},
+                        UpdateKind::Phase(phase)=>{
+                            if let Phase::Error(failure)=phase {self.pending_failure=Some(failure_message(&failure,&self.state.file_name));}
+                            else if self.state.live.is_some() {
+                                self.state.phase=match phase {Phase::EngineStarting=>ViewPhase::EngineStarting,Phase::Ready=>ViewPhase::Ready,Phase::Recording=>ViewPhase::Recording,Phase::Paused=>ViewPhase::Paused,Phase::Flushing=>ViewPhase::Flushing,_=>self.state.phase.clone()};self.publish();
+                            }
+                        },
+                        UpdateKind::Finished=>{self.state.phase=ViewPhase::Done;self.finish().await;if self.closing {return Ok(());}},
                         UpdateKind::Failed=>{
                             if let Some(message)=self.pending_failure.take() {self.state.phase=ViewPhase::Error {message};}
                             self.finish().await;
+                            if self.closing {return Ok(());}
                         },
                         UpdateKind::Fault(message)=>{
-                            self.state.phase=ViewPhase::Error {message};self.finish().await;
+                            self.state.phase=ViewPhase::Error {message:message.clone()};self.finish().await;
                             // A transport fault retires the underlying executor.
                             // Reap it before replacing it so retry/back remain usable.
                             let _=self.session.shutdown().await;
-                            self.session=FileSession::new(self.configuration.clone())?;
+                            if self.closing {return Err(io::Error::other(message));}
+                            self.session=Driver::new(self.configuration.clone())?;
                             self.run=None;
                         },
+                        #[cfg(target_os="macos")]
+                        UpdateKind::Live(event)=>self.live_event(event),
                         _=>(),
                     }
                 },
@@ -637,8 +770,16 @@ impl Worker {
                     self.publish();
                 },
                 _=deadline(self.checkpoint)=>{
-                    self.checkpoint=if self.state.phase==ViewPhase::Processing {Some(Instant::now()+Duration::from_secs(30))}else{None};
+                    self.checkpoint=if self.state.phase==ViewPhase::Processing || self.state.phase.is_recording() || self.state.phase==ViewPhase::Flushing {Some(Instant::now()+Duration::from_secs(30))}else{None};
                     if self.checkpoint.is_some() {self.auto_save().await;self.publish();}
+                },
+                permission=async{self.permission.as_mut().unwrap().await},if permission_pending=>{
+                    self.permission.take();
+                    self.permission_result(permission.map_err(io::Error::other).and_then(|r|r)).await?;
+                },
+                _=deadline(self.countdown)=>{
+                    self.countdown=None;
+                    self.countdown_elapsed().await?;
                 },
             }
             self.schedule();
@@ -650,7 +791,7 @@ impl Worker {
         settings: FileSettings,
         admission_error: Option<String>,
     ) -> io::Result<Snapshot> {
-        if self.state.phase == ViewPhase::Processing {
+        if self.busy() {
             return Ok(self.state.clone());
         }
         if let Some(message) = admission_error {
@@ -670,7 +811,7 @@ impl Worker {
         self.state.size_label = file.size_label;
         let run = self
             .session
-            .start(path, settings)
+            .start(&self.configuration, path, settings)
             .await?
             .ok_or_else(|| io::Error::other("file session is busy"))?;
         self.run = Some(run);
@@ -678,6 +819,252 @@ impl Worker {
         self.checkpoint = Some(Instant::now() + Duration::from_secs(30));
         self.publish();
         Ok(self.state.clone())
+    }
+    fn busy(&self) -> bool {
+        self.closing || self.state.admission_pending || self.state.phase.is_busy()
+    }
+    async fn cancel_admission(&mut self) {
+        if let Some(task) = self.permission.take() {
+            task.abort();
+            let _ = task.await;
+        }
+        self.countdown = None;
+        #[cfg(target_os = "macos")]
+        {
+            self.pending_live = None;
+        }
+        self.state.admission_pending = false;
+    }
+    #[cfg(target_os = "macos")]
+    async fn start_live(
+        &mut self,
+        request: crate::live_session::Request,
+        admission_error: Option<String>,
+    ) -> io::Result<Snapshot> {
+        if self.busy() {
+            return Ok(self.state.clone());
+        }
+        self.state.permission_issue = None;
+        if let Some(message) = admission_error {
+            self.state.phase = ViewPhase::Error { message };
+            self.publish();
+            return Ok(self.state.clone());
+        }
+        let source = request.capture.source;
+        let devices = matches!(request.input, crate::live_session::Input::Devices { .. });
+        // A cancelled admission is a retired UI identity too, even if no engine
+        // was started. Delayed countdown controls cannot cancel its replacement.
+        self.state.generation = self.state.generation.wrapping_add(1);
+        self.pending_live = Some(request);
+        self.state.admission_pending = true;
+        self.permission = Some(tokio::spawn(async move {
+            if devices {
+                crate::audio_permissions::preflight(source).await
+            } else {
+                Ok(None)
+            }
+        }));
+        self.publish();
+        Ok(self.state.clone())
+    }
+    async fn permission_result(
+        &mut self,
+        result: io::Result<Option<crate::audio_permissions::Issue>>,
+    ) -> io::Result<()> {
+        self.state.admission_pending = false;
+        let error = match result {
+            Ok(Some(issue)) => {
+                self.state.permission_issue = Some(issue);
+                let language = self
+                    .preferences
+                    .as_ref()
+                    .map(|p| p.snapshot().presentation.ui_language)
+                    .unwrap_or_default();
+                Some(issue.message(language).to_owned())
+            }
+            Err(error) => Some(error.to_string()),
+            Ok(None) => None,
+        };
+        if let Some(message) = error {
+            #[cfg(target_os = "macos")]
+            {
+                self.pending_live = None;
+            }
+            self.state.phase = ViewPhase::Error { message };
+            self.publish();
+            return Ok(());
+        }
+        #[cfg(target_os = "macos")]
+        if let Some(request) = &self.pending_live {
+            self.state.live = Some(LiveSnapshot {
+                source: request.capture.source,
+                input_device: match request.input {
+                    crate::live_session::Input::Devices { device } => {
+                        device.map(|id| format!("coreaudio:{id}"))
+                    }
+                    _ => None,
+                },
+                seconds: 0.0,
+                meter: 0.0,
+                capture_ended_reason: None,
+            });
+            self.state.phase = ViewPhase::CountingDown { remaining: 3 };
+            self.countdown = Some(Instant::now() + Duration::from_secs(1));
+            self.publish();
+        }
+        Ok(())
+    }
+    async fn countdown_elapsed(&mut self) -> io::Result<()> {
+        let ViewPhase::CountingDown { remaining } = self.state.phase else {
+            return Ok(());
+        };
+        if remaining > 1 {
+            self.state.phase = ViewPhase::CountingDown {
+                remaining: remaining - 1,
+            };
+            self.countdown = Some(Instant::now() + Duration::from_secs(1));
+            self.publish();
+            return Ok(());
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let Some(mut request) = self.pending_live.take() else {
+                return Ok(());
+            };
+            // Shipping start() reads the current controls after the countdown.
+            if let Some(preferences) = &self.preferences {
+                let latest = preferences.snapshot();
+                let memory = if request.settings.common.encoder_f16_cache {
+                    24_u64 << 30
+                } else {
+                    0
+                };
+                let terms = self
+                    .glossary
+                    .as_ref()
+                    .map(|g| g.with_value(personal_vocabulary::bias_terms))
+                    .unwrap_or_else(|| request.settings.common.bias_terms.clone());
+                request.settings =
+                    crate::asr_config::LiveSettings::from_setup(&latest.setup, memory, terms)
+                        .map_err(io::Error::other)?;
+                request.capture = madi_core::capture_stream::Configuration::from_settings(
+                    &latest.settings,
+                    &latest.setup,
+                );
+                if let crate::live_session::Input::Devices { device } = &mut request.input {
+                    *device =
+                        crate::audio_devices::capture_id(latest.setup.input_device_id.as_deref())?;
+                }
+            }
+            self.session.reset().await?;
+            self.clear();
+            self.store.features = Features::for_language(request.settings.common.language_token);
+            self.state.speaker_island_absorption = self.store.features.speaker_island_absorption;
+            self.state.live = Some(LiveSnapshot {
+                source: request.capture.source,
+                input_device: match request.input {
+                    crate::live_session::Input::Devices { device } => {
+                        device.map(|id| format!("coreaudio:{id}"))
+                    }
+                    _ => None,
+                },
+                seconds: 0.0,
+                meter: 0.0,
+                capture_ended_reason: None,
+            });
+            self.last_meter = Instant::now();
+            self.run = Some(
+                self.session
+                    .start_live(&self.configuration, request)
+                    .await?
+                    .ok_or_else(|| io::Error::other("live session is busy"))?,
+            );
+            self.state.phase = ViewPhase::EngineStarting;
+            self.publish();
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    async fn live_control(
+        &mut self,
+        generation: u64,
+        command: LiveControl,
+    ) -> io::Result<Snapshot> {
+        if generation != self.state.generation || self.closing {
+            return Ok(self.state.clone());
+        }
+        if matches!(command, LiveControl::CancelCountdown) {
+            if matches!(self.state.phase, ViewPhase::CountingDown { .. }) {
+                self.cancel_admission().await;
+                self.state.phase = ViewPhase::Idle;
+                self.state.live = None;
+                self.publish();
+            }
+        } else if let Some(run) = self.run {
+            self.session.control(run, command.clone())?;
+            if let LiveControl::InputDevice(device) = command
+                && let Some(live) = &mut self.state.live
+            {
+                live.input_device = device;
+                self.publish();
+            }
+        }
+        Ok(self.state.clone())
+    }
+    #[cfg(target_os = "macos")]
+    fn live_event(&mut self, event: crate::live_session::UpdateKind) {
+        use crate::live_session::UpdateKind as Live;
+        match event {
+            Live::RecordingStarted => {
+                self.checkpoint = Some(Instant::now() + Duration::from_secs(30));
+            }
+            Live::RecordedSeconds(seconds) => {
+                if let Some(live) = &mut self.state.live {
+                    live.seconds = seconds;
+                    self.publish();
+                }
+            }
+            Live::Level(level) => {
+                let now = Instant::now();
+                let release =
+                    (-now.duration_since(self.last_meter).as_secs_f64() / 0.5).exp() as f32;
+                self.last_meter = now;
+                if let Some(live) = &mut self.state.live {
+                    live.meter = level.max(live.meter * release);
+                }
+                if self.render.is_none() {
+                    self.render = Some(Instant::now() + Duration::from_millis(33));
+                }
+            }
+            Live::CaptureInterrupted(_) => {
+                let language = self
+                    .preferences
+                    .as_ref()
+                    .map(|p| p.snapshot().presentation.ui_language)
+                    .unwrap_or_default();
+                if let Some(live) = &mut self.state.live {
+                    live.capture_ended_reason = Some(
+                        match language {
+                            madi_core::preferences::UILanguage::Ko => {
+                                "오디오 연결이 끊겨 녹음을 마쳤어요"
+                            }
+                            madi_core::preferences::UILanguage::En => {
+                                "The audio connection stopped, so the recording was ended"
+                            }
+                            madi_core::preferences::UILanguage::Ja => {
+                                "オーディオの接続が切れたため録音を終了しました"
+                            }
+                        }
+                        .into(),
+                    );
+                    self.publish();
+                }
+            }
+            Live::WriteFailed { name, message, .. } => eprintln!("capture write {name}: {message}"),
+            // Preview policy/watchdog/AI remain distinct consumers; mutable
+            // preview slots must never be fed blindly into the committed lane.
+            _ => {}
+        }
     }
     fn ingest(&mut self, event: Event) {
         let event = match event {
@@ -822,5 +1209,7 @@ fn failure_message(failure: &Failure, file_name: &str) -> String {
     }
 }
 
+#[cfg(all(test, target_os = "macos"))]
+mod live_tests;
 #[cfg(test)]
 mod tests;

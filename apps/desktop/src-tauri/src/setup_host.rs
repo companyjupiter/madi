@@ -161,7 +161,9 @@ pub async fn choose_file(window: tauri::WebviewWindow) -> Result<SetupState, Str
     let app = window.app_handle().clone();
     let worker = service(&app).await?;
     let host = app.state::<SetupHost>();
-    if app.state::<FilesHost>().snapshot().phase == ViewPhase::Processing
+    let file = app.state::<FilesHost>().snapshot();
+    if file.phase.is_busy()
+        || file.admission_pending
         || host.picker_open.swap(true, Ordering::AcqRel)
     {
         return Ok(worker.snapshot().setup);
@@ -195,7 +197,8 @@ async fn route_selection(app: &tauri::AppHandle, path: PathBuf) -> Result<SetupS
     let worker = service(app).await?;
     let file = app.state::<FilesHost>().snapshot();
     if app.state::<SetupHost>().picker_open.load(Ordering::Acquire)
-        || file.phase == ViewPhase::Processing
+        || file.phase.is_busy()
+        || file.admission_pending
     {
         return Ok(worker.snapshot().setup);
     }
@@ -220,7 +223,8 @@ pub fn handle_drop(webview: &tauri::Webview, event: &tauri::WebviewEvent) {
     };
     match event {
         tauri::DragDropEvent::Enter { .. } => {
-            let allowed = webview.state::<FilesHost>().snapshot().phase != ViewPhase::Processing;
+            let file = webview.state::<FilesHost>().snapshot();
+            let allowed = !file.phase.is_busy() && !file.admission_pending;
             let _ = webview.emit_to("main", "media-drag-target", allowed);
         }
         tauri::DragDropEvent::Drop { paths, .. } => {

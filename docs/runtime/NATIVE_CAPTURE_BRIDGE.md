@@ -6,7 +6,7 @@ host. It retains AVAudioEngine, ScreenCaptureKit and the unchanged shipping
 ownership and live engine scheduling remain Rust responsibilities. Mixing,
 pause, segmentation and WAV ownership are implemented by the separate [capture pipeline](CAPTURE_PIPELINE.md),
 now exercised from native replay; live engine scheduling and the recording
-button are not connected yet.
+button now connect through `LIVE_WORKFLOW.md`; preview/watchdog remain open.
 
 This follows the migration plan's allowance for a thin native API bridge. The
 capture code must run in Madi's process so ScreenCaptureKit's
@@ -92,6 +92,7 @@ permission strings/entitlement, no developer dylib paths and strict signatures.
 Its native replay now verifies the final segment WAV and owned-directory cleanup.
 Local evidence is recorded in `../evidence/macos-native-capture-2026-11-04.json`.
 
-Still **NOT_RUN**: microphone/system hardware, TCC prompts, physical device
+The subsequent bounded microphone/UI observation is in `LIVE_WORKFLOW.md`.
+Still **NOT_RUN**: system/mixed hardware, fresh TCC prompts, physical device
 switch/disconnect, system self-audio exclusion, real start/cancel races, long
-recording performance and live recording UI. Windows capture remains unimplemented.
+recording performance and full live UI/UX parity. Windows capture remains unimplemented.

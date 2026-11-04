@@ -51,12 +51,18 @@ let bytes: [Int64] = [0, 1, 999, 1000, 867485320, 1312165344, 2783447424, 217965
 let specs: [(String, String, CGFloat, NSFont.Weight)] = [
     ("header", "waveform", 36, .light), ("required", "waveform", 18, .semibold),
     ("translation", "character.bubble", 18, .semibold), ("privacy", "lock.shield", 11, .regular),
-    ("error", "exclamationmark.triangle.fill", 11, .regular), ("follow", "arrow.down", 11, .semibold), ("folder", "folder", 26, .light), ("export", "square.and.arrow.up", 12, .semibold)]
+    ("error", "exclamationmark.triangle.fill", 11, .regular), ("follow", "arrow.down", 11, .semibold), ("folder", "folder", 26, .light), ("export", "square.and.arrow.up", 12, .semibold),
+    ("play", "play.fill", 15, .regular), ("cancel", "xmark", 15, .semibold),
+    ("plus", "plus", 15, .semibold), ("warning", "exclamationmark.triangle", 40, .regular),
+    ("micChevron", "chevron.down", 9, .medium)]
 let symbols = Dictionary(uniqueKeysWithValues: specs.map { key, name, points, weight in
     let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)!.withSymbolConfiguration(.init(pointSize: points, weight: weight))!
     return (key, ["width": image.size.width, "height": image.size.height])
 })
-let result: [String: Any] = ["physicalMemory": ProcessInfo.processInfo.physicalMemory,
+let df = DateFormatter()
+df.dateFormat = "yyyy-MM-dd HHmm"
+let titles = [0.0, 1735689600.0, 1793800800.0].map { "회의 " + df.string(from: Date(timeIntervalSince1970: $0)) }
+let result: [String: Any] = ["liveFallbackTitles": titles, "physicalMemory": ProcessInfo.processInfo.physicalMemory,
     "sizes": bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }, "symbols": symbols]
 FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]))
 ''')
@@ -65,7 +71,7 @@ FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: resul
     expected = json.loads(subprocess.check_output([str(binary)]))
     subprocess.run(['cargo', 'build', '--locked', '-p', 'madi-platform', '--example', 'model_presentation_oracle'], cwd=ROOT, check=True)
     actual = json.loads(subprocess.check_output([str(ROOT / 'target/debug/examples/model_presentation_oracle')]))
-    for key in ('physicalMemory', 'sizes'): assert actual[key] == expected[key], key
+    for key in ('physicalMemory', 'sizes', 'liveFallbackTitles'): assert actual[key] == expected[key], key
     symbols = {}
     artwork = actual['artwork'] | actual['transcriptArtwork']
     assert artwork.keys() == expected['symbols'].keys()
@@ -77,7 +83,7 @@ FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: resul
         assert result['pixelHeight'] == math.ceil(art['height'] * 2)
         symbols[key] = dict(width=art['width'], height=art['height'], **result)
     report = dict(schemaVersion=1, status='passed', physicalMemory=actual['physicalMemory'],
-                  sizes=actual['sizes'], symbols=symbols, byteCountCases=9, symbolCases=8,
+                  sizes=actual['sizes'], liveFallbackTitles=actual['liveFallbackTitles'], fallbackTitleCases=3, symbols=symbols, byteCountCases=9, symbolCases=13,
                   scope='Live native Foundation formatting and NSImage symbol dimensions plus nonempty transparent owned PNGs; no SwiftUI/WebView pixel or interaction comparison')
     (OUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

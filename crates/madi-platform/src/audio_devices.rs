@@ -29,3 +29,20 @@ pub fn snapshot() -> InputDevices {
         default_input_id: None,
     }
 }
+
+/// Resolve only IDs issued by the native Core Audio inventory. None requests
+/// the current system default; malformed renderer/persisted IDs cannot do so.
+pub fn capture_id(id: Option<&str>) -> std::io::Result<Option<u32>> {
+    id.map(|id| {
+        id.strip_prefix("coreaudio:")
+            .and_then(|id| id.parse::<u32>().ok())
+            .filter(|id| *id != 0)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "invalid native audio device identity",
+                )
+            })
+    })
+    .transpose()
+}

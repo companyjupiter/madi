@@ -2,8 +2,9 @@
 
 `madi-platform::live_session` now connects the verified session state machine,
 linked macOS capture boundary, Rust PCM/WAV pipeline and resident ASR process.
-This is a native executor. The recording button, preview admission, watchdog,
-translation, archive and other live product consumers are not yet connected.
+The recording button and shared transcript/archive owner now connect through
+`LIVE_WORKFLOW.md`. Preview admission, watchdog, translation, audio retention
+and other live product consumers are not yet connected.
 
 ## Ownership and event order
 
@@ -70,5 +71,6 @@ The original language lock, busy-lane admission, forced-prefix agreement and
 preview rotation ownership require the separate product policy before enabling
 them. The core's replacement-engine policy also awaits watchdog integration.
 The Windows capture adapter is not implemented; this executor is macOS-only.
-Real device/TCC tests, UI/UX parity and full recording acceptance remain NOT_RUN.
+A bounded microphone/UI observation is recorded in `LIVE_WORKFLOW.md`; full
+device/TCC scenarios, UI/UX parity and recording acceptance remain incomplete.
 Release builds remain disabled.

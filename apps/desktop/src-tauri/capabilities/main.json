@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Local parity window with native model installation, media selection, transcription, workspace scanning, isolated settings, archive opening and confirmed native exports. Paths are native-owned; no arbitrary path/URL, capture, shell, filesystem plugin or remote-origin grants.",
+  "description": "Local parity window with native model installation, media selection, transcription, workspace scanning, isolated settings, archive opening and confirmed native exports. Paths are native-owned; capture follows native permission preflight; no arbitrary path/URL, shell, filesystem plugin or remote-origin grants.",
   "windows": [
     "main"
   ],
@@ -21,6 +21,10 @@
     "allow-file-snapshot",
     "allow-file-artwork",
     "allow-file-start",
+    "allow-file-leave",
+    "allow-live-start",
+    "allow-live-control",
+    "allow-live-permission-action",
     "allow-file-reset",
     "allow-file-edit",
     "allow-file-copy-line",

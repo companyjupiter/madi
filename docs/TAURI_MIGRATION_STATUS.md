@@ -8,12 +8,34 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 |---|---|---|
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
-| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file transcript, workspace/export and five-tab Settings candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, native Settings toolbar/form match, complete transcript/workspace/AI/overlays |
-| G3 macOS core | Parsers, lifecycle, typed file/live configuration, native decode/ASR, transcript/edit differentials, timed file workflow, live executor with native replay and real ASR, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, live UI/preview/watchdog consumers, storage/migration, real audio devices, complete model UI lifecycle, AI policy and product end-to-end |
+| G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file/live transcript, transport, workspace/export and five-tab Settings candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, native Settings toolbar/form match, complete transcript/workspace/AI/overlays |
+| G3 macOS core | Parsers, lifecycle, typed file/live configuration, native decode/ASR, transcript/edit differentials, shared file/live workflow, native replay and real ASR, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, complete live UI, preview/watchdog consumers, storage/migration, system/mixed audio and hardware matrix, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
+
+- The macOS record button now connects permission preflight, 3/2/1 countdown,
+  native live ASR, pause/resume/stop/mic controls, the lifecycle clock and shared
+  transcript/archive presentation. Quit joins the final tail/ASR/archive before
+  exiting; closing the last visible window no longer leaves the hidden Settings
+  process alive. A real microphone observation reached pause, back confirmation, Done,
+  saved-record close and setup return. It exposed an empty automatic filename,
+  now corrected to the shipping Foundation timestamp title. The observed file
+  was recovered without changing its bytes; no microphone content is committed.
+  Three workflow regressions and the native callback-identity regression extend
+  the local Rust suite to 123 cases (21/88/14). See `runtime/LIVE_WORKFLOW.md` and
+  `evidence/macos-live-workflow-2026-11-04.json` for checks and explicit gaps.
+  UI/UX equality and full live product acceptance remain incomplete.
+
+- Live-executor revision `8ae884c` passed macOS/Windows Desktop checks, primary
+  CI and CodeQL. Downloaded push artifacts are hash-verified in
+  `evidence/desktop-ci-8ae884c-2026-11-04.json`: 119 macOS / 102 Windows Rust
+  cases and 50 repeated Windows archive checks. Its build manifests explicitly
+  record generated untracked `scripts/__pycache__/` with empty tracked source
+  diffs; this is not clean-worktree provenance. New workflow CI disables Python
+  bytecode generation. The separate Linux dependency-review finding remains
+  open. These CI results precede the live UI/workflow changes above.
 
 - The macOS live executor now connects native capture to Rust-owned WAVs and the
   resident ASR process. FIFO pause/resume markers preserve input ordering;
@@ -22,9 +44,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   premature engine completion and teardown faults. The real native-replay/Metal
   probe yields three WAV jobs, 28 words, a finalized JFK transcript and exactly
   one completion, with preserved source/model data and clean owned scratch.
-  2,406 live configurations match extracted shipping Swift. Current local tests
-  pass 119 Rust cases (21/84/14) and clippy. Recording UI, preview/watchdog/AI,
-  actual devices and Windows native capture remain open. See
+  2,406 live configurations match extracted shipping Swift. That executor revision passed 119 Rust cases (21/84/14) and clippy. Its
+  subsequent recording UI/workflow connection is described above; preview,
+  watchdog, AI and Windows native capture remain open. See
   `runtime/LIVE_SESSION.md` and `evidence/macos-live-session-2026-11-04.json`.
 
 - Capture-pipeline CI revision `ab6a88a` passed macOS but failed the Windows

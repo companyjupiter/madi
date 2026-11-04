@@ -46,6 +46,7 @@ pub enum UpdateKind {
         message: String,
     },
     RecordingStarted,
+    RecordedSeconds(f64),
     FlushTimedOut,
     Finished,
     Failed,
@@ -86,6 +87,7 @@ enum Command {
     Pause(RunId),
     Resume(RunId),
     Stop(RunId),
+    InputDevice(RunId, Option<u32>),
     Reset(oneshot::Sender<()>),
     Shutdown,
 }
@@ -117,6 +119,7 @@ impl LiveSession {
                 deadline: None,
                 flush_sent: None,
                 pipeline_token: None,
+                clock_tick: None,
             }
             .execute(),
         );
@@ -145,6 +148,11 @@ impl LiveSession {
     }
     pub fn stop(&self, run: RunId) -> io::Result<()> {
         self.commands.send(Command::Stop(run)).map_err(|_| closed())
+    }
+    pub fn switch_input(&self, run: RunId, device: Option<u32>) -> io::Result<()> {
+        self.commands
+            .send(Command::InputDevice(run, device))
+            .map_err(|_| closed())
     }
     /// Ack follows native stop, engine reap and release of this owner's WAVs.
     /// Other native consumers can retain explicit OwnedWav leases after reset.
@@ -209,6 +217,7 @@ impl CapturePort {
                 Control::Pause => capture.pause(),
                 Control::Resume => capture.resume(),
                 Control::Stop => capture.stop(),
+                Control::InputDevice(device) => capture.switch_input(device),
             },
             #[cfg(test)]
             Self::Scripted(port) => {
@@ -218,10 +227,11 @@ impl CapturePort {
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Control {
+pub(crate) enum Control {
     Pause,
     Resume,
     Stop,
+    InputDevice(Option<u32>),
 }
 
 struct Processing {
@@ -246,6 +256,7 @@ struct Worker {
     deadline: Option<(Token, Instant)>,
     flush_sent: Option<Token>,
     pipeline_token: Option<Token>,
+    clock_tick: Option<Instant>,
 }
 impl Worker {
     fn now(&self) -> f64 {
@@ -261,6 +272,11 @@ impl Worker {
         if self.phase != *self.core.phase() {
             self.phase = self.core.phase().clone();
             self.emit(UpdateKind::Phase(self.phase.clone()));
+            self.emit(UpdateKind::RecordedSeconds(
+                self.core.recorded_seconds(self.now()),
+            ));
+            self.clock_tick =
+                (self.phase == Phase::Recording).then(|| Instant::now() + Duration::from_secs(1));
         }
     }
     async fn execute(mut self) -> io::Result<()> {
@@ -288,6 +304,7 @@ impl Worker {
             let processing = self.processing.is_some();
             let running = self.engine.is_some();
             let deadline = self.deadline;
+            let clock_tick = self.clock_tick;
             tokio::select! {
                 command = self.input.recv() => match command {
                     Some(Command::Start(request, reply)) => {
@@ -307,7 +324,10 @@ impl Worker {
                     Some(Command::Pause(run)) if run == self.run => { let effects = self.core.pause(self.now()); self.effects(effects).await?; self.phase_changed(); }
                     Some(Command::Resume(run)) if run == self.run => { let effects = self.core.resume(self.now()); self.effects(effects).await?; self.phase_changed(); }
                     Some(Command::Stop(run)) if run == self.run => { let effects = self.core.stop(self.now()); self.effects(effects).await?; self.phase_changed(); }
-                    Some(Command::Pause(_) | Command::Resume(_) | Command::Stop(_)) => {}
+                    Some(Command::InputDevice(run,device)) if run==self.run && matches!(self.core.phase(),Phase::Recording|Phase::Paused)=>{
+                        if let Some((_,capture))=&mut self.capture {capture.control(Control::InputDevice(device));}
+                    }
+                    Some(Command::Pause(_) | Command::Resume(_) | Command::Stop(_) | Command::InputDevice(..)) => {}
                     Some(Command::Reset(reply)) => {
                         let effects = self.core.reset(); self.effects(effects).await?;
                         self.retained.clear(); self.pipeline.take(); self.request.take(); self.flush_sent = None;
@@ -337,6 +357,10 @@ impl Worker {
                     self.effects(effects).await?; self.phase_changed();
                 },
                 _ = self.output.closed() => return Ok(()),
+                _ = async { tokio::time::sleep_until(clock_tick.unwrap()).await }, if clock_tick.is_some() => {
+                    self.emit(UpdateKind::RecordedSeconds(self.core.recorded_seconds(self.now())));
+                    self.clock_tick = Some(Instant::now() + Duration::from_secs(1));
+                },
             }
         }
     }
@@ -707,4 +731,4 @@ impl Worker {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

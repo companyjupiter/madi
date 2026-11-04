@@ -5,7 +5,8 @@ conversion to 16 kHz mono PCM16. `madi-platform::capture_pipeline` writes its
 outputs to one owned temporary directory. The same pipeline is now exercised
 from the linked native capture replay and the relocated Tauri app's debug probe.
 The native live effect executor is connected and verified with real ASR replay
-(`LIVE_SESSION.md`); the product recording button remains unconnected.
+(`LIVE_SESSION.md`) and the recording/transcript/archive owner
+(`LIVE_WORKFLOW.md`).
 
 ## Source behavior preserved
 
@@ -90,6 +91,7 @@ directory cleanup. The installed-bundle probe must produce the expected segment
 WAV and remove its owned directory using only the packaged runtime.
 
 Native replay through the resident ASR executor now passes; see `LIVE_SESSION.md`.
-Still **NOT_RUN**: full product live scheduling, recording UI, real microphone/system
-input, permission denial, physical device switching, complete UI/UX parity and
+A bounded real-microphone/UI check is documented in `LIVE_WORKFLOW.md`.
+Still **NOT_RUN**: complete live scheduling/UI, system/mixed hardware, permission
+denial, physical device switching, complete UI/UX parity and
 recording latency/memory acceptance. Release remains disabled.
