@@ -9,11 +9,41 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
 | G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file transcript and workspace/export candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, complete transcript/settings/workspace/AI/overlays |
-| G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, native decode/ASR, transcript/edit differentials, timed file workflow, verified model downloads and first-run admission | Native file-screen delivery/interaction evidence, live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
+| G3 macOS core | Parsers, ordered delivery, lifecycle, typed file configuration, native decode/ASR, transcript/edit differentials, timed file workflow, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, live lifecycle executor, storage/migration, audio capture, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
+
+- Combined text-pass candidate: Korean number formatting matches 5,839 Swift
+  inputs; combined glossary/number correction and the original stable scan match
+  137 sequences / 4,679 snapshots. Target changes during file processing,
+  32-row scans, held-word preview gating, manual same-text protection, final
+  tail formatting, word identity and saved Markdown are covered. Local Rust
+  tests pass 93 (12/67/14), and both live/pinned gates pass. Translation dispatch
+  and live capture remain open; see `runtime/TEXT_PASSES.md`.
+
+- Native UI verification resumed after the user unlocked the Mac. An actual
+  fresh launch exposed `preferences_snapshot not allowed. Command not found`:
+  five implemented commands lacked build-manifest/capability entries. The
+  native registry/manifest/generated-permission/renderer contract test fails
+  before the fix and passes after it. Fresh startup, current device labels and
+  the upward device menu now work. The original five Settings tabs were captured
+  for comparison; the Tauri Settings window is still not implemented.
+
+- Actual macOS file-panel selection of the public JFK fixture reaches completed
+  transcription and non-overwriting Markdown autosaves. Font changes (16→18→16)
+  and content/detail switching work through IPC. Native inspection also exposed
+  feedback-driven shortening of `jfk.wav`/`madi`; preserving the full intrinsic
+  text width fixes it in the relaunched app. Export selection revealed generic
+  filename/folder defaults; the native panel now receives the saved meeting name,
+  workspace folder and selected content type. A fresh run confirms `jfk 3.txt`
+  in the `madi` folder and a successful native TXT save. The final 94.90 MiB
+  candidate also passes strict package relocation and actual Metal inference
+  (22 words), all five headless exports and source/model/cleanup checks. Full
+  visual parity is **not passed**. See
+  `evidence/macos-text-passes-and-ui-2026-11-04.json`; local screenshots are
+  retained under `out/native-ui-2026-11-04/`.
 
 - Personal vocabulary integration candidate: successful file line/word edits
   now learn through one isolated persistent owner, including when auto-apply is
@@ -26,9 +56,11 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   strict relocation/package checks with 16 notices. The relocated Metal probe
   restores a synthetic glossary, admits its prompt, produces 22 words, durably
   learns an actual native-word edit and passes all five exports with preserved
-  source/model/archive data and cleanup. Settings controls, stable-line timing,
-  the combined number pass, live capture and real-user/native-UI acceptance
-  remain open. See `runtime/GLOSSARY.md` and
+  source/model/archive data and cleanup. Revision `c44dc26` passes desktop CI
+  `41755961248` with 92/84 tests and clean hash-verified artifacts; its actual UI
+  startup gap and the subsequent text-pass work are recorded above. Settings
+  controls, live capture and full real-user/native-UI acceptance remain open.
+  See `runtime/GLOSSARY.md` and
   `evidence/macos-vocabulary-integration-2026-11-04.json`.
 
 - The preceding personal glossary value revision: unchanged Swift storage and the original

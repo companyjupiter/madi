@@ -6,6 +6,11 @@
     "main"
   ],
   "permissions": [
+    "allow-preferences-snapshot",
+    "allow-preferences-command",
+    "allow-settings-command",
+    "allow-glossary-snapshot",
+    "allow-glossary-command",
     "allow-setup-snapshot",
     "allow-setup-command",
     "allow-audio-inputs",

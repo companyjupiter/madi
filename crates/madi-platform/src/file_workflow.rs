@@ -5,22 +5,18 @@ use crate::{
     file_session::{Configuration, FileSession, RunId, UpdateKind},
     glossary_service::GlossaryService,
     media_file,
+    preferences_service::PreferencesService,
     session_archive::SessionArchiveWriter,
 };
 use madi_core::{
     personal_vocabulary,
     session::{Failure, Phase},
+    text_passes::TextPasses,
     transcript::{Features, Line, SpeakerNumbers, TranscriptStore, Uuid, archive},
 };
 use madi_protocol::{stream::Output, transcribe::Event};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    io,
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeMap, io, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, mpsc, oneshot, watch},
     task::JoinHandle,
@@ -124,6 +120,7 @@ pub enum Edit {
     },
 }
 enum Command {
+    Preferences(PreferencesService, oneshot::Sender<io::Result<()>>),
     Glossary(GlossaryService, oneshot::Sender<io::Result<()>>),
     Export {
         generation: u64,
@@ -212,7 +209,8 @@ impl FileWorkflow {
                 state,
                 store: TranscriptStore::default(),
                 glossary: None,
-                user_edited_lines: BTreeSet::new(),
+                preferences: None,
+                text_passes: TextPasses::default(),
                 run: None,
                 render: None,
                 fix: None,
@@ -233,6 +231,16 @@ impl FileWorkflow {
     }
     pub fn snapshot(&self) -> Snapshot {
         self.owner.snapshot.borrow().clone()
+    }
+    /// Stable display passes consult the current targets, including settings
+    /// changed during file processing, rather than a frozen admission copy.
+    pub async fn set_preferences(&self, preferences: PreferencesService) -> io::Result<()> {
+        let (reply, result) = oneshot::channel();
+        self.owner
+            .commands
+            .send(Command::Preferences(preferences, reply))
+            .map_err(|_| closed())?;
+        result.await.map_err(|_| closed())?
     }
     /// Attach the app-owned glossary before admission or a saved-file edit.
     pub async fn set_glossary(&self, glossary: GlossaryService) -> io::Result<()> {
@@ -379,7 +387,8 @@ struct Worker {
     state: Snapshot,
     store: TranscriptStore,
     glossary: Option<GlossaryService>,
-    user_edited_lines: BTreeSet<Uuid>,
+    preferences: Option<PreferencesService>,
+    text_passes: TextPasses,
     run: Option<RunId>,
     render: Option<Instant>,
     fix: Option<Instant>,
@@ -426,7 +435,7 @@ impl Worker {
         // All disk work is joined before another command can reach clear.
         self.archive_writer = Arc::new(std::sync::Mutex::new(SessionArchiveWriter::default()));
         self.store.reset();
-        self.user_edited_lines.clear();
+        self.text_passes.reset();
         let revision = self.state.revision;
         let generation = self.state.generation.wrapping_add(1);
         self.state = Snapshot {
@@ -452,15 +461,10 @@ impl Worker {
         self.store.finalize();
         if let Some(glossary) = &self.glossary {
             glossary.with_value(|glossary| {
-                for line in self.store.lines().to_vec() {
-                    if !self.user_edited_lines.contains(&line.id)
-                        && let Some(text) =
-                            personal_vocabulary::corrected_line_text(&line, glossary)
-                    {
-                        self.store.edit_line(line.id, &text, None);
-                    }
-                }
+                self.text_passes.finalize(&mut self.store, Some(glossary));
             });
+        } else {
+            self.text_passes.finalize(&mut self.store, None);
         }
         self.state.partial.clear();
         self.auto_save().await;
@@ -547,6 +551,9 @@ impl Worker {
         loop {
             tokio::select! {
                 command=self.input.recv()=>match command {
+                    Some(Command::Preferences(preferences, reply))=>{
+                        self.preferences=Some(preferences);let _=reply.send(Ok(()));
+                    },
                     Some(Command::Glossary(glossary, reply))=>{
                         self.glossary=Some(glossary);let _=reply.send(Ok(()));
                     },
@@ -706,6 +713,27 @@ impl Worker {
             _ => (),
         }
         self.store.ingest(&event);
+        if matches!(event, Event::Word { .. } | Event::WordSectionBegin)
+            && self
+                .preferences
+                .as_ref()
+                .is_some_and(PreferencesService::has_translation_targets)
+        {
+            if let Some(glossary) = &self.glossary {
+                glossary.with_value(|glossary| {
+                    self.text_passes.stable(
+                        &mut self.store,
+                        Some(glossary),
+                        true,
+                        &self.state.partial,
+                        false,
+                    );
+                });
+            } else {
+                self.text_passes
+                    .stable(&mut self.store, None, true, &self.state.partial, false);
+            }
+        }
         // Progress/name callbacks are low-frequency UI state, also coalesced.
         if self.render.is_none() {
             self.render = Some(Instant::now() + Duration::from_millis(33));
@@ -723,7 +751,7 @@ impl Worker {
                     .iter()
                     .find(|line| line.id == id)
                     .map(Line::text);
-                self.user_edited_lines.insert(id);
+                self.text_passes.mark_user_edited(id);
                 if self.store.edit_line(id, &text, None)
                     && let Some(before) = before
                 {

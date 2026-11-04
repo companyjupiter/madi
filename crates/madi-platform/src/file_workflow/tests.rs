@@ -137,14 +137,14 @@ async fn archived_word_edits_learn_while_disabled_then_feed_prompt_and_incoming_
 }
 
 #[tokio::test]
-async fn late_glossary_correction_preserves_words_and_manual_same_text_edits() {
+async fn late_combined_correction_preserves_words_and_manual_same_text_edits() {
     use crate::glossary_service::{GlossaryService, SettingsCommand, Store};
     use madi_core::glossary::Glossary;
     for manual in [false, true] {
         let (root, configuration, source) = fixture("", &format!("{GLOSSARY_WORDS}\n{HOLD}"));
         let mut fallback = Glossary::default();
         for _ in 0..2 {
-            fallback.learn("소버림", "소버린").unwrap();
+            fallback.learn("소버림", "삼십분").unwrap();
         }
         let glossary = GlossaryService::new(
             Store::load(root.path().join("glossary.json"), fallback).unwrap(),
@@ -194,7 +194,7 @@ async fn late_glossary_correction_preserves_words_and_manual_same_text_edits() {
         let expected = if manual {
             "소버림 회의록."
         } else {
-            "소버린 회의록."
+            "30분 회의록."
         };
         let done = state_when(&workflow, |state| {
             state.phase == ViewPhase::Done
@@ -217,6 +217,123 @@ async fn late_glossary_correction_preserves_words_and_manual_same_text_edits() {
         );
         workflow.shutdown().await.unwrap();
         glossary.shutdown().await.unwrap();
+        cleaned(root.path()).await;
+    }
+}
+
+#[tokio::test]
+async fn stable_number_pass_reads_target_changes_and_leaves_the_live_tail_until_finish() {
+    use crate::{preferences, preferences_service::PreferencesService};
+    use madi_core::settings::SettingsCommand;
+    let engine = format!(
+        r#"
+print('=== WORD TIMESTAMPS ===',flush=True)
+print('[0.0s-0.4s] 팔월. «conf 0.95»',flush=True)
+print('[2.0s-2.4s] 다음문장. «conf 0.95»',flush=True)
+(root/'first-ready').write_text('ready')
+while not (root/'continue').exists(): time.sleep(.01)
+print('[4.0s-4.4s] 삼십분. «conf 0.95»',flush=True)
+print('[6.0s-6.4s] 열한시. «conf 0.95»',flush=True)
+print('<<SEG_END>>',flush=True)
+{HOLD}
+"#
+    );
+    for initially_enabled in [false, true] {
+        let (root, configuration, source) = fixture("", &engine);
+        let preferences = PreferencesService::new(
+            preferences::Store::load(
+                root.path().join("preferences.json"),
+                preferences::Preferences::from_legacy(preferences::Legacy::default()),
+            )
+            .unwrap(),
+            |_| {},
+        )
+        .unwrap();
+        preferences
+            .settings(SettingsCommand::TranslationTarget {
+                language: madi_core::setup::Language::English,
+                enabled: initially_enabled,
+            })
+            .await
+            .unwrap();
+        let workflow = FileWorkflow::with_archive(
+            configuration,
+            Some(ArchiveSettings {
+                enabled: true,
+                folder: root.path().join("saved"),
+            }),
+            |_| {},
+        )
+        .unwrap();
+        workflow.set_preferences(preferences.clone()).await.unwrap();
+        workflow
+            .start(source, FileSettings::default(), None)
+            .await
+            .unwrap();
+        let before = state_when(&workflow, |state| state.lines.len() == 2).await;
+        assert_eq!(
+            before.lines[0].text,
+            if initially_enabled {
+                "8월."
+            } else {
+                "팔월."
+            }
+        );
+        assert_eq!(before.lines[0].line.words[0].text, "팔월.");
+        preferences
+            .settings(SettingsCommand::TranslationTarget {
+                language: madi_core::setup::Language::English,
+                enabled: !initially_enabled,
+            })
+            .await
+            .unwrap();
+        std::fs::write(root.path().join("continue"), "continue").unwrap();
+        let streamed = state_when(&workflow, |state| state.lines.len() == 4).await;
+        assert_eq!(streamed.lines[0].text, "8월.");
+        assert_eq!(
+            streamed.lines[2].text,
+            if initially_enabled {
+                "삼십분."
+            } else {
+                "30분."
+            }
+        );
+        assert_eq!(streamed.lines[3].text, "열한시.");
+        assert_eq!(before.lines[0].line.id, streamed.lines[0].line.id);
+        marker(&root.path().join("handler-ready")).await;
+        std::fs::write(root.path().join("finish"), "finish").unwrap();
+        // Like Swift, finalize publishes committed lines before the 33 ms
+        // display timer delivers text overlays. Wait for that actual delivery.
+        let done = state_when(&workflow, |state| {
+            state.phase == ViewPhase::Done
+                && state.lines.last().is_some_and(|line| line.text == "11시.")
+        })
+        .await;
+        assert_eq!(
+            done.lines
+                .iter()
+                .map(|line| line.text.as_str())
+                .collect::<Vec<_>>(),
+            ["8월.", "다음문장.", "30분.", "11시."]
+        );
+        assert_eq!(
+            done.lines
+                .iter()
+                .flat_map(|line| &line.line.words)
+                .collect::<Vec<_>>(),
+            streamed
+                .lines
+                .iter()
+                .flat_map(|line| &line.line.words)
+                .collect::<Vec<_>>()
+        );
+        let saved = std::fs::read_to_string(done.archive.transcript.as_ref().unwrap()).unwrap();
+        assert!(
+            saved.contains("30분.") && saved.contains("11시."),
+            "{saved}"
+        );
+        workflow.shutdown().await.unwrap();
+        preferences.shutdown().await.unwrap();
         cleaned(root.path()).await;
     }
 }

@@ -119,19 +119,42 @@ pub fn write_selected(path: &Path, content: &str) -> io::Result<()> {
     file.persist(path).map_err(|failure| failure.error)?;
     Ok(())
 }
-pub fn choose(format: Format) -> io::Result<Option<PathBuf>> {
+pub fn choose(
+    format: Format,
+    folder: &Path,
+    saved: Option<&Path>,
+    file_name: &str,
+) -> io::Result<Option<PathBuf>> {
     #[cfg(target_os = "macos")]
     {
         use objc2::MainThreadMarker;
         use objc2_app_kit::{NSModalResponseOK, NSSavePanel};
-        use objc2_foundation::NSString;
+        use objc2_foundation::{NSArray, NSString};
+        use objc2_uniform_type_identifiers::UTType;
         let mtm = MainThreadMarker::new()
             .ok_or_else(|| io::Error::other("export picker requires the main thread"))?;
         let panel = NSSavePanel::savePanel(mtm);
-        panel.setNameFieldStringValue(&NSString::from_str(&format!(
-            "transcript.{}",
-            format.extension()
-        )));
+        let kind = UTType::typeWithFilenameExtension(&NSString::from_str(format.extension()))
+            .ok_or_else(|| io::Error::other("export type is unavailable"))?;
+        panel.setAllowedContentTypes(&NSArray::from_slice(&[&*kind]));
+        let directory = crate::workspace_scan::macos::url(folder)?;
+        panel.setDirectoryURL(Some(&directory));
+        // ContentView.exportBaseName prefers the actual checkpoint (including
+        // collision suffixes), then the source file, then the untitled fallback.
+        let name = if let Some(saved) = saved {
+            crate::workspace_scan::macos::url(saved)?
+                .URLByDeletingPathExtension()
+                .and_then(|url| url.lastPathComponent())
+                .ok_or_else(|| io::Error::other("saved transcript has no name"))?
+        } else {
+            let name = NSString::from_str(file_name).stringByDeletingPathExtension();
+            if name.is_empty() {
+                NSString::from_str("transcript")
+            } else {
+                name
+            }
+        };
+        panel.setNameFieldStringValue(&name);
         if panel.runModal() != NSModalResponseOK {
             return Ok(None);
         }
@@ -141,7 +164,7 @@ pub fn choose(format: Format) -> io::Result<Option<PathBuf>> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = format;
+        let _ = (format, folder, saved, file_name);
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "native export selection is not implemented on this platform",

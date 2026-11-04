@@ -29,7 +29,11 @@ h1 { font: 700 17px var(--rounded); }
 .dropdown[data-direction="up"] { top: auto; bottom: calc(100% + 4px); }
 .option { width: 100%; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
 .device-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.middle-text { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+.middle-text { display: block; position: relative; min-width: 0; overflow: hidden; white-space: nowrap; }
+/* Intrinsic size belongs to the full text. Measuring the truncated label itself
+   made centered filenames and folder buttons shrink on every observer pass. */
+.middle-text-measure { visibility: hidden; }
+.middle-text-label { position: absolute; inset: 0; }
 .device-name { flex: 1; }
 .menu-check { font-size: 10px; font-weight: 600; }
 .option:disabled { opacity: .4; }

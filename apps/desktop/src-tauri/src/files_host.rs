@@ -284,8 +284,13 @@ pub async fn start_native(
     path: std::path::PathBuf,
     setup: SetupState,
 ) -> Result<Snapshot, String> {
+    let preferences = crate::setup_host::service(app).await?;
     let glossary = crate::glossary_host::service(app).await?;
     let worker = service(app)?;
+    worker
+        .set_preferences(preferences)
+        .await
+        .map_err(|error| error.to_string())?;
     worker
         .set_glossary(glossary.clone())
         .await

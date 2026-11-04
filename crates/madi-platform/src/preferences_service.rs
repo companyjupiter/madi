@@ -166,6 +166,16 @@ impl PreferencesService {
     pub fn snapshot(&self) -> Snapshot {
         self.owner.snapshot.borrow().clone()
     }
+    /// Read the current native setting without cloning presentation state per word.
+    pub fn has_translation_targets(&self) -> bool {
+        !self
+            .owner
+            .snapshot
+            .borrow()
+            .setup
+            .translate_targets
+            .is_empty()
+    }
     async fn request<T>(&self, command: impl FnOnce(Reply<T>) -> Command) -> io::Result<T> {
         let (send, receive) = oneshot::channel();
         self.owner

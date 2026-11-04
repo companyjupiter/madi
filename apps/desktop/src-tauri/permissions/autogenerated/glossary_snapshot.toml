@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-glossary-snapshot"
+description = "Enables the glossary_snapshot command without any pre-configured scope."
+commands.allow = ["glossary_snapshot"]
+
+[[permission]]
+identifier = "deny-glossary-snapshot"
+description = "Denies the glossary_snapshot command without any pre-configured scope."
+commands.deny = ["glossary_snapshot"]

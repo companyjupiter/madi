@@ -12,7 +12,9 @@ export function MiddleText({ children, className = '' }: { children: string; cla
     const context = canvas.getContext('2d')!;
     const fit = () => {
       context.font = getComputedStyle(element).font;
-      const width = element.clientWidth;
+      // Keep subpixel width: clientWidth rounds down and can repeatedly
+      // truncate a short, intrinsically sized label that actually fits.
+      const width = element.getBoundingClientRect().width;
       if (context.measureText(children).width <= width) { setLabel(children); return; }
       const candidate = (count: number) => segments.slice(0, Math.ceil(count / 2)).join('') + '…'
         + (count > 1 ? segments.slice(-Math.floor(count / 2)).join('') : '');
@@ -30,5 +32,8 @@ export function MiddleText({ children, className = '' }: { children: string; cla
     void document.fonts.ready.then(() => { if (active) fit(); });
     return () => { active = false; observer.disconnect(); };
   }, [children]);
-  return <span ref={span} className={`middle-text ${className}`} aria-label={children}>{label}</span>;
+  return <span ref={span} className={`middle-text ${className}`} aria-label={children}>
+    <span className="middle-text-measure" aria-hidden>{children}</span>
+    <span className="middle-text-label" aria-hidden>{label}</span>
+  </span>;
 }

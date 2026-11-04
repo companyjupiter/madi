@@ -209,7 +209,8 @@ pub async fn workspace_export(
     if current.generation != file_generation || current.lines.is_empty() {
         return Ok(());
     }
-    let settings = service(&app)?.snapshot().editor_settings;
+    let workspace = service(&app)?.snapshot();
+    let settings = workspace.editor_settings;
     let host = app.state::<WorkspaceHost>();
     if host.dialog_open.swap(true, Ordering::AcqRel) {
         return Ok(());
@@ -217,7 +218,12 @@ pub async fn workspace_export(
     let (sender, mut receiver) = tauri::async_runtime::channel(1);
     let owner = app.clone();
     if let Err(error) = app.run_on_main_thread(move || {
-        let result = madi_platform::transcript_export::choose(format);
+        let result = madi_platform::transcript_export::choose(
+            format,
+            &workspace.folder,
+            current.archive.transcript.as_deref(),
+            &current.file_name,
+        );
         owner
             .state::<WorkspaceHost>()
             .dialog_open

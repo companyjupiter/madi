@@ -1,0 +1,19 @@
+{
+  "cases": 137,
+  "snapshots": 4679,
+  "corpusSHA256": "d564440e2ca24e8f0b9358092efedd4e1011519a2fd877d6502a4141a26dbc5a",
+  "resultSHA256": "f17952436a0075eb56d713e7b6afa55509b6cf43f0960ff3664f26b3365180be",
+  "sources": {
+    "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+    "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+    "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+    "apps/macos/Sovereign/Transcript/SpeakerDisplayNumber.swift": "aed03483b387f644d426a6b66b291424d413e397c4555179a096912d448f3c1b",
+    "apps/macos/Sovereign/Transcript/LiveFeatureWiring.swift": "fb10adb3a626e5e6a3b9105ef2754b5fe52b307d7cd8c6648e3844bdccd4b956",
+    "apps/macos/Sovereign/Transcript/EnergyArc.swift": "7183d8bd405404abf47e51f58df1bb4a7e93f0bf9ed417ed9b60dfcc6d31fcc7",
+    "apps/macos/Sovereign/Engine/EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+    "apps/macos/Sovereign/Transcript/PersonalVocabulary.swift": "eebabc92c01543d73d608da3478977019698785e7fbb4ab726988a605a48340a",
+    "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+    "apps/macos/Sovereign/Transcript/KoreanNumberFormatter.swift": "e2f7237903343c929b5eda172f13cddd053abeb7fc4becfe33d19addf1cee57e",
+    "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+  }
+}

@@ -4,9 +4,9 @@
 rules. `personal_vocabulary` adds its original edit diff, matching and prompt
 policy. A shared native owner now connects isolated persistence, file edits,
 incoming-word correction, final display correction and file-engine prompt terms.
-**The Settings tab UI is not connected or visually verified.** Stable-line
-correction timing during translation and the combined Korean number-formatting
-pass remain incomplete.
+The combined Korean number pass and target-gated stable scan are now connected
+to file events; see `TEXT_PASSES.md`. **The Settings tab UI and translation
+dispatch remain incomplete.**
 
 The original defaults remain disabled with two confirmations required. Loading
 a pre-v2 blob raises the minimum to at least two while preserving entries;
@@ -73,9 +73,9 @@ since Swift's UserDefaults save exposes no equivalent synchronous error result.
 
 Remaining integration order:
 
-1. Port the combined Korean number-formatting pass and stable-line timing,
-   including translation-target, tail and held-word gates. Connect translation
-   consumers before claiming full live/file correction behavior.
+1. Connect translation consumers, tail dispatch and live preview before claiming
+   full live/file correction behavior. The combined pass and pure stable scan
+   now match the original source.
 2. Connect the original Settings rows and verify native appearance/interactions.
 3. Verify real-user glossary import/relaunch, live capture and full UI acceptance.
 
@@ -89,7 +89,7 @@ sixteen notices match their hashes. Its glossary JSON was omitted from the
 upload manifest; the receipt retains the exact verified report from CI logs.
 The upload list now includes glossary and personal-vocabulary reports.
 
-The connected candidate passes 92 local Rust tests (12 core / 66 platform /
+The vocabulary integration revision `c44dc26` passed 92 local Rust tests (12 core / 66 platform /
 14 protocol), including real child-process checks for disabled learning,
 word/line edits, stale-generation rejection, prompt environment, incoming and
 late display correction, manual same-text protection, identity and archive
@@ -101,5 +101,8 @@ Using its actual relocated decoder/Metal ASR, a synthetic glossary survives
 owner restart and supplies the admitted prompt; the JFK clip produces 22 words.
 Editing an actual native transcript word is durably learned by that same owner.
 Five exports, source/model/archive preservation and temporary cleanup pass.
-This remains headless native-owner evidence, with UI and real-user acceptance
+That revision also passed clean macOS/Windows CI `41755961248` with 92/84 Rust
+tests and verified artifact hashes. A later actual app launch exposed a missing
+Tauri IPC permission declaration; `TEXT_PASSES.md` describes its correction.
+The prior evidence remains headless native-owner evidence, with UI and real-user acceptance
 open. See `docs/evidence/macos-vocabulary-integration-2026-11-04.json`.

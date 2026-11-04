@@ -1,6 +1,11 @@
 fn main() {
     let attributes =
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
+            "preferences_snapshot",
+            "preferences_command",
+            "settings_command",
+            "glossary_snapshot",
+            "glossary_command",
             "setup_snapshot",
             "setup_command",
             "audio_inputs",

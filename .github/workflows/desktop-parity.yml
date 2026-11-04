@@ -27,6 +27,7 @@ on:
       - 'apps/macos/Sovereign/Audio/Resampler.swift'
       - 'apps/macos/Sovereign/Audio/WavWriter.swift'
       - 'apps/macos/Tests/AudioDecodeLimitTests.swift'
+      - 'apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatter*Tests.swift'
       - 'apps/macos/Sovereign/UI/ContentView.swift'
       - 'apps/macos/Sovereign/UI/L10n.swift'
       - 'apps/macos/Sovereign/UI/SettingsView.swift'
@@ -98,7 +99,7 @@ jobs:
           cargo fmt --all --check
           cargo test --locked -p madi-core -p madi-protocol -p madi-platform
           cargo clippy --locked --workspace --all-targets -- -D warnings
-          node --test tests/parity/setup_intent_queue.test.mjs
+          node --test tests/parity/setup_intent_queue.test.mjs tests/parity/desktop_ipc_contract.test.mjs
       - name: Compare against the shipping Swift parser
         if: runner.os == 'macOS'
         run: |
@@ -112,6 +113,8 @@ jobs:
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
+          python3 scripts/check_korean_numbers_parity.py
+          python3 scripts/check_text_passes_parity.py
           python3 scripts/check_asset_manifest_parity.py
           python3 scripts/check_model_setup_parity.py
           python3 scripts/check_model_gate_parity.py
@@ -136,6 +139,8 @@ jobs:
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
+          python scripts/check_korean_numbers_parity.py --rust-only
+          python scripts/check_text_passes_parity.py --rust-only
           python scripts/check_asset_manifest_parity.py --rust-only
           python scripts/check_model_setup_parity.py --rust-only
           python scripts/check_model_gate_parity.py --rust-only
@@ -172,6 +177,8 @@ jobs:
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json
+            out/korean-numbers-parity/report.json
+            out/text-passes-parity/report.json
             out/asset-manifest-parity/report.json
             out/model-setup-parity/report.json
             out/model-gate-parity/report.json
