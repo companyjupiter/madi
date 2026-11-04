@@ -198,6 +198,7 @@ jobs:
             out/segmenter-parity/report.json
             out/capture-bridge-parity/report.json
             out/capture-pipeline-parity/report.json
+            out/capture-pipeline-parity/rust.json
             out/asset-manifest-parity/report.json
             out/model-setup-parity/report.json
             out/model-gate-parity/report.json

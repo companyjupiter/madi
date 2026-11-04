@@ -126,7 +126,14 @@ def main():
     if args.write_reference:
         REFERENCE.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
     else:
-        assert report==json.loads(REFERENCE.read_text(encoding='utf-8')), 'Pinned capture pipeline reference changed'
+        expected = json.loads(REFERENCE.read_text(encoding='utf-8'))
+        differences = {key: dict(expected=expected.get(key), actual=report.get(key))
+                       for key in sorted(expected.keys() | report.keys())
+                       if expected.get(key) != report.get(key)}
+        if differences:
+            report.update(status='failed', nativeSwiftRun=not args.rust_only, differences=differences)
+            (OUT/'report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+            raise AssertionError('Pinned capture pipeline reference changed: '+json.dumps(differences))
     report.update(status='passed',nativeSwiftRun=not args.rust_only,
                   scope='Shipping ingest/mix/pause/stop/abort, exact Float meter and callback order, WAV bytes/names, preview rotation, retained files and cleanup; no hardware, live engine or UI acceptance')
     (OUT/'report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')

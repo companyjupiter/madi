@@ -29,3 +29,10 @@ apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatterGuard5Tests.swift text 
 apps/macos/Sovereign/Audio/Segmenter.swift text eol=lf
 apps/macos/Sovereign/Audio/WavWriter.swift text eol=lf
 apps/macos/Tests/SovereignCoreTests/SegmenterEarlyFlushTests.swift text eol=lf
+# The complete capture oracle hashes these additional shipping sources.
+apps/macos/Sovereign/Audio/AudioCapture.swift text eol=lf
+apps/macos/Sovereign/Audio/AudioDevices.swift text eol=lf
+apps/macos/Sovereign/Audio/SystemAudioCapture.swift text eol=lf
+apps/macos/Sovereign/Audio/Resampler.swift text eol=lf
+apps/macos/Sovereign/Session/SessionCoordinator.swift text eol=lf
+tests/parity/CapturePipelineOracle.swift text eol=lf
