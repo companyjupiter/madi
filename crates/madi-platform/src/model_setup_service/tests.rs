@@ -1,6 +1,8 @@
 use super::*;
 #[path = "tests_cancellation.rs"]
 mod cancellation;
+#[path = "tests_management.rs"]
+mod management;
 use madi_core::assets::RemoteAsset;
 use std::{
     io::{Read, Write},

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-04",
+  "sourceHead": "da3b146545d16a678374f2111e96a3b4c58702f2",
+  "sourceDirty": true,
+  "scope": "Native model-management owner only; Settings UI is not connected",
+  "sourceSHA256": {
+    "crates/madi-platform/src/model_setup_service.rs": "6c6423904f5d50005c49dd90e774dda9e5e257b9bfba3be78a530581a5a4c088",
+    "crates/madi-platform/src/model_setup_service/tests.rs": "0c3ed1969a286d0f45b365b9a087365bd370a01cbc8f26c0324f81be59000f0a",
+    "crates/madi-platform/src/model_setup_service/tests_management.rs": "e58d18cd290fe0691732bf2212b06f4c3652c32ffd845aa9fa0340fce90d9e4e"
+  },
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "checks": {
+    "rustTests": [
+      12,
+      70,
+      14
+    ],
+    "totalRustTests": 96,
+    "modelServiceTests": 8,
+    "clippy": "PASS",
+    "rustfmt": "PASS",
+    "diffCheck": "PASS",
+    "repeatedCancelMutationRedThenGreen": true
+  },
+  "behavior": [
+    "First-run choice preserved",
+    "Read-only model path/fast-size state and translation refresh",
+    "Completed Ready worker does not suppress explicit re-download",
+    "Failed replacement preserves installed bytes and can retry",
+    "Translation cancellation leaves transcription transfer running",
+    "Repeated clicks retain one transfer",
+    "Dropped cancel caller retains worker; repeated cancel joins cleanup",
+    "Shutdown joins workers and removes partial files"
+  ],
+  "logSHA256": {
+    "madi-model-management-full-tests.log": "e9541e5bed570f16c0d028080e3f1c9be6066114b95b131107952ec5b6727d8a",
+    "madi-model-management-tests.log": "904c4c1362897c1f1c7488a0da15b6682d344209a6f9e0c895fd37ee83d6b5a4",
+    "madi-model-management-cancel-red.log": "acc0b08ba815d8fc4c4017980203f0f1e683f316a9b84086ca33d19d9cf1bbfb",
+    "madi-model-management-clippy.log": "a68d3fc0d6f5523bce554c8572af7cabd0f78e8fccb42935908c222b634cc554"
+  },
+  "limitations": [
+    "Loopback fixture transfers, not real-model redownload or Settings UI acceptance",
+    "No renderer IPC or native window connection in this slice",
+    "Presence/installed flags are the source fast-size check, not integrity verification",
+    "Settings UI, Finder reveal and native save-folder panel behavior remain open"
+  ]
+}

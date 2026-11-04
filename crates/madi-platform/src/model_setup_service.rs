@@ -7,7 +7,7 @@ use madi_core::{
     assets::{TRANSCRIPTION, TranslationVariant},
     model_setup::{ModelSetupChoice, ModelSetupCommand, ModelSetupState},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 
@@ -27,6 +27,38 @@ pub struct ModelSnapshot {
     pub translation_size: String,
     pub transcription_download_size: String,
     pub recommended_download_size: String,
+}
+
+/// Settings actions do not select or reset the first-run recommendation.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelKind {
+    Transcription,
+    Translation,
+}
+impl ModelKind {
+    fn index(self) -> usize {
+        match self {
+            Self::Transcription => 0,
+            Self::Translation => 1,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "camelCase")]
+pub enum ManagementCommand {
+    Download(ModelKind),
+    CancelTranslation,
+    RefreshTranslation,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelLocations {
+    pub transcription: std::path::PathBuf,
+    pub translation: std::path::PathBuf,
+    pub transcription_installed: bool,
+    pub translation_installed: bool,
+    pub translation_disk_gb: String,
 }
 
 type Formatter = Arc<dyn Fn(u64) -> String + Send + Sync>;
@@ -160,20 +192,20 @@ impl ModelSetupService {
                     inner.state.choice = Some(choice);
                     inner.state.revision += 1;
                     if inner.state.required != DownloadState::Ready {
-                        self.start(&mut inner, 0).await;
+                        self.start(&mut inner, 0, false).await;
                     }
                     if choice == ModelSetupChoice::Recommended
                         && inner.state.translation_engine_available
                         && inner.state.translation != DownloadState::Ready
                     {
-                        self.start(&mut inner, 1).await;
+                        self.start(&mut inner, 1, false).await;
                     }
                 }
             }
             ModelSetupCommand::Retry => {
                 if inner.state.choice.is_some() {
                     if inner.state.required.can_retry() {
-                        self.start(&mut inner, 0).await;
+                        self.start(&mut inner, 0, false).await;
                     }
                     if inner.state.choice == Some(ModelSetupChoice::Recommended)
                         && inner.state.translation_engine_available
@@ -182,7 +214,7 @@ impl ModelSetupService {
                             DownloadState::Idle | DownloadState::Failed(_)
                         )
                     {
-                        self.start(&mut inner, 1).await;
+                        self.start(&mut inner, 1, false).await;
                     }
                 }
             }
@@ -193,60 +225,7 @@ impl ModelSetupService {
                 }
             }
             ModelSetupCommand::Cancel => {
-                let mut cancelled_jobs = Vec::new();
-                for index in 0..2 {
-                    let downloading = if index == 0 {
-                        &inner.state.required
-                    } else {
-                        &inner.state.translation
-                    };
-                    if !downloading.is_downloading() {
-                        continue;
-                    }
-                    inner.generations[index] += 1;
-                    let cancelled = if index == 0 {
-                        DownloadState::Cancelled
-                    } else if fast_size_matches(
-                        &inner.locations.translation_model(inner.state.variant),
-                        inner.state.variant.asset(),
-                    ) {
-                        DownloadState::Ready
-                    } else {
-                        DownloadState::Idle
-                    };
-                    inner.set_download_state(index, cancelled);
-                    if let Some(active) = inner.jobs[index].as_mut() {
-                        active.cancelling = true;
-                        active.task.request_cancel();
-                        cancelled_jobs.push(index);
-                    }
-                }
-                (self.changed)(inner.snapshot());
-                for index in cancelled_jobs {
-                    // Holding the command mutex serializes a following Retry
-                    // until the old file/OS lock has been released. Workers
-                    // never acquire this mutex during transfer or cleanup.
-                    // Keep ownership in the service across await. If the IPC
-                    // future itself is dropped, Retry/quit can still join it.
-                    let result = inner.jobs[index]
-                        .as_mut()
-                        .expect("cancelled job")
-                        .task
-                        .wait()
-                        .await;
-                    inner.jobs[index].take();
-                    match result {
-                        Ok(DownloadState::Ready) => {
-                            inner.set_download_state(index, DownloadState::Ready)
-                        }
-                        Ok(DownloadState::Failed(message)) => {
-                            inner.set_download_state(index, DownloadState::Failed(message))
-                        }
-                        Err(error) => inner
-                            .set_download_state(index, DownloadState::Failed(error.to_string())),
-                        _ => (),
-                    }
-                }
+                self.cancel(&mut inner, &[0, 1]).await;
             }
         }
         let snapshot = inner.snapshot();
@@ -255,7 +234,122 @@ impl ModelSetupService {
         Ok(snapshot)
     }
 
-    async fn start(&self, inner: &mut Inner, index: usize) {
+    pub async fn locations(&self) -> ModelLocations {
+        let inner = self.inner.lock().await;
+        let transcription = inner.locations.transcription_model();
+        let translation = inner.locations.translation_model(inner.state.variant);
+        ModelLocations {
+            transcription_installed: fast_size_matches(&transcription, TRANSCRIPTION),
+            translation_installed: fast_size_matches(&translation, inner.state.variant.asset()),
+            transcription,
+            translation,
+            translation_disk_gb: format!(
+                "{:.1}",
+                inner.state.variant.asset().size_bytes as f64 / 1_000_000_000.0
+            ),
+        }
+    }
+
+    pub async fn manage(&self, command: ManagementCommand) -> Result<ModelSnapshot, String> {
+        let mut inner = self.inner.lock().await;
+        if inner.closing {
+            return Err("model setup is shutting down".into());
+        }
+        match command {
+            ManagementCommand::Download(kind) => {
+                if matches!(kind, ModelKind::Translation)
+                    && !inner.state.translation_engine_available
+                {
+                    return Err("translation engine is not installed".into());
+                }
+                self.start(&mut inner, kind.index(), true).await;
+            }
+            ManagementCommand::CancelTranslation => self.cancel(&mut inner, &[1]).await,
+            ManagementCommand::RefreshTranslation => {
+                // TranslateModelDownloader.refresh checks the actual file first;
+                // a transfer retains its progress only while that file is absent.
+                let state = if fast_size_matches(
+                    &inner.locations.translation_model(inner.state.variant),
+                    inner.state.variant.asset(),
+                ) {
+                    DownloadState::Ready
+                } else if inner.state.translation.is_downloading() {
+                    inner.state.translation.clone()
+                } else {
+                    DownloadState::Idle
+                };
+                inner.set_download_state(1, state);
+            }
+        }
+        let snapshot = inner.snapshot();
+        drop(inner);
+        (self.changed)(snapshot.clone());
+        Ok(snapshot)
+    }
+
+    async fn cancel(&self, inner: &mut Inner, indexes: &[usize]) {
+        let mut cancelled_jobs = Vec::new();
+        for &index in indexes {
+            if inner.jobs[index].as_ref().is_some_and(|job| job.cancelling) {
+                // A prior caller may disappear while awaiting the join.
+                // Repeated cancel still completes that owned cleanup.
+                cancelled_jobs.push(index);
+                continue;
+            }
+            let downloading = if index == 0 {
+                &inner.state.required
+            } else {
+                &inner.state.translation
+            };
+            if !downloading.is_downloading() {
+                continue;
+            }
+            inner.generations[index] += 1;
+            let cancelled = if index == 0 {
+                DownloadState::Cancelled
+            } else if fast_size_matches(
+                &inner.locations.translation_model(inner.state.variant),
+                inner.state.variant.asset(),
+            ) {
+                DownloadState::Ready
+            } else {
+                DownloadState::Idle
+            };
+            inner.set_download_state(index, cancelled);
+            if let Some(active) = inner.jobs[index].as_mut() {
+                active.cancelling = true;
+                active.task.request_cancel();
+                cancelled_jobs.push(index);
+            }
+        }
+        (self.changed)(inner.snapshot());
+        for index in cancelled_jobs {
+            // Holding the command mutex serializes a following Retry
+            // until the old file/OS lock has been released. Workers
+            // never acquire this mutex during transfer or cleanup.
+            // Keep ownership in the service across await. If the IPC
+            // future itself is dropped, Retry/quit can still join it.
+            let result = inner.jobs[index]
+                .as_mut()
+                .expect("cancelled job")
+                .task
+                .wait()
+                .await;
+            inner.jobs[index].take();
+            match result {
+                Ok(DownloadState::Ready) => inner.set_download_state(index, DownloadState::Ready),
+                Ok(DownloadState::Failed(message)) => {
+                    inner.set_download_state(index, DownloadState::Failed(message))
+                }
+                Err(error) => {
+                    inner.set_download_state(index, DownloadState::Failed(error.to_string()))
+                }
+                _ => (),
+            }
+        }
+    }
+
+    async fn start(&self, inner: &mut Inner, index: usize, redownload: bool) {
         if let Some(job) = &mut inner.jobs[index] {
             // A terminal watch update can arrive just before the worker returns.
             // Await that final join so a rapid Retry is never silently ignored.
@@ -270,7 +364,9 @@ impl ModelSetupService {
             match job.task.wait().await {
                 Ok(DownloadState::Ready) => {
                     inner.set_download_state(index, DownloadState::Ready);
-                    return;
+                    if !redownload {
+                        return;
+                    }
                 }
                 Err(error) => {
                     inner.set_download_state(index, DownloadState::Failed(error.to_string()));
@@ -278,6 +374,7 @@ impl ModelSetupService {
                 }
                 _ => (),
             }
+            inner.jobs[index].take();
         }
         if inner.downloader.is_none() {
             match Downloader::new() {

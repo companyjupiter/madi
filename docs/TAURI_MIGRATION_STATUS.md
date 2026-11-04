@@ -15,6 +15,20 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Settings model-management owner: explicit re-download, translation-only cancel
+  and source-compatible presence refresh preserve first-run choice and installed
+  bytes. Three new loopback transfer tests cover failure/retry, independent
+  cancellation and dropped callers; repeated-cancel cleanup has RED→GREEN
+  mutation evidence. All eight model service tests and 96 local Rust tests pass,
+  along with formatting/clippy. Settings controls are not connected yet. See
+  `runtime/MODEL_MANAGEMENT.md` and `evidence/model-management-owner-2026-11-04.json`.
+
+- The text-pass revision `a6f4ba2` passed Windows Rust/frontend checks but its
+  Korean-number reference script failed to decode UTF-8 source with Python's
+  Windows cp1252 default. `da3b146` makes both new gates' text I/O explicitly
+  UTF-8. A local cp1252-default reproduction fails before the fix and both
+  portable gates pass after it; actual rerun CI remains pending.
+
 - Combined text-pass candidate: Korean number formatting matches 5,839 Swift
   inputs; combined glossary/number correction and the original stable scan match
   137 sequences / 4,679 snapshots. Target changes during file processing,
