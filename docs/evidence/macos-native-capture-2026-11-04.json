@@ -232,9 +232,33 @@
     "Hardware microphone and ScreenCaptureKit capture NOT_RUN",
     "TCC prompts, device switch/disconnect and real startup cancellation NOT_RUN",
     "Mixing, pause/resume, segment-file ownership and live executor/UI unconnected",
-    "GUI re-launch NOT_RUN: computer-use reported Mac locked",
     "Windows native capture unimplemented; hardware deferred by user",
-    "Release disabled; ad-hoc candidate is not notarized",
-    "New native-capture-head CI pending; prior segmenter CI 41771408788 is separate evidence"
-  ]
+    "Release disabled; ad-hoc candidate is not notarized"
+  ],
+  "nativeUIFollowup": {
+    "binarySourceRevision": "3baf384d0e6b302c6209c463608e83ae3fc6f0cb",
+    "status": "PASS",
+    "checks": [
+      "Old candidate quit via Cmd+Q; inventory confirmed not running",
+      "Fresh bundle launch shows Korean setup and detected microphone",
+      "Cmd+, opens native Settings Recording tab",
+      "Native Save toolbar action updates selected tab and content",
+      "Persisted auto-save on, debug off, VAD 0.55 preserved"
+    ],
+    "captures": {
+      "out/native-ui-2026-11-04/tauri-capture-build-setup.jpg": "4a4dc2e50d492ca9f189531dadeda50c49f059d3b9e286522aaebdb23c9c1778",
+      "out/native-ui-2026-11-04/tauri-capture-build-setup.txt": "9f193bd6b7c5c515b54986f7f6273e6d8cf70aab7d155ffb0b4465ab7c85d7c5",
+      "out/native-ui-2026-11-04/tauri-capture-build-save.jpg": "62eb3faf9d728a02b7b565bd6052678ad69f90476650a704b44eba873f32b39d",
+      "out/native-ui-2026-11-04/tauri-capture-build-save.txt": "62d4d632ca1374eaa757bc321a953003b17a16f46e70bc963caa77d77b54fb03"
+    },
+    "limitation": "Smoke check only; full original/candidate UI parity NOT_PASS. No audio devices opened."
+  },
+  "ciFollowup": {
+    "revision": "c2289f0a8fab614aa6e23353c8841697c81d8095",
+    "pushRun": "https://github.com/companyjupiter/madi/actions/runs/41773521959",
+    "prRun": "https://github.com/companyjupiter/madi/actions/runs/41773526449",
+    "status": "PASS",
+    "receipt": "docs/evidence/desktop-ci-c2289f0-2026-11-04.json",
+    "limitation": "Prior Windows checkpoint failure remains unexplained despite 100 passing repeats. Hardware capture and full UI parity remain open."
+  }
 }

@@ -24,6 +24,15 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   permissions, mixing/pause and the live executor/UI remain open; see
   `runtime/NATIVE_CAPTURE_BRIDGE.md`.
 
+  Revision `c2289f0` passes desktop push CI `41773521959` and PR CI
+  `41773526449`: 103 macOS / 93 Windows Rust tests, four frontend tests,
+  and 50 additional Windows archive repetitions in each run. The push artifacts
+  have verified clean-source binary, package, runtime and notice hashes; the
+  macOS native replay gate also passes. See
+  `evidence/desktop-ci-c2289f0-2026-11-04.json`. After unlock, fresh local app
+  launch, Cmd+, and native Save-tab switching passed with stored values intact.
+  This smoke check does not establish full UI parity or hardware capture.
+
 - Segmenter revision `9685cb4` passes desktop CI `41771408788`: 101 macOS /
   93 Windows Rust tests and four frontend tests, including live Swift and pinned
   segmenter gates. Downloaded clean-source executable/package/runtime/notice
@@ -34,7 +43,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   archive checkpoint regression (62/63 platform tests). Its boolean assertion
   did not retain the underlying file error. The separate passing push run does
   not close this intermittent failure. Error diagnostics and a 50-run Windows
-  regression loop are added; cause and actual Windows fix remain open.
+  regression loop are added. Both `c2289f0` runs pass all 100 additional
+  repetitions; the failure has not reproduced, and its cause and actual Windows
+  fix remain open.
 
 - Live PCM windowing foundation: the unchanged Swift segmenter and Rust match
   225 sequences / 24,347 snapshots / 2,676 segments, including exact PCM hashes,
