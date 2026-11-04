@@ -25,6 +25,8 @@ on:
       - 'apps/macos/Sovereign/Audio/AudioDevices.swift'
       - 'apps/macos/Sovereign/Audio/AudioDecode.swift'
       - 'apps/macos/Sovereign/Audio/Resampler.swift'
+      - 'apps/macos/Sovereign/Audio/Segmenter.swift'
+      - 'apps/macos/Tests/SovereignCoreTests/SegmenterEarlyFlushTests.swift'
       - 'apps/macos/Sovereign/Audio/WavWriter.swift'
       - 'apps/macos/Tests/AudioDecodeLimitTests.swift'
       - 'apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatter*Tests.swift'
@@ -115,6 +117,7 @@ jobs:
           python3 scripts/check_personal_vocabulary_parity.py
           python3 scripts/check_korean_numbers_parity.py
           python3 scripts/check_text_passes_parity.py
+          python3 scripts/check_segmenter_parity.py
           python3 scripts/check_asset_manifest_parity.py
           python3 scripts/check_model_setup_parity.py
           python3 scripts/check_model_gate_parity.py
@@ -141,6 +144,7 @@ jobs:
           python scripts/check_personal_vocabulary_parity.py --rust-only
           python scripts/check_korean_numbers_parity.py --rust-only
           python scripts/check_text_passes_parity.py --rust-only
+          python scripts/check_segmenter_parity.py --rust-only
           python scripts/check_asset_manifest_parity.py --rust-only
           python scripts/check_model_setup_parity.py --rust-only
           python scripts/check_model_gate_parity.py --rust-only
@@ -179,6 +183,7 @@ jobs:
             out/personal-vocabulary-parity/report.json
             out/korean-numbers-parity/report.json
             out/text-passes-parity/report.json
+            out/segmenter-parity/report.json
             out/asset-manifest-parity/report.json
             out/model-setup-parity/report.json
             out/model-gate-parity/report.json

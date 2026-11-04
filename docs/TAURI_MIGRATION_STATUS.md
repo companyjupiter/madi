@@ -15,6 +15,21 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Live PCM windowing foundation: the unchanged Swift segmenter and Rust match
+  225 sequences / 24,347 snapshots / 2,676 segments, including exact PCM hashes,
+  offset bits, speech flags, previews, mutable settings and final tails. Sixteen
+  legacy fragmentation groups preserve identical PCM. Four regressions include
+  RED→GREEN evidence for the source's retained adaptive peak. Native sample
+  capture, resampling/mixing, WAV ownership, engine feeding and recording UI are
+  **not connected by this change**; see `runtime/LIVE_SEGMENTATION.md`.
+
+- Native-toolbar revision `44e2548` passes desktop CI `41769617691` with
+  97 macOS / 89 Windows Rust tests, four frontend tests, all references and builds.
+  Both downloaded artifact sets match clean source and recorded binary/package/
+  runtime/notice hashes (`evidence/desktop-ci-44e2548-2026-11-04.json`). The form
+  follow-up `1c1b969` also corrects the Save folder row and diagnostic-path line
+  break in actual native captures; full UI parity remains open.
+
 - Native macOS Settings toolbar candidate: actual AppKit buttons now replace
   the web tabs, with original SF Symbols, centered title and a 492×500 pt frame.
   All five native callbacks, selection highlight, close/reopen and ko/en/ja

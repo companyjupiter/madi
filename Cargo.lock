@@ -1786,6 +1786,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "sha2",
  "unicode-normalization",
  "unicode-segmentation",
  "uuid",

@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-04",
+  "sourceHead": "1c1b9699ee33b298c97c3d7ca1f03a09054e1eb1",
+  "sourceDirty": true,
+  "sourceSHA256": {
+    ".gitattributes": "b92a3f7b64f8554d64e3695d29ea9f13f4cf9242d34cc9a3851359346c4f5b74",
+    ".github/workflows/desktop-parity.yml": "451c91484a1eeabb65e0955d23767ac98211685404c6b16783ecde3300036d68",
+    "Cargo.lock": "34edea7a803aaefc9e08ed8d8fdd4ec6287aec38b0012b95fb0f536c3d8eac52",
+    "crates/madi-core/Cargo.toml": "4c4bd112928d2a1065880b3515f2059a9079256c0026317b9b10e5aeebf499ee",
+    "crates/madi-core/examples/segmenter_oracle.rs": "08f73913ba0f4f41b635cf37e1bbee3c57c3951ac426f6c6df5695ef1962c69a",
+    "crates/madi-core/src/lib.rs": "4ea15826b4e00526b27d3ff70d8148b6d577e59652c5b002f9ef3b044dc71f9d",
+    "crates/madi-core/src/segmenter.rs": "1be6533e68784ad1e2df7f6d4f5fad8d43c485c24fdf321d421f3b5ac4ee6412",
+    "design/parity/segmenter-reference.json": "66eebe875a035f75b502a043cb74bff6304b3bc1a8473e2c4b126a05ed7d0067",
+    "scripts/check_segmenter_parity.py": "429e75de4deaf3874d4c7f9b91693dabc1d05b6b49c94906f8e62c75ffdf3aae",
+    "tests/parity/SegmenterOracle.swift": "4cf39c1ee76d74cb72df3577da24cc364b8e723904558d63282b1876a5a0bf79"
+  },
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "differentials": {
+    "live": {
+      "cases": 225,
+      "snapshots": 24347,
+      "segments": 2676,
+      "legacyFragmentationGroups": 16,
+      "corpusSHA256": "e1af048257888ee75fd27f04ccd3e5235ad55c3ebeac9ed9c2f8e3fed2aa72f3",
+      "resultSHA256": "a71f0ae6c77c3d266336f9d7d09eae2609fef5dfc048a21d5a56506307ea4bf6",
+      "sources": {
+        "apps/macos/Sovereign/Audio/Segmenter.swift": "8db64d433f12eb72b5b9da87233687d07258bdd8489474c5c31b7e5a82dab957",
+        "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+        "apps/macos/Tests/SovereignCoreTests/SegmenterEarlyFlushTests.swift": "b197d370f3a227f460534a0a9044f8f09c51ca9453fa5d3ceac8f494a9e7f25a"
+      },
+      "status": "passed",
+      "nativeSwiftRun": true,
+      "scope": "Exact PCM hashes, offset bits, body counts, speech flags, previews and flush/configuration transitions; not device capture, resampling, WAV IO, engine feeding or native UI acceptance."
+    },
+    "portable": {
+      "cases": 225,
+      "snapshots": 24347,
+      "segments": 2676,
+      "legacyFragmentationGroups": 16,
+      "corpusSHA256": "e1af048257888ee75fd27f04ccd3e5235ad55c3ebeac9ed9c2f8e3fed2aa72f3",
+      "resultSHA256": "a71f0ae6c77c3d266336f9d7d09eae2609fef5dfc048a21d5a56506307ea4bf6",
+      "sources": {
+        "apps/macos/Sovereign/Audio/Segmenter.swift": "8db64d433f12eb72b5b9da87233687d07258bdd8489474c5c31b7e5a82dab957",
+        "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+        "apps/macos/Tests/SovereignCoreTests/SegmenterEarlyFlushTests.swift": "b197d370f3a227f460534a0a9044f8f09c51ca9453fa5d3ceac8f494a9e7f25a"
+      },
+      "status": "passed",
+      "nativeSwiftRun": false,
+      "scope": "Exact PCM hashes, offset bits, body counts, speech flags, previews and flush/configuration transitions; not device capture, resampling, WAV IO, engine feeding or native UI acceptance."
+    }
+  },
+  "checks": {
+    "rustTests": [
+      16,
+      71,
+      14
+    ],
+    "totalTests": 101,
+    "frontendTests": 4,
+    "clippy": "PASS",
+    "rustfmt": "PASS",
+    "mutationRedThenGreen": "Resetting adaptive peak in cut fails the existing quiet-speech scenario; restoring source behavior passes all tests",
+    "windowsCI": "NOT_RUN for this new segmenter revision; both-host gate and uploaded report added"
+  },
+  "logs": {
+    "live": {
+      "sha256": "e65fc8ebb2b493426e6e850065bf69fd50ba86d913f3b83ea8ec42273bd2514a"
+    },
+    "portable": {
+      "sha256": "f7ed9e1926d5e4cfa929c2ac7dc460b044258b6f8ad892538d35e2ef445b9e63"
+    },
+    "full-tests": {
+      "sha256": "759f9b42b8e36150177ec6e7f68bc0223b3cf652a2882ab02c2e23d32933deef"
+    },
+    "mutation": {
+      "sha256": "6204f48e925abbecec300906801995dd86aa6c2dc0c602df534084ce2d0ff92d"
+    },
+    "clippy": {
+      "sha256": "ee66fe8e11fe35485142c32120bed422026a0a8a2a6c554aa6b86af84b8d6d97"
+    },
+    "frontend-tests": {
+      "sha256": "97abecfba3a2f92e1bc315bb2ff29729c2e3bac5c91d5d680f9dba74e80c9c1f"
+    }
+  },
+  "limitations": [
+    "Synthetic PCM, not microphone or ScreenCaptureKit capture",
+    "Native resampling/mixing, WAV ownership, preview cadence, engine feeding and live UI remain unconnected",
+    "Invalid runtime configuration is rejected explicitly; not claimed to match Swift traps/hangs",
+    "Early flush is not claimed fragmentation-invariant; only the 16 disabled-early-flush groups have that property"
+  ],
+  "productRelease": false
+}

@@ -13,3 +13,6 @@ unicode-segmentation = "=1.13.3"
 unicode-normalization = "=0.1.25"
 regex = "=1.13.1"
 madi-protocol = { path = "../madi-protocol" }
+
+[dev-dependencies]
+sha2 = "=0.10.9"

@@ -62,3 +62,7 @@ child supervision, ordered output, cancellation and owned JSONL cleanup. Its
 the [file effect executor](FILE_SESSION_EXECUTOR.md) now connects preparation,
 native engine lifetime and owned-file cleanup. Live capture effects and
 storage/UI wiring remain open.
+
+The portable live [PCM windowing layer](LIVE_SEGMENTATION.md) now has independent
+unchanged-Swift comparison for exact segments, previews and tails. It is not
+yet a native capture adapter or the live effect executor.

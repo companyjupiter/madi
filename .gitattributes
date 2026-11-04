@@ -24,3 +24,8 @@ apps/macos/Sovereign/SovereignApp.swift text eol=lf
 apps/macos/Sovereign/Audio/AudioSource.swift text eol=lf
 apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatterTests.swift text eol=lf
 apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatterGuard5Tests.swift text eol=lf
+
+# Live PCM windowing reference sources must hash identically on Windows.
+apps/macos/Sovereign/Audio/Segmenter.swift text eol=lf
+apps/macos/Sovereign/Audio/WavWriter.swift text eol=lf
+apps/macos/Tests/SovereignCoreTests/SegmenterEarlyFlushTests.swift text eol=lf
