@@ -114,3 +114,47 @@ fn missing_model_does_not_claim_the_revision_and_live_scan_defers_the_tail() {
     assert_eq!(final_jobs.len(), 1);
     assert_eq!(final_jobs[0].id, Uuid::from_u128(2));
 }
+
+#[test]
+fn cache_closes_only_applied_backfill_keys_and_never_rewrites_a_joined_run() {
+    let mut store = TranscriptStore::default();
+    store.load(vec![line(1, "안녕하세요 반가운 아침입니다.", 0.0)]);
+    let targets = vec!["English".into(), "Japanese".into()];
+    let mut s = Session::default();
+    let jobs = s.stable(&mut store, &targets, Some(50264), "", true, true);
+    for lang in &jobs[0].targets {
+        s.handle(
+            &mut store,
+            &Effect::Drop {
+                id: jobs[0].id,
+                language: lang.clone(),
+                source: jobs[0].text.clone(),
+            },
+        );
+    }
+    let mut backfill = s.backfill(&mut store, &targets, Some(50264), true);
+    let cached = BTreeMap::from([("English".into(), "Cached answer.".into())]);
+    s.apply_cached(&mut store, &mut backfill[0], &cached);
+    assert_eq!(s.backfill_remaining(), 1);
+    assert_eq!(backfill[0].targets, ["Japanese"]);
+    assert_eq!(store.lines()[0].translations["English"], "Cached answer.");
+    s.handle(
+        &mut store,
+        &result(&backfill[0], "Japanese", "日本語です。"),
+    );
+    assert_eq!(s.backfill_remaining(), 0);
+    store.load(vec![
+        line(1, "And", 0.0),
+        line(2, "we discuss this today.", 1.0),
+    ]);
+    s = Session::default();
+    let mut joined = s.stable(&mut store, &["Korean".into()], Some(50259), "", true, true);
+    assert!(!joined[0].cacheable);
+    s.apply_cached(
+        &mut store,
+        &mut joined[0],
+        &BTreeMap::from([("Korean".into(), "must not apply".into())]),
+    );
+    assert_eq!(joined[0].targets, ["Korean"]);
+    assert!(store.lines()[1].translations.is_empty());
+}

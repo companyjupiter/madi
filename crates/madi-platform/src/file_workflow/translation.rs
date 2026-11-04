@@ -6,8 +6,14 @@ use crate::{
 };
 use madi_core::{
     assets::TranslationVariant,
-    translation::{Kind, client::Configuration as ClientConfiguration, committed},
+    translation::{
+        Kind,
+        cache::{Faq, Interim},
+        client::Configuration as ClientConfiguration,
+        committed,
+    },
 };
+mod faq;
 #[cfg(test)]
 mod tests;
 
@@ -15,6 +21,7 @@ mod tests;
 pub struct Resources {
     pub locations: Locations,
     pub variant: TranslationVariant,
+    pub faq_path: Option<PathBuf>,
     #[cfg(test)]
     pub(crate) test_launch: Option<Launch>,
 }
@@ -23,9 +30,14 @@ impl Resources {
         Self {
             locations,
             variant,
+            faq_path: None,
             #[cfg(test)]
             test_launch: None,
         }
+    }
+    pub fn with_faq_path(mut self, path: PathBuf) -> Self {
+        self.faq_path = Some(path);
+        self
     }
     fn launch(&self) -> Option<Launch> {
         #[cfg(test)]
@@ -43,6 +55,8 @@ pub(super) struct Translations {
     resources: Option<Resources>,
     client: Option<TranslationClient>,
     pub policy: committed::Session,
+    faq: Faq,
+    pub interim: Interim,
     pub language_token: Option<i64>,
     pub tail: Option<(Instant, Uuid, u64)>,
     pub idle: Option<Instant>,
@@ -54,11 +68,17 @@ pub(super) struct Translations {
 }
 impl Translations {
     pub fn new(resources: Option<Resources>) -> io::Result<Self> {
+        let faq = resources
+            .as_ref()
+            .and_then(|r| r.faq_path.as_deref())
+            .map_or_else(crate::translation_cache::starter_faq, faq::load);
         Ok(Self {
             broker: DnaBroker::new()?,
             resources,
             client: None,
             policy: committed::Session::default(),
+            faq,
+            interim: Interim::default(),
             language_token: None,
             tail: None,
             idle: None,
@@ -150,11 +170,27 @@ impl Worker {
             client.configuration_mut().max_pending = 0;
             client.configuration_mut().shed_secondary_targets_at = 0;
         }
-        for request in requests {
+        let mut cache_hit = false;
+        for mut request in requests {
+            if request.cacheable
+                && let Some(cached) = self
+                    .translations
+                    .faq
+                    .lookup(&request.text)
+                    .or_else(|| self.translations.interim.get(&request.text))
+            {
+                self.translations
+                    .policy
+                    .apply_cached(&mut self.store, &mut request, &cached);
+                cache_hit = true;
+            }
+            if request.targets.is_empty() {
+                continue;
+            }
             let Some(client) = &mut self.translations.client else {
                 break;
             };
-            let (_, update) = client
+            let (accepted, update) = client
                 .translate(
                     &self.translations.broker,
                     &request.text,
@@ -165,6 +201,31 @@ impl Worker {
                 )
                 .await;
             self.translation_update(update);
+            if !accepted {
+                // A terminal client cannot emit another callback. Close only
+                // these rejected source/language keys using the same empty
+                // terminal result semantics as a failed in-flight request.
+                for language in request.targets {
+                    self.translations.policy.handle(
+                        &mut self.store,
+                        &madi_core::translation::client::Effect::Result(
+                            madi_core::translation::client::Translation {
+                                id: request.id,
+                                language,
+                                source: request.text.clone(),
+                                text: String::new(),
+                            },
+                        ),
+                    );
+                }
+                self.schedule();
+            }
+        }
+        if cache_hit {
+            self.schedule();
+            if self.translations.finalized && self.translations.policy.depth == 0 {
+                self.auto_save().await;
+            }
         }
     }
     pub(super) async fn translate_stable(&mut self, including_last: bool) {

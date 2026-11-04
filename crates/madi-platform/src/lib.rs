@@ -28,6 +28,7 @@ pub mod session_archive;
 pub mod settings_native;
 pub mod transcript_export;
 pub mod transcript_native;
+pub mod translation_cache;
 pub mod translation_client;
 pub mod workspace_preferences;
 pub mod workspace_scan;

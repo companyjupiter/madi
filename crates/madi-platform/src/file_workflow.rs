@@ -563,6 +563,7 @@ impl Worker {
     async fn clear(&mut self) {
         self.stop_translation().await;
         self.translations.policy = Default::default();
+        self.translations.interim.clear();
         self.translations.language_token = None;
         self.translations.finalized = false;
         self.translations.idle = None;
@@ -619,6 +620,7 @@ impl Worker {
         self.translations.finalized = true;
         self.translations.preview_tick = None;
         self.translate_stable(true).await;
+        self.translations.interim.clear();
         self.auto_save().await;
         self.publish();
     }

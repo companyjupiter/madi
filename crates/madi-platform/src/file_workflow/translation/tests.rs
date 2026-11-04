@@ -26,11 +26,13 @@ for raw in sys.stdin.buffer:
   os.write(1,('PFX_OK '+line.split()[1]+' 12\n').encode());continue
  n+=1
  (root/f'dna-turn-{generation}-{n}').write_text(line,encoding='utf-8')
- prefix='Previous ' if n==1 else 'Fresh '
+ japanese=line.startswith('%%TRN 2 ') or 'Target Japanese:' in line
+ prefix='日本語の' if japanese else ('Previous ' if n==1 else 'Fresh ')
  os.write(1,('[perf] prefill: 1 tok\n'+prefix).encode())
  if (root/'hold').exists():
   while not (root/f'release-{generation}-{n}').exists():time.sleep(.005)
- os.write(1,b'reply.\n[perf] generation: 3 tok\n> ')
+ if (root/'crash').exists():sys.exit(7)
+ os.write(1,(('回答です。' if japanese else 'reply.')+'\n[perf] generation: 3 tok\n> ').encode())
 "#;
 async fn setup(hold: bool) -> (tempfile::TempDir, FileWorkflow, PreferencesService, PathBuf) {
     setup_with_engine(hold, WORDS).await
@@ -38,6 +40,13 @@ async fn setup(hold: bool) -> (tempfile::TempDir, FileWorkflow, PreferencesServi
 async fn setup_with_engine(
     hold: bool,
     engine: &str,
+) -> (tempfile::TempDir, FileWorkflow, PreferencesService, PathBuf) {
+    setup_with_bank(hold, engine, None).await
+}
+async fn setup_with_bank(
+    hold: bool,
+    engine: &str,
+    bank: Option<Vec<madi_core::translation::cache::Entry>>,
 ) -> (tempfile::TempDir, FileWorkflow, PreferencesService, PathBuf) {
     let (root, config, source) = fixture("", engine);
     if hold {
@@ -68,6 +77,11 @@ async fn setup_with_engine(
         model: root.path().into(),
         arguments: vec!["-u".into(), "-c".into(), DNA.into()],
     });
+    if let Some(entries) = bank {
+        let path = root.path().join("faq_translations.json");
+        std::fs::write(&path, serde_json::to_vec_pretty(&entries).unwrap()).unwrap();
+        resources.faq_path = Some(path);
+    }
     let w = FileWorkflow::with_translation(
         config,
         Some(ArchiveSettings {
@@ -318,4 +332,142 @@ async fn source_language_only_does_not_start_a_dna_process() {
     w.shutdown().await.unwrap();
     p.shutdown().await.unwrap();
     assert!(!root.path().join("dna-launches").exists());
+}
+
+#[tokio::test]
+async fn terminal_engine_failure_closes_shed_backfill_without_claiming_translations() {
+    let engine = r#"
+print('=== WORD TIMESTAMPS ===',flush=True)
+for i in range(45):
+ print(f'[{i*5:.1f}s-{i*5+1:.1f}s] 안녕하세요 반가운 아침{i}입니다. «conf 0.99»',flush=True)
+print('<<SEG_END>>',flush=True)
+while not (root/'finish').exists():time.sleep(.005)
+print('<<FLUSH_END>>',flush=True)
+"#;
+    let (root, w, p, source) = setup_with_engine(true, engine).await;
+    w.start(
+        source,
+        FileSettings {
+            language_token: Some(50264),
+            ..Default::default()
+        },
+        None,
+    )
+    .await
+    .unwrap();
+    marker(&root.path().join("dna-turn-1-1")).await;
+    until(&w, |s| {
+        s.lines.len() >= 44 && s.translation_backlog > 0 && s.translation_queue_depth > 0
+    })
+    .await;
+    std::fs::write(root.path().join("crash"), b"crash").unwrap();
+    release(root.path(), 1, 1);
+    until(&w, |s| s.translation_queue_depth == 0).await;
+    std::fs::write(root.path().join("finish"), b"go").unwrap();
+    let done = until(&w, |s| s.phase == ViewPhase::Done).await;
+    assert_eq!(done.translation_queue_depth, 0);
+    assert_eq!(
+        done.translation_backfill_remaining, 0,
+        "dead client must not leave a backfill barrier pending"
+    );
+    assert_eq!(done.translation_backlog, 0);
+    assert_eq!(done.lines.len(), 45);
+    assert!(done.lines.iter().all(|l| l.line.translations.is_empty()));
+    // Translation overlays share the owner's existing 33 ms render batch.
+    let settled = until(&w, |s| {
+        s.lines.len() == 45
+            && s.lines
+                .iter()
+                .all(|l| l.line.suppressed_translations.contains("English"))
+    })
+    .await;
+    assert!(settled.lines.iter().all(|l| l.line.translations.is_empty()));
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("dna-launches"))
+            .unwrap()
+            .lines()
+            .count(),
+        1,
+        "terminal failure must not trigger an unlimited restart loop"
+    );
+    w.shutdown().await.unwrap();
+    p.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn starter_faq_reaches_transcript_and_archive_without_a_model_turn() {
+    let engine = WORDS.replace("안녕하세요 반가운 아침입니다.", "오늘 샤워해도 되나요?");
+    let (root, w, p, source) = setup_with_engine(false, &engine).await;
+    p.settings(SettingsCommand::TranslationTarget {
+        language: Language::English,
+        enabled: false,
+    })
+    .await
+    .unwrap();
+    p.settings(SettingsCommand::TranslationTarget {
+        language: Language::Japanese,
+        enabled: true,
+    })
+    .await
+    .unwrap();
+    start(&w, source).await;
+    let done = until(&w, |s| {
+        s.phase == ViewPhase::Done && s.lines[0].line.translations.contains_key("Japanese")
+    })
+    .await;
+    assert_eq!(
+        done.lines[0].line.translations["Japanese"],
+        "今日、シャワーを浴びてもいいですか?"
+    );
+    assert_eq!(done.translation_queue_depth, 0);
+    assert!(
+        std::fs::read_to_string(done.archive.transcript.unwrap())
+            .unwrap()
+            .contains("今日、シャワーを浴びてもいいですか?")
+    );
+    marker(&root.path().join("dna-launches")).await;
+    w.shutdown().await.unwrap();
+    p.shutdown().await.unwrap();
+    assert!(!root.path().join("dna-turn-1-1").exists());
+}
+
+#[tokio::test]
+async fn a_partial_faq_hit_queues_only_the_missing_language_and_preserves_user_bank() {
+    let entry = BTreeMap::from([
+        ("Korean".into(), "안녕하세요 반가운 아침입니다.".into()),
+        ("English".into(), "Cached English.".into()),
+    ]);
+    let (root, w, p, source) = setup_with_bank(false, WORDS, Some(vec![entry])).await;
+    let bank = root.path().join("faq_translations.json");
+    let before = std::fs::read(&bank).unwrap();
+    p.settings(SettingsCommand::TranslationTarget {
+        language: Language::Japanese,
+        enabled: true,
+    })
+    .await
+    .unwrap();
+    start(&w, source).await;
+    let done = until(&w, |s| {
+        s.translation_queue_depth == 0 && s.lines[0].line.translations.len() == 2
+    })
+    .await;
+    assert_eq!(
+        done.lines[0].line.translations["English"],
+        "Cached English."
+    );
+    assert_eq!(
+        done.lines[0].line.translations["Japanese"],
+        "日本語の回答です。"
+    );
+    assert!(
+        std::fs::read_to_string(root.path().join("dna-turn-1-1"))
+            .unwrap()
+            .starts_with("%%TRN 2 ")
+    );
+    assert!(!root.path().join("dna-turn-1-2").exists());
+    w.shutdown().await.unwrap();
+    p.shutdown().await.unwrap();
+    assert_eq!(std::fs::read(bank).unwrap(), before);
+    let saved = std::fs::read_to_string(done.archive.transcript.unwrap()).unwrap();
+    assert!(saved.contains("Cached English.") && saved.contains("日本語の回答です。"));
 }

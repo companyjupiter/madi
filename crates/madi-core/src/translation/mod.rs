@@ -1,5 +1,6 @@
 //! Shipping translation queue, prompt and response policies. Transcript revision
 //! acceptance remains the session owner's responsibility.
+pub mod cache;
 pub mod client;
 pub mod committed;
 pub mod output;

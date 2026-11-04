@@ -41,9 +41,12 @@ probe through this same workflow and archive owner. The probe's model inputs
 and source audio are preserved. See
 `../evidence/macos-committed-translation-2026-11-05.json`.
 
-This is not complete translation or UI/UX parity. FAQ persistence/starter-pack
-lookup, interim translation requests/display and cache reuse, caption overlays,
-the full backlog HUD, summary/AI broker consumers, terminal-failure plus shed-backlog recovery, complete live timing tests,
-visual comparison, Windows native ASR/capture and Windows GPU inference remain
-open. Cache hits can still take an engine turn in this staged candidate. The
-existing shipping Swift implementation remains the comparison baseline.
+FAQ persistence, starter-pack lookup and committed cache reuse are now connected;
+the terminal-client/shed-backfill regression is also covered. See
+`TRANSLATION_CACHE.md` for that follow-up and its separate evidence.
+
+This is not complete translation or UI/UX parity. Interim translation
+requests/display, caption overlays, the full backlog HUD, summary/AI broker
+consumers, complete live timing tests, visual comparison, Windows native
+ASR/capture and Windows GPU inference remain open. The existing shipping Swift
+implementation remains the comparison baseline.

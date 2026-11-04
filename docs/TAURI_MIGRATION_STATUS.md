@@ -15,6 +15,27 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- FAQ persistence and committed cache reuse are connected to the native owner.
+  Exact normalized hits populate revision-guarded transcript translations and
+  the owned archive; partial hits queue only missing targets. A real engine
+  crash previously left 14 shed backfill keys pending with an empty queue; the
+  regression now reaches zero without fabricated translations or restart loops.
+  Existing malformed FAQ bytes are preserved, and concurrent first use publishes
+  one complete starter bank. Swift cache comparisons cover 394 cases, all
+  1,112,064 Unicode scalars, 7,200 LRU operations and all 15 starter entries.
+  A public JFK recording reaches an isolated preset FAQ translation and archive
+  in about 1.5 seconds, preserving its input and bank. This checks actual ASR and
+  cache integration, not DNA inference or translation quality. See
+  `runtime/TRANSLATION_CACHE.md` and
+  `evidence/macos-translation-cache-2026-11-05.json`. Interim request production
+  and caption display remain open, as do ambiguous FAQ source-column matching
+  and empty-value/backfill edge cases. Native GUI checking remains unavailable
+  while the Mac is locked. The final local source passes 168 Rust tests
+  (27/127/14), formatting, clippy, both cache comparisons and the existing
+  committed/client comparisons. Three deliberate mutations fail the intended
+  regressions and are restored. The rebuilt macOS debug app and relocated
+  package/decoder/native-capture replay also pass.
+
 - Committed translation now reaches the shared file/live workflow, display
   snapshots and owned Markdown archive. It connects trusted model admission,
   source-language routing, stable/coalesced scheduling, source revision gates,
@@ -26,16 +47,16 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   cover stale replies, reset, setting changes, tail timing and final saving.
   Three deliberate revision/archive mutations are detected and restored. See
   `runtime/COMMITTED_TRANSLATION.md` and
-  `evidence/macos-committed-translation-2026-11-05.json`. FAQ/interim cache reuse,
-  interim caption display, complete backlog HUD and actual live/UI acceptance
-  remain open. The Mac was locked at the latest Computer Use attempt.
-  The final local source passes 161 Rust tests (26/121/14), formatting, clippy,
+  `evidence/macos-committed-translation-2026-11-05.json`. Cache integration is
+  described above; interim caption display, complete backlog HUD and actual
+  live/UI acceptance remain open.
+  That source passes 161 Rust tests (26/121/14), formatting, clippy,
   both grouping/routing comparisons and a rebuilt standalone macOS debug app.
-  Its relocated package/decoder/capture replay also passes. The preceding
-  `032ce33` desktop CI passes on macOS (151 tests) and Windows (123 tests plus
-  50 archive repeats), with downloaded binaries, packages and translation
-  client result bytes verified in `evidence/desktop-ci-032ce33-2026-11-05.json`.
-  This new session connection requires its own CI verdict.
+  Its relocated package/decoder/capture replay also passes. `c996b2c` desktop CI
+  passes on macOS (161 tests) and Windows (133 tests plus 50 archive repeats),
+  with downloaded binaries, packages and committed/client result bytes verified
+  in `evidence/desktop-ci-c996b2c-2026-11-05.json`. The cache follow-up requires
+  its own CI verdict.
 
 - The native translation client now executes the shipping queue/prompt/output
   state through the shared DNA broker. Its 165 Swift scenarios / 6,767 operations

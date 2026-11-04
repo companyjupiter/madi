@@ -226,13 +226,21 @@ pub(crate) fn service(app: &tauri::AppHandle) -> Result<FileWorkflow, String> {
                 enabled: preferences.auto_save,
                 folder: preferences.folder,
             }),
-            Some(madi_platform::file_workflow::translation::Resources::new(
-                locations,
-                madi_core::assets::TranslationVariant::selected(
-                    madi_platform::model_presentation::physical_memory(),
-                    std::env::var("MADI_TRANSLATE_MODEL").ok().as_deref(),
+            Some(
+                madi_platform::file_workflow::translation::Resources::new(
+                    locations,
+                    madi_core::assets::TranslationVariant::selected(
+                        madi_platform::model_presentation::physical_memory(),
+                        std::env::var("MADI_TRANSLATE_MODEL").ok().as_deref(),
+                    ),
+                )
+                .with_faq_path(
+                    app.path()
+                        .data_dir()
+                        .map_err(|e| e.to_string())?
+                        .join("Sovereign/faq_translations.json"),
                 ),
-            )),
+            ),
             move |snapshot| {
                 if let Some(path) = &snapshot.archive.transcript {
                     let key = (snapshot.generation, snapshot.archive.write_revision);

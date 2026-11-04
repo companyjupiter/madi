@@ -131,6 +131,7 @@ pub struct Request {
     pub id: Uuid,
     pub text: String,
     pub targets: Vec<String>,
+    pub cacheable: bool,
 }
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Key {
@@ -240,6 +241,7 @@ impl Session {
             id: line.id,
             text,
             targets: missing,
+            cacheable: true,
         })
     }
     pub fn stable(
@@ -331,9 +333,35 @@ impl Session {
                 id: anchor.id,
                 text: run.text,
                 targets: missing,
+                cacheable: false,
             });
         }
         jobs
+    }
+    pub fn apply_cached(
+        &mut self,
+        store: &mut TranscriptStore,
+        request: &mut Request,
+        cached: &super::cache::Entry,
+    ) {
+        if !request.cacheable {
+            return;
+        }
+        let revision = text_revision(&request.text);
+        request.targets.retain(|lang| {
+            if let Some(text) = cached.get(lang) {
+                store.set_translation(request.id, lang.clone(), text, Some(revision), false);
+                false
+            } else {
+                true
+            }
+        });
+        // Cache hits have no client callback. Close only matching, successfully
+        // applied keys; an empty or stale cached value is not a valid translation.
+        let valid = store.valid_translation_languages(request.id, revision);
+        self.backfill.retain(|key| {
+            key.id != request.id || key.revision != revision || !valid.contains(&key.language)
+        });
     }
     fn valid_backlog(
         &self,

@@ -25,9 +25,10 @@ fn hash(path: &Path) -> io::Result<String> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
     let args: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
-    if args.len() != 5 {
+    let faq_mode = args.len() == 6 && args[5] == Path::new("public-faq");
+    if args.len() != 5 && !faq_mode {
         return Err(io::Error::other(
-            "usage: committed_translation_smoke <executables> <assets> <model-directory> <public-media> <report.json>",
+            "usage: committed_translation_smoke <executables> <assets> <model-directory> <public-media> <report.json> [public-faq]",
         ));
     }
     let bin = &args[0];
@@ -36,6 +37,15 @@ async fn main() -> io::Result<()> {
     let source = &args[3];
     let report = &args[4];
     let scratch = tempfile::tempdir()?;
+    let faq_path = scratch.path().join("faq.json");
+    let cached_text = "공개 연설에 미리 지정한 테스트 번역입니다.";
+    let faq_bytes = serde_json::to_vec(&json!([{
+        "English": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+        "Korean": cached_text,
+    }]))?;
+    if faq_mode {
+        std::fs::write(&faq_path, &faq_bytes)?;
+    }
     let preferences = PreferencesService::new(
         Store::load(
             scratch.path().join("preferences.json"),
@@ -58,20 +68,24 @@ async fn main() -> io::Result<()> {
         scratch_parent: scratch.path().into(),
     };
     let (tx, mut changes) = tokio::sync::mpsc::unbounded_channel();
+    let mut translation_resources = translation::Resources::new(
+        Locations {
+            bundle_resources: assets.clone(),
+            bundle_executables: bin.clone(),
+            support: model.clone(),
+        },
+        TranslationVariant::Quality4B,
+    );
+    if faq_mode {
+        translation_resources = translation_resources.with_faq_path(faq_path.clone());
+    }
     let w = FileWorkflow::with_translation(
         configuration,
         Some(ArchiveSettings {
             enabled: true,
             folder: scratch.path().join("archives"),
         }),
-        Some(translation::Resources::new(
-            Locations {
-                bundle_resources: assets.clone(),
-                bundle_executables: bin.clone(),
-                support: model.clone(),
-            },
-            TranslationVariant::Quality4B,
-        )),
+        Some(translation_resources),
         move |s| {
             let _ = tx.send(s);
         },
@@ -127,8 +141,22 @@ async fn main() -> io::Result<()> {
         .iter()
         .flat_map(|l| l.line.translations.values())
         .all(|text| markdown.contains(text));
+    let faq_unchanged = faq_mode
+        .then(|| std::fs::read(&faq_path))
+        .transpose()?
+        .map(|bytes| bytes == faq_bytes);
+    let exact_cache_hit = faq_mode.then(|| {
+        snapshot.lines.iter().any(|l| {
+            l.line
+                .translations
+                .get("Korean")
+                .is_some_and(|s| s == cached_text)
+        })
+    });
     if !unchanged
         || !saved_all
+        || faq_unchanged == Some(false)
+        || exact_cache_hit == Some(false)
         || snapshot.translation_backlog != 0
         || snapshot.translation_backfill_remaining != 0
     {
@@ -140,7 +168,8 @@ async fn main() -> io::Result<()> {
     std::fs::write(&archive_copy, &markdown)?;
     let value = json!({
         "status":"PASS", "elapsedSeconds":started.elapsed().as_secs_f64(),
-        "scope":"Real public audio through FileWorkflow ASR, committed translation and archive; GUI/live microphone/interim/FAQ are not exercised",
+        "scope":if faq_mode { "Real public audio through FileWorkflow ASR, isolated FAQ and archive; preset test translation, not model inference or translation quality" } else { "Real public audio through FileWorkflow ASR, committed translation and archive; GUI/live microphone/interim/FAQ are not exercised" },
+        "faqMode":faq_mode,"faqUnchanged":faq_unchanged,"exactCacheHit":exact_cache_hit,
         "source":source,"sourceSHA256":original,"sourceUnchanged":unchanged,
         "archive":archive_copy,"archiveSHA256":format!("{:x}",Sha256::digest(markdown.as_bytes())),"allTranslationsSaved":saved_all,
         "transcribeSHA256":hash(&bin.join("transcribe"))?,"translationEngineSHA256":hash(&bin.join("translate-engine-4b"))?,"decoderSHA256":hash(&bin.join("madi-audio-decode"))?,
