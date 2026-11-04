@@ -856,7 +856,11 @@ async fn cancelling_a_deferred_attach_does_not_launch_an_unowned_model() {
         .unwrap();
     broker
         .commands
-        .send(Control::Attach(launch(root.path()), attach_tx))
+        .send(Control::Attach(AttachRequest {
+            launch: launch(root.path()),
+            cleanup: broker.commands.clone(),
+            reply: attach_tx,
+        }))
         .unwrap();
     // Cancel is an acknowledgement barrier after the deferred attach command.
     broker.cancel_pending(client).await.unwrap();

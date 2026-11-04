@@ -15,6 +15,22 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- The native translation client now executes the shipping queue/prompt/output
+  state through the shared DNA broker. Its 165 Swift scenarios / 6,767 operations
+  preserve request/callback order, partial throttling, prefix caches, retries,
+  context reuse, forced prefixes and queue counts. Ten real process tests cover
+  recovery, replacement, terminal draining and cleanup; a queued-attachment
+  cancellation leak was reproduced and fixed. Two intentional mutations are
+  detected. A real Metal DNA4B probe completes three public-text translations
+  and a second client's request in one reaped process, with identical full
+  before/after engine/model hashes. See `runtime/TRANSLATION_CLIENT.md` and
+  `evidence/macos-translation-client-2026-11-05.json`. The file/live session's
+  model admission, scheduling, revision acceptance, interim display and backfill
+  still need connection; product translation/UI acceptance remains open.
+  The final local workspace passes 151 Rust tests (23/114/14), formatting,
+  clippy and both client comparisons; the 3,574 output/queue and 760 broker
+  policy comparisons also remain green.
+
 - Pure translation scheduling, prompt and output policies now match 3,574 live
   Swift oracle cases, including 6,300 queue operations. Unicode grapheme boundaries,
   reserved interim admission, revision replacement, example reuse/echo/replay,
@@ -26,6 +42,11 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   are still unconnected; these checks are not end-to-end translation acceptance.
   The final local snapshot passes 141 Rust tests (23/104/14), formatting,
   workspace clippy, the live Swift comparison and the pinned-reference comparison.
+  Revision `138a741` now completes macOS/Windows Desktop CI successfully with
+  141/113 Rust tests, the 3,574 policy cases and 50 Windows archive repeats.
+  Downloaded binaries/package and translation result bytes are verified in
+  `evidence/desktop-ci-138a741-2026-11-05.json`. That receipt precedes the client
+  connection above and does not establish its CI result.
 
 - The shared native DNA broker now has one resident process, caption-first/FIFO
   scheduling, caption-pressure admission, prefix registration, queued cancellation

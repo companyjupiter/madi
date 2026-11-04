@@ -59,8 +59,10 @@ detected before the original sources are restored. Local receipts are in
 
 ## Remaining acceptance
 
-The translation client lifecycle, prefix-cache generation, broker ownership,
-80 ms partial throttling, revision acceptance, stable-line coalescing, tail timers,
-interim display agreement and stop-time backfill still need connection and tests.
+The client lifecycle, prefix-cache generation, broker ownership and 80 ms partial
+throttling now have a native adapter and separate evidence in
+`TRANSLATION_CLIENT.md`. Session revision acceptance, stable-line coalescing, tail
+timers, interim display agreement and stop-time backfill still need connection
+and tests.
 No translation quality, full Unicode-universe equivalence, native UI/UX parity,
 real-document application result or Windows GPU acceptance is claimed here.

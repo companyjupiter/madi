@@ -33,7 +33,7 @@ pub struct Launch {
     pub model: PathBuf,
     // Test engines speak the real wire protocol without loading model weights.
     #[cfg(test)]
-    arguments: Vec<std::ffi::OsString>,
+    pub(crate) arguments: Vec<std::ffi::OsString>,
 }
 
 impl Launch {
@@ -151,14 +151,38 @@ pub enum Event {
         code: Option<i32>,
         reason: StopReason,
     },
+    /// There will be no READY after this stop: drain queues owned by clients,
+    /// including after a failed relaunch or exhausted watchdog restart budget.
+    Unavailable {
+        generation: u64,
+        reason: StopReason,
+    },
     Fault {
         operation: &'static str,
         message: String,
     },
 }
 
+struct Attachment {
+    client: ClientId,
+    generation: u64,
+    cleanup: Option<mpsc::UnboundedSender<Control>>,
+}
+impl Drop for Attachment {
+    fn drop(&mut self) {
+        if let Some(commands) = self.cleanup.take() {
+            let (tx, _) = oneshot::channel();
+            let _ = commands.send(Control::Detach(self.client, tx));
+        }
+    }
+}
+struct AttachRequest {
+    launch: Launch,
+    cleanup: mpsc::UnboundedSender<Control>,
+    reply: oneshot::Sender<io::Result<Attachment>>,
+}
 enum Control {
-    Attach(Launch, oneshot::Sender<io::Result<ClientId>>),
+    Attach(AttachRequest),
     Submit(
         ClientId,
         Request,
@@ -186,7 +210,7 @@ impl DnaBroker {
             .and_then(dna::timeout_override);
         Self::with_timeout(override_seconds.and_then(|s| Duration::try_from_secs_f64(s).ok()))
     }
-    fn with_timeout(timeout: Option<Duration>) -> io::Result<Self> {
+    pub(crate) fn with_timeout(timeout: Option<Duration>) -> io::Result<Self> {
         tokio::runtime::Handle::try_current().map_err(io::Error::other)?;
         let (commands, input) = mpsc::unbounded_channel();
         let (output, events) = mpsc::unbounded_channel();
@@ -201,9 +225,28 @@ impl DnaBroker {
         })
     }
     pub async fn attach(&self, launch: Launch) -> io::Result<ClientId> {
+        self.attach_owned(launch).await.map(|mut a| {
+            a.cleanup = None;
+            a.client
+        })
+    }
+    async fn attach_owned(&self, launch: Launch) -> io::Result<Attachment> {
         let (tx, rx) = oneshot::channel();
-        self.send(Control::Attach(launch, tx))?;
+        self.send(Control::Attach(AttachRequest {
+            launch,
+            cleanup: self.commands.clone(),
+            reply: tx,
+        }))?;
         rx.await.map_err(io::Error::other)?
+    }
+    pub(crate) async fn attach_caption(&self, launch: Launch) -> io::Result<CaptionLease> {
+        let mut attached = self.attach_owned(launch).await?;
+        Ok(CaptionLease {
+            client: attached.client,
+            generation: attached.generation,
+            commands: attached.cleanup.take().expect("unclaimed attachment"),
+            detached: false,
+        })
     }
     pub async fn submit(
         &self,
@@ -251,6 +294,38 @@ impl DnaBroker {
         self.commands
             .send(command)
             .map_err(|_| io::ErrorKind::BrokenPipe.into())
+    }
+}
+
+/// A session adapter may be dropped while an async detach is cancelled. Keep
+/// native client release owned even when its caller cannot await cleanup.
+pub(crate) struct CaptionLease {
+    pub(crate) client: ClientId,
+    pub(crate) generation: u64,
+    commands: mpsc::UnboundedSender<Control>,
+    detached: bool,
+}
+impl CaptionLease {
+    pub(crate) async fn detach(&mut self) -> io::Result<()> {
+        if self.detached {
+            return Ok(());
+        }
+        let (tx, rx) = oneshot::channel();
+        self.commands
+            .send(Control::Detach(self.client, tx))
+            .map_err(io::Error::other)?;
+        rx.await.map_err(io::Error::other)?;
+        self.detached = true;
+        Ok(())
+    }
+}
+impl Drop for CaptionLease {
+    fn drop(&mut self) {
+        if !self.detached {
+            let _ = self.commands.send(Control::Pressure(0));
+            let (tx, _) = oneshot::channel();
+            let _ = self.commands.send(Control::Detach(self.client, tx));
+        }
     }
 }
 impl Drop for DnaBroker {
@@ -366,7 +441,7 @@ struct Owner {
     busy: bool,
     timeout: Option<Duration>,
     detach_replies: Vec<oneshot::Sender<()>>,
-    deferred_attach: VecDeque<(Launch, oneshot::Sender<io::Result<ClientId>>)>,
+    deferred_attach: VecDeque<AttachRequest>,
     shutting_down: bool,
     shutdown_requested: Arc<AtomicBool>,
 }
@@ -485,7 +560,11 @@ impl Owner {
 
     fn control(&mut self, command: Control) {
         match command {
-            Control::Attach(launch, reply) => {
+            Control::Attach(AttachRequest {
+                launch,
+                cleanup,
+                reply,
+            }) => {
                 if reply.is_closed() {
                     return;
                 }
@@ -494,7 +573,11 @@ impl Owner {
                     return;
                 }
                 if self.process.as_ref().is_some_and(|p| p.stopping.is_some()) {
-                    self.deferred_attach.push_back((launch, reply));
+                    self.deferred_attach.push_back(AttachRequest {
+                        launch,
+                        cleanup,
+                        reply,
+                    });
                     return;
                 }
                 if self.process.as_ref().is_some_and(|p| p.launch != launch) {
@@ -522,7 +605,15 @@ impl Owner {
                     });
                 }
                 // A cancelled attach must not leave an invisible resident client.
-                if reply.send(Ok(client)).is_err() {
+                let generation = self.process.as_ref().expect("attached process").generation;
+                if reply
+                    .send(Ok(Attachment {
+                        client,
+                        generation,
+                        cleanup: Some(cleanup),
+                    }))
+                    .is_err()
+                {
                     self.clients.remove(&client);
                     if self.clients.is_empty()
                         && let Some(p) = self.process.as_mut()
@@ -644,6 +735,7 @@ impl Owner {
     fn finished(&mut self) {
         let mut process = self.process.take().unwrap();
         let reason = process.stopping.unwrap_or(StopReason::Exited);
+        let generation = process.generation;
         let code = process.exited.and_then(|s| s.code());
         let launch = process.launch.clone();
         let mut orphans = std::mem::take(&mut self.pending);
@@ -670,6 +762,9 @@ impl Owner {
         }
         // Reset/relaunch before completions: next-turn submissions from a
         // completion consumer cannot be erased by the old process reset.
+        if self.process.is_none() && !self.clients.is_empty() {
+            self.emit(Event::Unavailable { generation, reason });
+        }
         for request in orphans {
             self.complete(request, None);
         }
@@ -678,8 +773,8 @@ impl Owner {
         }
         // A cancelled attach can itself start teardown. Handle each deferred
         // command once, leaving any re-deferred work for the next reap.
-        for (launch, reply) in std::mem::take(&mut self.deferred_attach) {
-            self.control(Control::Attach(launch, reply));
+        for request in std::mem::take(&mut self.deferred_attach) {
+            self.control(Control::Attach(request));
         }
     }
 

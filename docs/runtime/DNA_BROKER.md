@@ -1,8 +1,9 @@
 # Shared DNA engine broker
 
 `madi-platform::dna_broker` provides the native resident process required by
-translation, the action rail, summaries and Q&A. It is not connected to those
-product consumers yet. It does not expose arbitrary process launching through
+translation, the action rail, summaries and Q&A. The native translation client
+is connected; its product session and other DNA consumers remain open. The
+broker does not expose arbitrary process launching through
 Tauri commands, and passing its tests does not establish translation or UI parity.
 
 The host owns one `DnaBroker`. Clients attach with the resolved engine/model
@@ -83,9 +84,12 @@ than being converted into an invalid timer.
   before/after input hashes. This is transport execution evidence, not a
   translation quality assessment.
 
-The pure turn queue, prompt and output policies now have their own Swift
-differential in `TRANSLATION_POLICY.md`. Next integration work includes their
-TranslateEngine client owner, repair retries, prefix registration, interim/committed
-revision guards, caption pressure and busy signals, stop-time backfill, and all other
-DNA clients.
+The pure policies and native TranslateEngine owner now have separate Swift and
+process evidence in `TRANSLATION_POLICY.md` and `TRANSLATION_CLIENT.md`. Native
+attachments also retain ownership until the reply is received; cancelled queued
+replies detach automatically. Unavailable marks a terminal stopped generation
+when no READY will follow, so queues owned by clients can drain too.
+Next integration work includes session model admission, interim/committed
+revision guards, preview busy/aging admission, stop-time backfill and other DNA
+clients.
 Actual WebView/native screen comparison and Windows GPU execution remain open.
