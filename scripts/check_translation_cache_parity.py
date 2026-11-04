@@ -85,12 +85,18 @@ def main():
         for i,(want,got) in enumerate(zip(expected,native_result,strict=True)):
             if want!=got:
                 differences={k:difference(want[k],got[k]) for k in want if want[k]!=got[k]}
+                (OUT/'report.json').write_text(json.dumps(dict(status='failed',phase='nativeSwift',case=i,differences=differences),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
                 raise AssertionError(json.dumps(dict(case=i,differences=differences),ensure_ascii=False))
     report=dict(cases=len(corpus),unicodeScalars=0x110000-2048,operations=sum(len(c['ops']) for c in corpus),corpusSHA256=hashlib.sha256(payload).hexdigest(),resultSHA256=hashlib.sha256(encoded(actual)).hexdigest(),sources={s.relative_to(ROOT).as_posix():hashlib.sha256(s.read_bytes()).hexdigest() for s in SOURCES},starterSHA256=hashlib.sha256((ROOT/'crates/madi-core/src/translation/faq_starter.json').read_bytes()).hexdigest())
     if a.write_reference:
         assert actual==native_result,'Portable baseline must match the original native platform when pinning'
         REFERENCE.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
-    else:assert report==json.loads(REFERENCE.read_text(encoding='utf-8')),'Cache reference changed'
+    else:
+        expected_reference=json.loads(REFERENCE.read_text(encoding='utf-8'))
+        if report!=expected_reference:
+            differences={k:dict(expected=expected_reference.get(k),actual=report.get(k)) for k in sorted(report.keys()|expected_reference.keys()) if report.get(k)!=expected_reference.get(k)}
+            (OUT/'report.json').write_text(json.dumps(dict(**report,status='failed',phase='pinnedReference',differences=differences),indent=2)+'\n',encoding='utf-8')
+            raise AssertionError('Cache reference changed: '+json.dumps(differences))
     report.update(status='passed',nativeSwiftRun=not a.rust_only,nativeResultSHA256=hashlib.sha256(encoded(native_result)).hexdigest() if native_result is not None else None,nativeVsPortableDifferenceCases=sum(a!=b for a,b in zip(native_result,actual,strict=True)) if native_result is not None else None,scope='Unchanged FAQTranslationStore and InterimTranslationCache; filesystem persistence tested separately; ambiguous same-normalized columns are not in this corpus')
     report.update(nativeSwiftVersion=subprocess.check_output(['xcrun','swiftc','--version']).decode('utf-8').strip() if not a.rust_only else None,nativeMacOS=platform.mac_ver()[0] if not a.rust_only else None)
     (OUT/'report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8');print(json.dumps(report,indent=2))

@@ -37,3 +37,5 @@ apps/macos/Sovereign/Audio/SystemAudioCapture.swift text eol=lf
 apps/macos/Sovereign/Audio/Resampler.swift text eol=lf
 apps/macos/Sovereign/Session/SessionCoordinator.swift text eol=lf
 tests/parity/CapturePipelineOracle.swift text eol=lf
+# The FAQ oracle pins the copied starter pack's original bytes as well as values.
+crates/madi-core/src/translation/faq_starter.json text eol=lf

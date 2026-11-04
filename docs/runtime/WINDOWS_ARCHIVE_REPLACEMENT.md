@@ -28,7 +28,11 @@ contain the new text and the existing reader to retain the old text, and checks
 the stable owned path and absence of leftover temporary files. CI runs this
 probe explicitly and retains the existing 50 concurrent repetitions.
 
-The shared-reader mechanism is a candidate explanation for the observed error,
-not yet a traced identification of the original competing handle. Windows CI
-must verify the new code and the probe before claiming the defect fixed. The
-local Mac build does not execute this Windows-only branch.
+At `885317f`, Windows CI records OS error 5 for the legacy shared-reader persist,
+then passes the new replacement probe and all 50 concurrent repetitions. This
+proves that the replacement handles a shared-open destination; it does not trace
+the identity of the competing handle in the earlier intermittent failure. The
+same job later fails the FAQ reference file hash because of Windows checkout
+line endings, so the whole job is not green. See
+`../evidence/windows-cache-checkout-2026-11-05.json`. The local Mac build does not
+execute the Windows-only branch.

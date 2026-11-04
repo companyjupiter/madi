@@ -15,6 +15,16 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- Windows `885317f` passes 142 Rust tests, the shared-reader replacement probe
+  (legacy persist reproduces OS error 5), and 50 concurrent archive repetitions.
+  Its cache result bytes also match the pinned reference. The job then fails a
+  starter-file hash: Windows CRLF checkout changes the copied FAQ JSON bytes.
+  An isolated autocrlf checkout reproduces the mismatch without changing JSON
+  values; a file-specific LF rule restores the exact pinned hash. Failure reports
+  now retain the differing fields. See
+  `evidence/windows-cache-checkout-2026-11-05.json`. This checkout fix requires
+  a new remote verdict; Windows standalone build was not reached in that run.
+
 - Desktop CI for `6e90399` and `fb69224` exposed two remaining platform issues:
   macOS 15 Swift lowercase differs from Rust for some Unicode scalars, and the
   repeated Windows archive checkpoint test again returned OS error 5. The
