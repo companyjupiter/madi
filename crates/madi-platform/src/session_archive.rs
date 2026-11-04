@@ -265,13 +265,22 @@ mod tests {
                 std::thread::spawn(move || {
                     let mut writer = SessionArchiveWriter::default();
                     barrier.wait();
-                    assert!(writer.save_transcript(&index.to_string(), &path, "회의"));
+                    assert!(
+                        writer.save_transcript(&index.to_string(), &path, "회의"),
+                        "initial archive {index}: {:?}",
+                        writer.last_error()
+                    );
                     let destination = writer.transcript().unwrap().to_path_buf();
-                    assert!(writer.save_transcript(
-                        &format!("updated-{index}"),
-                        &path.join("ignored"),
-                        "also ignored"
-                    ));
+                    assert!(
+                        writer.save_transcript(
+                            &format!("updated-{index}"),
+                            &path.join("ignored"),
+                            "also ignored"
+                        ),
+                        "checkpoint {index} at {}: {:?}",
+                        destination.display(),
+                        writer.last_error()
+                    );
                     assert_eq!(writer.transcript(), Some(destination.as_path()));
                     (destination, index)
                 })

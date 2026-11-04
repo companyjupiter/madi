@@ -102,6 +102,12 @@ jobs:
           cargo test --locked -p madi-core -p madi-protocol -p madi-platform
           cargo clippy --locked --workspace --all-targets -- -D warnings
           node --test tests/parity/setup_intent_queue.test.mjs tests/parity/desktop_ipc_contract.test.mjs
+      - name: Repeat Windows concurrent archive checkpoint regression
+        if: runner.os == 'Windows'
+        run: |
+          for attempt in $(seq 1 50); do
+            cargo test --locked -p madi-platform session_archive::tests::concurrent_sessions_never_overwrite_and_checkpoints_keep_their_file -- --exact --nocapture
+          done
       - name: Compare against the shipping Swift parser
         if: runner.os == 'macOS'
         run: |

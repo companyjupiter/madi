@@ -30,6 +30,12 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   hashes are verified in `evidence/desktop-ci-9685cb4-2026-11-04.json`. This
   receipt precedes the new native capture bridge above.
 
+  A duplicate PR run `41771414361` passed macOS but failed the Windows concurrent
+  archive checkpoint regression (62/63 platform tests). Its boolean assertion
+  did not retain the underlying file error. The separate passing push run does
+  not close this intermittent failure. Error diagnostics and a 50-run Windows
+  regression loop are added; cause and actual Windows fix remain open.
+
 - Live PCM windowing foundation: the unchanged Swift segmenter and Rust match
   225 sequences / 24,347 snapshots / 2,676 segments, including exact PCM hashes,
   offset bits, speech flags, previews, mutable settings and final tails. Sixteen
