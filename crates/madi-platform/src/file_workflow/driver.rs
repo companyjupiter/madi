@@ -66,6 +66,8 @@ impl Driver {
             self.shutdown().await?;
             *self = Self::Live(crate::live_session::LiveSession::new(
                 crate::live_session::Configuration {
+                    #[cfg(test)]
+                    wall_clock: request.wall_clock.clone(),
                     resources: configuration.resources.clone(),
                     scratch_parent: configuration.scratch_parent.clone(),
                 },

@@ -53,9 +53,12 @@ progression, including immediate replacement and long-jump behavior. Swift
 source comparisons cover both backend policy and frontend transitions; actual
 WebView/native visual equality is still a separate acceptance gate.
 
-The DNA caption lane is not connected, so its busy/2s-or-4s starvation admission
-signal remains open with the AI migration. The current connected path always
-preserves committed-transcript priority and uses one resident ASR model.
+The connected DNA translation owner now supplies busy/queue-depth signals.
+Preview aging admits a slice after 2 seconds at depth up to six, or 4 seconds
+above that depth, while preserving committed-job priority. W1 retries remain
+committed jobs until they retire. See `COMMITTED_TRANSLATION.md` for this
+admission integration and its separate validation; full concurrent ASR/DNA
+device and native UI acceptance remain open.
 
 ## Finish, preservation and close
 

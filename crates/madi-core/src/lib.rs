@@ -23,3 +23,4 @@ pub mod segmenter;
 pub mod pipeline_status;
 
 pub mod coverage;
+pub mod hang_watchdog;

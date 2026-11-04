@@ -11,8 +11,9 @@ second empty result also records a gap. Silent jobs never trigger recovery.
 counter and gap offsets. Every committed Word event counts, as in the original;
 preview words and preview-embedded control markers remain quarantined by the
 protocol decoder. Every committed segment boundary resets the counter, including
-a boundary with no queued job. Turnaround timestamps and W2 hang recovery are
-separate work and are not simulated by this policy.
+a boundary with no queued job. Feed timestamps now support the separate W2
+owner in `HANG_WATCHDOG.md`; the W1 differential excludes timing. Turnaround
+diagnostics remain separate work.
 
 The native executor owns each queued `OwnedWav`. Refeeding creates neither a new
 WAV nor a second capture/retention event. The queue publishes the authoritative
@@ -62,6 +63,6 @@ unbounded retry, silent-job retry and counting preview words as committed words.
 
 Actual microphone speech recovery, warning expansion interaction, pixel/font
 comparison and full native UI/UX acceptance remain NOT_RUN. W2 engine-hang
-recovery and AI correction/reconciliation remain unimplemented. The prior native
+recovery is now connected separately; AI correction/reconciliation remains open. The prior native
 playback failure and Windows hardware/integration gates remain open. See
 `../evidence/macos-coverage-retry-2026-11-05.json` for validation provenance.

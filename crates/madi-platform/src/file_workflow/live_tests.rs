@@ -564,3 +564,79 @@ async fn coverage_gap_survives_completion_but_never_invents_saved_transcript_wor
     workflow.shutdown().await.unwrap();
     assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
 }
+
+#[tokio::test]
+async fn hang_watchdog_preserves_live_speaker_namespace_and_publishes_recovery_warning() {
+    use crate::live_session::tests::{
+        HANG_ENGINE, advance_watchdog, coverage_marker, coverage_request, hang_clock,
+    };
+    let (root, live) = fixture(HANG_ENGINE);
+    let workflow = FileWorkflow::with_archive(
+        Configuration {
+            decoder: live.resources.executable.clone(),
+            resources: live.resources,
+            scratch_parent: live.scratch_parent,
+        },
+        Some(ArchiveSettings {
+            enabled: true,
+            folder: root.path().join("archive"),
+        }),
+        |_| {},
+    )
+    .unwrap();
+    let clock = hang_clock();
+    let (capture, events, mut controls) = input();
+    let mut request = coverage_request(capture);
+    request.wall_clock = Some(clock.clone());
+    request.recovery_settings = Some(Arc::new(|| {
+        let mut settings = crate::asr_config::LiveSettings {
+            common: Default::default(),
+            language_candidates: vec![],
+        };
+        settings.common.language_token = Some(50264);
+        Ok(settings)
+    }));
+    workflow.start_live(request, None).await.unwrap();
+    events.send(Event::Started).unwrap();
+    let recording = state(&workflow, |s| s.phase == ViewPhase::Recording).await;
+    events
+        .send(Event::Samples {
+            microphone: true,
+            pcm: vec![4000; 32000],
+        })
+        .unwrap();
+    coverage_marker(&root.path().join("hung")).await;
+    state(&workflow, |s| {
+        s.lines.iter().any(|l| l.text.contains("Before."))
+    })
+    .await;
+    advance_watchdog(&clock, 1046.).await;
+    let recovered = state(&workflow, |s| {
+        s.status.warning.as_deref() == Some("복구 1회")
+            && s.lines.iter().any(|l| l.text.contains("Recovered."))
+    })
+    .await;
+    assert!(recovered.speaker_island_absorption);
+    workflow
+        .live_control(recording.generation, LiveControl::Stop)
+        .await
+        .unwrap();
+    control(&mut controls, Control::Stop).await;
+    events.send(Event::Stopped).unwrap();
+    let done = state(&workflow, |s| {
+        s.phase == ViewPhase::Done && s.archive.transcript.is_some()
+    })
+    .await;
+    assert_eq!(done.status.warning.as_deref(), Some("복구 1회"));
+    assert!(
+        done.lines.iter().all(|l| l.line.speaker == 2),
+        "replacement FLUSH labels cannot renumber pre-restart speakers"
+    );
+    let archive = std::fs::read_to_string(done.archive.transcript.unwrap()).unwrap();
+    assert!(archive.contains("Before.") && archive.contains("Recovered."));
+    assert!(!archive.contains("Stale.") && !archive.contains("복구 1회"));
+    let reset = workflow.reset(recording.generation).await.unwrap();
+    assert!(reset.status.warning.is_none());
+    workflow.shutdown().await.unwrap();
+    assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
+}

@@ -65,6 +65,7 @@ mod probe {
         workflow
             .start_live(
                 Request {
+                    recovery_settings: None,
                     settings: LiveSettings {
                         common: FileSettings::default(),
                         language_candidates: Vec::new(),

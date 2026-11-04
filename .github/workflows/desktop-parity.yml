@@ -155,6 +155,7 @@ jobs:
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_review_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_pipeline_status_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_coverage_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_hang_watchdog_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -195,6 +196,7 @@ jobs:
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_review_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_pipeline_status_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_coverage_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_hang_watchdog_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -262,6 +264,9 @@ jobs:
             out/coverage-parity/report.json
             out/coverage-parity/result.json
             out/coverage-parity/swift.json
+            out/hang-watchdog-parity/report.json
+            out/hang-watchdog-parity/result.json
+            out/hang-watchdog-parity/swift.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json

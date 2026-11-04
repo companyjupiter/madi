@@ -9,11 +9,29 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 | G0 baseline | Source/state inventory; 28 actual AppKit color tokens in light/dark; original artwork hashes; native dark Korean first-run/setup captures; strict-asset Swift build and model downloads | Complete screenshot/action matrix, deployment-version match, fonts/SF Symbols and Windows exceptions |
 | G1 feasibility | Rust parser differential; macOS Tauri host builds and starts; Windows Tauri debug host builds in CI; fixed-model Windows LLM runners pass Windows CPU/PTX CI | Full native interaction coverage, Windows ASR, GPU/model inference, audio/caption/calendar feasibility |
 | G2 UI | Start-screen candidate with native Rust IPC exercised; native comparison corrected frame/spacing; ko/en/ja text; model guide, file/live transcript, transport, workspace/export and five-tab Settings candidate connected to Rust | Complete native visual/UX comparison, full device/file/model interaction, native Settings toolbar/form match, complete transcript/workspace/AI/overlays |
-| G3 macOS core | Parsers, lifecycle, typed file/live configuration, native decode/ASR, transcript/edit differentials, shared file/live workflow and provisional previews, native replay and real ASR, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, complete live UI and preview visual acceptance, DNA admission/watchdog consumers, storage/migration, system/mixed audio and hardware matrix, complete model UI lifecycle, AI policy and product end-to-end |
+| G3 macOS core | Parsers, lifecycle, typed file/live configuration, native decode/ASR, transcript/edit differentials, shared file/live workflow and provisional previews, W1/W2 native recovery owners, native replay and real ASR, verified model downloads and first-run admission; actual file-picker/JFK transcript delivery exercised | Complete file-screen interaction matrix, complete live UI and preview visual acceptance, remaining AI clients and real-model recovery/concurrency acceptance, storage/migration, system/mixed audio and hardware matrix, complete model UI lifecycle, AI policy and product end-to-end |
 | G4 Windows | SovereignLLM experimental PE executables exist | GPU numerical/quality/performance, ASR, WASAPI, decoding, full product integration and Windows 11 device validation |
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
+
+- Live ASR hang recovery now connects the original five-second W2 poll and
+  strict >45-second progress rule. Recording and paused capture survive engine
+  replacement; READY/diagnostics/JSONL do not disguise a stall. Current native
+  settings/glossary are read again, pending audio is re-fed in order with exact
+  WAV bytes/offsets, and the old speaker namespace is protected at finalization.
+  Recovery warnings persist without entering archive text. Six hundred unchanged
+  Swift cases / 36,000 transitions cover timestamps, counters, retry flags and
+  restart decisions. Three real-process/workflow tests cover timer integration,
+  active progress, paused recovery, retired output, spawn failure, refreshed
+  language, speaker labels, archive and reset. Five deliberate mutations are
+  detected. Local validation passes 195 Rust tests (32 core, 138 platform,
+  14 protocol, 11 desktop), strict clippy, five IPC checks, both W2 oracles,
+  unchanged W1 reference, app build and relocated package checks. This slice's
+  CI is pending. Actual stuck-model/device recovery and native visual/interaction
+  acceptance remain NOT_RUN; remaining AI clients and Windows native integration
+  remain open. See `runtime/HANG_WATCHDOG.md` and
+  `evidence/macos-hang-watchdog-2026-11-05.json`.
 
 - Live speech coverage now connects the original W1 queue rule to native owned
   WAVs: one retry for an empty speech job when no later committed job is queued,
@@ -26,11 +44,15 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   Five hundred unchanged Swift cases / 22,250 transitions match, and four
   deliberate mutations are detected. Local validation passes 191 Rust tests
   (31 core, 135 platform, 14 protocol, 11 desktop), strict clippy, five IPC checks,
-  native/portable oracles, app build and relocated package checks. CI for this
-  slice is pending. A retry queued behind FLUSH does not extend completion,
+  native/portable oracles, app build and relocated package checks. Both push/PR
+  CI at `8c9902d` pass macOS 15 and Windows 2022 (41931326442 / 41931333828).
+  Downloaded PR merge artifacts verify 191 Mac / 158 Windows tests, clean source
+  provenance, executable/package hashes, pinned W1 results and native Swift
+  equality; see `evidence/desktop-ci-8c9902d-2026-11-05.json`.
+  A retry queued behind FLUSH does not extend completion,
   preserving the original behavior rather than guaranteeing final recovery.
-  Actual microphone recovery and native UI interaction remain NOT_RUN; W2 hang
-  recovery and remaining AI producers remain open. See `runtime/COVERAGE_RETRY.md`
+  Actual microphone recovery and native UI interaction remain NOT_RUN; W2 is
+  connected by the subsequent slice above, while remaining AI producers remain open. See `runtime/COVERAGE_RETRY.md`
   and `evidence/macos-coverage-retry-2026-11-05.json`.
 
 - Transcript-tail status now uses a native derived pipeline projection, preserving
@@ -49,7 +71,7 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   and package hashes, pinned status results and native Swift equality; see
   `evidence/desktop-ci-02255f3-2026-11-05.json`.
   Native display and animation remain NOT_RUN. W1 coverage is connected by the
-  subsequent slice above. Hang recovery and AI correction/reconcile remain open; their
+  subsequent slices above, as is W2 hang recovery. AI correction/reconcile remain open; their
   presentation rules are tested but are not end-to-end features yet. See
   `runtime/PIPELINE_STATUS.md` and `evidence/macos-pipeline-status-2026-11-05.json`.
 

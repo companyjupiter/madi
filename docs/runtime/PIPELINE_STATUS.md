@@ -15,7 +15,7 @@ A completed ASR phase can still show translating while DNA owns queued work.
 Preference language changes update the projection without another ASR event.
 
 The connected producers are file phase/progress, committed translation queue and
-backfill, native live segment/retry count, coverage gaps, capture interruption
+backfill, native live segment/retry count, coverage gaps, hang recovery count, capture interruption
 and silence detection. The coverage queue and retry integration are described
 in `COVERAGE_RETRY.md`.
 Native raw level strictly above 0.02 updates the audible timestamp; the original
@@ -26,9 +26,9 @@ retire the timer; no renderer timer or microphone sample is needed to publish a
 silence warning. Peak-held meter levels do not feed the silence detector.
 
 The complete presentation policy also preserves the original recovery counts
-and correction/reconciliation priority. **Hang-recovery and AI-correction
-producers are not connected yet.** Those inputs remain absent until their native
-owners are ported. Coverage warning/gap timestamps now have a native producer
+and correction/reconciliation priority. **AI-correction producers are not
+connected yet.** Those inputs remain absent until their native owners are ported.
+Hang recovery is connected through `HANG_WATCHDOG.md`. Coverage warning/gap timestamps now have a native producer
 and process-backed workflow validation. Actual gap-expansion interaction and
 microphone recovery remain separate end-to-end acceptance gates.
 

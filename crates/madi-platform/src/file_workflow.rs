@@ -279,6 +279,7 @@ impl FileWorkflow {
                 source_media: None,
                 review_cache_key: None,
                 coverage_gaps: Vec::new(),
+                hang_recoveries: 0,
                 silence: None,
                 silence_tick: None,
                 store: TranscriptStore::default(),
@@ -531,6 +532,7 @@ struct Worker {
     source_media: Option<PathBuf>,
     review_cache_key: Option<(u64, u64)>,
     coverage_gaps: Vec<f64>,
+    hang_recoveries: usize,
     silence: Option<madi_core::pipeline_status::SilenceWatch>,
     silence_tick: Option<Instant>,
     store: TranscriptStore,
@@ -609,7 +611,8 @@ impl Worker {
                 .as_ref()
                 .and_then(|s| s.capture_ended_reason.clone()),
             coverage_gaps: self.coverage_gaps.clone(),
-            // Reconcile, forced-language correction and hang recovery remain
+            hang_recoveries: self.hang_recoveries,
+            // Reconcile and forced-language correction remain
             // separate migration work; never fabricate those producer signals.
             ..Default::default()
         };
@@ -683,6 +686,7 @@ impl Worker {
         self.source_media = None;
         self.review_cache_key = None;
         self.coverage_gaps.clear();
+        self.hang_recoveries = 0;
         self.silence = None;
         self.silence_tick = None;
         self.store.reset();
@@ -1161,6 +1165,21 @@ impl Worker {
                 request.settings =
                     crate::asr_config::LiveSettings::from_setup(&latest.setup, memory, terms)
                         .map_err(io::Error::other)?;
+                let preferences = preferences.clone();
+                let glossary = self.glossary.clone();
+                let initial_terms = request.settings.common.bias_terms.clone();
+                request.recovery_settings = Some(Arc::new(move || {
+                    let terms = glossary
+                        .as_ref()
+                        .map(|g| g.with_value(personal_vocabulary::bias_terms))
+                        .unwrap_or_else(|| initial_terms.clone());
+                    crate::asr_config::LiveSettings::from_setup(
+                        &preferences.snapshot().setup,
+                        memory,
+                        terms,
+                    )
+                    .map_err(io::Error::other)
+                }));
                 request.capture = madi_core::capture_stream::Configuration::from_settings(
                     &latest.settings,
                     &latest.setup,
@@ -1236,6 +1255,18 @@ impl Worker {
     fn live_event(&mut self, event: crate::live_session::UpdateKind) {
         use crate::live_session::UpdateKind as Live;
         match event {
+            Live::Recovery {
+                attempts,
+                language_token,
+            } => {
+                self.hang_recoveries = attempts;
+                self.store.mark_diar_namespace_broken();
+                let refreshed = Features::for_language(language_token);
+                self.store.features.speaker_island_absorption = refreshed.speaker_island_absorption;
+                self.store.features.weak_label_continuation = refreshed.weak_label_continuation;
+                self.state.speaker_island_absorption = refreshed.speaker_island_absorption;
+                self.publish();
+            }
             Live::Coverage {
                 segments_in_flight,
                 gaps,
@@ -1302,7 +1333,7 @@ impl Worker {
                 }
             }
             Live::WriteFailed { name, message, .. } => eprintln!("capture write {name}: {message}"),
-            // Watchdog and AI policies remain separate consumers.
+            // Remaining AI policies have separate consumers.
             _ => {}
         }
     }

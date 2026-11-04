@@ -52,6 +52,7 @@ mod probe {
         })?;
         let run = session
             .start(Request {
+                recovery_settings: None,
                 settings: LiveSettings {
                     common: FileSettings::default(),
                     language_candidates: Vec::new(),

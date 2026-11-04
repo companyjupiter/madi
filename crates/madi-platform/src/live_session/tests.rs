@@ -34,6 +34,8 @@ pub(crate) fn input() -> (
 }
 pub(crate) fn request(input: Input) -> Request {
     Request {
+        recovery_settings: None,
+        wall_clock: None,
         settings: LiveSettings {
             common: Default::default(),
             language_candidates: Vec::new(),
@@ -69,6 +71,7 @@ assert sys.argv[1]=='/dev/null'
     )
     .unwrap();
     let configuration = Configuration {
+        wall_clock: None,
         resources: Resources {
             executable: python,
             model,
@@ -966,6 +969,244 @@ time.sleep(60)
     session.reset().await.unwrap();
     drop(first);
     drop(done);
+    session.shutdown().await.unwrap();
+    assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
+}
+
+pub(crate) const HANG_ENGINE: &str = r#"
+import hashlib
+counter=root/'generation'
+generation=int(counter.read_text(encoding='utf-8'))+1 if counter.exists() else 1
+counter.write_text(str(generation),encoding='utf-8')
+(root/('engine-'+str(generation))).write_text(json.dumps({'pid':os.getpid(),'language':os.environ.get('WHISPER_LANG_ID')}),encoding='utf-8')
+def retired(*args):
+    print('=== WORD TIMESTAMPS ===\n[99s-100s] Stale. «conf 0.99»\n<<SEG_END>>',flush=True)
+    sys.exit(0)
+signal.signal(signal.SIGTERM,retired)
+print('[stream] ready',flush=True)
+records=[]
+for wire in sys.stdin:
+    line=wire.rstrip('\n')
+    if line=='FLUSH':
+        print('SPKFIX -0.2 99 5 1',flush=True)
+        print('<<FLUSH_END>>',flush=True)
+        continue
+    offset,path=line.split(' ',1)
+    record={'offset':float(offset),'name':pathlib.Path(path).name,'sha256':hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()}
+    records.append(record)
+    (root/('wire-'+str(generation))).write_text(json.dumps(records),encoding='utf-8')
+    if generation==1:
+        if len(records)==1:
+            print('SPK 0 2 2 1\n=== WORD TIMESTAMPS ===\n[0s-0.4s] Before. «conf 0.99»',flush=True)
+        if len(records)==2:
+            (root/'hung').write_text('ready',encoding='utf-8')
+            sent=set()
+            while True:
+                if (root/'progress').exists() and 'progress' not in sent:
+                    sent.add('progress');print('<<PREVIEW_BEGIN>>\n=== WORD TIMESTAMPS ===\n[0s-0.1s] heartbeat\n<<PREVIEW_END>>',flush=True)
+                if (root/'diagnostics').exists() and 'diagnostics' not in sent:
+                    sent.add('diagnostics');print('[stream] ready\n[caps] preview-fp\nnoise acknowledgement',flush=True)
+                time.sleep(.005)
+    else:
+        print('SPK '+offset+' 2 2 1\n=== WORD TIMESTAMPS ===',flush=True)
+        print('['+offset+'s-'+str(float(offset)+.4)+'s] '+('Before.' if float(offset)==0 else 'Recovered.')+' «conf 0.99»',flush=True)
+        print('<<SEG_END>>',flush=True)
+"#;
+
+pub(crate) fn hang_clock() -> std::sync::Arc<std::sync::atomic::AtomicU64> {
+    std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1000_f64.to_bits()))
+}
+pub(crate) async fn advance_watchdog(clock: &std::sync::atomic::AtomicU64, now: f64) {
+    clock.store(now.to_bits(), std::sync::atomic::Ordering::SeqCst);
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(5)).await;
+    tokio::time::resume();
+}
+
+#[tokio::test]
+async fn hang_watchdog_respects_progress_replays_owned_queue_and_preserves_paused_capture() {
+    for paused in [false, true] {
+        let (root, mut configuration) = fixture(HANG_ENGINE);
+        let clock = hang_clock();
+        configuration.wall_clock = Some(clock.clone());
+        let mut session = LiveSession::new(configuration).unwrap();
+        let (capture, events, mut controls) = input();
+        let mut request = coverage_request(capture);
+        request.recovery_settings = Some(std::sync::Arc::new(|| {
+            let mut settings = LiveSettings {
+                common: Default::default(),
+                language_candidates: vec![],
+            };
+            settings.common.language_token = Some(50264);
+            Ok(settings)
+        }));
+        let run = session.start(request).await.unwrap().unwrap();
+        events.send(CaptureEvent::Started).unwrap();
+        until(&mut session, |e| matches!(e, UpdateKind::RecordingStarted)).await;
+        events.send(samples(32000, 4000)).unwrap();
+        let initial = until(
+            &mut session,
+            |e| matches!(e,UpdateKind::Segment{offset,..} if *offset==1.),
+        )
+        .await;
+        marker(&root.path().join("hung")).await;
+        until(&mut session, |e| {
+            matches!(
+                e,
+                UpdateKind::Output(Output::Stdout(transcribe::Event::Word { .. }))
+            )
+        })
+        .await;
+        if paused {
+            session.pause(run).unwrap();
+            control(&mut controls, Control::Pause).await;
+            events.send(CaptureEvent::Paused).unwrap();
+            until(&mut session, |e| {
+                matches!(e, UpdateKind::Phase(Phase::Paused))
+            })
+            .await;
+        }
+        advance_watchdog(&clock, 1044.).await;
+        let checked = until(&mut session, |e| {
+            matches!(e, UpdateKind::WatchdogChecked(_))
+        })
+        .await;
+        assert!(matches!(
+            checked.last().unwrap().kind,
+            UpdateKind::WatchdogChecked(0)
+        ));
+        std::fs::write(root.path().join("progress"), b"go").unwrap();
+        until(&mut session, |e| {
+            matches!(
+                e,
+                UpdateKind::Output(Output::Stdout(transcribe::Event::PreviewEnd))
+            )
+        })
+        .await;
+        advance_watchdog(&clock, 1089.).await;
+        let checked = until(&mut session, |e| {
+            matches!(e, UpdateKind::WatchdogChecked(_))
+        })
+        .await;
+        assert!(matches!(
+            checked.last().unwrap().kind,
+            UpdateKind::WatchdogChecked(0)
+        ));
+        std::fs::write(root.path().join("diagnostics"), b"go").unwrap();
+        until(&mut session,|e|matches!(e,UpdateKind::Output(Output::Stdout(transcribe::Event::Other(s))) if s=="noise acknowledgement")).await;
+        advance_watchdog(&clock, 1090.).await;
+        let checked = until(&mut session, |e| {
+            matches!(e, UpdateKind::WatchdogChecked(_))
+        })
+        .await;
+        assert!(matches!(
+            checked.last().unwrap().kind,
+            UpdateKind::WatchdogChecked(1)
+        ));
+        assert!(checked.iter().any(|e| matches!(
+            e.kind,
+            UpdateKind::Recovery {
+                attempts: 1,
+                language_token: Some(50264)
+            }
+        )));
+        let recovered = until(&mut session, |e| {
+            matches!(
+                e,
+                UpdateKind::Coverage {
+                    segments_in_flight: 0,
+                    ..
+                }
+            )
+        })
+        .await;
+        assert!(!recovered.iter().any(|e|matches!(&e.kind,UpdateKind::Output(Output::Stdout(transcribe::Event::Word{text,..})) if text=="Stale.")));
+        assert!(
+            !recovered
+                .iter()
+                .any(|e| matches!(e.kind, UpdateKind::RecordingStarted))
+        );
+        assert!(
+            controls.try_recv().is_err(),
+            "replacement cannot restart/resume capture"
+        );
+        let read = |name: &str| {
+            serde_json::from_slice::<serde_json::Value>(
+                &std::fs::read(root.path().join(name)).unwrap(),
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            read("wire-1"),
+            read("wire-2"),
+            "same offsets, paths, bytes and order"
+        );
+        assert_eq!(read("engine-2")["language"], "50264");
+        advance_watchdog(&clock, 1200.).await;
+        let checked = until(&mut session, |e| {
+            matches!(e, UpdateKind::WatchdogChecked(_))
+        })
+        .await;
+        assert!(
+            matches!(checked.last().unwrap().kind, UpdateKind::WatchdogChecked(1)),
+            "empty queue cannot restart"
+        );
+        session.stop(run).unwrap();
+        control(&mut controls, Control::Stop).await;
+        events.send(CaptureEvent::Stopped).unwrap();
+        let done = terminal(&mut session).await;
+        assert!(matches!(done.last().unwrap().kind, UpdateKind::Finished));
+        session.reset().await.unwrap();
+        drop(initial);
+        drop(recovered);
+        drop(done);
+        session.shutdown().await.unwrap();
+        assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
+    }
+}
+
+#[tokio::test]
+async fn hang_watchdog_replacement_spawn_failure_retires_capture_and_pending_audio() {
+    let (root, mut configuration) = fixture(HANG_ENGINE);
+    let clock = hang_clock();
+    configuration.wall_clock = Some(clock.clone());
+    let link = root.path().join("replaceable-python");
+    std::os::unix::fs::symlink(&configuration.resources.executable, &link).unwrap();
+    configuration.resources.executable = link.clone();
+    let mut session = LiveSession::new(configuration).unwrap();
+    let (capture, events, mut controls) = input();
+    session.start(coverage_request(capture)).await.unwrap();
+    events.send(CaptureEvent::Started).unwrap();
+    until(&mut session, |e| matches!(e, UpdateKind::RecordingStarted)).await;
+    events.send(samples(32000, 4000)).unwrap();
+    marker(&root.path().join("hung")).await;
+    until(&mut session, |e| {
+        matches!(
+            e,
+            UpdateKind::Output(Output::Stdout(transcribe::Event::Word { .. }))
+        )
+    })
+    .await;
+    std::fs::remove_file(link).unwrap();
+    advance_watchdog(&clock, 1046.).await;
+    control(&mut controls, Control::Stop).await;
+    events.send(CaptureEvent::Stopped).unwrap();
+    let failed = terminal(&mut session).await;
+    assert!(matches!(failed.last().unwrap().kind, UpdateKind::Failed));
+    assert!(
+        failed
+            .iter()
+            .any(|e| matches!(e.kind, UpdateKind::Recovery { attempts: 1, .. }))
+    );
+    assert!(failed.iter().any(|e| matches!(
+        e.kind,
+        UpdateKind::Coverage {
+            segments_in_flight: 0,
+            ..
+        }
+    )));
+    session.reset().await.unwrap();
+    drop(failed);
     session.shutdown().await.unwrap();
     assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
 }

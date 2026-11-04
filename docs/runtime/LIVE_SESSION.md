@@ -4,8 +4,9 @@
 linked macOS capture boundary, Rust PCM/WAV pipeline and resident ASR process.
 The recording button and shared transcript/archive owner now connect through
 `LIVE_WORKFLOW.md`. Preview admission, translation, retained audio and W1
-coverage retry now have native consumers; W2 hang recovery and remaining live
-AI features still require integration. See `COVERAGE_RETRY.md` for W1 behavior.
+coverage retry now have native consumers. W2 hang recovery is connected through
+`HANG_WATCHDOG.md`; remaining live AI features still require integration.
+See `COVERAGE_RETRY.md` for W1 behavior.
 
 ## Ownership and event order
 
@@ -70,8 +71,8 @@ shutdown. Replay opens no microphone or system audio device.
 Preview WAVs are surfaced as typed availability updates and admitted by the
 product scheduler described in `LIVE_WORKFLOW.md`. Language lock, busy-lane
 admission, forced-prefix agreement and preview ownership are checked before
-feeding them. W1 retries share that committed-job priority; the core's
-replacement-engine policy still awaits W2 hang-watchdog integration.
+feeding them. W1 retries share that committed-job priority; W2 now executes the
+core's replacement-engine policy while preserving capture and pending audio.
 The Windows capture adapter is not implemented; this executor is macOS-only.
 A bounded microphone/UI observation is recorded in `LIVE_WORKFLOW.md`; full
 device/TCC scenarios, UI/UX parity and recording acceptance remain incomplete.

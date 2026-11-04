@@ -427,6 +427,7 @@ pub async fn live_start(
             .await
             .map_err(|e| e.to_string())?;
         let request = madi_platform::live_session::Request {
+            recovery_settings: None,
             settings: madi_platform::asr_config::LiveSettings::from_setup(
                 &current.setup,
                 madi_platform::model_presentation::physical_memory(),

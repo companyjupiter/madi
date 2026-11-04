@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "verifiedUTC": "2026-11-04T23:27:09.362027+00:00",
+  "status": "CI_AND_SELECTED_ARTIFACTS_VERIFIED",
+  "featureHead": "8c9902d8f3f3a4b26a3ef14a29078f17930e3629",
+  "prMergeHead": "86441094ee2fe6ec7405fb71aeeb0ec2690b02a6",
+  "prMergeParents": [
+    "c1390c750f2506e556a277421e146d80195ab797",
+    "8c9902d8f3f3a4b26a3ef14a29078f17930e3629"
+  ],
+  "successfulRuns": [
+    41931326442,
+    41931333828
+  ],
+  "verifiedArtifactRun": 41931333828,
+  "artifacts": {
+    "windows": {
+      "artifactId": 13373040657,
+      "artifactSHA256": "cd84a8ab8a719fe7d4baba685c6404aaa26d79df8266ea52d8c27674821162a4",
+      "sourceHead": "86441094ee2fe6ec7405fb71aeeb0ec2690b02a6",
+      "sourceDirty": false,
+      "binary": "target/debug/madi-desktop.exe",
+      "binaryBytes": 19976192,
+      "binarySHA256": "683460d8f760c15b9718b04c02691821b54fa7e4fdafe3bb200929890bb31e1d",
+      "rustTestCounts": [
+        31,
+        11,
+        102,
+        14
+      ],
+      "rustTestTotal": 158,
+      "coverage": {
+        "cases": 500,
+        "transitions": 22250,
+        "corpusSHA256": "0eee8172b010890a3a8b6c1b86e63498bc84e6932f71f7dfa9315811a9077029",
+        "resultSHA256": "0555a1d0f521d7c2ed0e6f913c903209896003eed6733698c570c0a0b3616ba6",
+        "sources": {
+          "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+        },
+        "status": "passed",
+        "nativeSwiftRun": false,
+        "scope": "Unchanged original segmentEnd body with input enqueue/word-counter/reset scaffolding and no-op diagnostics/preview admission. Queue, one-retry decisions, gaps and counters compared; timestamps/turnaround diagnostics, capture/transport and native UI excluded."
+      },
+      "nativeSwiftBytesSHA256": null,
+      "packageArchiveSHA256": null,
+      "jobLogSHA256": "19b035f1864d96afa2bec9e6e55e1312183c97cdc9403da7114f9c13a50c13f9"
+    },
+    "macos": {
+      "artifactId": 13372413102,
+      "artifactSHA256": "84d02bad814eef5f5afb1f25db98da1d1b86d95d95e85a3a29b4061ab1c489b6",
+      "sourceHead": "86441094ee2fe6ec7405fb71aeeb0ec2690b02a6",
+      "sourceDirty": false,
+      "binary": "target/debug/madi-desktop",
+      "binaryBytes": 67326672,
+      "binarySHA256": "b9cf27495b8c6a06e1d3ae45f0ba7428d8b49aa2e2ac941b50b34aba439b3cab",
+      "rustTestCounts": [
+        31,
+        11,
+        135,
+        14
+      ],
+      "rustTestTotal": 191,
+      "coverage": {
+        "cases": 500,
+        "transitions": 22250,
+        "corpusSHA256": "0eee8172b010890a3a8b6c1b86e63498bc84e6932f71f7dfa9315811a9077029",
+        "resultSHA256": "0555a1d0f521d7c2ed0e6f913c903209896003eed6733698c570c0a0b3616ba6",
+        "sources": {
+          "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+        },
+        "status": "passed",
+        "nativeSwiftRun": true,
+        "scope": "Unchanged original segmentEnd body with input enqueue/word-counter/reset scaffolding and no-op diagnostics/preview admission. Queue, one-retry decisions, gaps and counters compared; timestamps/turnaround diagnostics, capture/transport and native UI excluded."
+      },
+      "nativeSwiftBytesSHA256": "c46a0bfcf6ac94257c7888ea698321663f3a8cb4c56ea156dfccc4f97c154ec3",
+      "packageArchiveSHA256": "6a454dc3d5ad25f32479de7a787491b177de01ad2eb4717a9a3738c1614e4b05",
+      "jobLogSHA256": "f3c989c10f4620384c0911975cd0d3d7022a00e21ac8fba2eab0e93efb55b2d1"
+    }
+  },
+  "scope": "Both push/PR runs completed successfully on macOS 15 and Windows 2022. Downloaded PR merge artifacts verify clean checkout, executable hashes, pinned coverage reference/source hashes, native Swift semantic equality and macOS package archive hash. Not full UI/UX, actual microphone coverage, audio playback or Windows native audio/GPU acceptance."
+}

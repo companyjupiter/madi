@@ -24,6 +24,8 @@ pub struct RunId(u64);
 
 #[derive(Debug)]
 pub enum UpdateKind {
+    #[cfg(test)]
+    WatchdogChecked(usize),
     Phase(Phase),
     Output(Output),
     Capabilities(Vec<String>),
@@ -31,6 +33,10 @@ pub enum UpdateKind {
     Coverage {
         segments_in_flight: usize,
         gaps: Vec<f64>,
+    },
+    Recovery {
+        attempts: usize,
+        language_token: Option<i64>,
     },
     Segment {
         offset: f64,
@@ -66,6 +72,8 @@ pub struct Update {
 pub struct Configuration {
     pub resources: Resources,
     pub scratch_parent: PathBuf,
+    #[cfg(test)]
+    pub wall_clock: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
 }
 
 pub enum Input {
@@ -83,9 +91,15 @@ pub enum Input {
 }
 pub struct Request {
     pub settings: LiveSettings,
+    /// Native preferences/glossary snapshot at replacement time, never renderer
+    /// executable/path input. Standalone replay callers can retain initial settings.
+    pub recovery_settings: Option<RecoverySettings>,
+    #[cfg(test)]
+    pub wall_clock: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
     pub capture: capture_stream::Configuration,
     pub input: Input,
 }
+pub type RecoverySettings = std::sync::Arc<dyn Fn() -> io::Result<LiveSettings> + Send + Sync>;
 enum Command {
     Start(Request, oneshot::Sender<io::Result<Option<RunId>>>),
     Pause(RunId),
@@ -111,6 +125,7 @@ impl LiveSession {
         tokio::runtime::Handle::try_current().map_err(io::Error::other)?;
         let (commands, input) = mpsc::unbounded_channel();
         let (output, updates) = mpsc::unbounded_channel();
+        let watchdog = madi_core::hang_watchdog::Watchdog::new(wall_seconds(&configuration));
         let task = tokio::spawn(
             Worker {
                 configuration,
@@ -131,6 +146,8 @@ impl LiveSession {
                 pipeline_token: None,
                 clock_tick: None,
                 coverage: Default::default(),
+                watchdog,
+                watchdog_tick: None,
                 preview_lease: None,
                 language_locked: false,
                 preview_forced_prefix: false,
@@ -291,11 +308,68 @@ struct Worker {
     pipeline_token: Option<Token>,
     clock_tick: Option<Instant>,
     coverage: madi_core::coverage::Coverage<OwnedWav>,
+    watchdog: madi_core::hang_watchdog::Watchdog,
+    watchdog_tick: Option<Instant>,
     preview_lease: Option<OwnedWav>,
     language_locked: bool,
     preview_forced_prefix: bool,
 }
+fn wall_seconds(configuration: &Configuration) -> f64 {
+    #[cfg(test)]
+    if let Some(clock) = &configuration.wall_clock {
+        return f64::from_bits(clock.load(std::sync::atomic::Ordering::SeqCst));
+    }
+    let _ = configuration;
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or_else(|e| -e.duration().as_secs_f64(), |v| v.as_secs_f64())
+}
 impl Worker {
+    async fn watchdog_tick(&mut self) -> io::Result<()> {
+        if !self.watchdog.tick(
+            self.core.phase(),
+            self.coverage.oldest_fed_at(),
+            wall_seconds(&self.configuration),
+        ) {
+            return Ok(());
+        }
+        let request = self
+            .request
+            .as_mut()
+            .ok_or_else(|| io::Error::other("missing recovery request"))?;
+        if let Some(settings) = &request.recovery_settings {
+            request.settings = settings()?;
+        }
+        self.emit(UpdateKind::Recovery {
+            attempts: self.watchdog.recoveries,
+            language_token: self
+                .request
+                .as_ref()
+                .unwrap()
+                .settings
+                .common
+                .language_token,
+        });
+        let effects = self.core.replace_engine();
+        self.effects(effects).await?;
+        // Launch failure has already retired capture/queue and emitted Failed.
+        if !matches!(self.core.phase(), Phase::Recording | Phase::Paused) {
+            return Ok(());
+        }
+        for job in self.coverage.refeed(wall_seconds(&self.configuration)) {
+            let path = job
+                .audio
+                .path()
+                .to_str()
+                .ok_or_else(|| io::Error::other("non UTF-8 recovery WAV"))?;
+            let (_, engine) = self
+                .engine
+                .as_ref()
+                .ok_or_else(|| io::Error::other("missing recovery engine"))?;
+            engine.send_line(&format!("{:.3} {path}", job.offset))?;
+        }
+        Ok(())
+    }
     fn now(&self) -> f64 {
         self.started.elapsed().as_secs_f64()
     }
@@ -350,6 +424,7 @@ impl Worker {
             let running = self.engine.is_some();
             let deadline = self.deadline;
             let clock_tick = self.clock_tick;
+            let watchdog_tick = self.watchdog_tick;
             tokio::select! {
                 command = self.input.recv() => match command {
                     Some(Command::Start(request, reply)) => {
@@ -358,6 +433,7 @@ impl Worker {
                         let effects = self.core.reset(); self.effects(effects).await?;
                         self.pipeline.take(); self.retained.clear(); self.request.take();
                         self.preview_lease.take(); self.coverage=Default::default();
+                        self.watchdog.recoveries=0; self.watchdog_tick=None;
                         self.language_locked=request.settings.common.language_token.is_some();
                         self.preview_forced_prefix=false;
                         let config = request.capture.clone();
@@ -365,6 +441,7 @@ impl Worker {
                         let pipeline = tokio::task::spawn_blocking(move || CapturePipeline::new(config, &parent)).await.map_err(io::Error::other)?;
                         let pipeline = match pipeline { Ok(p) => p, Err(e) => { self.phase_changed(); let _ = reply.send(Err(e)); continue; } };
                         self.run.0 = self.run.0.checked_add(1).ok_or_else(|| io::Error::other("live run identity exhausted"))?;
+                        self.watchdog_tick=Some(Instant::now()+Duration::from_secs(5));
                         self.emit_coverage();
                         self.pipeline = Some(pipeline); self.request = Some(request); self.flush_sent = None;
                         let effects = self.core.begin_live(); self.pipeline_token = self.core.capture_token(); self.phase_changed(); self.effects(effects).await?; self.phase_changed();
@@ -385,6 +462,7 @@ impl Worker {
                         let effects = self.core.reset(); self.effects(effects).await?;
                         self.retained.clear(); self.pipeline.take(); self.request.take(); self.flush_sent = None;
                         self.coverage=Default::default(); self.emit_coverage();
+                        self.watchdog_tick=None;
                         self.phase_changed(); let _ = reply.send(());
                     }
                     Some(Command::Shutdown) | None => return Ok(()),
@@ -411,6 +489,12 @@ impl Worker {
                     self.effects(effects).await?; self.phase_changed();
                 },
                 _ = self.output.closed() => return Ok(()),
+                _ = async { tokio::time::sleep_until(watchdog_tick.unwrap()).await }, if watchdog_tick.is_some() => {
+                    self.watchdog_tick=Some(Instant::now()+Duration::from_secs(5));
+                    self.watchdog_tick().await?;
+                    #[cfg(test)]
+                    self.emit(UpdateKind::WatchdogChecked(self.watchdog.recoveries));
+                },
                 _ = async { tokio::time::sleep_until(clock_tick.unwrap()).await }, if clock_tick.is_some() => {
                     self.emit(UpdateKind::RecordedSeconds(self.core.recorded_seconds(self.now())));
                     self.clock_tick = Some(Instant::now() + Duration::from_secs(1));
@@ -560,7 +644,12 @@ impl Worker {
                         .ok_or_else(|| io::Error::other("missing live engine"))?
                         .1;
                     engine.send_line(&format!("{offset:.3} {path}"))?;
-                    self.coverage.feed(offset, wav.clone(), had_speech);
+                    self.coverage.feed(
+                        offset,
+                        wav.clone(),
+                        had_speech,
+                        wall_seconds(&self.configuration),
+                    );
                     self.emit_coverage();
                     self.retained.push(wav.clone());
                     self.emit(UpdateKind::Segment {
@@ -596,6 +685,14 @@ impl Worker {
         if self.core.engine_token() != Some(token) {
             return Ok(());
         }
+        // EngineProcess dispatches these through SessionController.engine(didEmit:).
+        // READY, FLUSH_END, diagnostics, capabilities, JSONL and exit are separate
+        // callbacks in Swift and must not disguise a hung committed job.
+        if matches!(&message.event, EngineEvent::Protocol(Output::Stdout(event))
+            if !matches!(event, transcribe::Event::Ready | transcribe::Event::FlushEnd | transcribe::Event::Other(_)))
+        {
+            self.watchdog.activity(wall_seconds(&self.configuration));
+        }
         // Swift stop() is synchronous. The async port must not accept an early
         // engine acknowledgement while native capture/tail delivery is pending.
         let premature = *self.core.phase() == Phase::Flushing && self.flush_sent != Some(token);
@@ -626,7 +723,9 @@ impl Worker {
                     }
                     Output::Stdout(transcribe::Event::Word { .. }) => self.coverage.word(),
                     Output::Stdout(transcribe::Event::SegmentEnd) => {
-                        if let Some(retry) = self.coverage.segment_end() {
+                        if let Some(retry) =
+                            self.coverage.segment_end(wall_seconds(&self.configuration))
+                        {
                             let path = retry
                                 .audio
                                 .path()
@@ -721,14 +820,16 @@ impl Worker {
         while let Some(effect) = pending.pop_front() {
             let result = match effect {
                 Effect::StartEngine { token, file: None } => {
+                    self.preview_forced_prefix = false;
                     let launched = self
                         .configuration
                         .resources
                         .live_launch(
                             self.pipeline
                                 .as_ref()
-                                .ok_or_else(|| io::Error::other("missing capture root"))?
-                                .directory(),
+                                .map(CapturePipeline::directory)
+                                .or_else(|| self.retained.first().map(OwnedWav::directory))
+                                .ok_or_else(|| io::Error::other("missing capture root"))?,
                             &self
                                 .request
                                 .as_ref()
@@ -839,6 +940,7 @@ impl Worker {
                     Ok(())
                 }
                 Effect::Finished | Effect::Failed => {
+                    self.watchdog_tick = None;
                     self.coverage.retire_pending();
                     self.emit_coverage();
                     if fault.is_none() {
