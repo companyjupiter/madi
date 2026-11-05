@@ -15,6 +15,15 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- The `f310e7f` macOS push check exposed a race in the W1 test fixture:
+  the reader used file existence as readiness while Python had only opened,
+  but not yet written, the JSON record. An injected open-before-write pause
+  reproduces the same EOF error; writing a sibling temporary file and renaming
+  only after close passes under the same schedule. The fix changes test
+  evidence publication only. All 201 default Rust tests, formatting and strict
+  clippy pass locally. See
+  `evidence/macos-coverage-publication-2026-11-05.json` for the red/green checks.
+
 - AI correction now has native request/validation and owned audio execution
   components. Reconciliation uses the existing DNA broker's post-session lane,
   preserving caption pressure, ordered multi-part replies and cancellation.
@@ -25,7 +34,9 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   and five deliberate mutations pass. Local validation passes 201 Rust tests
   (32 core, 144 platform, 14 protocol, 11 desktop; one opt-in hang probe ignored),
   strict clippy, native/portable oracles, app build and relocated package checks.
-  This slice CI is pending. An installed Metal probe matches the
+  Its initial macOS push CI failed in the W1 fixture race documented above;
+  the remaining CI checks were still running when that fix was prepared.
+  An installed Metal probe matches the
   unchanged Swift one-shot result exactly on the same padded public JFK clip.
   The source/model/engine remain unchanged. **FileWorkflow application of the
   correction plan, revision gates, result/undo UI, identity services and

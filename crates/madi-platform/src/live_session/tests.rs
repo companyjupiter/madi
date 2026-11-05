@@ -625,7 +625,10 @@ for wire in sys.stdin:
     offset,path=line.split(' ',1)
     record={'offset':float(offset),'name':pathlib.Path(path).name,'sha256':hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()}
     records.append(record)
-    (root/('coverage-turn-'+str(turn))).write_text(json.dumps(record),encoding='utf-8')
+    # Publish complete evidence atomically: existence is the Rust reader's signal.
+    pending=root/('coverage-turn-'+str(turn)+'.pending')
+    pending.write_text(json.dumps(record),encoding='utf-8')
+    pending.replace(root/('coverage-turn-'+str(turn)))
     # Preview words AND its fake segment boundary must not satisfy/pop W1 jobs.
     if turn==1:print('<<PREVIEW_BEGIN>>\n=== WORD TIMESTAMPS ===\n[0s-0.1s] ghost\n<<SEG_END>>\n<<PREVIEW_END>>',flush=True)
     while not (root/('coverage-release-'+str(turn))).exists():
