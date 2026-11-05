@@ -1,0 +1,17 @@
+{
+  "status": "pass",
+  "cases": 20,
+  "swiftComparison": "live-unmodified-EngineProcess",
+  "sources": {
+    "EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+    "EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+    "EngineEvents.swift": "075b00249483183ce5abee33650fd21a8f05b5683238f6365bc40fe772f05c1f",
+    "EnginePathPolicy.swift": "d441d6cfb62106a8c075365469b1f9f3cfaedc6b56d75e845d81eccbdc9038c8"
+  },
+  "corpusSha256": "35c3bef6b6dc71dca3d02fd165d9c28c9127445b76e0cef73d34e33704b2e96b",
+  "eventStreamSha256": "c6b041cd1d4c5b772beeed0ca85c2f9c232dd1c434fad19834d6d53caf96cb8b",
+  "scope": "Real child pipes and JSONL barriers; fixture engine, no recording or inference",
+  "referenceSourceCommit": "c1390c750f2506e556a277421e146d80195ab797",
+  "referenceHost": "macOS 27.2 arm64; Swift 6.4.2",
+  "policy": "Captured from an unmodified Swift implementation after exact event comparison. Do not update to make a failing test pass."
+}

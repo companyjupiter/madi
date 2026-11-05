@@ -1,0 +1,11 @@
+{
+  "controllerCases": 800,
+  "transitions": 24000,
+  "navigationCases": 400,
+  "corpusSHA256": "7d7b341e1001ac36b442a3781073b5bed7727e15a7a4340f89a411957826b69c",
+  "resultSHA256": "c63a6636840c1cd6210a339801a0c09526f418a029d2c3cd20dbf7e43d13c1ff",
+  "sources": {
+    "apps/macos/Sovereign/Transcript/ReviewController.swift": "0f729275f359a7c5e180adafe4dd592db7fe044d5dbcf9cc497f3b22faca1287",
+    "apps/macos/Sovereign/UI/TranscriptView.swift": "dd7a53f78e029120dbaae5e554bbd891d7a4d21182a8d40e282ccae60655c08f"
+  }
+}

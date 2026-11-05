@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-settings-models-command"
+description = "Enables the settings_models_command command without any pre-configured scope."
+commands.allow = ["settings_models_command"]
+
+[[permission]]
+identifier = "deny-settings-models-command"
+description = "Denies the settings_models_command command without any pre-configured scope."
+commands.deny = ["settings_models_command"]

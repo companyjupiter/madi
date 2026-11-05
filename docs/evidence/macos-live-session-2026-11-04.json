@@ -1,0 +1,509 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-04",
+  "baseRevision": "9490c408125b3634e6579d4fe59b00f489f956ad",
+  "status": "passed",
+  "scope": "Native live configuration and effect executor; desktop recording UX remains unconnected",
+  "sourceSHA256": {
+    "crates/madi-core/src/capture_stream.rs": "bbd1e1805d3e51129547066093e6d4933c948627b329bce7a22160be3d9bee59",
+    "crates/madi-platform/src/asr_config.rs": "2263800a49e23db72a38622459a554574a1cf23fd1eef475b8b8b068b5ed1e0f",
+    "crates/madi-platform/src/live_session.rs": "39456b7c95b8e14cbfd3c36c4639de38b03515abbae2743f2f6ccd679520fbda",
+    "crates/madi-platform/src/live_session/tests.rs": "cbfcc0437b564761dd1c99007fde530a1b439ab26b2114fea5884555565cd8b4",
+    "crates/madi-platform/src/audio_capture.rs": "b712e962ed5fcc758da551329dcb0daf3db231c9937eacecab5520d88597551c",
+    "crates/madi-platform/native/AudioCaptureBridge.swift": "6a99cb297dcd7ed1152f524b8ec1578185d635f5f7ee1a8c28a9e2ba1aabc892",
+    "crates/madi-platform/examples/live_session_smoke.rs": "30dabdbd1d7d0e5fdfa07a708c837145bfd82149fde2b57bc545001a77628c03",
+    "crates/madi-platform/examples/live_config_oracle.rs": "95b94c3d5bc4d438ea133cf333e4c5c6818d1bfa3e85dd10b6cbd3f332044567",
+    "crates/madi-platform/examples/capture_bridge_oracle.rs": "039b556977ad317f2db3f72ad86fc8c78b3947609250e566dc3cc1f0b30525a9",
+    "scripts/check_live_config_parity.py": "b9115bc46682da0f59dafc26502e9d190aef25896fd3caaaf7aedb31285376ff",
+    "scripts/check_capture_bridge_parity.py": "ff893ef6f27851865dbf0ce27d490eb9f29efeb17372bbaf40a1f47f25b9103b"
+  },
+  "rustTests": [
+    21,
+    84,
+    14
+  ],
+  "frontendTests": 4,
+  "liveConfig": {
+    "cases": 2406,
+    "corpusSHA256": "75a933be1e1452270fc973a760a9e0f6aa6f97568cf2a5b477110cb819ce3191",
+    "resultSHA256": "bd390fc75013be133d44d94553319602a6066aa46b22fbeeeba0f7107fef59dc",
+    "extractedSourceSHA256": "ade742abb182d12f3c523a7048eac4d19c21993efda43d742637f9f9ac77a86f",
+    "sources": {
+      "apps/macos/Sovereign/Engine/EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+      "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+      "apps/macos/Sovereign/Engine/EnginePathPolicy.swift": "d441d6cfb62106a8c075365469b1f9f3cfaedc6b56d75e845d81eccbdc9038c8"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "Live launch options, language candidates, multi-target window and preview settings; no engine, capture hardware or UI execution",
+    "intentionalDifference": "Rust clears unset engine-owned keys and validates the canonical owned stream root"
+  },
+  "nativeCapture": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "In-process native resampler/callback ABI and Rust segmentation; no device or permissions",
+    "cases": 8,
+    "samples": 1664512,
+    "segments": 32,
+    "cancelBeforeStartCases": 9,
+    "concurrentDropCases": 9,
+    "nativePauseResumeStopMarkerCases": 9,
+    "missingFileFailure": true,
+    "fixtures": [
+      {
+        "name": "fixture-16000-1.wav",
+        "sha256": "5d65c224091cd928829924c44d80fc99bfc34a2f0e435c5f5f568311c115e680"
+      },
+      {
+        "name": "fixture-44100-1.wav",
+        "sha256": "afef7b1424d7c4fa0ba0215e2c5ddb1c02476573b2dc8ad2f324dad2a8c87d5e"
+      },
+      {
+        "name": "fixture-48000-2.wav",
+        "sha256": "c2ee0c36ced6f46f829dcce2b8c77f832bba755be2386b02a9462773f64227f6"
+      },
+      {
+        "name": "fixture-96000-2.wav",
+        "sha256": "b6d8595c5f3fd527a46f02f4a678ff184e790fcd2fb771c3e9b91ba4182817a2"
+      }
+    ],
+    "ownedWavPipeline": true,
+    "segmentDirectoryCleanup": true,
+    "resultSHA256": "e2abe83085bfbcdfab234975f69fa84fc7e58ea51e8ef770215255bed1459169",
+    "sourceSHA256": {
+      "apps/macos/Sovereign/Audio/Resampler.swift": "2489496e71e1a364e695e3aa4d002b5194ec528e9732f8d30f39c117bdfef2f8",
+      "apps/macos/Sovereign/Audio/Segmenter.swift": "8db64d433f12eb72b5b9da87233687d07258bdd8489474c5c31b7e5a82dab957",
+      "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+      "tests/parity/CaptureBridgeOracle.swift": "61da7d760952ae6043463afbb5e68a6bc2ffdbd56460bf8e57ca53b87d2008ca"
+    },
+    "linkedLibraries": [
+      "\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 62460.40.78)",
+      "\t/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration (compatibility version 1.0.0, current version 1453.40.1)",
+      "\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 5027.1.8)",
+      "\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2775.20.133)",
+      "\t/System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers (compatibility version 1.0.0, current version 709.0.0)",
+      "\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 5027.1.8)",
+      "\t/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio (compatibility version 1.0.0, current version 1.0.0)",
+      "\t/usr/lib/libobjc.A.dylib (compatibility version 1.0.0, current version 228.0.0)",
+      "\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)",
+      "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1359.40.3)",
+      "\t/System/Library/Frameworks/AVFoundation.framework/Versions/A/AVFoundation (compatibility version 1.0.0, current version 2.0.0)",
+      "\t/System/Library/Frameworks/AudioToolbox.framework/Versions/A/AudioToolbox (compatibility version 1.0.0, current version 1000.0.0)",
+      "\t/System/Library/Frameworks/CoreMedia.framework/Versions/A/CoreMedia (compatibility version 1.0.0, current version 3385.14.5)",
+      "\t/System/Library/Frameworks/ScreenCaptureKit.framework/Versions/A/ScreenCaptureKit (compatibility version 1.0.0, current version 1.0.0)",
+      "\t/usr/lib/swift/libswiftAVFoundation.dylib (compatibility version 1.0.0, current version 2475.13.5, weak)",
+      "\t/usr/lib/swift/libswiftCore.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/usr/lib/swift/libswiftCoreAudio.dylib (compatibility version 1.0.0, current version 482.208.0, weak)",
+      "\t/usr/lib/swift/libswiftCoreFoundation.dylib (compatibility version 1.0.0, current version 120.100.0, weak)",
+      "\t/usr/lib/swift/libswiftCoreImage.dylib (compatibility version 1.0.0, current version 3.0.0, weak)",
+      "\t/usr/lib/swift/libswiftCoreMIDI.dylib (compatibility version 1.0.0, current version 6.0.0, weak)",
+      "\t/usr/lib/swift/libswiftDarwin.dylib (compatibility version 1.0.0, current version 428.40.1, weak)",
+      "\t/usr/lib/swift/libswiftDispatch.dylib (compatibility version 1.0.0, current version 1605.40.4)",
+      "\t/usr/lib/swift/libswiftIOKit.dylib (compatibility version 1.0.0, current version 1.0.0, weak)",
+      "\t/usr/lib/swift/libswiftMetal.dylib (compatibility version 1.0.0, current version 383.1.0, weak)",
+      "\t/usr/lib/swift/libswiftOSLog.dylib (compatibility version 1.0.0, current version 10.0.0, weak)",
+      "\t/usr/lib/swift/libswiftObjectiveC.dylib (compatibility version 1.0.0, current version 973.1.0, weak)",
+      "\t/usr/lib/swift/libswiftQuartzCore.dylib (compatibility version 1.0.0, current version 5.0.0, weak)",
+      "\t/usr/lib/swift/libswiftSpatial.dylib (compatibility version 1.0.0, current version 1.0.0, weak)",
+      "\t/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib (compatibility version 1.0.0, current version 917.1.12, weak)",
+      "\t/usr/lib/swift/libswiftXPC.dylib (compatibility version 1.0.0, current version 167.0.2, weak)",
+      "\t/usr/lib/swift/libswiftos.dylib (compatibility version 1.0.0, current version 1090.40.3, weak)",
+      "\t/usr/lib/swift/libswiftsimd.dylib (compatibility version 1.0.0, current version 25.0.0, weak)",
+      "\t@rpath/libswift_Concurrency.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/usr/lib/swift/libswiftFoundation.dylib (compatibility version 1.0.0, current version 1.0.0)",
+      "\t/usr/lib/swift/libswiftCoreMedia.dylib (compatibility version 1.0.0, current version 3385.14.5)"
+    ],
+    "limitations": [
+      "Microphone and ScreenCaptureKit hardware NOT_RUN",
+      "Device switch and permission denial NOT_RUN",
+      "No live engine or UI session is connected by this gate"
+    ]
+  },
+  "realNativeReplayAndMetalASR": {
+    "devicesOpened": false,
+    "failedCallbacks": 0,
+    "faults": [],
+    "finishedCallbacks": 1,
+    "fixtureSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "levelEvents": 43,
+    "modelSizeMtimeUnchanged": true,
+    "originalUnchanged": true,
+    "ownedScratchEmptyAfterShutdown": true,
+    "phases": [
+      "EngineStarting",
+      "Ready",
+      "Recording",
+      "Flushing",
+      "Done"
+    ],
+    "schemaVersion": 1,
+    "scope": "Native replay/conversion, Rust live-session executor, owned WAV feed and real resident Metal ASR; no hardware, permissions, previews, translation, watchdog, archive or Tauri UI acceptance",
+    "segmentFilesRetainedAtDone": true,
+    "segments": [
+      "And so, my fellow,",
+      "And so, my fellow Americans, ask not.",
+      "Ask not what your country can do for you. Ask what you can do for your country."
+    ],
+    "status": "passed",
+    "timedOut": false,
+    "transcript": [
+      {
+        "editedText": null,
+        "editedTranslations": [],
+        "end": 7.56,
+        "id": "d423d659-d533-4188-82d7-a1fd47d3beb7",
+        "overlapSpeakers": [],
+        "speaker": 0,
+        "speakerMargin": 1.0,
+        "staleTranslations": {},
+        "start": 0.34,
+        "suppressedTranslations": [],
+        "translations": {},
+        "words": [
+          {
+            "conf": 0.69,
+            "id": "d423d659-d533-4188-82d7-a1fd47d3beb7",
+            "t0": 0.34,
+            "t1": 0.5,
+            "text": "And"
+          },
+          {
+            "conf": 0.53,
+            "id": "f39a9cca-d64b-4a58-a1ac-76e91a7889af",
+            "t0": 0.5,
+            "t1": 1.02,
+            "text": "so,"
+          },
+          {
+            "conf": 1.0,
+            "id": "cd52dec8-d881-442d-a984-43947b30bc06",
+            "t0": 1.02,
+            "t1": 1.2,
+            "text": "my"
+          },
+          {
+            "conf": 1.0,
+            "id": "d57d26ce-3195-4333-824d-f5182ebe9313",
+            "t0": 1.37,
+            "t1": 1.54,
+            "text": "fellow"
+          },
+          {
+            "conf": 0.85,
+            "id": "a8dda94f-1a6a-41c1-ae5d-d7a68e1ca057",
+            "t0": 1.54,
+            "t1": 2.11,
+            "text": "Americans,"
+          },
+          {
+            "conf": 0.94,
+            "id": "34abdb03-1193-4189-8b57-f62634aed048",
+            "t0": 2.7,
+            "t1": 3.66,
+            "text": "ask"
+          },
+          {
+            "conf": 0.95,
+            "id": "1c868942-061d-4fb1-8c02-180293716ed0",
+            "t0": 4.01,
+            "t1": 4.29,
+            "text": "not"
+          },
+          {
+            "conf": 0.94,
+            "id": "6531daed-a997-4c9a-a095-d48e16ada966",
+            "t0": 4.42,
+            "t1": 4.5,
+            "text": "what"
+          },
+          {
+            "conf": 0.99,
+            "id": "ef6d2806-1ce0-470c-90e0-1ae1ad60a87f",
+            "t0": 5.42,
+            "t1": 5.57,
+            "text": "your"
+          },
+          {
+            "conf": 1.0,
+            "id": "f236b20e-d050-43f4-a8f0-f6af65dd3cc1",
+            "t0": 5.65,
+            "t1": 6.42,
+            "text": "country"
+          },
+          {
+            "conf": 1.0,
+            "id": "735e0cc3-4ac0-4b32-825b-1dc42ec17cef",
+            "t0": 6.5,
+            "t1": 6.51,
+            "text": "can"
+          },
+          {
+            "conf": 1.0,
+            "id": "64d91763-138b-4c4f-90b9-96205710326d",
+            "t0": 6.51,
+            "t1": 6.71,
+            "text": "do"
+          },
+          {
+            "conf": 1.0,
+            "id": "b9211de9-2578-4154-8bba-c4c211b60621",
+            "t0": 6.71,
+            "t1": 6.93,
+            "text": "for"
+          },
+          {
+            "conf": 0.47,
+            "id": "54e2a168-fb1c-4fe3-b24a-43d8ba246631",
+            "t0": 7.01,
+            "t1": 7.56,
+            "text": "you."
+          }
+        ]
+      },
+      {
+        "editedText": null,
+        "editedTranslations": [],
+        "end": 10.59,
+        "id": "b2227224-1eb0-4116-814c-c7a23dd1d0f9",
+        "overlapSpeakers": [],
+        "speaker": 0,
+        "speakerMargin": 1.0,
+        "staleTranslations": {},
+        "start": 8.2,
+        "suppressedTranslations": [],
+        "translations": {},
+        "words": [
+          {
+            "conf": 1.0,
+            "id": "b2227224-1eb0-4116-814c-c7a23dd1d0f9",
+            "t0": 8.2,
+            "t1": 8.49,
+            "text": "Ask"
+          },
+          {
+            "conf": 1.0,
+            "id": "16d3f899-4e5c-4e28-b125-626f807efb47",
+            "t0": 8.64,
+            "t1": 8.76,
+            "text": "what"
+          },
+          {
+            "conf": 1.0,
+            "id": "fc90080a-04e4-40d8-a704-53539e95696f",
+            "t0": 8.76,
+            "t1": 9.2,
+            "text": "you"
+          },
+          {
+            "conf": 1.0,
+            "id": "2141e853-5b67-4135-ab42-a1e1432dafa8",
+            "t0": 9.2,
+            "t1": 9.33,
+            "text": "can"
+          },
+          {
+            "conf": 1.0,
+            "id": "6f510e9c-545f-425f-8ced-49502133bdc5",
+            "t0": 9.33,
+            "t1": 9.45,
+            "text": "do"
+          },
+          {
+            "conf": 1.0,
+            "id": "9d7490e5-3f47-49f0-891c-77fbbc77655a",
+            "t0": 9.45,
+            "t1": 9.66,
+            "text": "for"
+          },
+          {
+            "conf": 1.0,
+            "id": "cb2ac5d3-271e-4f18-a5b7-54f0c0b4e4ab",
+            "t0": 9.73,
+            "t1": 9.82,
+            "text": "your"
+          },
+          {
+            "conf": 0.93,
+            "id": "9c91acf7-4df5-46d6-9791-051e89d2016a",
+            "t0": 9.82,
+            "t1": 10.59,
+            "text": "country."
+          }
+        ]
+      }
+    ],
+    "transcriptText": [
+      "And so, my fellow Americans, ask not what your country can do for you.",
+      "Ask what you can do for your country."
+    ],
+    "wavSegments": [
+      {
+        "bytes": 48044,
+        "hadSpeech": true,
+        "offset": 0.0,
+        "sha256": "0e5e19033b3508fb604f1d1f8192ada2d8da26aec726965171937a4038a3b747"
+      },
+      {
+        "bytes": 163884,
+        "hadSpeech": true,
+        "offset": 0.0,
+        "sha256": "e3c6410db65a2364867f1035d4827e14d4928ea53552adb7da75b9de1049c526"
+      },
+      {
+        "bytes": 284204,
+        "hadSpeech": true,
+        "offset": 2.12,
+        "sha256": "47af6388865ebd6ee59ba10322e05f40b2106b4c61da987e9e139fc890e763de"
+      }
+    ],
+    "wordEvents": 28
+  },
+  "mutations": {
+    "status": "passed",
+    "restoredSHA256": "39456b7c95b8e14cbfd3c36c4639de38b03515abbae2743f2f6ccd679520fbda",
+    "mutations": [
+      {
+        "mutation": "pause-discard-disabled",
+        "exitCode": 101,
+        "target": "live_session::tests::pause_markers_omit_only_paused_samples_and_tail_precedes_flush_with_retained_lease",
+        "logSHA256": "3eb022a1cc875277635bfff52b1e4a0195c457516cfcb6a7793132a167c5430d"
+      },
+      {
+        "mutation": "flush-before-tail",
+        "exitCode": 101,
+        "target": "live_session::tests::pause_markers_omit_only_paused_samples_and_tail_precedes_flush_with_retained_lease",
+        "logSHA256": "46d78552c52bee505a90898cee7666f28ce45dd3c75bd3b1d3d564f67a54e876"
+      }
+    ]
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "captureUsageDescriptionsMatch": [
+      "NSMicrophoneUsageDescription",
+      "NSScreenCaptureUsageDescription",
+      "NSAudioCaptureUsageDescription"
+    ],
+    "captureAudioInputEntitlement": true,
+    "developerLibraryDependenciesAbsent": true,
+    "relocatedNativeCaptureReplay": {
+      "devicesOpened": false,
+      "ownedDirectoryCleaned": true,
+      "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+      "sampleCount": 16000,
+      "segments": [
+        {
+          "hadSpeech": true,
+          "name": "seg00000.wav",
+          "offsetBits": "0000000000000000",
+          "wavBytes": 32044,
+          "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+        }
+      ],
+      "stopped": true
+    },
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957888,
+        "sha256": "8448246bd47ca13141870e284bd27ff87f7ae887e5f97744172c805a19342514"
+      },
+      "translate-engine-2b": {
+        "bytes": 1576224,
+        "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+      },
+      "translate-engine-4b": {
+        "bytes": 1576080,
+        "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+    "helperBytes": 151296,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "02ec98eaa5f7f37f572bb53dbd0e6fcc3f5681d6af884e05646eaac365f46898",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "logSHA256": {
+    "madi-live-session-restored-tests.log": "aa423f8e6f40325083cc95a32a06081b7ab2513711ec59cab94ee8b365845819",
+    "madi-live-session-clippy-restored.log": "7486c36a13645987c22edab9cd6bb646639511a8c07d47d094ea3df69a7d49bf",
+    "madi-live-session-frontend.log": "5b23c59ec2869f28dd72fc26120e62c4c5cd6e7aebbe3d8fd1cd802dfe1acaee",
+    "madi-live-config-final.log": "127a88e9252fafcaaf187483d05f5df38a0eabf7dca6f8b1b5921196eb4656dc",
+    "madi-live-capture-controls-final.log": "701c68712e626e51ae960b3cb3ec5956817cab612f11665bc86aa6fc6f2446f5",
+    "madi-live-session-smoke.log": "70ccc4e1ed741e3d95d324622fb85ebd8ab7eae016e0562260004ddf0e6cfbac",
+    "madi-live-session-app-build.log": "4a9e00fc53d8bd1bb1491c6fe7f63f5e5b8a7c3cd0c8b6b6e4932493ea698170",
+    "madi-live-session-package.log": "908bb790537cd29c210eb3209744681d30eb429a1ac22badfa9537d0debd6c40"
+  },
+  "limits": [
+    "No microphone or ScreenCaptureKit hardware/TCC acceptance",
+    "No live recording UI, preview language/admission policy, watchdog, translation, archive or AI integration",
+    "Actual UI/UX parity NOT_PASS",
+    "Windows native capture/GPU execution deferred",
+    "Release disabled; no merge or release"
+  ]
+}

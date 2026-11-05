@@ -1,0 +1,6 @@
+{
+  "identifier": "caption-staff",
+  "description": "Local staff caption projection, measured content size, drag and close. No transcript edit, preference, model or filesystem commands.",
+  "windows": ["caption-staff"],
+  "permissions": ["allow-caption-snapshot", "allow-caption-close", "allow-caption-resize", "core:event:allow-listen", "core:event:allow-unlisten", "core:window:allow-start-dragging"]
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-file-rename-speaker"
+description = "Enables the file_rename_speaker command without any pre-configured scope."
+commands.allow = ["file_rename_speaker"]
+
+[[permission]]
+identifier = "deny-file-rename-speaker"
+description = "Denies the file_rename_speaker command without any pre-configured scope."
+commands.deny = ["file_rename_speaker"]

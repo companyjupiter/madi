@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41694353597",
+  "conclusion": "success",
+  "head": "689b897e8811c6e0584474529e8975525d8885c1",
+  "records": [
+    {
+      "platform": "macos",
+      "binaryVerified": true,
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "689b897e8811c6e0584474529e8975525d8885c1",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "binary": "target/debug/madi-desktop",
+        "bytes": 32567440,
+        "sha256": "aad6718d03e21e94c3a1d8abf456bf0a170bb2ba0ff55d3c0e3e54e6ba5fe773",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "structured": {
+        "status": "pass",
+        "cases": 2945,
+        "fixtures": {
+          "web/fixtures/devops_ko.events.jsonl": 844,
+          "web/fixtures/devops_ko_biased.events.jsonl": 792,
+          "web/fixtures/jfk3.events.jsonl": 71
+        },
+        "swiftComparison": "live-unmodified-source",
+        "corpusSha256": "66728d0c6e6332f5304d71f8742fb8032b6b598d1ae5a89b2cc21b7c00a2a5b8",
+        "swiftSourceSha256": "075b00249483183ce5abee33650fd21a8f05b5683238f6365bc40fe772f05c1f",
+        "eventStreamSha256": "a693bd4b3c5ec1976fbd570075435851a11c3997d53e6a32c7550bf63c6b456c",
+        "scope": "Engine contract fields; arbitrary-precision NSNumber coercions outside the bounded engine contract are not reproduced",
+        "duplicateKeyProfile": "first",
+        "canonicalEventStreamSha256": "a693bd4b3c5ec1976fbd570075435851a11c3997d53e6a32c7550bf63c6b456c",
+        "canonicalDefaultMatchesHost": true
+      },
+      "stream": {
+        "status": "pass",
+        "cases": 20,
+        "swiftComparison": "live-unmodified-EngineProcess",
+        "sources": {
+          "EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+          "EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+          "EngineEvents.swift": "075b00249483183ce5abee33650fd21a8f05b5683238f6365bc40fe772f05c1f",
+          "EnginePathPolicy.swift": "d441d6cfb62106a8c075365469b1f9f3cfaedc6b56d75e845d81eccbdc9038c8"
+        },
+        "corpusSha256": "35c3bef6b6dc71dca3d02fd165d9c28c9127445b76e0cef73d34e33704b2e96b",
+        "eventStreamSha256": "c6b041cd1d4c5b772beeed0ca85c2f9c232dd1c434fad19834d6d53caf96cb8b",
+        "scope": "Real child pipes and JSONL barriers; fixture engine, no recording or inference"
+      }
+    },
+    {
+      "platform": "windows",
+      "binaryVerified": true,
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "689b897e8811c6e0584474529e8975525d8885c1",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "binary": "target\\debug\\madi-desktop.exe",
+        "bytes": 12485120,
+        "sha256": "9e34055012126cf4a4f908879fe9c08b2d3ff4c78103b9db036bc6cb9d2f5094",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "structured": {
+        "status": "pass",
+        "cases": 2945,
+        "fixtures": {
+          "web\\fixtures\\devops_ko.events.jsonl": 844,
+          "web\\fixtures\\devops_ko_biased.events.jsonl": 792,
+          "web\\fixtures\\jfk3.events.jsonl": 71
+        },
+        "swiftComparison": "not-run",
+        "corpusSha256": "66728d0c6e6332f5304d71f8742fb8032b6b598d1ae5a89b2cc21b7c00a2a5b8",
+        "swiftSourceSha256": "075b00249483183ce5abee33650fd21a8f05b5683238f6365bc40fe772f05c1f",
+        "eventStreamSha256": "a693bd4b3c5ec1976fbd570075435851a11c3997d53e6a32c7550bf63c6b456c",
+        "scope": "Engine contract fields; arbitrary-precision NSNumber coercions outside the bounded engine contract are not reproduced",
+        "duplicateKeyProfile": null,
+        "canonicalEventStreamSha256": "a693bd4b3c5ec1976fbd570075435851a11c3997d53e6a32c7550bf63c6b456c",
+        "canonicalDefaultMatchesHost": null
+      },
+      "stream": {
+        "status": "pass",
+        "cases": 20,
+        "swiftComparison": "not-run",
+        "sources": {
+          "EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+          "EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+          "EngineEvents.swift": "075b00249483183ce5abee33650fd21a8f05b5683238f6365bc40fe772f05c1f",
+          "EnginePathPolicy.swift": "d441d6cfb62106a8c075365469b1f9f3cfaedc6b56d75e845d81eccbdc9038c8"
+        },
+        "corpusSha256": "35c3bef6b6dc71dca3d02fd165d9c28c9127445b76e0cef73d34e33704b2e96b",
+        "eventStreamSha256": "c6b041cd1d4c5b772beeed0ca85c2f9c232dd1c434fad19834d6d53caf96cb8b",
+        "scope": "Real child pipes and JSONL barriers; fixture engine, no recording or inference"
+      }
+    }
+  ],
+  "limitations": [
+    "Debug UI harness only",
+    "Fixture child processes, no inference or audio",
+    "Lifecycle core was added after this revision"
+  ]
+}

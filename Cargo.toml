@@ -1,0 +1,10 @@
+[workspace]
+members = ["crates/madi-protocol", "crates/madi-core", "crates/madi-platform", "apps/desktop/src-tauri"]
+default-members = ["crates/madi-protocol", "crates/madi-core"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "AGPL-3.0-only"

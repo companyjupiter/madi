@@ -1,0 +1,10 @@
+{
+  "cases": 360,
+  "lines": 8005,
+  "corpusSHA256": "ba13756891dea918bd02f42f3258d4a7473610e90891f3e0b867dd5d2f98ff00",
+  "resultSHA256": "52580eec8508beb223ea2678ce28d4af4b7b0b567c008099c4abb798c3efe804",
+  "sources": {
+    "apps/macos/Sovereign/Transcript/TranslationCoalescer.swift": "9a8e71d9589bc26847b2fccf885b03007ac2cbbca4c2260d5546f9d510a82de1",
+    "apps/macos/Sovereign/Engine/TranslateStreamParser.swift": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6"
+  }
+}

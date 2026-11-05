@@ -1,0 +1,28 @@
+{
+  "identifier": "settings",
+  "description": "Local Settings window with shared preference/model/glossary/workspace owners. No session admission, transcript edits, arbitrary paths or remote origins.",
+  "windows": [
+    "settings"
+  ],
+  "permissions": [
+    "allow-settings-open",
+    "allow-settings-metadata",
+    "allow-settings-model-locations",
+    "allow-settings-models-command",
+    "allow-settings-reveal",
+    "allow-preferences-snapshot",
+    "allow-preferences-command",
+    "allow-settings-command",
+    "allow-glossary-snapshot",
+    "allow-glossary-command",
+    "allow-setup-command",
+    "allow-audio-inputs",
+    "allow-models-snapshot",
+    "allow-workspace-snapshot",
+    "allow-workspace-command",
+    "allow-workspace-choose-folder",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-set-title"
+  ]
+}

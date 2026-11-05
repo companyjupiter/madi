@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41711822569",
+  "head": "3954f46174cb317c87e7af12d809a782a0d48e07",
+  "conclusion": "success",
+  "unitTests": {
+    "macos-15": 49,
+    "windows-2022": 43
+  },
+  "records": [
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "3954f46174cb317c87e7af12d809a782a0d48e07",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "binary": "target/debug/madi-desktop",
+        "bytes": 34072032,
+        "sha256": "9f091de1f1aefc5f1314535eac9d8a0776c37a3c7b2381f05c26c925f8a69af3",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "modelManifest": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "assets": 3,
+        "selectionCases": 70,
+        "integrityCases": 27,
+        "swiftComparison": "live-unmodified-source",
+        "actualHostOverrideCases": 10,
+        "sourceSHA256": "b080aa2bd7f1894e9c9bc986b492ab769d96594671c2d561a51c1a9489eaa49c",
+        "corpusSHA256": "90162cdb562a0363ed52b04e0a5a00116028a688cc42d605413db821da9d98e1",
+        "resultSHA256": "b6f6c04db25aa6a8ec009578e6321571506547a436ee59667cd09d8c47360eb6",
+        "scope": "Live shipping manifest, memory/override selection, full integrity and hashing; no downloads or production model/support-directory writes"
+      },
+      "package": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "bundleIdentifier": "tv.devart.madi.parity",
+        "minimumSystemVersion": "14.0",
+        "signature": "ad-hoc; deep strict verification passed",
+        "relocatedLookup": "passed",
+        "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+        "missingHelperFailsClosed": true,
+        "helperSHA256": "b8a5b37227a639793c1ef57990b62ded6e250c14a70f560ab036225f14dcda45",
+        "helperBytes": 145024,
+        "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+        "archiveSHA256": "338425d91aa5ade54126384881103c1ba9cfa5aa9bf5e4ab8be354fdcc265311",
+        "productRelease": false,
+        "notarized": false,
+        "scope": "Headless relocated package/helper only; no UI, microphone, model admission, ASR bundle or updater validation"
+      }
+    },
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "3954f46174cb317c87e7af12d809a782a0d48e07",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "binary": "target\\debug\\madi-desktop.exe",
+        "bytes": 12881408,
+        "sha256": "8fb66fcbc89c38b0628f55670d6ea65c5cdfb4f8eb19ef6d81ab0b9c6b705a3d",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "modelManifest": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "assets": 3,
+        "selectionCases": 70,
+        "integrityCases": 27,
+        "swiftComparison": "not-run",
+        "actualHostOverrideCases": 0,
+        "sourceSHA256": "b080aa2bd7f1894e9c9bc986b492ab769d96594671c2d561a51c1a9489eaa49c",
+        "corpusSHA256": "90162cdb562a0363ed52b04e0a5a00116028a688cc42d605413db821da9d98e1",
+        "resultSHA256": "b6f6c04db25aa6a8ec009578e6321571506547a436ee59667cd09d8c47360eb6",
+        "scope": "Live shipping manifest, memory/override selection, full integrity and hashing; no downloads or production model/support-directory writes"
+      }
+    }
+  ],
+  "downloadedBinariesVerified": true,
+  "downloadedAppArchiveAndBundledHelperVerified": true,
+  "limitations": [
+    "No complete native UI parity or first-run installer validation",
+    "Precedes ASR/LLM runtime bundling and pure first-run policy",
+    "Windows Swift reference comparison; no Windows native/GPU inference"
+  ]
+}

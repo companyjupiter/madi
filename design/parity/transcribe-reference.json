@@ -1,0 +1,10 @@
+{
+  "cases": 2728,
+  "events": 10424,
+  "corpusSha256": "a0a70c2af9992885f43fcfd07bf5b11427df6a312bb483796704da0d4968c7d2",
+  "swiftSourceSha256": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+  "eventStreamSha256": "238b38790cb76d632dd20963c3bef76674e3619621706b9bd5ab27d050ea09be",
+  "schemaVersion": 1,
+  "reference": "Unmodified Swift EngineProtocol.Decoder on macOS 27.2, Swift 6.4.2",
+  "sourceCommit": "c1390c750f2506e556a277421e146d80195ab797"
+}

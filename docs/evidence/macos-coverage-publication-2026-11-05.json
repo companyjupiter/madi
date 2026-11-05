@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "verified_utc": "2026-11-05T00:39:05.331990+00:00",
+  "base_commit": "f310e7f2dc56b959e40f54956fdc9fb4f5acc176",
+  "scope": "Test fixture evidence publication only; no production runtime or UI changes.",
+  "observed_ci_failure": {
+    "run": 41941907133,
+    "job": 126964543238,
+    "platform": "macos-15",
+    "test": "live_session::tests::coverage_backlog_marks_gap_without_refeeding_past_later_audio",
+    "error": "EOF while parsing a value at line 1 column 0",
+    "log_sha256": "1723a50d45e3485095fe6d8ebf98c7271b8b63dc1fd4eef5f931f5826e78c497"
+  },
+  "root_cause": "The Rust reader treated coverage-turn-N existence as readiness. Python Path.write_text opens/truncates that final path before writing JSON, exposing an empty file.",
+  "controlled_schedule": {
+    "injection": "Replace the record write with open(w), time.sleep(.25), write(json.dumps(record)). No reader retry or timeout changes.",
+    "before": "FAIL with the same EOF signature",
+    "after": "PASS when the identical open-before-write delay affects the sibling .pending file, renamed to the observed path after close.",
+    "removed_after_probe": true
+  },
+  "fix": "Write the sibling coverage-turn-N.pending file fully, close it, then atomically replace coverage-turn-N in the same directory. Readers still wait only for the final path, then parse once.",
+  "source_sha256": "3be50840660062b8862b89940f9ff541f2e2f7b03c55358a8a22bb693809bd89",
+  "validation": {
+    "red": {
+      "path": "/tmp/madi-coverage-publication-red.log",
+      "sha256": "e91ea8ee7e1327f332ab66805acad3077acf25194defc353613d1fe62adaf319",
+      "results": [
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.33s"
+      ]
+    },
+    "green": {
+      "path": "/tmp/madi-coverage-publication-green.log",
+      "sha256": "f28024ee3f40b3121d47b545ac59c3218420e1333cc8322a0cb057ceb477f75b",
+      "results": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 144 filtered out; finished in 0.60s"
+      ]
+    },
+    "default_tests": {
+      "path": "/tmp/madi-coverage-publication-tests.log",
+      "sha256": "3ce448419f6028423c79cfcb4c374319743e292f05a290bf33e4bc2ce37f14a4",
+      "results": [
+        "test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 144 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 32.20s",
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    "rustfmt": {
+      "path": "/tmp/madi-coverage-publication-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "results": []
+    },
+    "strict_clippy": {
+      "path": "/tmp/madi-coverage-publication-clippy.log",
+      "sha256": "d9645f0d91751615e9ece5809588b0c042692c367385bb7cd71840981793d958",
+      "results": []
+    },
+    "passed": 201,
+    "ignored": 1,
+    "ignored_reason": "Installed-Metal hang probe requires explicit execution; its existing receipt remains separate."
+  },
+  "not_rerun": [
+    "Package build and actual Metal probes: only test fixture publication changed.",
+    "Native UI and microphone acceptance."
+  ],
+  "ci": "Replacement source has not run in CI yet; initial push failure is retained rather than rerun away."
+}

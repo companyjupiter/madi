@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-playback-toggle"
+description = "Enables the playback_toggle command without any pre-configured scope."
+commands.allow = ["playback_toggle"]
+
+[[permission]]
+identifier = "deny-playback-toggle"
+description = "Denies the playback_toggle command without any pre-configured scope."
+commands.deny = ["playback_toggle"]

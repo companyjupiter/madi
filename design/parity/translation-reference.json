@@ -1,0 +1,23 @@
+{
+  "cases": 3574,
+  "caseKinds": {
+    "policy": 1839,
+    "prompt": 1366,
+    "shed": 144,
+    "guarantee": 45,
+    "queue": 180
+  },
+  "queueOperations": 6300,
+  "positivePolicyDecisions": {
+    "replay": 21,
+    "mayEcho": 7,
+    "retry": 436
+  },
+  "corpusSHA256": "0043376c3e01199345196c169a3e6500edfd42967330c5c75a4370477d5962ca",
+  "resultSHA256": "ffa71ddcd96f2e3d3f9f77509b4b36a56319f92a67ada009bc44c9ede92925ae",
+  "sources": {
+    "apps/macos/Sovereign/Engine/TranslationTurnQueue.swift": "382eaa929ff9267af6c3982d632975c499b1f9ecfa03dd1d5f6247a4430a197f",
+    "apps/macos/Sovereign/Transcript/TranslationShedPolicy.swift": "a5030e8b430578816ea0e25758075715acac43dcc3cfec07fa6474fc50b8215d",
+    "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d"
+  }
+}

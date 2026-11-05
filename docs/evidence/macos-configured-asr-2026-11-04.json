@@ -1,0 +1,32 @@
+{
+  "decodedInput": true,
+  "exitCode": 0,
+  "faults": [],
+  "flushBeforeExit": true,
+  "ownedScratchRemoved": true,
+  "preparedWavRemoved": true,
+  "schemaVersion": 1,
+  "scope": "Rust native ASR supervisor with real model and optional native decoding; desktop and session executor not connected",
+  "segments": [
+    "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+  ],
+  "status": "passed",
+  "structuredEvents": 26,
+  "typedFileConfiguration": true,
+  "wordEvents": 22,
+  "date": "2026-11-04",
+  "parentEnvironmentOverrides": {
+    "STREAM": "0",
+    "DIAR_K": "2",
+    "WHISPER_LANG_ID": "50264",
+    "PROMPT": "wrong-vocabulary",
+    "ENC_F16_CACHE": "1"
+  },
+  "originalFixtureSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "configurationReference": "design/parity/asr-config-reference.json",
+  "limitations": [
+    "No session effect executor or Tauri inference UI connection",
+    "No Windows ASR or model-admission validation",
+    "Small smoke, not a quality/performance benchmark"
+  ]
+}

@@ -1,0 +1,382 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_PASS_REMOTE_PENDING",
+  "baselineHead": "cd0526fe9aaa2e0b18a396ababcb98da5bef0cce",
+  "sourceDirtyAtValidation": true,
+  "sourceSHA256": {
+    "apps/desktop/src-tauri/src/caption_host.rs": "67d6952a1e6e632424d195a4698fb801235683f7ab0a343751bc257cbcd3e441",
+    "apps/desktop/src-tauri/src/caption_host/lifecycle.rs": "e53743149d92c77978651a19c8297aade3f74ab65ecbcdd610f3a35dab2eb813",
+    "apps/desktop/src-tauri/src/caption_host/native.rs": "2d21100ea26fe3cb9c0245e34db08ff90e7868c97d4646e51c1895d680f82070",
+    "apps/desktop/src-tauri/src/files_host.rs": "93f903798755921ffa94f738fe87c7f882f80546749ff8e3021bddb1be196bdc",
+    "apps/desktop/src-tauri/src/main.rs": "308755a895d65fe2c13296b64d680fa7338cef55b476c52acf7c6000dd6c827e",
+    "apps/desktop/src/CaptionWindow.tsx": "e48f3a1fa9e17b5b85ad63b063832ff14d1bb59dc2be450ad4d813d8bb446daa",
+    "apps/desktop/src/LiveControls.tsx": "8d8c8979cffe2a351700a5c0e02fbd09704e3d05dfe1b75fe6c95dc882c96212",
+    "apps/desktop/src/captions.ts": "2d3101cbe1e7cae6a13531f5ae8a5d399d539c22162e3a71784f05f024f3dde3",
+    "crates/madi-platform/examples/model_presentation_oracle.rs": "f2fbecf7f34d282c39eee609f4783e37862103177d21386884e89182661511f4",
+    "scripts/check_model_presentation_parity.py": "e211d2b781efac60abe70fce5fc4f3751c79fd3e5404210cc44ab19ee05f1b9a"
+  },
+  "desktopTests": 8,
+  "frontendContractTests": 5,
+  "mutations": [
+    {
+      "name": "accept-retired-instance",
+      "detected": true,
+      "exitCode": 101,
+      "log": "/tmp/madi-caption-lifecycle-mutation-accept-retired-instance.log"
+    },
+    {
+      "name": "reuse-retiring-label",
+      "detected": true,
+      "exitCode": 101,
+      "log": "/tmp/madi-caption-lifecycle-mutation-reuse-retiring-label.log"
+    }
+  ],
+  "artwork": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "physicalMemory": 51539607552,
+    "sizes": [
+      "Zero KB",
+      "1 byte",
+      "999 bytes",
+      "1 KB",
+      "867.5 MB",
+      "1.31 GB",
+      "2.78 GB",
+      "2.18 GB",
+      "3.65 GB"
+    ],
+    "liveFallbackTitles": [
+      "\ud68c\uc758 1970-01-01 0900",
+      "\ud68c\uc758 2025-01-01 0900",
+      "\ud68c\uc758 2026-11-04 2300"
+    ],
+    "fallbackTitleCases": 3,
+    "symbols": {
+      "error": {
+        "width": 14.0,
+        "height": 13.0,
+        "pixelWidth": 28,
+        "pixelHeight": 26,
+        "visiblePixels": 370,
+        "sha256": "fe3bd902beae6352eaf0cd6d2bced2cce2d09be1c00b6abdc5fa4f9fc7fc6823"
+      },
+      "header": {
+        "width": 40.0,
+        "height": 43.0,
+        "pixelWidth": 80,
+        "pixelHeight": 86,
+        "visiblePixels": 1393,
+        "sha256": "19a5287d4fedc773da7915a55cad3072960ff19af94a48b23083277c5bcffdc6"
+      },
+      "privacy": {
+        "width": 12.0,
+        "height": 13.0,
+        "pixelWidth": 24,
+        "pixelHeight": 26,
+        "visiblePixels": 283,
+        "sha256": "cf003eed89614ceba243753834f941557a7ade18c2cf3b78f73ba61fe1b89b28"
+      },
+      "required": {
+        "width": 22.0,
+        "height": 23.0,
+        "pixelWidth": 44,
+        "pixelHeight": 46,
+        "visiblePixels": 704,
+        "sha256": "89a3686d1daf5b58b167e99f30602baba273fea845ec6f4a3ef8e39a179a1f27"
+      },
+      "translation": {
+        "width": 24.0,
+        "height": 22.0,
+        "pixelWidth": 48,
+        "pixelHeight": 44,
+        "visiblePixels": 732,
+        "sha256": "b8a04200c25d65b42bfca7170f22f42fb2e4d20ee1d2eb8bde8eef70553374fe"
+      },
+      "cancel": {
+        "width": 17.0,
+        "height": 16.0,
+        "pixelWidth": 34,
+        "pixelHeight": 32,
+        "visiblePixels": 396,
+        "sha256": "50b64351bc1062f0e1312c23017805f31e6b9923aa0fadc16c63b3c4b6cabfde"
+      },
+      "caption": {
+        "width": 16.0,
+        "height": 15.0,
+        "pixelWidth": 32,
+        "pixelHeight": 30,
+        "visiblePixels": 429,
+        "sha256": "0358a2e73efefb3ca619b4bfc42c2c4387c2ad6ae2884f7b0176284e950bcd73"
+      },
+      "captionOn": {
+        "width": 16.0,
+        "height": 15.0,
+        "pixelWidth": 32,
+        "pixelHeight": 30,
+        "visiblePixels": 621,
+        "sha256": "8c9da30d491d9fc1f6903925767e668bc48bae513e1b55d5846b36ee7cfaa38a"
+      },
+      "export": {
+        "width": 14.0,
+        "height": 17.0,
+        "pixelWidth": 28,
+        "pixelHeight": 34,
+        "visiblePixels": 324,
+        "sha256": "eaa797c4fc112efdff25589a626536f8d4ea983a1d6e3c8370487b61a7a48207"
+      },
+      "folder": {
+        "width": 35.0,
+        "height": 28.0,
+        "pixelWidth": 70,
+        "pixelHeight": 56,
+        "visiblePixels": 1074,
+        "sha256": "176035411c750b54b8cc8e494970e0e701ccbc477c5aab35a0d3fcbf5490af00"
+      },
+      "follow": {
+        "width": 12.0,
+        "height": 13.0,
+        "pixelWidth": 24,
+        "pixelHeight": 26,
+        "visiblePixels": 202,
+        "sha256": "0d86968965c38e7f52db2b0cf65ca7994ae33dab025c6d112ccb1a530d18bef0"
+      },
+      "micChevron": {
+        "width": 10.0,
+        "height": 7.0,
+        "pixelWidth": 20,
+        "pixelHeight": 14,
+        "visiblePixels": 87,
+        "sha256": "666f0861ce115a8af939717095f6ec31792c9af24dbf59ff2e87db792d3d48b1"
+      },
+      "play": {
+        "width": 14.0,
+        "height": 16.0,
+        "pixelWidth": 28,
+        "pixelHeight": 32,
+        "visiblePixels": 431,
+        "sha256": "7e4986f016a6ccf510e0521ddbf04ebc0ebcc1ac6d4a6b34bbf2801f34d1bdaa"
+      },
+      "plus": {
+        "width": 17.0,
+        "height": 16.0,
+        "pixelWidth": 34,
+        "pixelHeight": 32,
+        "visiblePixels": 284,
+        "sha256": "5f1be325a601e8db7b7828de0e7e669a31bdaf2cc2984392dd3a51d7d7411759"
+      },
+      "warning": {
+        "width": 49.0,
+        "height": 45.0,
+        "pixelWidth": 98,
+        "pixelHeight": 90,
+        "visiblePixels": 2149,
+        "sha256": "906921322d86a0b96ed4d05e5bca696d97900a900dcbd6c07a1ab253a1f2592e"
+      },
+      "overlay.caption": {
+        "width": 16.0,
+        "height": 15.0,
+        "pixelWidth": 32,
+        "pixelHeight": 30,
+        "visiblePixels": 621,
+        "sha256": "8c9da30d491d9fc1f6903925767e668bc48bae513e1b55d5846b36ee7cfaa38a"
+      },
+      "overlay.close": {
+        "width": 12.0,
+        "height": 11.0,
+        "pixelWidth": 24,
+        "pixelHeight": 22,
+        "visiblePixels": 148,
+        "sha256": "055f81d6e8b34ba7caa4c9e395defd604592cf87f9ab131f081fd4397de952e4"
+      },
+      "overlay.mic": {
+        "width": 10.0,
+        "height": 13.0,
+        "pixelWidth": 20,
+        "pixelHeight": 26,
+        "visiblePixels": 238,
+        "sha256": "51420d2081b508bebf404efe71df4f0596ef9d2d8e5d9d5b8f923ef02bc14622"
+      }
+    },
+    "byteCountCases": 9,
+    "symbolCases": 18,
+    "scope": "Live native Foundation formatting and NSImage symbol dimensions plus nonempty transparent owned PNGs; no SwiftUI/WebView pixel or interaction comparison"
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "captureUsageDescriptionsMatch": [
+      "NSMicrophoneUsageDescription",
+      "NSScreenCaptureUsageDescription",
+      "NSAudioCaptureUsageDescription"
+    ],
+    "captureAudioInputEntitlement": true,
+    "developerLibraryDependenciesAbsent": true,
+    "relocatedNativeCaptureReplay": {
+      "devicesOpened": false,
+      "ownedDirectoryCleaned": true,
+      "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+      "sampleCount": 16000,
+      "segments": [
+        {
+          "hadSpeech": true,
+          "name": "seg00000.wav",
+          "offsetBits": "0000000000000000",
+          "wavBytes": 32044,
+          "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+        }
+      ],
+      "stopped": true
+    },
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957888,
+        "sha256": "7b9af5b097eae43555c8e147a84e505103ecd92a7c3ef7de456e1d1b54d4d4a7"
+      },
+      "translate-engine-2b": {
+        "bytes": 1576224,
+        "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+      },
+      "translate-engine-4b": {
+        "bytes": 1576080,
+        "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d",
+      "tauri-nspanel-2.1.1-MIT.txt": "35e740d8a0d71739293b136b9f289c6b05f21ff6b0584b9b691dd5de5233d7e8"
+    },
+    "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+    "helperBytes": 151296,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "77d9b9977ab7b7c086712fbb01e9d4449d65a55b2bf73c474d5cb331793ea1bb",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "logSHA256": {
+    "/tmp/madi-caption-lifecycle-final-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/tmp/madi-caption-lifecycle-final-tests.log": "02407d8bdaa7158e4b59a42edb9b5efc99d3831bff159ffd0a73a5208e497c11",
+    "/tmp/madi-caption-lifecycle-final-clippy.log": "1c6d083251c7d01028441a995c00622b02341a00046fbd2fcf7e6a209288ac81",
+    "/tmp/madi-caption-lifecycle-final-bundle.log": "413ef81e14b1100da8e24891e12627ea0bef54c22eb364026146bd677b6e19b4",
+    "/tmp/madi-caption-lifecycle-final-package.log": "a3c323755cd7fb9d05f671adeaa9bc7bb9588e116962bdf97c0bb531559ba3f1",
+    "/tmp/madi-caption-lifecycle-frontend.log": "d0cea36a74142cc93760f6e22d5c55d9276a980b2ab271990689bc6a4d70f2ed",
+    "/tmp/madi-caption-lifecycle-ipc.log": "6d0e7465b0320879cf93e60e9d1218d7a9fa54cda4cc71f63d233f50f7820074",
+    "/tmp/madi-caption-artwork-red.log": "381ba7c891d8f3fee47177973a8001f2964fea0a180f7fb0d32cdf12629e9697",
+    "/tmp/madi-caption-artwork-green.log": "25a6a35ecb9c3640ec53fd1f419ae4aaa36eb61920ea72d9a40258d233106dd6"
+  },
+  "priorCI": {
+    "run": "https://github.com/companyjupiter/madi/actions/runs/41900189732",
+    "head": "cd0526fe9aaa2e0b18a396ababcb98da5bef0cce",
+    "conclusion": "failure",
+    "jobs": {
+      "macos": {
+        "conclusion": "failure",
+        "rustTests": [
+          28,
+          5,
+          127,
+          14
+        ],
+        "logSHA256": "14c6089b0b9e267012030ae6867291f96d74286862693976868e9a2474974c18",
+        "failure": "Model artwork strict key-set comparison retained only 13 configurations after adding caption symbols; reproduced locally and expanded to 18 native configurations."
+      },
+      "windows": {
+        "conclusion": "failure",
+        "rustTests": [
+          28,
+          5,
+          100,
+          14
+        ],
+        "logSHA256": "17d5785c84b900983179177e3d1d6095d281808004266eca11e7e9aee67506f1",
+        "failure": "Strict clippy: caption file_changed and Source projection only referenced by macOS workflow callback. Shared snapshot bootstrap now connects it on every platform."
+      }
+    },
+    "captionNative": {
+      "cases": 1500,
+      "corpusSHA256": "7feed2fb63fe384ab84226e0abec70e3779c4c16026a02cd1441bff784d3bbe2",
+      "resultSHA256": "43ed6bd21cb66167241ea5427017321db9cbb6947718f25b1dc12c482fecefb0",
+      "sources": {
+        "apps/macos/Sovereign/UI/CaptionOverlay.swift": "3835fc6b58d561dbe15a67dbf21d7e4c1c082981e02d5a673ec62c6c2d4a9a81",
+        "apps/macos/Sovereign/UI/ClinicDisplaySupport.swift": "75cc35bd1be94e5dc691e4203551805b978d94451266440e1dc8f5a2d44b35b5",
+        "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+        "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8"
+      },
+      "status": "passed",
+      "nativeSwiftRun": true,
+      "scope": "Original CaptionView lang/pick/caption/statusKind bodies and patientCaptionLang; original CaptionStatus/SpeakerID helpers. Ambiguous multi-value fallback and native window/UI geometry are not acceptance claims."
+    },
+    "captionSwiftSHA256": "0ddc975d55efee0d40c2e177b176b30d28162fd4bcdd55d3e324320f31c6ba8d",
+    "captionResultBytesVerified": true,
+    "captionValuesEqualSwift": true
+  },
+  "limitations": [
+    "Native destroy/recreate, focus, drag, fullscreen and monitor behavior NOT_RUN: Mac locked",
+    "New Windows and macOS CI verdicts required",
+    "Windows toolbar SVG is a visible fallback, not accepted SF Symbol parity",
+    "Unchanged shared runtime suites were not redundantly rerun after the desktop-only lifecycle changes",
+    "Ambiguous caption dictionary fallback and complete product migration acceptance remain open"
+  ]
+}

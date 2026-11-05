@@ -1,0 +1,27 @@
+//! Product state shared by both desktop hosts. UI code submits intent only.
+pub mod assets;
+pub mod caption;
+pub mod capture_stream;
+pub mod dna;
+pub mod glossary;
+pub mod korean_numbers;
+pub mod model_setup;
+pub mod personal_vocabulary;
+pub mod preferences;
+pub mod preview;
+pub mod reconcile;
+pub mod review;
+pub mod session;
+pub mod settings;
+pub mod setup;
+pub mod text_passes;
+pub mod transcript;
+pub mod translation;
+pub mod workspace;
+
+pub mod segmenter;
+
+pub mod pipeline_status;
+
+pub mod coverage;
+pub mod hang_watchdog;

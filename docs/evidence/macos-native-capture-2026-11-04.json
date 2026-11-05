@@ -1,0 +1,264 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-04",
+  "sourceHead": "9685cb45c2d9b13006c980bcafc54b814bea6f5a",
+  "sourceDirty": true,
+  "sourceSHA256": {
+    "crates/madi-platform/native/AudioCaptureBridge.swift": "46adef34a8ce9019b3807a202e87faf1616d2257a08e4808cebb0dd54bfb10e6",
+    "crates/madi-platform/src/audio_capture.rs": "f661dccf245b400857b2a2a54a8895f8378a3ffa97ee4c76ff206d718cf67ba0",
+    "crates/madi-platform/build.rs": "6d33d55848e02a511d7a0f5adb0b954c3cf453196ab0d50ffee35e009acbbeff",
+    "crates/madi-platform/examples/capture_bridge_oracle.rs": "8cdf9e0e00381cb274bafb86b725814b25912653e53fc6026e4507b7facd717f",
+    "apps/desktop/src-tauri/src/main.rs": "1c15abd38f9e10356f91f3b2f527b8d5e82fd3293c767e1840835639678f1cac",
+    "apps/desktop/src-tauri/build.rs": "695556abd29431996b1cef795b8b674667d4d2c962d60bcf8b131937c03fb7ad",
+    "apps/desktop/src-tauri/Info.plist": "9d24dfaa3d0c0990f28bd1ece7a0af7ae552e22da65cb2b75e1010279731fe63",
+    "apps/desktop/src-tauri/Capture.entitlements": "215af35a3a47cccb6300f58454245845a616d1a7215241e30e19db227e6a28de",
+    "apps/desktop/src-tauri/tauri.macos.conf.json": "c4acb018e562c62fd917381df7899be430c6ab27fecbdad2133bbb7f80c381c9",
+    "scripts/check_capture_bridge_parity.py": "f288f68134b7601d4ebab3d2cbe39281e041dabde143ef2480b762f848b4b3eb",
+    "scripts/check_desktop_package_parity.py": "1afbc042f3cbf160c9e1a6a453f09443a70bcea53dff091c1a7a2244464a42cd",
+    "tests/parity/CaptureBridgeOracle.swift": "61da7d760952ae6043463afbb5e68a6bc2ffdbd56460bf8e57ca53b87d2008ca"
+  },
+  "host": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "toolchain": {
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.2.0"
+  },
+  "nativeReplay": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "In-process native resampler/callback ABI and Rust segmentation; no device or permissions",
+    "cases": 8,
+    "samples": 1664512,
+    "segments": 32,
+    "cancelBeforeStartCases": 9,
+    "concurrentDropCases": 9,
+    "missingFileFailure": true,
+    "fixtures": [
+      {
+        "name": "fixture-16000-1.wav",
+        "sha256": "5d65c224091cd928829924c44d80fc99bfc34a2f0e435c5f5f568311c115e680"
+      },
+      {
+        "name": "fixture-44100-1.wav",
+        "sha256": "afef7b1424d7c4fa0ba0215e2c5ddb1c02476573b2dc8ad2f324dad2a8c87d5e"
+      },
+      {
+        "name": "fixture-48000-2.wav",
+        "sha256": "c2ee0c36ced6f46f829dcce2b8c77f832bba755be2386b02a9462773f64227f6"
+      },
+      {
+        "name": "fixture-96000-2.wav",
+        "sha256": "b6d8595c5f3fd527a46f02f4a678ff184e790fcd2fb771c3e9b91ba4182817a2"
+      }
+    ],
+    "resultSHA256": "e2abe83085bfbcdfab234975f69fa84fc7e58ea51e8ef770215255bed1459169",
+    "sourceSHA256": {
+      "apps/macos/Sovereign/Audio/Resampler.swift": "2489496e71e1a364e695e3aa4d002b5194ec528e9732f8d30f39c117bdfef2f8",
+      "apps/macos/Sovereign/Audio/Segmenter.swift": "8db64d433f12eb72b5b9da87233687d07258bdd8489474c5c31b7e5a82dab957",
+      "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+      "tests/parity/CaptureBridgeOracle.swift": "61da7d760952ae6043463afbb5e68a6bc2ffdbd56460bf8e57ca53b87d2008ca"
+    },
+    "linkedLibraries": [
+      "\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 62460.40.78)",
+      "\t/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration (compatibility version 1.0.0, current version 1453.40.1)",
+      "\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 5027.1.8)",
+      "\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2775.20.133)",
+      "\t/System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers (compatibility version 1.0.0, current version 709.0.0)",
+      "\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 5027.1.8)",
+      "\t/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio (compatibility version 1.0.0, current version 1.0.0)",
+      "\t/usr/lib/libobjc.A.dylib (compatibility version 1.0.0, current version 228.0.0)",
+      "\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)",
+      "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1359.40.3)",
+      "\t/System/Library/Frameworks/AVFoundation.framework/Versions/A/AVFoundation (compatibility version 1.0.0, current version 2.0.0)",
+      "\t/System/Library/Frameworks/AudioToolbox.framework/Versions/A/AudioToolbox (compatibility version 1.0.0, current version 1000.0.0)",
+      "\t/System/Library/Frameworks/CoreMedia.framework/Versions/A/CoreMedia (compatibility version 1.0.0, current version 3385.14.5)",
+      "\t/System/Library/Frameworks/ScreenCaptureKit.framework/Versions/A/ScreenCaptureKit (compatibility version 1.0.0, current version 1.0.0)",
+      "\t/usr/lib/swift/libswiftAVFoundation.dylib (compatibility version 1.0.0, current version 2475.13.5, weak)",
+      "\t/usr/lib/swift/libswiftCore.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/usr/lib/swift/libswiftCoreAudio.dylib (compatibility version 1.0.0, current version 482.208.0, weak)",
+      "\t/usr/lib/swift/libswiftCoreFoundation.dylib (compatibility version 1.0.0, current version 120.100.0, weak)",
+      "\t/usr/lib/swift/libswiftCoreImage.dylib (compatibility version 1.0.0, current version 3.0.0, weak)",
+      "\t/usr/lib/swift/libswiftCoreMIDI.dylib (compatibility version 1.0.0, current version 6.0.0, weak)",
+      "\t/usr/lib/swift/libswiftDarwin.dylib (compatibility version 1.0.0, current version 428.40.1, weak)",
+      "\t/usr/lib/swift/libswiftDispatch.dylib (compatibility version 1.0.0, current version 1605.40.4)",
+      "\t/usr/lib/swift/libswiftIOKit.dylib (compatibility version 1.0.0, current version 1.0.0, weak)",
+      "\t/usr/lib/swift/libswiftMetal.dylib (compatibility version 1.0.0, current version 383.1.0, weak)",
+      "\t/usr/lib/swift/libswiftOSLog.dylib (compatibility version 1.0.0, current version 10.0.0, weak)",
+      "\t/usr/lib/swift/libswiftObjectiveC.dylib (compatibility version 1.0.0, current version 973.1.0, weak)",
+      "\t/usr/lib/swift/libswiftQuartzCore.dylib (compatibility version 1.0.0, current version 5.0.0, weak)",
+      "\t/usr/lib/swift/libswiftSpatial.dylib (compatibility version 1.0.0, current version 1.0.0, weak)",
+      "\t/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib (compatibility version 1.0.0, current version 917.1.12, weak)",
+      "\t/usr/lib/swift/libswiftXPC.dylib (compatibility version 1.0.0, current version 167.0.2, weak)",
+      "\t/usr/lib/swift/libswiftos.dylib (compatibility version 1.0.0, current version 1090.40.3, weak)",
+      "\t/usr/lib/swift/libswiftsimd.dylib (compatibility version 1.0.0, current version 25.0.0, weak)",
+      "\t@rpath/libswift_Concurrency.dylib (compatibility version 0.0.0, current version 0.0.0)",
+      "\t/usr/lib/swift/libswiftFoundation.dylib (compatibility version 1.0.0, current version 1.0.0)",
+      "\t/usr/lib/swift/libswiftCoreMedia.dylib (compatibility version 1.0.0, current version 3385.14.5)"
+    ],
+    "limitations": [
+      "Microphone and ScreenCaptureKit hardware NOT_RUN",
+      "Device switch and permission denial NOT_RUN",
+      "No live engine or UI session is connected by this gate"
+    ]
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "captureUsageDescriptionsMatch": [
+      "NSMicrophoneUsageDescription",
+      "NSScreenCaptureUsageDescription",
+      "NSAudioCaptureUsageDescription"
+    ],
+    "captureAudioInputEntitlement": true,
+    "developerLibraryDependenciesAbsent": true,
+    "relocatedNativeCaptureReplay": {
+      "devicesOpened": false,
+      "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+      "sampleCount": 16000,
+      "stopped": true
+    },
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957888,
+        "sha256": "d2194ec12540b580582536dda638c69461b10db4c3ceb86710dbcad1f005f960"
+      },
+      "translate-engine-2b": {
+        "bytes": 1576224,
+        "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+      },
+      "translate-engine-4b": {
+        "bytes": 1576080,
+        "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+    "helperBytes": 151296,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "8337c66b61375fdb4378df6c3ee6ee13015f32a44ecf8bb685bebf17ee48df49",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "binary": {
+    "path": "target/debug/bundle/macos/Madi UI Parity.app/Contents/MacOS/madi-desktop",
+    "bytes": 61398480,
+    "sha256": "22fce388226ba51727943dd82450dd3a805489b5c35b04adf2455ff6c94b5931"
+  },
+  "unitTests": {
+    "core": 16,
+    "platform": 73,
+    "protocol": 14,
+    "total": 103
+  },
+  "frontendTests": 4,
+  "fmt": "PASS",
+  "clippy": "PASS",
+  "swiftNonDebugReplaySymbolsAbsent": true,
+  "logSHA256": {
+    "all-tests-final": "781028b8614a686ca324e6684afb6434e288416ca2c47646fb2a0f4a5fbf450a",
+    "fmt-final": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "clippy-final": "417c6e2994e9cb4a1540309fd2bc50ed7096477b328d4140bf5285f97f40fa33",
+    "parity-final": "e4a9735e45c2d6780d28f8e5804458c98f94b9666c678e9d7ea61e45bc934aee",
+    "app-build": "01c34ea42c698b00caa7faa06ec8d7c1a3f198e9d79a245e60cb4e3712ff634f",
+    "package": "6d01e98ac5e7ce0c164f12127457c7c043ff18d9ad5d73501b730dbb1a31671d",
+    "frontend-tests": "3a9619843eba3e1a61656955686f0d393277abd7730475d2ab57611eed2d639d",
+    "release-symbols": "6f10ddc7b87c500fb3aaea14c8e88e6f2503d5500ba6b486821e00788c321ed2"
+  },
+  "limitations": [
+    "Hardware microphone and ScreenCaptureKit capture NOT_RUN",
+    "TCC prompts, device switch/disconnect and real startup cancellation NOT_RUN",
+    "Mixing, pause/resume, segment-file ownership and live executor/UI unconnected",
+    "Windows native capture unimplemented; hardware deferred by user",
+    "Release disabled; ad-hoc candidate is not notarized"
+  ],
+  "nativeUIFollowup": {
+    "binarySourceRevision": "3baf384d0e6b302c6209c463608e83ae3fc6f0cb",
+    "status": "PASS",
+    "checks": [
+      "Old candidate quit via Cmd+Q; inventory confirmed not running",
+      "Fresh bundle launch shows Korean setup and detected microphone",
+      "Cmd+, opens native Settings Recording tab",
+      "Native Save toolbar action updates selected tab and content",
+      "Persisted auto-save on, debug off, VAD 0.55 preserved"
+    ],
+    "captures": {
+      "out/native-ui-2026-11-04/tauri-capture-build-setup.jpg": "4a4dc2e50d492ca9f189531dadeda50c49f059d3b9e286522aaebdb23c9c1778",
+      "out/native-ui-2026-11-04/tauri-capture-build-setup.txt": "9f193bd6b7c5c515b54986f7f6273e6d8cf70aab7d155ffb0b4465ab7c85d7c5",
+      "out/native-ui-2026-11-04/tauri-capture-build-save.jpg": "62eb3faf9d728a02b7b565bd6052678ad69f90476650a704b44eba873f32b39d",
+      "out/native-ui-2026-11-04/tauri-capture-build-save.txt": "62d4d632ca1374eaa757bc321a953003b17a16f46e70bc963caa77d77b54fb03"
+    },
+    "limitation": "Smoke check only; full original/candidate UI parity NOT_PASS. No audio devices opened."
+  },
+  "ciFollowup": {
+    "revision": "c2289f0a8fab614aa6e23353c8841697c81d8095",
+    "pushRun": "https://github.com/companyjupiter/madi/actions/runs/41773521959",
+    "prRun": "https://github.com/companyjupiter/madi/actions/runs/41773526449",
+    "status": "PASS",
+    "receipt": "docs/evidence/desktop-ci-c2289f0-2026-11-04.json",
+    "limitation": "Prior Windows checkpoint failure remains unexplained despite 100 passing repeats. Hardware capture and full UI parity remain open."
+  }
+}

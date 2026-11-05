@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 1,
+  "verifiedUTC": "2026-11-04T23:25:40.702444+00:00",
+  "status": "POLICY_NATIVE_OWNER_AND_PACKAGE_PASS_UI_NOT_RUN",
+  "baselineHead": "8c9902d8f3f3a4b26a3ef14a29078f17930e3629",
+  "sourceDirtyAtValidation": true,
+  "sourceSHA256": {
+    ".github/workflows/desktop-parity.yml": "f667f1a687065ca09fa70f3e1e788288acae7f746f1766ea934f5cedfc4365e2",
+    "apps/desktop/src-tauri/src/files_host.rs": "dba6ee10e3aafe02313926f61b9f887d6bbb8014336f4a38a3a947082dd0c5d7",
+    "crates/madi-core/examples/coverage_oracle.rs": "5474af2d804dcc2aed313d4f01f597ca8448ba3b0e9daf188105360ee06a95ea",
+    "crates/madi-core/examples/hang_watchdog_oracle.rs": "93f4a40044039f202c187b13db1773eb34c0843b8f85b1a89f6519bed3cd262d",
+    "crates/madi-core/src/coverage.rs": "5b0fc23cd707b802293fe3a33e998bbd5825eddef44a08fda89ab69003b000bb",
+    "crates/madi-core/src/hang_watchdog.rs": "dd2a00b267c91fe3cfdf18846710aa4a02796f3e3a40154862bd529eff360030",
+    "crates/madi-core/src/lib.rs": "90b9193b80fdcb807ac2b7efb555ab54919ddeffd0121e5c3751a22038130a6c",
+    "crates/madi-platform/examples/live_session_smoke.rs": "3798b20f089715e404e4cb4c445022d1f286e9e0861b7dd5eb76379dae482226",
+    "crates/madi-platform/examples/live_workflow_smoke.rs": "a296eb1c81440e53def70e1c4ab1bbebf3d36f5bf8557ddb892df4f2c621e619",
+    "crates/madi-platform/src/file_workflow.rs": "3db7c3276c294b3fd0850681669f92d677dedcb78c164b59dcf2ab5648827839",
+    "crates/madi-platform/src/file_workflow/driver.rs": "00cfa519a891d204fafacc282aade3a57c12f784eedddbf31184c32c562b3d74",
+    "crates/madi-platform/src/file_workflow/live_tests.rs": "483fbf74a82422153d51117c0b4a8ec680407a702071a697aca8be16d87b867d",
+    "crates/madi-platform/src/live_session.rs": "7112bcf68fe04349d5a409ef73c8ddbf76d516359a56cce0ecf435fe58201cc0",
+    "crates/madi-platform/src/live_session/tests.rs": "43f6c508007b2bcf967892e5d66a45dc146a05c92d407a694664ab5153c18532",
+    "design/parity/hang-watchdog-reference.json": "ff9129f44d29a6a32b5c072ce20d5449caa33539641018ba15eab42d44204472",
+    "scripts/check_hang_watchdog_parity.py": "de32ae7cc716a4a69b9ec12f63db2fec8e4d03f8b8725a5829b0cc1405a46e65"
+  },
+  "unchangedOriginalSourceSHA256": {
+    "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+    "apps/macos/Sovereign/Engine/EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+    "apps/macos/Sovereign/Session/SessionCoordinator.swift": "76afa2c46241b6e04003c66673421d23af9b40c86b3f6f78d908f9945ab9619f",
+    "apps/macos/Sovereign/Session/SessionEngineAdapter.swift": "f692c997f4c788b0123594c6f44ae2ee5b59466d5b414dbbf3dccae9b7449265",
+    "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68"
+  },
+  "environment": {
+    "os": "macOS 27.2",
+    "architecture": "arm64",
+    "screen": "No native UI interaction in this slice; preceding Computer Use observation was locked"
+  },
+  "validation": {
+    "rustTestCounts": {
+      "core": 32,
+      "desktop": 11,
+      "platform": 138,
+      "protocol": 14
+    },
+    "rustTestTotal": 195,
+    "rustFmt": "PASS",
+    "clippy": "PASS --workspace --all-targets -D warnings",
+    "ipcTests": 5,
+    "hangWatchdogOracle": {
+      "cases": 600,
+      "transitions": 36000,
+      "corpusSHA256": "9feefba3ee419f36a63ea2d7103991462498c5aa421abfae425ffb0fec188d2b",
+      "resultSHA256": "8bd184b28fbde21c12b72e32711e83ce3df51b7a34f516eb501c8fc05a6421ac",
+      "sources": {
+        "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+      },
+      "status": "passed",
+      "nativeSwiftRun": true,
+      "scope": "Unchanged tickWatchdog and W1 segment-end bodies with injected Date clock; replacement result, feed collection and input reset scaffolding. Queue timestamps, retry flags, word counter, recovery count, namespace-break signal and ordered feeds compared. No process, live settings, scheduling, capture or UI acceptance."
+    },
+    "unchangedCoverageOracle": {
+      "cases": 500,
+      "transitions": 22250,
+      "corpusSHA256": "0eee8172b010890a3a8b6c1b86e63498bc84e6932f71f7dfa9315811a9077029",
+      "resultSHA256": "0555a1d0f521d7c2ed0e6f913c903209896003eed6733698c570c0a0b3616ba6",
+      "sources": {
+        "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+      },
+      "status": "passed",
+      "nativeSwiftRun": true,
+      "scope": "Unchanged original segmentEnd body with input enqueue/word-counter/reset scaffolding and no-op diagnostics/preview admission. Queue, one-retry decisions, gaps and counters compared; timestamps/turnaround diagnostics, capture/transport and native UI excluded."
+    },
+    "portableReference": "PASS locally; current slice Windows CI pending",
+    "nativeHangTests": 3,
+    "mutations": [
+      {
+        "name": "non-strict-threshold",
+        "status": "DETECTED",
+        "exit": 1,
+        "log": "/tmp/madi-hang-mutation-non-strict-threshold.log",
+        "logSHA256": "b486a9f09e79796ad9dcac841f62bade8cedc91a2c3c2892b145d429bee9260e"
+      },
+      {
+        "name": "ignore-progress",
+        "status": "DETECTED",
+        "exit": 1,
+        "log": "/tmp/madi-hang-mutation-ignore-progress.log",
+        "logSHA256": "94fbc590b588840ab67c1da0e61bfe2f48d4554145e0f7874c4e2528887d55af"
+      },
+      {
+        "name": "reset-word-counter-on-refeed",
+        "status": "DETECTED",
+        "exit": 1,
+        "log": "/tmp/madi-hang-mutation-reset-word-counter-on-refeed.log",
+        "logSHA256": "3a02fa0c224aa91607f154bab3540d95928b9c0bb76b9182d05cc31f83430248"
+      },
+      {
+        "name": "diagnostics-as-progress",
+        "status": "DETECTED",
+        "exit": 101,
+        "log": "/tmp/madi-hang-mutation-diagnostics-as-progress.log",
+        "logSHA256": "f8213609458f2841b494e976f88aa7aa0de23679a18fd70a05beb28e76a928fa"
+      },
+      {
+        "name": "renumber-old-speakers",
+        "status": "DETECTED",
+        "exit": 101,
+        "log": "/tmp/madi-hang-mutation-renumber-old-speakers.log",
+        "logSHA256": "a1950ea4b8be22e494c917a1eb1f15dbb2dabdd86a4803854537fa23f45a4243"
+      }
+    ],
+    "appBuild": "PASS debug app 101.64 MiB; release disabled",
+    "package": {
+      "schemaVersion": 1,
+      "status": "passed",
+      "bundleIdentifier": "tv.devart.madi.parity",
+      "minimumSystemVersion": "14.0",
+      "signature": "ad-hoc; deep strict verification passed",
+      "captureUsageDescriptionsMatch": [
+        "NSMicrophoneUsageDescription",
+        "NSScreenCaptureUsageDescription",
+        "NSAudioCaptureUsageDescription"
+      ],
+      "captureAudioInputEntitlement": true,
+      "developerLibraryDependenciesAbsent": true,
+      "relocatedNativeCaptureReplay": {
+        "devicesOpened": false,
+        "ownedDirectoryCleaned": true,
+        "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+        "sampleCount": 16000,
+        "segments": [
+          {
+            "hadSpeech": true,
+            "name": "seg00000.wav",
+            "offsetBits": "0000000000000000",
+            "wavBytes": 32044,
+            "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+          }
+        ],
+        "stopped": true
+      },
+      "relocatedLookup": "passed",
+      "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+      "missingHelperFailsClosed": true,
+      "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+      "missingOrLinkedRuntimeFilesRejected": 11,
+      "runtimeAssets": [
+        {
+          "name": "WHISPER_BPE.bin",
+          "bytes": 514525,
+          "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+        },
+        {
+          "name": "kaldi_melbank.bin",
+          "bytes": 82240,
+          "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+        },
+        {
+          "name": "mel_filters.bin",
+          "bytes": 102912,
+          "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+        },
+        {
+          "name": "pyannote_osd.bin",
+          "bytes": 5973428,
+          "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+        },
+        {
+          "name": "resnet34_diar.bin",
+          "bytes": 26522076,
+          "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+        },
+        {
+          "name": "silero_vad.bin",
+          "bytes": 1238776,
+          "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+        },
+        {
+          "name": "suppress_tokens.bin",
+          "bytes": 352,
+          "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+        }
+      ],
+      "engines": {
+        "transcribe": {
+          "bytes": 957888,
+          "sha256": "2b6ce1de028513f7f3a59d560bdd327932a648298db4385218038934ae9e9137"
+        },
+        "translate-engine-2b": {
+          "bytes": 1576224,
+          "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+        },
+        "translate-engine-4b": {
+          "bytes": 1576080,
+          "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+        }
+      },
+      "runtimeNoticesPreserved": true,
+      "directRuntimeNotices": {
+        "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+        "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+        "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+        "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+        "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+        "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+        "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+        "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+        "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+        "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+        "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+        "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+        "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+        "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d",
+        "tauri-nspanel-2.1.1-MIT.txt": "35e740d8a0d71739293b136b9f289c6b05f21ff6b0584b9b691dd5de5233d7e8"
+      },
+      "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+      "helperBytes": 151296,
+      "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+      "archiveSHA256": "b6e30b3c32343a3c8206106f96565f67e2ba75e08b27bf106176390395beb6b6",
+      "productRelease": false,
+      "notarized": false,
+      "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+    },
+    "logs": {
+      "fmt": {
+        "path": "/tmp/madi-hang-final-fmt.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "tests": {
+        "path": "/tmp/madi-hang-final-tests.log",
+        "sha256": "cefeeb9b8d55c244f91886d804bdc926ee4666fa5d215d995640700beaa3866c"
+      },
+      "clippy": {
+        "path": "/tmp/madi-hang-final-clippy.log",
+        "sha256": "1ad7dbe11a129ee1393585ef04a33c27d61494335fd7965f16cc318138c50bd3"
+      },
+      "portable": {
+        "path": "/tmp/madi-hang-final-portable.log",
+        "sha256": "45defb9a7ea811e0def7896a847be314715315a90939e429078f27ec0df1d2c2"
+      },
+      "native": {
+        "path": "/tmp/madi-hang-final-native.log",
+        "sha256": "19ed941a1dfb9565c2ae6e60a450a9c0ca78aeaa256474b63553dfb106ce9465"
+      },
+      "coverage": {
+        "path": "/tmp/madi-hang-final-coverage.log",
+        "sha256": "df5c5719dc1cc009a1b9c510d01f822e757f21ef2c50027efdf759627fadfda2"
+      },
+      "ipc": {
+        "path": "/tmp/madi-hang-final-ipc.log",
+        "sha256": "5c76adf647a114b6ec4015c42241cdb22f0eb92c45b45535aabea9dde9de1e4e"
+      },
+      "bundle": {
+        "path": "/tmp/madi-hang-final-bundle.log",
+        "sha256": "8cd4cd5d1530c288a85647eab89834751c9895c40529936e85ceab04002c70cd"
+      },
+      "package": {
+        "path": "/tmp/madi-hang-final-package.log",
+        "sha256": "4362858e73c053d6b4a3ceed69bb5206e8f7d81ad7fc492fa584ab751f433fce"
+      }
+    }
+  },
+  "precedingCoverageCI": {
+    "push": {
+      "run": 41931326442,
+      "head": "8c9902d8f3f3a4b26a3ef14a29078f17930e3629",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "databaseId": 126928660576,
+          "name": "desktop (windows-2022)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "databaseId": 126928660990,
+          "name": "desktop (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "pr": {
+      "run": 41931333828,
+      "head": "8c9902d8f3f3a4b26a3ef14a29078f17930e3629",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "databaseId": 126928685173,
+          "name": "desktop (windows-2022)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "databaseId": 126928685721,
+          "name": "desktop (macos-15)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  },
+  "latestFullyVerifiedCI": "8c9902d both events and OS PASS; downloaded PR merge artifacts verified in desktop-ci-8c9902d-2026-11-05.json",
+  "currentSliceCI": "PENDING",
+  "remaining": {
+    "aiCorrectionReconcile": "NOT_IMPLEMENTED producers; other AI clients incomplete",
+    "realModelDeviceHangRecovery": "NOT_RUN",
+    "nativeVisualInteraction": "NOT_RUN",
+    "nativeAudio": "Prior playback probe FAIL; no new audible-device acceptance",
+    "windowsDevicesGPU": "Deferred real hardware; native audio/ASR integration incomplete",
+    "release": "DISABLED"
+  },
+  "scope": "W2 original-body policy differential with injected Date; actual replacement processes and owned WAVs driven by scripted PCM and injected wall clock, including actual five-second poll scheduling. No real hung Metal model, native UI, microphone/audio playback or Windows GPU acceptance."
+}

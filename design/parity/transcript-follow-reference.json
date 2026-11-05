@@ -1,0 +1,9 @@
+{
+  "cases": 287,
+  "snapshots": 13294,
+  "sources": {
+    "apps/macos/Sovereign/Transcript/TranscriptFollowModel.swift": "f8c199b85e9a0abf12ff7cc1d1b8a499f00dfbd8501ed3928776592b28bf7a82"
+  },
+  "corpusSHA256": "856d8990ab4791d0ddcb763e92b662ffa363ae4484bfee66e16d73fb75c6fedf",
+  "resultSHA256": "7653ace387745e286dbfcd8649f1244b2ead5dff185cc8f45e5e7fe096cb8713"
+}

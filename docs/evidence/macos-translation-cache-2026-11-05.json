@@ -1,0 +1,564 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T18:33:17.206649+00:00",
+  "baseHead": "c996b2c086379f1f996006485e9fbe61fc388c56",
+  "status": "PASS",
+  "scope": "FAQ persistence and committed reuse, session interim LRU lookup, and terminal-client shed-backfill closure; interim producer/display remain open",
+  "sourceSHA256": {
+    "crates/madi-core/src/translation/mod.rs": "66fb087905660968c751fd57eb6e7c12a54fe874fbcdbafb7b9dc6ff7b92811b",
+    "crates/madi-core/src/translation/cache.rs": "61da8b6874416301eb09856cd665fc10d24b0e076092b3acc7b5847c4e42bf9a",
+    "crates/madi-core/src/translation/faq_starter.json": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+    "crates/madi-core/src/translation/committed.rs": "4651f314d4a6ba393215a476dac85fa70fb7f8fc9b39b8df488001b1d900fa1b",
+    "crates/madi-core/src/translation/committed/tests.rs": "0cf894468a480aeaf0d6e3c51e3800c2492e8df8abfb034ce1685aa86943c673",
+    "crates/madi-platform/src/lib.rs": "b3b8e48068b8bc7edb25e7d9d02df77f19ceaa107483a08a605e16d0948ae9f7",
+    "crates/madi-platform/src/file_workflow.rs": "a22cacaf5e89ce14c14b34ff7ee30beffc4d1e90c089ea006210c683f49c60ca",
+    "crates/madi-platform/src/file_workflow/translation.rs": "76fd96e7f3527f044c160dc297bd51cb8cc90b6d353530a326d022cc974adc04",
+    "crates/madi-platform/src/file_workflow/translation/tests.rs": "c86efb28b61d8c64af9e16f60ef3ea1830b17a65a824cfaddaa2bf584f005dc5",
+    "crates/madi-platform/src/file_workflow/translation/faq.rs": "503cadff4e04e8d4ea68abe4f7609470d6adcc0db2917f57f14b77a9c24becf7",
+    "crates/madi-platform/src/translation_cache.rs": "e0a67a25ad4b1a3b1bcb29a1a02129b3563e654c677f4491ea628ac6aef84fbc",
+    "crates/madi-platform/examples/translation_cache_oracle.rs": "7c9f5854dd6fd66b4c81e8f64a9f03026cc7c37187231fb0b5a51b60893f6aae",
+    "crates/madi-platform/examples/committed_translation_smoke.rs": "998d93e9b3ee6dc02ec70db324b314fa3ae362bdcdaaeb397c0bdccdc0f4323a",
+    "apps/desktop/src-tauri/src/files_host.rs": "d8380d191c2e9e2bfeae44cca34346d7eeccf11f7a90d1125a32b0feda3dd3ea",
+    "scripts/check_translation_cache_parity.py": "b46a1c460a14938d34b9953a38a4bf3327ed64e1deb6fa393d785836998684af",
+    "design/parity/translation-cache-reference.json": "4a8c0a246b8586ac966a19bc7a72d9970169a9963a44b75eb98909ec62bf0fb4",
+    ".github/workflows/desktop-parity.yml": "72d6fbb6ceedef80768bcec75bec8a579833a3920595d1acea8485f0e5ec1e29",
+    "Cargo.lock": "34edea7a803aaefc9e08ed8d8fdd4ec6287aec38b0012b95fb0f536c3d8eac52",
+    "rust-toolchain.toml": "d13306be0ecda81ce779baa290ffb417380d525928477f16200884b5169cca33"
+  },
+  "checks": {
+    "format": "PASS",
+    "clippy": "PASS",
+    "unitTests": [
+      27,
+      127,
+      14
+    ],
+    "totalTests": 168,
+    "newCoreTests": 1,
+    "newProcessWorkflowTests": 3,
+    "newPersistenceTests": 3,
+    "frontendTypecheckAndBuild": "PASS",
+    "macOSDebugAppBundle": "PASS",
+    "package": "PASS"
+  },
+  "nativeSwift": {
+    "cases": 394,
+    "unicodeScalars": 1112064,
+    "operations": 7200,
+    "corpusSHA256": "9ba6091853d28132acf4354e5b09c0f6b092fa41167b2a2d0803b3b30790dffc",
+    "resultSHA256": "b7b5563f8ef1cf155f91aee33920c447a9d3b665eed430815f172dddf515b745",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/FAQTranslationStore.swift": "a54ba4efbaff3d118602be5a7f98af94a3f762507fbb82b12f37f47b1b8578fd",
+      "apps/macos/Sovereign/Transcript/InterimTranslationCache.swift": "cd75c8c81f51bf47191091d83a1b897ebe6d54caf1085c29351fbf4fa9b33a48"
+    },
+    "starterSHA256": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "nativeResultSHA256": "b7b5563f8ef1cf155f91aee33920c447a9d3b665eed430815f172dddf515b745",
+    "nativeVsPortableDifferenceCases": 0,
+    "scope": "Unchanged FAQTranslationStore and InterimTranslationCache; filesystem persistence tested separately; ambiguous same-normalized columns are not in this corpus"
+  },
+  "pinnedReference": {
+    "cases": 394,
+    "unicodeScalars": 1112064,
+    "operations": 7200,
+    "corpusSHA256": "9ba6091853d28132acf4354e5b09c0f6b092fa41167b2a2d0803b3b30790dffc",
+    "resultSHA256": "b7b5563f8ef1cf155f91aee33920c447a9d3b665eed430815f172dddf515b745",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/FAQTranslationStore.swift": "a54ba4efbaff3d118602be5a7f98af94a3f762507fbb82b12f37f47b1b8578fd",
+      "apps/macos/Sovereign/Transcript/InterimTranslationCache.swift": "cd75c8c81f51bf47191091d83a1b897ebe6d54caf1085c29351fbf4fa9b33a48"
+    },
+    "starterSHA256": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "nativeResultSHA256": null,
+    "nativeVsPortableDifferenceCases": null,
+    "scope": "Unchanged FAQTranslationStore and InterimTranslationCache; filesystem persistence tested separately; ambiguous same-normalized columns are not in this corpus"
+  },
+  "committedComparison": {
+    "cases": 360,
+    "lines": 8005,
+    "corpusSHA256": "ba13756891dea918bd02f42f3258d4a7473610e90891f3e0b867dd5d2f98ff00",
+    "resultSHA256": "52580eec8508beb223ea2678ce28d4af4b7b0b567c008099c4abb798c3efe804",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranslationCoalescer.swift": "9a8e71d9589bc26847b2fccf885b03007ac2cbbca4c2260d5546f9d510a82de1",
+      "apps/macos/Sovereign/Engine/TranslateStreamParser.swift": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "Unchanged TranslationCoalescer and extracted unchanged TranslateRouting; session callbacks tested separately"
+  },
+  "clientComparison": {
+    "cases": 165,
+    "operations": 6767,
+    "corpusSHA256": "c738cb40bda6c9cf47eae09e9f249a9587457663909f44c1dd93114c4071eff0",
+    "resultSHA256": "a5906a0c07da47049c916f34fd52d4ad68ed40b2f30a7a2fda5d91dec27f4320",
+    "sources": {
+      "apps/macos/Sovereign/Engine/TranslateEngine.swift": "cb7203c697757c07b7a720b8850d361bd720fd9570e2a53135562586f9542c85",
+      "apps/macos/Sovereign/Engine/TranslationTurnQueue.swift": "382eaa929ff9267af6c3982d632975c499b1f9ecfa03dd1d5f6247a4430a197f",
+      "apps/macos/Sovereign/Transcript/TranslationShedPolicy.swift": "a5030e8b430578816ea0e25758075715acac43dcc3cfec07fa6474fc50b8215d",
+      "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "Unchanged TranslateEngine with deterministic broker callbacks and clocks; actual process transport checked separately"
+  },
+  "mutations": {
+    "sourcesRestored": true,
+    "sourceSHA256": {
+      "crates/madi-platform/src/file_workflow/translation.rs": "76fd96e7f3527f044c160dc297bd51cb8cc90b6d353530a326d022cc974adc04",
+      "crates/madi-core/src/translation/committed.rs": "4651f314d4a6ba393215a476dac85fa70fb7f8fc9b39b8df488001b1d900fa1b"
+    },
+    "mutations": [
+      {
+        "name": "closed-client-backfill",
+        "test": "terminal_engine_failure_closes_shed_backfill_without_claiming_translations",
+        "exitCode": 101,
+        "assertionDetected": true,
+        "logSHA256": "0eb727b02a886474fcb7f925c37d14b42dc1c7bc59a2a9a16cab49bf0b7d08d4"
+      },
+      {
+        "name": "cache-backfill-key",
+        "test": "cache_closes_only_applied_backfill_keys_and_never_rewrites_a_joined_run",
+        "exitCode": 101,
+        "assertionDetected": true,
+        "logSHA256": "5f55cf3ddacaf9959a444c4513a364d7faf1ac0d851b3cae9fbf1b1d72b7106a"
+      },
+      {
+        "name": "faq-runtime-lookup",
+        "test": "starter_faq_reaches_transcript_and_archive_without_a_model_turn",
+        "exitCode": 101,
+        "assertionDetected": true,
+        "logSHA256": "4aa0972103688ce43fafbc4f322e66e046843ed4b32fe2bbc87b74725851490b"
+      }
+    ]
+  },
+  "terminalBackfillRegression": {
+    "redRemaining": 14,
+    "greenRemaining": 0,
+    "redLogSHA256": "76f6fa506d9509b8713f173d2261fe5594b2ef0eb820d3b9022c43f88d5d2300",
+    "semantics": "Rejected closed-client requests suppress only exact source/language keys; no translated text or restart loop"
+  },
+  "nativeProbe": {
+    "report": {
+      "allTranslationsSaved": true,
+      "archive": "/Users/jupitersong/antigravity/madi/out/translation-cache-native/report.md",
+      "archiveError": null,
+      "archiveSHA256": "be54efaf9e5ac111c03fedb9f2c1746d975e8641710e31ee6f2373eb0305f763",
+      "backfillRemaining": 0,
+      "backlog": 0,
+      "decoderSHA256": "8a24fe90c479cd001e953a17f58144c3b80c710cf123dbb4b6255a73d5e45fa4",
+      "elapsedSeconds": 1.481295208,
+      "exactCacheHit": true,
+      "faqMode": true,
+      "faqUnchanged": true,
+      "lines": [
+        {
+          "editedText": null,
+          "editedTranslations": [],
+          "end": 10.35,
+          "id": "219f732a-bf14-4994-a9a0-964f00b5ff63",
+          "overlapSpeakers": [],
+          "sourceRevision": "13950391516942635375",
+          "speaker": 0,
+          "speakerMargin": 1.0,
+          "staleTranslations": {},
+          "start": 0.33,
+          "suppressedTranslations": [],
+          "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+          "translations": {
+            "Korean": "공개 연설에 미리 지정한 테스트 번역입니다."
+          },
+          "words": [
+            {
+              "conf": 1.0,
+              "id": "219f732a-bf14-4994-a9a0-964f00b5ff63",
+              "t0": 0.33,
+              "t1": 0.5,
+              "text": "And"
+            },
+            {
+              "conf": 0.6,
+              "id": "b3dba2af-2d4e-4370-9817-b73eea3a55e9",
+              "t0": 0.5,
+              "t1": 0.58,
+              "text": "so,"
+            },
+            {
+              "conf": 1.0,
+              "id": "f4364445-9dd5-42e9-b7b8-a127fd3cb1d3",
+              "t0": 0.69,
+              "t1": 1.2,
+              "text": "my"
+            },
+            {
+              "conf": 1.0,
+              "id": "695808b6-12e1-4fba-81c3-bab8037f4413",
+              "t0": 1.2,
+              "t1": 1.28,
+              "text": "fellow"
+            },
+            {
+              "conf": 0.86,
+              "id": "5f7acf2a-36ec-4dd6-956a-68f74f6aa54f",
+              "t0": 1.37,
+              "t1": 2.11,
+              "text": "Americans,"
+            },
+            {
+              "conf": 0.98,
+              "id": "13bb9cd4-446f-44d1-a1a3-123aa59f92d9",
+              "t0": 3.29,
+              "t1": 3.66,
+              "text": "ask"
+            },
+            {
+              "conf": 0.98,
+              "id": "1afb225a-fb6a-4cf4-8f02-7ab376ccc354",
+              "t0": 4.03,
+              "t1": 4.29,
+              "text": "not"
+            },
+            {
+              "conf": 0.99,
+              "id": "6fe994ba-054a-4420-b215-e45e739c747a",
+              "t0": 4.54,
+              "t1": 5.56,
+              "text": "what"
+            },
+            {
+              "conf": 0.99,
+              "id": "1421891c-9e85-407e-9d53-c708e9456312",
+              "t0": 5.56,
+              "t1": 5.64,
+              "text": "your"
+            },
+            {
+              "conf": 1.0,
+              "id": "bd5360c8-2be8-4d6e-89d3-de0f9f6a1cdc",
+              "t0": 5.66,
+              "t1": 6.42,
+              "text": "country"
+            },
+            {
+              "conf": 1.0,
+              "id": "189d67be-6cdc-4de4-b1f0-90680b16303c",
+              "t0": 6.51,
+              "t1": 6.6,
+              "text": "can"
+            },
+            {
+              "conf": 1.0,
+              "id": "aff6505d-3406-4f88-8fb5-1f487c1ca2ac",
+              "t0": 6.6,
+              "t1": 6.68,
+              "text": "do"
+            },
+            {
+              "conf": 1.0,
+              "id": "685da5f2-1352-4ca8-a25a-0af77a2848ae",
+              "t0": 6.71,
+              "t1": 6.91,
+              "text": "for"
+            },
+            {
+              "conf": 0.64,
+              "id": "56e1205a-10ea-4119-a448-3d5348d078fc",
+              "t0": 7.01,
+              "t1": 7.52,
+              "text": "you,"
+            },
+            {
+              "conf": 1.0,
+              "id": "77c2e81a-d149-4826-a393-d6ab34b00f5b",
+              "t0": 8.2,
+              "t1": 8.48,
+              "text": "ask"
+            },
+            {
+              "conf": 1.0,
+              "id": "a565e536-3be8-4b33-8d28-17900fafa370",
+              "t0": 8.52,
+              "t1": 8.76,
+              "text": "what"
+            },
+            {
+              "conf": 1.0,
+              "id": "1983118e-defb-4ce4-b52d-8a07666764c1",
+              "t0": 8.76,
+              "t1": 8.84,
+              "text": "you"
+            },
+            {
+              "conf": 1.0,
+              "id": "347f36ac-e68e-4fdc-8896-f6ea348e7f66",
+              "t0": 8.92,
+              "t1": 9.33,
+              "text": "can"
+            },
+            {
+              "conf": 1.0,
+              "id": "b98ca2bc-5019-498c-b011-86cd5fba9694",
+              "t0": 9.33,
+              "t1": 9.41,
+              "text": "do"
+            },
+            {
+              "conf": 1.0,
+              "id": "39af4b14-1aac-41b1-9fd3-68176beea970",
+              "t0": 9.45,
+              "t1": 9.76,
+              "text": "for"
+            },
+            {
+              "conf": 1.0,
+              "id": "c2e1af29-ff6c-4512-b078-2fcb7579d1b0",
+              "t0": 9.76,
+              "t1": 9.83,
+              "text": "your"
+            },
+            {
+              "conf": 0.95,
+              "id": "1c411754-e489-4363-bd96-6a31de372551",
+              "t0": 9.83,
+              "t1": 10.35,
+              "text": "country."
+            }
+          ]
+        }
+      ],
+      "queueDepth": 0,
+      "scope": "Real public audio through FileWorkflow ASR, isolated FAQ and archive; preset test translation, not model inference or translation quality",
+      "source": "/Users/jupitersong/antigravity/madi/out/macos-engine-smoke/jfk.wav",
+      "sourceSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "sourceUnchanged": true,
+      "status": "PASS",
+      "transcribeSHA256": "976dfc2050aef118e7cf84f21a44fed3dd1cba1cae917483a28591bf216cb4a8",
+      "translationEngineSHA256": "64be74aed0e23a650ede70ae7951f131b44f0c229e82d2ee68a74d089ff78a0e"
+    },
+    "buildSnapshot": {
+      "crates/madi-core/src/translation/cache.rs": "61da8b6874416301eb09856cd665fc10d24b0e076092b3acc7b5847c4e42bf9a",
+      "crates/madi-core/src/translation/faq_starter.json": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+      "crates/madi-core/src/translation/committed.rs": "4651f314d4a6ba393215a476dac85fa70fb7f8fc9b39b8df488001b1d900fa1b",
+      "crates/madi-platform/src/file_workflow.rs": "a22cacaf5e89ce14c14b34ff7ee30beffc4d1e90c089ea006210c683f49c60ca",
+      "crates/madi-platform/src/file_workflow/translation.rs": "76fd96e7f3527f044c160dc297bd51cb8cc90b6d353530a326d022cc974adc04",
+      "crates/madi-platform/src/file_workflow/translation/faq.rs": "503cadff4e04e8d4ea68abe4f7609470d6adcc0db2917f57f14b77a9c24becf7",
+      "crates/madi-platform/src/translation_cache.rs": "e0a67a25ad4b1a3b1bcb29a1a02129b3563e654c677f4491ea628ac6aef84fbc",
+      "crates/madi-platform/src/translation_client.rs": "fd662f4dfc255516f249788457c65bc7003d380b26a80e9eb217411be3a7b9ad",
+      "crates/madi-platform/src/dna_broker.rs": "45cef6accf832a7d5a4c268a0f8822511e80bb94a2d0b4cdb1dc25709eec3292",
+      "crates/madi-platform/examples/committed_translation_smoke.rs": "998d93e9b3ee6dc02ec70db324b314fa3ae362bdcdaaeb397c0bdccdc0f4323a",
+      "out/translation-cache-native/probe": "fe0604edd9fc1da62c87e7f141818730ab96d8871016b5b6763fe3c4fede6368"
+    },
+    "inputHashesBeforeAndAfter": {
+      "/Users/jupitersong/Library/Application Support/Madi/model.q8.safetensors": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+      "/Users/jupitersong/Library/Application Support/Madi/DNA3.0-4B.i1-Q4_K_M.gguf": "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8"
+    },
+    "modelInputsUnchanged": true,
+    "command": "committed_translation_smoke <absolute-executables> <absolute-assets-small> <Madi-model-directory> <public-jfk.wav> <report.json> public-faq",
+    "scope": "Actual ASR and preset FAQ delivery/archive, not DNA inference or quality",
+    "initialInvocation": "An incorrect model basename stopped the preflight checksum command before the probe; corrected using the existing verified model manifest"
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "captureUsageDescriptionsMatch": [
+      "NSMicrophoneUsageDescription",
+      "NSScreenCaptureUsageDescription",
+      "NSAudioCaptureUsageDescription"
+    ],
+    "captureAudioInputEntitlement": true,
+    "developerLibraryDependenciesAbsent": true,
+    "relocatedNativeCaptureReplay": {
+      "devicesOpened": false,
+      "ownedDirectoryCleaned": true,
+      "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+      "sampleCount": 16000,
+      "segments": [
+        {
+          "hadSpeech": true,
+          "name": "seg00000.wav",
+          "offsetBits": "0000000000000000",
+          "wavBytes": 32044,
+          "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+        }
+      ],
+      "stopped": true
+    },
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957888,
+        "sha256": "27698662a1326de82757e7dac36246bf40e68f7ddd6d87fae1ce6d005186a18b"
+      },
+      "translate-engine-2b": {
+        "bytes": 1576224,
+        "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+      },
+      "translate-engine-4b": {
+        "bytes": 1576080,
+        "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+    "helperBytes": 151296,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "1ef1d9257920932c199929cc1b8d5c0a14ceef41b23368b8969ae403762e690f",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "precedingCI": {
+    "head": "c996b2c086379f1f996006485e9fbe61fc388c56",
+    "run": "https://github.com/companyjupiter/madi/actions/runs/41883833481",
+    "status": "success",
+    "unitTests": {
+      "macos-15": [
+        26,
+        121,
+        14
+      ],
+      "windows-2022": [
+        26,
+        93,
+        14
+      ],
+      "windowsArchiveRepeats": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "artifactAndResultBytesVerified": true
+  },
+  "logs": {
+    "fmt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests": "2612ec3efac66bf572452a5d6370b5785559511efc9be0dbbe45078eaa170073",
+    "clippy": "81bc6596e46c5a2da99a881c6cbc038384e2a77511b3dfcad78a8bfadf96c2da",
+    "native": "e8538f36f9d346268a8e144a2e8581cfb4649c95cfc641faf7d34190e1fc9426",
+    "reference": "4b3ad19f0c6328344e12e9db4d31b1c79998bac8f482f3c037797e1652bfe4ed",
+    "committed": "7f895ba36b92280382770d569642b8790190885bdcc82044d6b19f01ddf4eca2",
+    "client": "2beb960eef954f3227efa42e26834032b4e157403491bb16d8bf579d4323b66c",
+    "bundle": "9785b2a61ef9d1cac616895cd8327a7ee90c4d94ec5494da879a2a008eec3c3f",
+    "package": "f1bedef4a84e66c3daf9f46fc2bc643d95c4dea8d36e57ebdef4298195208045"
+  },
+  "limits": [
+    "This source snapshot has not completed its own macOS/Windows CI",
+    "Native Foundation uses installed OS categories; the portable reference pins measured macOS 27.2 behavior",
+    "Interim request production/caption display, complete HUD and simultaneous live hardware behavior remain unconnected or unverified",
+    "Ambiguous same-normalized language columns are not covered; Swift dictionary iteration does not define a stable winner",
+    "Empty cached values retain shipping target-removal behavior; interaction with stop backfill needs a follow-up",
+    "Malformed/unreadable user FAQ bytes are preserved intentionally instead of original fallback overwrite",
+    "Mac is locked according to current Computer Use check; native GUI/UX acceptance NOT_RUN",
+    "No Windows native ASR/capture/GPU inference or release/notarization acceptance"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "cases": 3000,
+  "pipelineKinds": [
+    "backfilling",
+    "completed",
+    "correcting",
+    "diarizing",
+    "error",
+    "fileTranscribing",
+    "idle",
+    "listening",
+    "transcribing",
+    "translating",
+    "translatingBacklogged"
+  ],
+  "languages": [
+    "ko",
+    "en",
+    "ja"
+  ],
+  "corpusSHA256": "3548fa7ba7de4952689efa01bac586c24eaa07532442835fafb30d51cffc165b",
+  "resultSHA256": "43030c3090f26953441966c04497ecde31cf931ab4e385e1a3a148d514cd257f",
+  "sources": {
+    "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+    "apps/macos/Sovereign/UI/ContentView.swift": "b546ea492be43d6c0ef978b4f57d5ad33aec282816bc9a9e37f789085810d511",
+    "apps/macos/Sovereign/UI/StatusLine.swift": "6487577c1db7116eb3d4a94c3bb363871814fbcd487a20e27907e379e0732ab2"
+  }
+}

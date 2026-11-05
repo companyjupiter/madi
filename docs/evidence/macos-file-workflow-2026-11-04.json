@@ -1,0 +1,631 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "local uncommitted file-workflow candidate on eba8f8b; native UI interaction not exercised",
+  "sourceSHA256": {
+    "crates/madi-platform/src/file_workflow/tests.rs": "06a706845dcbd41882ea9a93074d77e4d83b51e170aee2e50fd6a6b3ce9a87c1",
+    "crates/madi-platform/src/file_workflow.rs": "04f0cde03db0953537fe7d6caabb235499dae4619356b41e0a00ee71419c5fdf",
+    "crates/madi-platform/examples/file_workflow_smoke.rs": "b914c6f09f2687fcff69a00967140fee359d56063f4bbabcf25df59a06e4996b",
+    "crates/madi-platform/src/transcript_native.rs": "97ed4a06dcb87db099444c98cbb92754aada957bea7463402fe0a134c1935a7a",
+    "apps/desktop/src-tauri/src/files_host.rs": "9e7f131ccd3215c5171ab5c066163b10bacc51aba8a5eb5fc8307441baa12199",
+    "apps/desktop/src-tauri/src/setup_host.rs": "7f7b135ab49e174793fbb751c8b8f59fd34c28f23e23ef82668f0c2f5c886371",
+    "apps/desktop/src/FileTranscript.tsx": "f4bed8ce701d43686607e23fd86dedee04a105268d73cca22437a2b1261f37ad",
+    "apps/desktop/src/files.ts": "dcc7964cfa50146f2c79d1fe7ead1d9aadc8e43bd774ddd1916690e395bae9f6",
+    "apps/desktop/src/transcript.css": "19f894f060c0201ab7b27df028012b614a4bf9ef98aac8e4af1fcea8e244abec"
+  },
+  "localChecks": {
+    "rustTests": 65,
+    "core": 11,
+    "protocol": 14,
+    "platform": 40,
+    "realChildWorkflowTests": 6,
+    "clippyAllTargets": "passed",
+    "typescriptVite": "passed",
+    "formatting": "passed"
+  },
+  "transcriptStore": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 309,
+    "snapshots": 5947,
+    "fixtureWords": 1566,
+    "swiftComparison": "live-unmodified-model-bodies-with-deterministic-ID-and-render-delivery-hooks",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+      "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+      "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+      "apps/macos/Sovereign/Transcript/SpeakerDisplayNumber.swift": "aed03483b387f644d426a6b66b291424d413e397c4555179a096912d448f3c1b",
+      "apps/macos/Sovereign/Transcript/LiveFeatureWiring.swift": "fb10adb3a626e5e6a3b9105ef2754b5fe52b307d7cd8c6648e3844bdccd4b956",
+      "apps/macos/Sovereign/Transcript/EnergyArc.swift": "7183d8bd405404abf47e51f58df1bb4a7e93f0bf9ed417ed9b60dfcc6d31fcc7",
+      "apps/macos/Sovereign/Engine/EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+      "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+      "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+      "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+    },
+    "corpusSHA256": "9a309537a98266d1420094e7080d1fa5796dea1555cd262619aa46326f24337e",
+    "resultSHA256": "627a8270f0b91ca4df4ed4d471063fbe755c9d5a78ab7612aca99a80f55fe0c3",
+    "scope": "Finite transcript inputs plus 1566 fixture word payloads (not full stdout replay): exact line/word identity, text bytes, times/confidence, grouping, speaker fixes/numbers, overlap, edits, translation provenance, suppression, reload/reset and explicit display delivery. No wall-clock scheduling, UI pixels, translation generation or archive serialization."
+  },
+  "nativeWorkflow": {
+    "cleanAtShutdown": true,
+    "modelSizeMtimeUnchanged": true,
+    "passed": true,
+    "schema": 1,
+    "sourcePreserved": true,
+    "sourceSha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "workflow": {
+      "cleanAtCompletion": true,
+      "completed": {
+        "chunksDone": 1,
+        "chunksTotal": 1,
+        "fileName": "jfk.wav",
+        "generation": 1,
+        "lines": [
+          {
+            "editedText": null,
+            "editedTranslations": [],
+            "end": 10.35,
+            "id": "1526780a-94ce-400d-82cd-550fd63f64ff",
+            "overlapSpeakers": [],
+            "sourceRevision": "13950391516942635375",
+            "speaker": 0,
+            "speakerMargin": 1.0,
+            "staleTranslations": {},
+            "start": 0.33,
+            "suppressedTranslations": [],
+            "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+            "translations": {},
+            "words": [
+              {
+                "conf": 1.0,
+                "id": "1526780a-94ce-400d-82cd-550fd63f64ff",
+                "t0": 0.33,
+                "t1": 0.5,
+                "text": "And"
+              },
+              {
+                "conf": 0.6,
+                "id": "10aaa9de-5392-4245-9ec8-b413ae6729f9",
+                "t0": 0.5,
+                "t1": 0.58,
+                "text": "so,"
+              },
+              {
+                "conf": 1.0,
+                "id": "382b1307-6d25-433a-9c93-b3c7b2ad7f1f",
+                "t0": 0.69,
+                "t1": 1.2,
+                "text": "my"
+              },
+              {
+                "conf": 1.0,
+                "id": "cec313e2-b7e2-423c-b986-6d5fb937eca4",
+                "t0": 1.2,
+                "t1": 1.28,
+                "text": "fellow"
+              },
+              {
+                "conf": 0.86,
+                "id": "409f3778-7ac1-4a6b-8b4a-69afaaa74dd4",
+                "t0": 1.37,
+                "t1": 2.11,
+                "text": "Americans,"
+              },
+              {
+                "conf": 0.98,
+                "id": "e054018a-a51b-4b46-a3b7-b1a021cb18f3",
+                "t0": 3.29,
+                "t1": 3.66,
+                "text": "ask"
+              },
+              {
+                "conf": 0.98,
+                "id": "6c4ead61-290e-456c-ac07-f5e49ea9879b",
+                "t0": 4.03,
+                "t1": 4.29,
+                "text": "not"
+              },
+              {
+                "conf": 0.99,
+                "id": "cf96585f-3cb9-4864-9e19-a19f954e163d",
+                "t0": 4.54,
+                "t1": 5.56,
+                "text": "what"
+              },
+              {
+                "conf": 0.99,
+                "id": "70a69fc2-2965-4fe3-986a-fe1bb1355d90",
+                "t0": 5.56,
+                "t1": 5.64,
+                "text": "your"
+              },
+              {
+                "conf": 1.0,
+                "id": "504470ab-e648-49d6-a4ee-39ecc8e68880",
+                "t0": 5.66,
+                "t1": 6.42,
+                "text": "country"
+              },
+              {
+                "conf": 1.0,
+                "id": "9927e7b7-592b-4a8b-a969-ea7bb5094a52",
+                "t0": 6.51,
+                "t1": 6.6,
+                "text": "can"
+              },
+              {
+                "conf": 1.0,
+                "id": "b5b74efa-a573-4abe-8c52-b2a08f8a601f",
+                "t0": 6.6,
+                "t1": 6.68,
+                "text": "do"
+              },
+              {
+                "conf": 1.0,
+                "id": "2e5194af-3dba-44da-a1c8-7bfddfb8960d",
+                "t0": 6.71,
+                "t1": 6.91,
+                "text": "for"
+              },
+              {
+                "conf": 0.64,
+                "id": "266609f7-b6fc-4a0e-9981-2dafa467e82d",
+                "t0": 7.01,
+                "t1": 7.52,
+                "text": "you,"
+              },
+              {
+                "conf": 1.0,
+                "id": "289c79e0-b6a5-4bf1-a4c3-f42fe43cda15",
+                "t0": 8.2,
+                "t1": 8.48,
+                "text": "ask"
+              },
+              {
+                "conf": 1.0,
+                "id": "6bba62e0-053d-4843-b6b0-512aec010fd2",
+                "t0": 8.52,
+                "t1": 8.76,
+                "text": "what"
+              },
+              {
+                "conf": 1.0,
+                "id": "b884a0b9-5ef5-4853-9d98-757288fd2773",
+                "t0": 8.76,
+                "t1": 8.84,
+                "text": "you"
+              },
+              {
+                "conf": 1.0,
+                "id": "2a46fbef-0b9f-4811-afc8-085077026081",
+                "t0": 8.92,
+                "t1": 9.33,
+                "text": "can"
+              },
+              {
+                "conf": 1.0,
+                "id": "3c51afeb-0ee1-4756-a4d1-0c8c6c1bb9fd",
+                "t0": 9.33,
+                "t1": 9.41,
+                "text": "do"
+              },
+              {
+                "conf": 1.0,
+                "id": "1d559419-1b81-4c2e-b494-835430854c0b",
+                "t0": 9.45,
+                "t1": 9.76,
+                "text": "for"
+              },
+              {
+                "conf": 1.0,
+                "id": "59c83c58-f3a6-4cb5-be61-779c4a186355",
+                "t0": 9.76,
+                "t1": 9.83,
+                "text": "your"
+              },
+              {
+                "conf": 0.95,
+                "id": "fafa3e74-67f5-4083-8c52-e76e1ff78d01",
+                "t0": 9.83,
+                "t1": 10.35,
+                "text": "country."
+              }
+            ]
+          }
+        ],
+        "partial": "",
+        "phase": {
+          "kind": "done"
+        },
+        "revision": 7,
+        "sizeLabel": "343k",
+        "speakerIslandAbsorption": false,
+        "speakerNames": {},
+        "speakerNumbers": {
+          "next": 2,
+          "numbers": {
+            "0": 1
+          }
+        }
+      },
+      "edited": {
+        "chunksDone": 1,
+        "chunksTotal": 1,
+        "fileName": "jfk.wav",
+        "generation": 1,
+        "lines": [
+          {
+            "editedText": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. [probe edit]",
+            "editedTranslations": [],
+            "end": 10.35,
+            "id": "1526780a-94ce-400d-82cd-550fd63f64ff",
+            "overlapSpeakers": [],
+            "sourceRevision": "17696157483020390743",
+            "speaker": 0,
+            "speakerMargin": 1.0,
+            "staleTranslations": {},
+            "start": 0.33,
+            "suppressedTranslations": [],
+            "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. [probe edit]",
+            "translations": {},
+            "words": [
+              {
+                "conf": 1.0,
+                "id": "1526780a-94ce-400d-82cd-550fd63f64ff",
+                "t0": 0.33,
+                "t1": 0.5,
+                "text": "And"
+              },
+              {
+                "conf": 0.6,
+                "id": "10aaa9de-5392-4245-9ec8-b413ae6729f9",
+                "t0": 0.5,
+                "t1": 0.58,
+                "text": "so,"
+              },
+              {
+                "conf": 1.0,
+                "id": "382b1307-6d25-433a-9c93-b3c7b2ad7f1f",
+                "t0": 0.69,
+                "t1": 1.2,
+                "text": "my"
+              },
+              {
+                "conf": 1.0,
+                "id": "cec313e2-b7e2-423c-b986-6d5fb937eca4",
+                "t0": 1.2,
+                "t1": 1.28,
+                "text": "fellow"
+              },
+              {
+                "conf": 0.86,
+                "id": "409f3778-7ac1-4a6b-8b4a-69afaaa74dd4",
+                "t0": 1.37,
+                "t1": 2.11,
+                "text": "Americans,"
+              },
+              {
+                "conf": 0.98,
+                "id": "e054018a-a51b-4b46-a3b7-b1a021cb18f3",
+                "t0": 3.29,
+                "t1": 3.66,
+                "text": "ask"
+              },
+              {
+                "conf": 0.98,
+                "id": "6c4ead61-290e-456c-ac07-f5e49ea9879b",
+                "t0": 4.03,
+                "t1": 4.29,
+                "text": "not"
+              },
+              {
+                "conf": 0.99,
+                "id": "cf96585f-3cb9-4864-9e19-a19f954e163d",
+                "t0": 4.54,
+                "t1": 5.56,
+                "text": "what"
+              },
+              {
+                "conf": 0.99,
+                "id": "70a69fc2-2965-4fe3-986a-fe1bb1355d90",
+                "t0": 5.56,
+                "t1": 5.64,
+                "text": "your"
+              },
+              {
+                "conf": 1.0,
+                "id": "504470ab-e648-49d6-a4ee-39ecc8e68880",
+                "t0": 5.66,
+                "t1": 6.42,
+                "text": "country"
+              },
+              {
+                "conf": 1.0,
+                "id": "9927e7b7-592b-4a8b-a969-ea7bb5094a52",
+                "t0": 6.51,
+                "t1": 6.6,
+                "text": "can"
+              },
+              {
+                "conf": 1.0,
+                "id": "b5b74efa-a573-4abe-8c52-b2a08f8a601f",
+                "t0": 6.6,
+                "t1": 6.68,
+                "text": "do"
+              },
+              {
+                "conf": 1.0,
+                "id": "2e5194af-3dba-44da-a1c8-7bfddfb8960d",
+                "t0": 6.71,
+                "t1": 6.91,
+                "text": "for"
+              },
+              {
+                "conf": 0.64,
+                "id": "266609f7-b6fc-4a0e-9981-2dafa467e82d",
+                "t0": 7.01,
+                "t1": 7.52,
+                "text": "you,"
+              },
+              {
+                "conf": 1.0,
+                "id": "289c79e0-b6a5-4bf1-a4c3-f42fe43cda15",
+                "t0": 8.2,
+                "t1": 8.48,
+                "text": "ask"
+              },
+              {
+                "conf": 1.0,
+                "id": "6bba62e0-053d-4843-b6b0-512aec010fd2",
+                "t0": 8.52,
+                "t1": 8.76,
+                "text": "what"
+              },
+              {
+                "conf": 1.0,
+                "id": "b884a0b9-5ef5-4853-9d98-757288fd2773",
+                "t0": 8.76,
+                "t1": 8.84,
+                "text": "you"
+              },
+              {
+                "conf": 1.0,
+                "id": "2a46fbef-0b9f-4811-afc8-085077026081",
+                "t0": 8.92,
+                "t1": 9.33,
+                "text": "can"
+              },
+              {
+                "conf": 1.0,
+                "id": "3c51afeb-0ee1-4756-a4d1-0c8c6c1bb9fd",
+                "t0": 9.33,
+                "t1": 9.41,
+                "text": "do"
+              },
+              {
+                "conf": 1.0,
+                "id": "1d559419-1b81-4c2e-b494-835430854c0b",
+                "t0": 9.45,
+                "t1": 9.76,
+                "text": "for"
+              },
+              {
+                "conf": 1.0,
+                "id": "59c83c58-f3a6-4cb5-be61-779c4a186355",
+                "t0": 9.76,
+                "t1": 9.83,
+                "text": "your"
+              },
+              {
+                "conf": 0.95,
+                "id": "fafa3e74-67f5-4083-8c52-e76e1ff78d01",
+                "t0": 9.83,
+                "t1": 10.35,
+                "text": "country."
+              }
+            ]
+          }
+        ],
+        "partial": "",
+        "phase": {
+          "kind": "done"
+        },
+        "revision": 8,
+        "sizeLabel": "343k",
+        "speakerIslandAbsorption": false,
+        "speakerNames": {},
+        "speakerNumbers": {
+          "next": 2,
+          "numbers": {
+            "0": 1
+          }
+        }
+      },
+      "observations": [
+        {
+          "elapsed": 0.001675417,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 1,
+          "words": 0
+        },
+        {
+          "elapsed": 0.001680167,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 2,
+          "words": 0
+        },
+        {
+          "elapsed": 0.633319459,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 3,
+          "words": 0
+        },
+        {
+          "elapsed": 1.020284375,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 4,
+          "words": 0
+        },
+        {
+          "elapsed": 1.0951745,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 5,
+          "words": 0
+        },
+        {
+          "elapsed": 1.8232305,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 6,
+          "words": 0
+        },
+        {
+          "elapsed": 1.8809132499999999,
+          "lines": 1,
+          "phase": {
+            "kind": "done"
+          },
+          "revision": 7,
+          "words": 22
+        }
+      ],
+      "reset": {
+        "chunksDone": 0,
+        "chunksTotal": 0,
+        "fileName": "",
+        "generation": 2,
+        "lines": [],
+        "partial": "",
+        "phase": {
+          "kind": "idle"
+        },
+        "revision": 9,
+        "sizeLabel": "",
+        "speakerIslandAbsorption": false,
+        "speakerNames": {},
+        "speakerNumbers": {
+          "next": 1,
+          "numbers": {}
+        }
+      },
+      "staleEditIgnored": true
+    },
+    "relocatedOutsideRepository": true,
+    "runtimeSha256": {
+      "transcribe": "ed0ed0a6f0483c9fd0f45b7c4fff602a5dcfe87dccbd82703d03256a8952e787",
+      "madi-audio-decode": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568"
+    },
+    "sourceHead": "eba8f8b801b2e788f428aa4cdd1c4b220a02904e",
+    "sourceDirty": true
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957392,
+        "sha256": "ed0ed0a6f0483c9fd0f45b7c4fff602a5dcfe87dccbd82703d03256a8952e787"
+      },
+      "translate-engine-2b": {
+        "bytes": 1575744,
+        "sha256": "34795c20da441bc7baf249f4a2ca12766e04016bad05fd7303b2da4356486de0"
+      },
+      "translate-engine-4b": {
+        "bytes": 1575600,
+        "sha256": "fc0c8687300de8dd51f7a67493a57090eb2a677a730395cbd0e95fe6c21e85eb"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "helperBytes": 150816,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "a5bc84be9dda731983af51790f56d0d98b8d6333a2e724dbca2f31d67e73cca3",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "limitations": [
+    "Actual JFK inference emitted its 22-word transcript at Done; fixture processes separately verify timed pre-completion word and speaker-fix publication.",
+    "No native screen capture, clicks, clipboard or alert execution; no claim of UI/UX parity.",
+    "No settings migration, archive/autosave, capture, workspace, playback, glossary, AI postprocessing or translation generation.",
+    "Windows committed build/CI evidence for this candidate is pending; native Windows file decode/UI not implemented."
+  ]
+}

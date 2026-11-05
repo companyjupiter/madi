@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-caption-resize"
+description = "Enables the caption_resize command without any pre-configured scope."
+commands.allow = ["caption_resize"]
+
+[[permission]]
+identifier = "deny-caption-resize"
+description = "Denies the caption_resize command without any pre-configured scope."
+commands.deny = ["caption_resize"]

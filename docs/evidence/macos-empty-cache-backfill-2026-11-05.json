@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T18:39:51.468279+00:00",
+  "baseHead": "6e90399bbf4011c9a1617c82569671b5e930a6f7",
+  "status": "PASS",
+  "scope": "Close consumed empty/stale cache backfill keys without changing the source revision guard, transcript content, suppression state, or target removal",
+  "sourceSHA256": {
+    "crates/madi-core/src/translation/committed.rs": "a8f423b9284d767ea04d5e1ea7f08b4f54a91a4fe693fc7b065f3ad2b81d7e58",
+    "crates/madi-core/src/translation/committed/tests.rs": "340c224990196d42ed0dc8888644066a2852ada96d0e9a761aac454a1e9dd57a",
+    "crates/madi-platform/src/file_workflow/translation.rs": "76fd96e7f3527f044c160dc297bd51cb8cc90b6d353530a326d022cc974adc04",
+    "apps/macos/Sovereign/Transcript/LiveFeatureWiring.swift": "fb10adb3a626e5e6a3b9105ef2754b5fe52b307d7cd8c6648e3844bdccd4b956",
+    "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+    "Cargo.lock": "34edea7a803aaefc9e08ed8d8fdd4ec6287aec38b0012b95fb0f536c3d8eac52",
+    "rust-toolchain.toml": "d13306be0ecda81ce779baa290ffb417380d525928477f16200884b5169cca33"
+  },
+  "regression": {
+    "trigger": "A shed coalesced request is backfilled as a cacheable single anchor whose FAQ has an empty target value",
+    "redRemainingAfterEmpty": 2,
+    "expectedRemainingAfterEmpty": 1,
+    "greenFinalRemaining": 0,
+    "transcriptUnchanged": true,
+    "noTranslationFabricated": true,
+    "noNewSuppressionForEmptyCache": true,
+    "redLogSHA256": "aa61c8bbee80182ccca22585e73651a39a203a9202a8e42f9cb542b3a0667e96"
+  },
+  "mutation": {
+    "exitCode": 101,
+    "assertionDetected": true,
+    "sourcesRestored": true,
+    "sourceSHA256": "a8f423b9284d767ea04d5e1ea7f08b4f54a91a4fe693fc7b065f3ad2b81d7e58",
+    "logSHA256": "7cd2d1b38c0d24cd59a5dc9b43f559dbedb32ba1469978434d18e1fbcbf51e3b"
+  },
+  "checks": {
+    "format": "PASS",
+    "clippy": "PASS",
+    "unitTests": [
+      28,
+      127,
+      14
+    ],
+    "totalTests": 169,
+    "frontendTypecheckAndBuild": "PASS",
+    "macOSDebugAppBundle": "PASS",
+    "package": "PASS"
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "captureUsageDescriptionsMatch": [
+      "NSMicrophoneUsageDescription",
+      "NSScreenCaptureUsageDescription",
+      "NSAudioCaptureUsageDescription"
+    ],
+    "captureAudioInputEntitlement": true,
+    "developerLibraryDependenciesAbsent": true,
+    "relocatedNativeCaptureReplay": {
+      "devicesOpened": false,
+      "ownedDirectoryCleaned": true,
+      "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+      "sampleCount": 16000,
+      "segments": [
+        {
+          "hadSpeech": true,
+          "name": "seg00000.wav",
+          "offsetBits": "0000000000000000",
+          "wavBytes": 32044,
+          "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+        }
+      ],
+      "stopped": true
+    },
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957888,
+        "sha256": "f9113d81175d81ea16a99d3e5f3f178d1ef69c1ba9b01ecef47b9f63a31df273"
+      },
+      "translate-engine-2b": {
+        "bytes": 1576224,
+        "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+      },
+      "translate-engine-4b": {
+        "bytes": 1576080,
+        "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+    "helperBytes": 151296,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "d71f7281a8160002e7a91454926fe24c27b833e07f8dc894530f7f05594bffa7",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "shippingFeatureGateReview": {
+    "status": "SOURCE_REVIEW",
+    "source": "apps/macos/Sovereign/Transcript/LiveFeatureWiring.swift",
+    "interimTranslation": false,
+    "translationStreaming": false,
+    "candidate": "No interim translation producer is enabled; committed partial streaming stays disabled",
+    "scopeCorrection": "Dormant producer port is future redesign work, not an instruction to enable it for migration; gray ASR preview is separate"
+  },
+  "logs": {
+    "fmt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests": "9187ee985c5423ff0ceeb198e8daa377f13220ed6aad08e6c0a03c473fbb236a",
+    "clippy": "3fb0c5169777c51c38a9a1b2b436c44c4fc0b74ea1157ea94ffcd7906fd40e0e",
+    "bundle": "437f9efdd510b0f1b992812b7a0ba809f5f729fd4711313e45c4f90df7c27d2f",
+    "package": "3fd8bc5c2cb20f56c35cde10398557f95d66642e72a92db917890b5d46b444e6"
+  },
+  "precedingCacheEvidence": "macos-translation-cache-2026-11-05.json",
+  "limits": [
+    "Own macOS/Windows CI verdict not yet available",
+    "This follow-up uses core/workflow regressions and package validation; the prior real FAQ probe and native cache oracle belong to 6e90399",
+    "Ambiguous same-normalized FAQ source columns remain outside parity acceptance",
+    "Native visual/interaction, committed caption overlay, full live timing and Windows GPU/ASR acceptance remain open"
+  ]
+}

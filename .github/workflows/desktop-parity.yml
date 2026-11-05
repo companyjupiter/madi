@@ -1,0 +1,310 @@
+name: Desktop migration checks
+on:
+  push:
+    branches: [codex/tauri-ui-parity]
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'crates/**'
+      - 'Cargo.*'
+      - '.gitattributes'
+      - 'rust-toolchain.toml'
+      - 'scripts/*parity.py'
+      - 'scripts/prepare_desktop_native.mjs'
+      - 'scripts/record_desktop_build.py'
+      - 'scripts/prepare_desktop_runtime.mjs'
+      - 'scripts/sync_desktop_resources.py'
+      - 'engine/**'
+      - 'apps/macos/scripts/build_engine.sh'
+      - 'tests/parity/**'
+      - 'apps/macos/Sovereign/Engine/TranslateStreamParser.swift'
+      - 'apps/macos/Sovereign/Engine/DNAEngineBroker.swift'
+      - 'apps/macos/Sovereign/Engine/DNATurnBudget.swift'
+      - 'apps/macos/Sovereign/Engine/TranslationTurnQueue.swift'
+      - 'apps/macos/Sovereign/Engine/TranslateEngine.swift'
+      - 'apps/macos/Sovereign/Engine/SummaryEngine.swift'
+      - 'apps/macos/Sovereign/Engine/EngineProtocol.swift'
+      - 'apps/macos/Sovereign/Engine/PreviewEngine.swift'
+      - 'apps/macos/Sovereign/Engine/TranslationStability.swift'
+      - 'apps/macos/Sovereign/Transcript/TranslationCoalescer.swift'
+      - 'apps/macos/Sovereign/Transcript/FAQTranslationStore.swift'
+      - 'apps/macos/Sovereign/Transcript/InterimTranslationCache.swift'
+      - 'apps/macos/Sovereign/UI/TranscriptView.swift'
+      - 'apps/macos/Sovereign/Engine/EngineEvents.swift'
+      - 'apps/macos/Sovereign/Engine/EngineProcess.swift'
+      - 'apps/macos/Sovereign/Engine/EnginePathPolicy.swift'
+      - 'apps/macos/Sovereign/Transcript/**'
+      - 'apps/macos/Sovereign/Audio/AudioDevices.swift'
+      - 'apps/macos/Sovereign/Audio/AudioCapture.swift'
+      - 'apps/macos/Sovereign/Audio/SystemAudioCapture.swift'
+      - 'apps/macos/Sovereign/Session/SessionCoordinator.swift'
+      - 'apps/macos/Sovereign/Audio/AudioDecode.swift'
+      - 'apps/macos/Sovereign/Audio/Resampler.swift'
+      - 'apps/macos/Sovereign/Audio/Segmenter.swift'
+      - 'apps/macos/Tests/SovereignCoreTests/SegmenterEarlyFlushTests.swift'
+      - 'apps/macos/Sovereign/Audio/WavWriter.swift'
+      - 'apps/macos/Tests/AudioDecodeLimitTests.swift'
+      - 'apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatter*Tests.swift'
+      - 'apps/macos/Sovereign/UI/ContentView.swift'
+      - 'apps/macos/Sovereign/UI/StatusLine.swift'
+      - 'apps/macos/Sovereign/UI/CaptionOverlay.swift'
+      - 'apps/macos/Sovereign/Transcript/SpeakerID.swift'
+      - 'apps/macos/Sovereign/UI/L10n.swift'
+      - 'apps/macos/Sovereign/UI/SettingsView.swift'
+      - 'apps/macos/Sovereign/UI/ClinicDisplaySupport.swift'
+      - 'apps/macos/Sovereign/UI/GlossarySettingsView.swift'
+      - 'apps/macos/Sovereign/SovereignApp.swift'
+      - 'apps/macos/Sovereign/Audio/AudioSource.swift'
+      - 'apps/macos/Sovereign/SessionController.swift'
+      - 'apps/macos/Sovereign/Session/SessionArchiveWriter.swift'
+      - 'apps/macos/Sovereign/Session/SessionOneShotTranscriber.swift'
+      - 'apps/macos/Sovereign/Model/AssetManifest.swift'
+      - 'apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift'
+      - 'apps/macos/Sovereign/UI/ModelGateView.swift'
+      - 'apps/macos/Sovereign/UI/WorkspaceExplorer.swift'
+      - 'apps/macos/Sovereign/UI/WorkspaceStatsView.swift'
+      - 'apps/macos/Sovereign/Model/WorkspaceTree.swift'
+      - 'apps/macos/Sovereign/Model/ModelDownloader.swift'
+      - 'apps/macos/Sovereign/Model/TranslateModelDownloader.swift'
+      - 'web/fixtures/*.events.jsonl'
+      - 'design/parity/*reference.json'
+      - 'design/parity/reconcile-name-candidates.json'
+      - '.github/workflows/desktop-parity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Fail at the first failing native command on Windows as well as macOS.
+    shell: bash
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Install pinned Rust components
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - name: Prepare original macOS inference build inputs
+        if: runner.os == 'macOS'
+        run: |
+          [ "$(uname -m)" = arm64 ] || { echo 'Apple Silicon runner required' >&2; exit 1; }
+          curl --fail --location --retry 3 https://ziglang.org/download/0.14.1/zig-aarch64-macos-0.14.1.tar.xz --output "$RUNNER_TEMP/madi-zig.tar.xz"
+          echo "39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa  $RUNNER_TEMP/madi-zig.tar.xz" | shasum -a 256 -c -
+          tar -xf "$RUNNER_TEMP/madi-zig.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/zig-aarch64-macos-0.14.1" >> "$GITHUB_PATH"
+          apps/macos/scripts/fetch_runtime_assets.sh
+      - name: Build the local frontend
+        working-directory: apps/desktop
+        run: |
+          npm ci
+          npm run prepare-native
+          npm run build
+      - name: Check formatting and shared behavior
+        run: |
+          python scripts/sync_desktop_resources.py
+          git diff --exit-code -- apps/desktop/public/assets apps/desktop/src/strings.generated.json apps/desktop/src/model-strings.generated.json apps/desktop/src/settings-strings.generated.json design/parity/asset-reference.json
+          cargo fmt --all --check
+          cargo test --locked -p madi-core -p madi-protocol -p madi-platform -p madi-desktop
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          node --test tests/parity/setup_intent_queue.test.mjs tests/parity/desktop_ipc_contract.test.mjs
+      - name: Check Windows shared-open archive replacement
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo test --locked -p madi-platform session_archive::tests::checkpoint_replaces_a_shared_open_destination_and_retains_the_old_reader -- --exact --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Repeat Windows concurrent archive checkpoint regression
+        if: runner.os == 'Windows'
+        run: |
+          for attempt in $(seq 1 50); do
+            cargo test --locked -p madi-platform session_archive::tests::concurrent_sessions_never_overwrite_and_checkpoints_keep_their_file -- --exact --nocapture
+          done
+      - name: Compare against the shipping Swift parser
+        if: runner.os == 'macOS'
+        run: |
+          python3 scripts/check_translate_parser_parity.py
+          python3 scripts/check_transcribe_parser_parity.py
+          python3 scripts/check_structured_parser_parity.py
+          python3 scripts/check_stream_process_parity.py
+          python3 scripts/check_audio_devices_parity.py
+          python3 scripts/check_media_file_parity.py
+          python3 scripts/check_asr_config_parity.py
+          python3 scripts/check_live_config_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_preview_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_dna_broker_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_client_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_committed_translation_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_cache_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_caption_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_review_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_pipeline_status_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_coverage_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_hang_watchdog_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_names_parity.py
+          python3 scripts/check_preferences_parity.py
+          python3 scripts/check_glossary_parity.py
+          python3 scripts/check_personal_vocabulary_parity.py
+          python3 scripts/check_korean_numbers_parity.py
+          python3 scripts/check_text_passes_parity.py
+          python3 scripts/check_segmenter_parity.py
+          python3 scripts/check_capture_bridge_parity.py
+          python3 scripts/check_capture_pipeline_parity.py
+          python3 scripts/check_asset_manifest_parity.py
+          python3 scripts/check_model_setup_parity.py
+          python3 scripts/check_model_gate_parity.py
+          python3 scripts/check_model_presentation_parity.py
+          python3 scripts/check_word_merger_parity.py
+          python3 scripts/check_transcript_store_parity.py
+          python3 scripts/check_transcript_follow_parity.py
+          python3 scripts/check_archive_parity.py
+          python3 scripts/check_archive_writer_parity.py
+          python3 scripts/check_workspace_parity.py
+          python3 scripts/check_export_parity.py
+          swiftc -parse-as-library apps/macos/Sovereign/Audio/AudioDecode.swift apps/macos/Sovereign/Audio/Resampler.swift apps/macos/Sovereign/Audio/WavWriter.swift apps/macos/Tests/AudioDecodeLimitTests.swift -o "$RUNNER_TEMP/madi-audio-decode-parity"
+          "$RUNNER_TEMP/madi-audio-decode-parity"
+      - name: Compare Windows parser to pinned Swift reference
+        if: runner.os == 'Windows'
+        run: |
+          python scripts/check_translate_parser_parity.py --rust-only
+          python scripts/check_transcribe_parser_parity.py --rust-only
+          python scripts/check_structured_parser_parity.py --rust-only
+          python scripts/check_stream_process_parity.py --rust-only
+          python scripts/check_asr_config_parity.py --rust-only
+          python scripts/check_live_config_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_preview_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_dna_broker_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_client_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_committed_translation_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_translation_cache_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_caption_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_review_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_pipeline_status_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_coverage_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_hang_watchdog_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_names_parity.py --rust-only
+          python scripts/check_preferences_parity.py --rust-only
+          python scripts/check_glossary_parity.py --rust-only
+          python scripts/check_personal_vocabulary_parity.py --rust-only
+          python scripts/check_korean_numbers_parity.py --rust-only
+          python scripts/check_text_passes_parity.py --rust-only
+          python scripts/check_segmenter_parity.py --rust-only
+          python scripts/check_capture_pipeline_parity.py --rust-only
+          python scripts/check_asset_manifest_parity.py --rust-only
+          python scripts/check_model_setup_parity.py --rust-only
+          python scripts/check_model_gate_parity.py --rust-only
+          python scripts/check_word_merger_parity.py --rust-only
+          python scripts/check_transcript_store_parity.py --rust-only
+          python scripts/check_transcript_follow_parity.py --frontend-only
+          python scripts/check_archive_parity.py --rust-only
+          python scripts/check_archive_writer_parity.py --rust-only
+          python scripts/check_export_parity.py --rust-only
+      - name: Build the standalone debug parity host
+        run: cargo build --locked -p madi-desktop --features custom-protocol
+      - name: Verify the relocated macOS app and native decoder
+        if: runner.os == 'macOS'
+        run: |
+          npm --prefix apps/desktop run tauri build -- --debug --bundles app
+          python3 scripts/check_desktop_package_parity.py 'target/debug/bundle/macos/Madi UI Parity.app'
+      - name: Record build provenance
+        run: python scripts/record_desktop_build.py
+      - name: Preserve evidence and experimental executable
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-parity-${{ matrix.os }}
+          path: |
+            out/desktop-build/report.json
+            out/desktop-build/source.diff
+            out/translate-parser-parity/report.json
+            out/transcribe-parser-parity/report.json
+            out/structured-parser-parity/report.json
+            out/stream-process-parity/report.json
+            out/audio-devices-parity/report.json
+            out/media-file-parity/report.json
+            out/asr-config-parity/report.json
+            out/live-config-parity/report.json
+            out/preview-parity/report.json
+            out/preview-parity/result.json
+            out/dna-broker-parity/report.json
+            out/dna-broker-parity/result.json
+            out/translation-parity/report.json
+            out/translation-parity/result.json
+            out/translation-client-parity/report.json
+            out/translation-client-parity/result.json
+            out/committed-translation-parity/report.json
+            out/committed-translation-parity/result.json
+            out/translation-cache-parity/report.json
+            out/translation-cache-parity/result.json
+            out/translation-cache-parity/native-result.json
+            out/translation-cache-parity/swift.json
+            out/caption-parity/report.json
+            out/caption-parity/result.json
+            out/caption-parity/swift.json
+            out/review-parity/report.json
+            out/review-parity/rust-and-frontend.json
+            out/review-parity/swift.json
+            out/pipeline-status-parity/report.json
+            out/pipeline-status-parity/result.json
+            out/pipeline-status-parity/swift.json
+            out/coverage-parity/report.json
+            out/coverage-parity/result.json
+            out/coverage-parity/swift.json
+            out/hang-watchdog-parity/report.json
+            out/hang-watchdog-parity/result.json
+            out/hang-watchdog-parity/swift.json
+            out/reconcile-parity/report.json
+            out/reconcile-parity/result.json
+            out/reconcile-parity/swift.json
+            out/reconcile-names-parity/report.json
+            out/reconcile-names-parity/result.json
+            out/reconcile-names-parity/swift.json
+            out/preferences-parity/report.json
+            out/glossary-parity/report.json
+            out/personal-vocabulary-parity/report.json
+            out/korean-numbers-parity/report.json
+            out/text-passes-parity/report.json
+            out/segmenter-parity/report.json
+            out/capture-bridge-parity/report.json
+            out/capture-pipeline-parity/report.json
+            out/capture-pipeline-parity/rust.json
+            out/asset-manifest-parity/report.json
+            out/model-setup-parity/report.json
+            out/model-gate-parity/report.json
+            out/model-presentation-parity/report.json
+            out/word-merger-parity/report.json
+            out/transcript-store-parity/report.json
+            out/transcript-follow-parity/report.json
+            out/archive-parity/report.json
+            out/archive-writer-parity/report.json
+            out/workspace-parity/report.json
+            out/export-parity/report.json
+            out/desktop-package/report.json
+            out/desktop-package/Madi-UI-Parity.app.zip
+            target/debug/madi-desktop
+            target/debug/madi-desktop.exe
+            target/debug/madi-audio-decode
+            out/desktop-native/*.json
+          if-no-files-found: error
+          retention-days: 14

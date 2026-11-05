@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41709809414",
+  "head": "f829c2095b900bc0efef39eb25da84b5972c7a3b",
+  "conclusion": "success",
+  "records": [
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "f829c2095b900bc0efef39eb25da84b5972c7a3b",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "binary": "target/debug/madi-desktop",
+        "bytes": 34073088,
+        "sha256": "cf481769ef64a1a7d8d083dda1f0c2a9b926558ba6dc757b5028af2b37c0b554",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "package": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "bundleIdentifier": "tv.devart.madi.parity",
+        "minimumSystemVersion": "14.0",
+        "signature": "ad-hoc; deep strict verification passed",
+        "relocatedLookup": "passed",
+        "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+        "missingHelperFailsClosed": true,
+        "helperSHA256": "b8a5b37227a639793c1ef57990b62ded6e250c14a70f560ab036225f14dcda45",
+        "helperBytes": 145024,
+        "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+        "archiveSHA256": "db16b48a4152171cd6fb8258535d1107f09044f7a8d86b5dedecb7105d2c270e",
+        "productRelease": false,
+        "notarized": false,
+        "scope": "Headless relocated package/helper only; no UI, microphone, model admission, ASR bundle or updater validation"
+      }
+    },
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "f829c2095b900bc0efef39eb25da84b5972c7a3b",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "binary": "target\\debug\\madi-desktop.exe",
+        "bytes": 12892672,
+        "sha256": "af70accd7442a25befb0ae6d18b5965018af58ce47af9eb080fc858f125c3dac",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      }
+    }
+  ],
+  "downloadedBinariesVerified": true,
+  "downloadedAppArchiveAndBundledHelperVerified": true,
+  "limitations": [
+    "No full native UI parity or Tauri inference view validation",
+    "No ASR/LLM bundle, model admission or updater validation",
+    "Debug ad-hoc app; not a signed/notarized product release"
+  ]
+}

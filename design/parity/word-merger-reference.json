@@ -1,0 +1,14 @@
+{
+  "cases": 301,
+  "snapshots": 1974,
+  "fixtureWords": 1566,
+  "sources": {
+    "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+    "apps/macos/Sovereign/Transcript/WordMerger.swift": "7a8de21960f2c62b00798b4423ef472136399675811b079cd232672f901e961c",
+    "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+    "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+    "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+  },
+  "corpusSHA256": "c2e22d8ebd0b9bdc185ff09803ba643d4758a6aa5908df627e92ba2101a16b5c",
+  "resultSHA256": "f1600b4aff5fa0b11e7c17cb0053481f6ecc06c88cbcf6cdf82f4de91f0f7c36"
+}

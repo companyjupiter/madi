@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41702228682",
+  "head": "484bd235434c9820da81258169e8215d2f169c34",
+  "conclusion": "success",
+  "unitTests": {
+    "macOS": 34,
+    "Windows": 33
+  },
+  "records": [
+    {
+      "schemaVersion": 1,
+      "sourceHead": "484bd235434c9820da81258169e8215d2f169c34",
+      "sourceDirty": false,
+      "sourceStatus": [],
+      "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+      "binary": "target/debug/madi-desktop",
+      "bytes": 33622832,
+      "sha256": "635d3930c4285646f9f868880c7f8fb792b9d6fd026de4f91bd01c3571c74c6c",
+      "productRelease": false,
+      "nativeUIParity": "not-verified",
+      "recordingAndInference": "not-connected"
+    },
+    {
+      "schemaVersion": 1,
+      "sourceHead": "484bd235434c9820da81258169e8215d2f169c34",
+      "sourceDirty": false,
+      "sourceStatus": [],
+      "host": "Windows-2022Server-10.0.20348-SP0",
+      "binary": "target\\debug\\madi-desktop.exe",
+      "bytes": 12747264,
+      "sha256": "a43a779b119fa4529a1ef41629dd6b47d8d4a2817ab22e0a53e3a472fd3f3a38",
+      "productRelease": false,
+      "nativeUIParity": "not-verified",
+      "recordingAndInference": "not-connected"
+    }
+  ],
+  "downloadedBinariesVerified": true,
+  "limitations": [
+    "Process supervisor tested; complete session executor not connected",
+    "Precedes native file decoder bridge",
+    "Full native UI parity remains open"
+  ]
+}

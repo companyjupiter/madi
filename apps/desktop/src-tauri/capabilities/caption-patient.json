@@ -1,0 +1,6 @@
+{
+  "identifier": "caption-patient",
+  "description": "Local patient caption projection, measured content size and drag. No close, transcript edit, preference, model or filesystem commands.",
+  "windows": ["caption-patient"],
+  "permissions": ["allow-caption-snapshot", "allow-caption-resize", "core:event:allow-listen", "core:event:allow-unlisten", "core:window:allow-start-dragging"]
+}

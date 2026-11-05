@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "verifiedUTC": "2026-11-04T22:29:58.962018+00:00",
+  "status": "CI_AND_SELECTED_ARTIFACTS_VERIFIED",
+  "featureHead": "04bc473bf98968379a131496e71dc4e3951dbb10",
+  "prMergeHead": "c14b1fcb6718ab5911119a1803404709489ef03d",
+  "prMergeParents": [
+    "c1390c750f2506e556a277421e146d80195ab797",
+    "04bc473bf98968379a131496e71dc4e3951dbb10"
+  ],
+  "successfulRuns": [
+    41920656521,
+    41920663836
+  ],
+  "verifiedArtifactRun": 41920663836,
+  "artifacts": {
+    "windows": {
+      "artifactId": 13367143551,
+      "artifactSHA256": "88d8ab1cfff7e293c72493b1e57e5949db85f9d78cde21e6e15a57144c6c489d",
+      "sourceHead": "c14b1fcb6718ab5911119a1803404709489ef03d",
+      "sourceDirty": false,
+      "binary": "target/debug/madi-desktop.exe",
+      "binaryBytes": 19960832,
+      "binarySHA256": "884ad4e28a6d212b080385520a0291068ab0223240b7bcbf96a7fd9c55b5fa0f",
+      "rustTestCounts": [
+        29,
+        11,
+        102,
+        14
+      ],
+      "rustTestTotal": 156,
+      "review": {
+        "controllerCases": 800,
+        "transitions": 24000,
+        "navigationCases": 400,
+        "corpusSHA256": "7d7b341e1001ac36b442a3781073b5bed7727e15a7a4340f89a411957826b69c",
+        "resultSHA256": "c63a6636840c1cd6210a339801a0c09526f418a029d2c3cd20dbf7e43d13c1ff",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/ReviewController.swift": "0f729275f359a7c5e180adafe4dd592db7fe044d5dbcf9cc497f3b22faca1287",
+          "apps/macos/Sovereign/UI/TranscriptView.swift": "dd7a53f78e029120dbaae5e554bbd891d7a4d21182a8d40e282ccae60655c08f"
+        },
+        "status": "passed",
+        "nativeSwiftRun": false,
+        "scope": "Unchanged shipping ReviewController with Line/Word input scaffolding; original flaggedRefs, moveReview and applyReview bodies; original word-spacing predicate. No audio, SwiftUI geometry, focus or native interaction acceptance."
+      },
+      "nativeSwiftBytesSHA256": null,
+      "packageArchiveSHA256": null,
+      "jobLogSHA256": "f82dc4c13394ad34ec0d4ce0054701d025d0f5a043c18b565344bc2f12062b27"
+    },
+    "macos": {
+      "artifactId": 13367293649,
+      "artifactSHA256": "20d82f1e5359c052e981b74c7e12b354abbd8fe1e17c3011c6806eaf2fd1dfb9",
+      "sourceHead": "c14b1fcb6718ab5911119a1803404709489ef03d",
+      "sourceDirty": false,
+      "binary": "target/debug/madi-desktop",
+      "binaryBytes": 67180352,
+      "binarySHA256": "01d01ea2eb6edf65fa3e7ce7f132dc203b014b8d116fd19ce806e4033a85d771",
+      "rustTestCounts": [
+        29,
+        11,
+        129,
+        14
+      ],
+      "rustTestTotal": 183,
+      "review": {
+        "controllerCases": 800,
+        "transitions": 24000,
+        "navigationCases": 400,
+        "corpusSHA256": "7d7b341e1001ac36b442a3781073b5bed7727e15a7a4340f89a411957826b69c",
+        "resultSHA256": "c63a6636840c1cd6210a339801a0c09526f418a029d2c3cd20dbf7e43d13c1ff",
+        "sources": {
+          "apps/macos/Sovereign/Transcript/ReviewController.swift": "0f729275f359a7c5e180adafe4dd592db7fe044d5dbcf9cc497f3b22faca1287",
+          "apps/macos/Sovereign/UI/TranscriptView.swift": "dd7a53f78e029120dbaae5e554bbd891d7a4d21182a8d40e282ccae60655c08f"
+        },
+        "status": "passed",
+        "nativeSwiftRun": true,
+        "scope": "Unchanged shipping ReviewController with Line/Word input scaffolding; original flaggedRefs, moveReview and applyReview bodies; original word-spacing predicate. No audio, SwiftUI geometry, focus or native interaction acceptance."
+      },
+      "nativeSwiftBytesSHA256": "1be2559e7fce0a798a4c262aa0b7065f6dcdad5574e1bab795a2d39ca6b915a9",
+      "packageArchiveSHA256": "fcdb052da875cc9f664f05df86706b46747769901d610eca4f0852919c5fe504",
+      "jobLogSHA256": "ae4ded385763ea6af9340f489838c662fbb540f750f48ae00a5c908823c792e5"
+    }
+  },
+  "scope": "Both push/PR runs completed successfully on macOS 15 and Windows 2022. Downloaded PR merge artifacts verify clean checkout, executable byte hashes, review reference/source hashes, native Swift semantic output and macOS package archive hash. Not full UI/UX, actual audible playback, Windows native audio or GPU/model acceptance."
+}

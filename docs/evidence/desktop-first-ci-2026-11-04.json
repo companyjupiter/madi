@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41690075166",
+  "overallConclusion": "failure",
+  "windowsJobConclusion": "success",
+  "macOSJobConclusion": "failure",
+  "macOSFailure": "Foundation UTF-8 BOM behavior differs from the macOS 27.2 reference",
+  "downloadedBinaryVerified": true,
+  "windowsBuildReport": {
+    "schemaVersion": 1,
+    "sourceHead": "957a537cb6eb5bc8f40ff198d0990f40ee32327f",
+    "sourceDirty": true,
+    "host": "Windows-2022Server-10.0.20348-SP0",
+    "binary": "target\\debug\\madi-desktop.exe",
+    "bytes": 12485120,
+    "sha256": "d4dae5073aa87fab6b32d9c7d5620b30a91419a16a1c44aa305f6bedb42a87f0",
+    "productRelease": false,
+    "nativeUIParity": "not-verified",
+    "recordingAndInference": "not-connected"
+  },
+  "limitations": [
+    "Debug parity harness only",
+    "Native UI parity not verified",
+    "No recording or inference connected",
+    "Corrected parser CI pending"
+  ]
+}

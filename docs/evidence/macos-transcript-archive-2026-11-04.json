@@ -1,0 +1,884 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-11-03T23:07:20.424398+00:00",
+  "evidenceKind": "local archive-foundation candidate on 109f712; implementation changes uncommitted when tested",
+  "sourceHead": "109f712d5ea6b4ec77282ee3c601254aeff59c37",
+  "sourceDirty": true,
+  "sourceSHA256": {
+    ".github/workflows/desktop-parity.yml": "90625adb08593bfdaccd3e773750d23a288130c3263973f26e813c90db6f0473",
+    "Cargo.lock": "a8cfe65d69f8c55afdad82374eb9b53b8146ae98e60d9800b62d64f9fe214e15",
+    "apps/desktop/src/files.ts": "558d7e9b34abc40d5940fee64493fae364785979732096d8c1ebf7f7e7546cb0",
+    "crates/madi-core/Cargo.toml": "4272f21ab5a49640c65923a9c662089aae89b3007b3534a8e3e44daf21cf05b4",
+    "crates/madi-core/src/transcript/archive.rs": "dbef58b99040c78f6b455f87258aeca18a20083fa98fe5ecc80c9f7c8a882ed0",
+    "crates/madi-core/src/transcript/mod.rs": "97d6b735b958c411358f5032ae7fa8f83a100131a56287537934274ef0d91979",
+    "crates/madi-platform/examples/archive_oracle.rs": "62e2be7696d575bd3cfc9d8968372c7ac6c40c1ee1a21c4e0ea546116014938c",
+    "crates/madi-platform/examples/archive_writer_oracle.rs": "5f7cdc42d5ae67a2d31df34b8a3221bb0b1acf5b1e2088a20fc80e48fc976f48",
+    "crates/madi-platform/examples/file_workflow_smoke.rs": "2e5b7d47ab2439286319dfdcc3c7468ca772cb9781907f1a08f4c856b505d6da",
+    "crates/madi-platform/src/file_workflow.rs": "5eab06dea85f6fa86f4603964b1191b8a1c6d5bce0d39d4335de433e6f3a4305",
+    "crates/madi-platform/src/file_workflow/tests.rs": "7884e7debca9ac47340fa2a1d8c9cf5988c2627cca0c32f1c837ef26a4ff64e3",
+    "crates/madi-platform/src/lib.rs": "c97476fec793676dcc5c9d3b5f5d4c95d605a4c100c9c9202e2a8ccf224150ee",
+    "crates/madi-platform/src/session_archive.rs": "431db16d334b3207c9a38caeea697862dc64fc59d0fa7a834e01f9b0b518b481",
+    "scripts/check_archive_parity.py": "585c8616459af2cf2fbae3588d008dd0cc07d0bc37404a746fb83ed249759443",
+    "scripts/check_archive_writer_parity.py": "0299d7d761bd1728fe95a14c5abe6bb454bcdabaea3f9f59039b77755e30329d",
+    "tests/parity/ArchiveOracle.swift": "7d422572646cdbb84280f0827fe17374d1bf914d5a1485728b3b0e4c2ac120fb",
+    "tests/parity/ArchiveWriterOracle.swift": "9deb985b1f7a6a484084f6564e545e39b12a2fe77e10a3492e26bfe3999e1e78"
+  },
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "localChecks": {
+    "rustTests": 71,
+    "core": 11,
+    "platform": 46,
+    "protocol": 14,
+    "realChildWorkflowTests": 9,
+    "writerTests": 3,
+    "concurrentWriters": 12,
+    "productionCheckpointSeconds": 30,
+    "clippyAllTargets": "passed",
+    "formatting": "passed",
+    "typescriptVite": "passed",
+    "macOSDebugApp": "passed",
+    "directRuntimeNotices": 16
+  },
+  "archiveFormat": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 284,
+    "fixtureWords": 1566,
+    "swiftComparison": "live-unmodified-export-methods-and-archive-source",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68",
+      "apps/macos/Sovereign/Transcript/Exporters.swift": "4db520162040d8913b0680f5488943e311d875d41010544831cca0392d58e94d",
+      "apps/macos/Sovereign/Transcript/TranscriptArchive.swift": "2269fe85512b93689067c5b5db6dcbed58532daf5d6ed93b5356f04f2e10c298",
+      "apps/macos/Sovereign/Transcript/SpeakerID.swift": "62ee538944a5ea7ee8ba90fb5ffd6b772d0ed2075e2594afd8f8e4133f4a52b8",
+      "web/fixtures/devops_ko.events.jsonl": "09481863b8b974687615cb5885d8026c68db6ef95a90d1a2809e05faae80abdc",
+      "web/fixtures/devops_ko_biased.events.jsonl": "265ff3345475e6cb820c6d51f4cce846d3d457124c6706daac2abf455af20f5d",
+      "web/fixtures/jfk3.events.jsonl": "bee3f6dcf2860fd27c18dd5e232dfd34bf841800edbc7083eb5bf67a29469cbf"
+    },
+    "corpusSHA256": "f13b67077dc5bb353fdd68cc343c68bba385204207ef4c09508ba15dcc9914c8",
+    "resultSHA256": "f02c75aa96b59c86cb78b60ac1e6723e53ab44d6a9b10b05d5ef938b790e5197",
+    "scope": "Exact UTF-8 Markdown/plain export; reopened names, word times/confidence, translations and identity invariants. Fresh UUID values differ intentionally. Does not verify native UI, file writes, SRT/VTT/JSON export or invalid Swift-trapping numeric inputs."
+  },
+  "archiveWriter": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 48,
+    "snapshots": 825,
+    "swiftComparison": "live-unmodified-writer-source",
+    "sources": {
+      "apps/macos/Sovereign/Session/SessionArchiveWriter.swift": "4f87bc3a69241235fb7371931ee5bef664eb77d50428c324cc7399740d1f7161"
+    },
+    "corpusSHA256": "91f414ae928df0856a17b49f3771a5081514a981daa7562edb53b8b1f694d810",
+    "resultSHA256": "11ec8b889910ce34ec67b2fe70aad6b98a8738ef0e74fe347a9abe8e50bd6c94",
+    "scope": "Real temporary files: pointer/error presence, canonical names and contents after checkpoint, reset, rename, summary and I/O failure. Live macOS compares full file bytes exactly; portable reference additionally compares filename-derived summary headings canonically, with body bytes exact. Error wording, cross-volume moves, crash durability and native UI are not compared. Concurrent allocation is verified separately in Rust."
+  },
+  "nativeWorkflow": {
+    "cleanAtShutdown": true,
+    "modelSizeMtimeUnchanged": true,
+    "passed": true,
+    "schema": 2,
+    "sourcePreserved": true,
+    "sourceSha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "workflow": {
+      "archive": {
+        "bytes": 234,
+        "inlineEditDidNotAutosave": true,
+        "reopenDidNotClaimWritableTarget": true,
+        "reopened": {
+          "archive": {
+            "enabled": true,
+            "error": null,
+            "folder": "/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-archive-relocated-3epjq1ok/madi-archive-probe-c9x0OV",
+            "transcript": null
+          },
+          "chunksDone": 0,
+          "chunksTotal": 0,
+          "fileName": "jfk.md",
+          "generation": 2,
+          "lines": [
+            {
+              "editedText": null,
+              "editedTranslations": [],
+              "end": 0.0,
+              "id": "d0c0439c-8f54-4955-93a0-27d08f67518e",
+              "overlapSpeakers": [],
+              "sourceRevision": "13950391516942635375",
+              "speaker": 0,
+              "speakerMargin": 1.0,
+              "staleTranslations": {},
+              "start": 0.0,
+              "suppressedTranslations": [],
+              "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+              "translations": {},
+              "words": [
+                {
+                  "conf": 1.0,
+                  "id": "d0c0439c-8f54-4955-93a0-27d08f67518e",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "And"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "d41e456a-d963-4dab-8897-51619b6b2417",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "so,"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "5c6e05bb-bbe6-4c05-a82a-706008de9622",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "my"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "55190202-9d65-4c16-8e30-337b601de6e6",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "fellow"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "92f7da5a-2390-4820-a39b-a5c12820c505",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "Americans,"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "0f27a17a-81e2-45f6-a824-25994fa285bb",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "ask"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "fdffeb16-1cda-45da-beaa-e8c64972e7a0",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "not"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "2737f974-3388-4759-b256-5112726bb9fb",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "what"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "f657b838-152f-493f-9ba4-f7cb42ab4b05",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "your"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "1b89c778-5e6c-41bf-9f5d-f8de3b9166d4",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "country"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "0e6cdf55-5d00-4a99-b35c-0456e02ce482",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "can"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "cdb9597e-8b07-4a37-b715-102e02981b7e",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "do"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "170dcd89-8058-463b-8fe9-0b0940aab0a7",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "for"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "178c6b75-91d2-4cb6-a4cb-9c0c9b63d095",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "you,"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "2cef5a19-920e-4b03-82f8-309277941a39",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "ask"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "26d179ce-b663-42c4-995e-1cb84ff03ff4",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "what"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "a900edeb-e576-4b35-b608-c5ace0027072",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "you"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "e5b5e972-7fd6-4833-acd5-e4653cb830dc",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "can"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "ecdc0201-c38d-48ec-beff-d8898df104e1",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "do"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "256b1f3a-b6ed-4908-a086-798de3487baf",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "for"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "e8c15f1a-777a-4e21-a6e1-fb7d2d185b9f",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "your"
+                },
+                {
+                  "conf": 1.0,
+                  "id": "a7bb628e-f822-4cc2-9a5f-c041a021e5fb",
+                  "t0": 0.0,
+                  "t1": 0.0,
+                  "text": "country."
+                }
+              ]
+            }
+          ],
+          "partial": "",
+          "phase": {
+            "kind": "done"
+          },
+          "revision": 8,
+          "sizeLabel": "",
+          "speakerIslandAbsorption": false,
+          "speakerNames": {},
+          "speakerNumbers": {
+            "next": 2,
+            "numbers": {
+              "0": 1
+            }
+          }
+        },
+        "sha256": "59490bcaadf8cf1d119e8f7f7c1f251ff524aa6505dd8db2909c8df96aa1b63d",
+        "sourcePreserved": true
+      },
+      "cleanAtCompletion": true,
+      "completed": {
+        "archive": {
+          "enabled": true,
+          "error": null,
+          "folder": "/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-archive-relocated-3epjq1ok/madi-archive-probe-c9x0OV",
+          "transcript": "/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-archive-relocated-3epjq1ok/madi-archive-probe-c9x0OV/jfk.md"
+        },
+        "chunksDone": 1,
+        "chunksTotal": 1,
+        "fileName": "jfk.wav",
+        "generation": 1,
+        "lines": [
+          {
+            "editedText": null,
+            "editedTranslations": [],
+            "end": 10.35,
+            "id": "e5371e3e-e67d-4d76-a31d-755f68927861",
+            "overlapSpeakers": [],
+            "sourceRevision": "13950391516942635375",
+            "speaker": 0,
+            "speakerMargin": 1.0,
+            "staleTranslations": {},
+            "start": 0.33,
+            "suppressedTranslations": [],
+            "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+            "translations": {},
+            "words": [
+              {
+                "conf": 1.0,
+                "id": "e5371e3e-e67d-4d76-a31d-755f68927861",
+                "t0": 0.33,
+                "t1": 0.5,
+                "text": "And"
+              },
+              {
+                "conf": 0.6,
+                "id": "db96f415-e367-4cb2-81ba-82d052394d99",
+                "t0": 0.5,
+                "t1": 0.58,
+                "text": "so,"
+              },
+              {
+                "conf": 1.0,
+                "id": "3adf5613-c3bd-4c05-a9fa-74b4abd985be",
+                "t0": 0.69,
+                "t1": 1.2,
+                "text": "my"
+              },
+              {
+                "conf": 1.0,
+                "id": "93a26e26-295a-47e9-a6a1-00458c570e11",
+                "t0": 1.2,
+                "t1": 1.28,
+                "text": "fellow"
+              },
+              {
+                "conf": 0.86,
+                "id": "61b5fef4-d64b-407e-9829-fa8ff416740c",
+                "t0": 1.37,
+                "t1": 2.11,
+                "text": "Americans,"
+              },
+              {
+                "conf": 0.98,
+                "id": "43acc16f-251b-48d6-9de7-4f588464a299",
+                "t0": 3.29,
+                "t1": 3.66,
+                "text": "ask"
+              },
+              {
+                "conf": 0.98,
+                "id": "4bd66cad-e614-4ccb-b976-8192d8e53621",
+                "t0": 4.03,
+                "t1": 4.29,
+                "text": "not"
+              },
+              {
+                "conf": 0.99,
+                "id": "054c22c1-36bf-4145-9090-8372748f2a62",
+                "t0": 4.54,
+                "t1": 5.56,
+                "text": "what"
+              },
+              {
+                "conf": 0.99,
+                "id": "5b47ace4-4fc6-4765-85ff-01ebee95a23e",
+                "t0": 5.56,
+                "t1": 5.64,
+                "text": "your"
+              },
+              {
+                "conf": 1.0,
+                "id": "7f4e3fd2-6b7c-4342-9b34-5810d5238ae8",
+                "t0": 5.66,
+                "t1": 6.42,
+                "text": "country"
+              },
+              {
+                "conf": 1.0,
+                "id": "11374599-c9e4-45c6-863d-b120db19d19e",
+                "t0": 6.51,
+                "t1": 6.6,
+                "text": "can"
+              },
+              {
+                "conf": 1.0,
+                "id": "db71e2d9-d819-45c9-97a1-ab187f3a8134",
+                "t0": 6.6,
+                "t1": 6.68,
+                "text": "do"
+              },
+              {
+                "conf": 1.0,
+                "id": "bb965f7a-86bb-4205-b0cf-aa69b6dcdd8d",
+                "t0": 6.71,
+                "t1": 6.91,
+                "text": "for"
+              },
+              {
+                "conf": 0.64,
+                "id": "0041590f-12de-4368-b884-ca2a7cd46f15",
+                "t0": 7.01,
+                "t1": 7.52,
+                "text": "you,"
+              },
+              {
+                "conf": 1.0,
+                "id": "c52e7375-728d-4ac1-a763-671d55ef8f9f",
+                "t0": 8.2,
+                "t1": 8.48,
+                "text": "ask"
+              },
+              {
+                "conf": 1.0,
+                "id": "136806a6-ac6d-449b-9898-f2ee47f491e1",
+                "t0": 8.52,
+                "t1": 8.76,
+                "text": "what"
+              },
+              {
+                "conf": 1.0,
+                "id": "1e6fccfb-407a-4c85-9b9b-e4dae55a2ce1",
+                "t0": 8.76,
+                "t1": 8.84,
+                "text": "you"
+              },
+              {
+                "conf": 1.0,
+                "id": "a2a35679-3c40-4618-a0cc-9db9d8a286b5",
+                "t0": 8.92,
+                "t1": 9.33,
+                "text": "can"
+              },
+              {
+                "conf": 1.0,
+                "id": "9f705f23-5943-4ad6-85d3-73165da3e6fd",
+                "t0": 9.33,
+                "t1": 9.41,
+                "text": "do"
+              },
+              {
+                "conf": 1.0,
+                "id": "25f5bf8e-6996-4a98-aecf-aaf77d0e6b5a",
+                "t0": 9.45,
+                "t1": 9.76,
+                "text": "for"
+              },
+              {
+                "conf": 1.0,
+                "id": "8c388ca8-6074-4876-9223-595ea789ef5c",
+                "t0": 9.76,
+                "t1": 9.83,
+                "text": "your"
+              },
+              {
+                "conf": 0.95,
+                "id": "3d9cf59e-ff56-4683-b497-3ec11d4b50fe",
+                "t0": 9.83,
+                "t1": 10.35,
+                "text": "country."
+              }
+            ]
+          }
+        ],
+        "partial": "",
+        "phase": {
+          "kind": "done"
+        },
+        "revision": 6,
+        "sizeLabel": "343k",
+        "speakerIslandAbsorption": false,
+        "speakerNames": {},
+        "speakerNumbers": {
+          "next": 2,
+          "numbers": {
+            "0": 1
+          }
+        }
+      },
+      "edited": {
+        "archive": {
+          "enabled": true,
+          "error": null,
+          "folder": "/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-archive-relocated-3epjq1ok/madi-archive-probe-c9x0OV",
+          "transcript": "/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-archive-relocated-3epjq1ok/madi-archive-probe-c9x0OV/jfk.md"
+        },
+        "chunksDone": 1,
+        "chunksTotal": 1,
+        "fileName": "jfk.wav",
+        "generation": 1,
+        "lines": [
+          {
+            "editedText": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. [probe edit]",
+            "editedTranslations": [],
+            "end": 10.35,
+            "id": "e5371e3e-e67d-4d76-a31d-755f68927861",
+            "overlapSpeakers": [],
+            "sourceRevision": "17696157483020390743",
+            "speaker": 0,
+            "speakerMargin": 1.0,
+            "staleTranslations": {},
+            "start": 0.33,
+            "suppressedTranslations": [],
+            "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country. [probe edit]",
+            "translations": {},
+            "words": [
+              {
+                "conf": 1.0,
+                "id": "e5371e3e-e67d-4d76-a31d-755f68927861",
+                "t0": 0.33,
+                "t1": 0.5,
+                "text": "And"
+              },
+              {
+                "conf": 0.6,
+                "id": "db96f415-e367-4cb2-81ba-82d052394d99",
+                "t0": 0.5,
+                "t1": 0.58,
+                "text": "so,"
+              },
+              {
+                "conf": 1.0,
+                "id": "3adf5613-c3bd-4c05-a9fa-74b4abd985be",
+                "t0": 0.69,
+                "t1": 1.2,
+                "text": "my"
+              },
+              {
+                "conf": 1.0,
+                "id": "93a26e26-295a-47e9-a6a1-00458c570e11",
+                "t0": 1.2,
+                "t1": 1.28,
+                "text": "fellow"
+              },
+              {
+                "conf": 0.86,
+                "id": "61b5fef4-d64b-407e-9829-fa8ff416740c",
+                "t0": 1.37,
+                "t1": 2.11,
+                "text": "Americans,"
+              },
+              {
+                "conf": 0.98,
+                "id": "43acc16f-251b-48d6-9de7-4f588464a299",
+                "t0": 3.29,
+                "t1": 3.66,
+                "text": "ask"
+              },
+              {
+                "conf": 0.98,
+                "id": "4bd66cad-e614-4ccb-b976-8192d8e53621",
+                "t0": 4.03,
+                "t1": 4.29,
+                "text": "not"
+              },
+              {
+                "conf": 0.99,
+                "id": "054c22c1-36bf-4145-9090-8372748f2a62",
+                "t0": 4.54,
+                "t1": 5.56,
+                "text": "what"
+              },
+              {
+                "conf": 0.99,
+                "id": "5b47ace4-4fc6-4765-85ff-01ebee95a23e",
+                "t0": 5.56,
+                "t1": 5.64,
+                "text": "your"
+              },
+              {
+                "conf": 1.0,
+                "id": "7f4e3fd2-6b7c-4342-9b34-5810d5238ae8",
+                "t0": 5.66,
+                "t1": 6.42,
+                "text": "country"
+              },
+              {
+                "conf": 1.0,
+                "id": "11374599-c9e4-45c6-863d-b120db19d19e",
+                "t0": 6.51,
+                "t1": 6.6,
+                "text": "can"
+              },
+              {
+                "conf": 1.0,
+                "id": "db71e2d9-d819-45c9-97a1-ab187f3a8134",
+                "t0": 6.6,
+                "t1": 6.68,
+                "text": "do"
+              },
+              {
+                "conf": 1.0,
+                "id": "bb965f7a-86bb-4205-b0cf-aa69b6dcdd8d",
+                "t0": 6.71,
+                "t1": 6.91,
+                "text": "for"
+              },
+              {
+                "conf": 0.64,
+                "id": "0041590f-12de-4368-b884-ca2a7cd46f15",
+                "t0": 7.01,
+                "t1": 7.52,
+                "text": "you,"
+              },
+              {
+                "conf": 1.0,
+                "id": "c52e7375-728d-4ac1-a763-671d55ef8f9f",
+                "t0": 8.2,
+                "t1": 8.48,
+                "text": "ask"
+              },
+              {
+                "conf": 1.0,
+                "id": "136806a6-ac6d-449b-9898-f2ee47f491e1",
+                "t0": 8.52,
+                "t1": 8.76,
+                "text": "what"
+              },
+              {
+                "conf": 1.0,
+                "id": "1e6fccfb-407a-4c85-9b9b-e4dae55a2ce1",
+                "t0": 8.76,
+                "t1": 8.84,
+                "text": "you"
+              },
+              {
+                "conf": 1.0,
+                "id": "a2a35679-3c40-4618-a0cc-9db9d8a286b5",
+                "t0": 8.92,
+                "t1": 9.33,
+                "text": "can"
+              },
+              {
+                "conf": 1.0,
+                "id": "9f705f23-5943-4ad6-85d3-73165da3e6fd",
+                "t0": 9.33,
+                "t1": 9.41,
+                "text": "do"
+              },
+              {
+                "conf": 1.0,
+                "id": "25f5bf8e-6996-4a98-aecf-aaf77d0e6b5a",
+                "t0": 9.45,
+                "t1": 9.76,
+                "text": "for"
+              },
+              {
+                "conf": 1.0,
+                "id": "8c388ca8-6074-4876-9223-595ea789ef5c",
+                "t0": 9.76,
+                "t1": 9.83,
+                "text": "your"
+              },
+              {
+                "conf": 0.95,
+                "id": "3d9cf59e-ff56-4683-b497-3ec11d4b50fe",
+                "t0": 9.83,
+                "t1": 10.35,
+                "text": "country."
+              }
+            ]
+          }
+        ],
+        "partial": "",
+        "phase": {
+          "kind": "done"
+        },
+        "revision": 7,
+        "sizeLabel": "343k",
+        "speakerIslandAbsorption": false,
+        "speakerNames": {},
+        "speakerNumbers": {
+          "next": 2,
+          "numbers": {
+            "0": 1
+          }
+        }
+      },
+      "observations": [
+        {
+          "elapsed": 0.002070292,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 1,
+          "words": 0
+        },
+        {
+          "elapsed": 0.002084667,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 2,
+          "words": 0
+        },
+        {
+          "elapsed": 0.497894417,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 3,
+          "words": 0
+        },
+        {
+          "elapsed": 0.6053705,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 4,
+          "words": 0
+        },
+        {
+          "elapsed": 1.346386083,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 5,
+          "words": 0
+        },
+        {
+          "elapsed": 1.391427625,
+          "lines": 1,
+          "phase": {
+            "kind": "done"
+          },
+          "revision": 6,
+          "words": 22
+        }
+      ],
+      "reset": {
+        "archive": {
+          "enabled": true,
+          "error": null,
+          "folder": "/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-archive-relocated-3epjq1ok/madi-archive-probe-c9x0OV",
+          "transcript": null
+        },
+        "chunksDone": 0,
+        "chunksTotal": 0,
+        "fileName": "",
+        "generation": 3,
+        "lines": [],
+        "partial": "",
+        "phase": {
+          "kind": "idle"
+        },
+        "revision": 9,
+        "sizeLabel": "",
+        "speakerIslandAbsorption": false,
+        "speakerNames": {},
+        "speakerNumbers": {
+          "next": 1,
+          "numbers": {}
+        }
+      },
+      "staleEditIgnored": true
+    }
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957392,
+        "sha256": "9c01c257088261719a5121cad9afba8d3212e0f3a80b2712b29e41a0210d238c"
+      },
+      "translate-engine-2b": {
+        "bytes": 1575744,
+        "sha256": "34795c20da441bc7baf249f4a2ca12766e04016bad05fd7303b2da4356486de0"
+      },
+      "translate-engine-4b": {
+        "bytes": 1575600,
+        "sha256": "fc0c8687300de8dd51f7a67493a57090eb2a677a730395cbd0e95fe6c21e85eb"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "helperBytes": 150816,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "34c20b82afd46ff202419fc14a4774ece558c70386f83c032d86265bf0d4fb7e",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "integration": {
+    "workflowPersistence": "connected when native owner supplies ArchiveSettings",
+    "tauriHostPersistence": "disabled; workspace/preference boundary not yet connected",
+    "nativeWorkspaceAndArchiveUI": "not-connected",
+    "existingUserPreferenceReads": "not-run",
+    "existingUserArchiveMigration": "not-run",
+    "nativeUICaptureAndInteraction": "not-run"
+  },
+  "regressionFindings": [
+    "Combining asterisk/keycap must be treated as a grapheme, not stripped as an italic marker",
+    "Foundation filename representation differs from plain NFD; native URL construction and scoped autorelease pools are used",
+    "Model-admission failure has no active session; finalizing a reopened archive would erase imported lines. Admission now publishes error without rebuilding or saving",
+    "Render callbacks cannot publish terminal failure before finalization/archive work completes"
+  ],
+  "limitations": [
+    "No complete UI/UX parity claim; no native screen interaction or user-folder writes performed",
+    "Fresh UUID values differ; identity invariants compared",
+    "Writer error messages are not localized to Foundation wording",
+    "Windows source/runtime CI pending; Windows GPU hardware deferred",
+    "Cross-volume rename, network volumes, crash durability, long-session latency and hostile external file replacement not validated",
+    "Full workspace/settings migration, SRT/VTT/JSON export and AI product flows remain open",
+    "Separate Linux glib dependency-review failure remains unresolved",
+    "Experimental debug app, not notarized or released"
+  ]
+}

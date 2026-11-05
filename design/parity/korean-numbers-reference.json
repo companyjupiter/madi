@@ -1,0 +1,10 @@
+{
+  "cases": 5839,
+  "corpusSHA256": "ce2fa48d84f435026d7c54ba8bbe256b2dcbc9504a7f18724bd44d93e00a26bd",
+  "resultSHA256": "d263612e2e80b0cffc4da544b56a8d65cac399c304c113c252ed346f4be4ee9b",
+  "sources": {
+    "apps/macos/Sovereign/Transcript/KoreanNumberFormatter.swift": "e2f7237903343c929b5eda172f13cddd053abeb7fc4becfe33d19addf1cee57e",
+    "apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatterTests.swift": "c7f182a78c09412abe429e6a5b684cdef8c319d4ed542dad2e53f4891b49da46",
+    "apps/macos/Tests/SovereignCoreTests/KoreanNumberFormatterGuard5Tests.swift": "695e33a5ec5d25d2c644863cd632ea392a990511245da6a0116abae26d1481b2"
+  }
+}

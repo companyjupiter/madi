@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "verifiedUTC": "2026-11-04T23:47:21.477497+00:00",
+  "status": "CI_AND_SELECTED_ARTIFACTS_VERIFIED",
+  "featureHead": "44115b5d7c6554a72c107a474ceb357264dc35ab",
+  "prMergeHead": "d44afa90932dee9563f85a45d38aa579e8c3c919",
+  "prMergeParents": [
+    "c1390c750f2506e556a277421e146d80195ab797",
+    "44115b5d7c6554a72c107a474ceb357264dc35ab"
+  ],
+  "successfulRuns": [
+    41933939284,
+    41933948405
+  ],
+  "verifiedArtifactRun": 41933948405,
+  "artifacts": {
+    "windows": {
+      "artifactId": 13373567658,
+      "artifactSHA256": "ce1a46007fa2917b277807bdb1a9450844c141913b35f42780868c61f4e79847",
+      "sourceHead": "d44afa90932dee9563f85a45d38aa579e8c3c919",
+      "sourceDirty": false,
+      "binary": "target/debug/madi-desktop.exe",
+      "binaryBytes": 19976192,
+      "binarySHA256": "2dc4fbf2c46761e9f04067d408a33adb60fe1cf3963cbe6d5b649421b10a33c4",
+      "rustTestCounts": [
+        32,
+        11,
+        102,
+        14
+      ],
+      "rustTestTotal": 159,
+      "hangWatchdog": {
+        "cases": 600,
+        "transitions": 36000,
+        "corpusSHA256": "9feefba3ee419f36a63ea2d7103991462498c5aa421abfae425ffb0fec188d2b",
+        "resultSHA256": "8bd184b28fbde21c12b72e32711e83ce3df51b7a34f516eb501c8fc05a6421ac",
+        "sources": {
+          "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+        },
+        "status": "passed",
+        "nativeSwiftRun": false,
+        "scope": "Unchanged tickWatchdog and W1 segment-end bodies with injected Date clock; replacement result, feed collection and input reset scaffolding. Queue timestamps, retry flags, word counter, recovery count, namespace-break signal and ordered feeds compared. No process, live settings, scheduling, capture or UI acceptance."
+      },
+      "nativeSwiftBytesSHA256": null,
+      "packageArchiveSHA256": null,
+      "jobLogSHA256": "5fa65cafcff0512b7628f79e32977e0710622cf8145e6aa061201948f6277c30"
+    },
+    "macos": {
+      "artifactId": 13373374511,
+      "artifactSHA256": "3f67fd2651e583e489c0c93875142011ab48eff64a869dff95872dcbc4c4f282",
+      "sourceHead": "d44afa90932dee9563f85a45d38aa579e8c3c919",
+      "sourceDirty": false,
+      "binary": "target/debug/madi-desktop",
+      "binaryBytes": 67379824,
+      "binarySHA256": "acfb7350606c08e991edc37e608455cd546404b98890ecdbb533075fb871620a",
+      "rustTestCounts": [
+        32,
+        11,
+        138,
+        14
+      ],
+      "rustTestTotal": 195,
+      "hangWatchdog": {
+        "cases": 600,
+        "transitions": 36000,
+        "corpusSHA256": "9feefba3ee419f36a63ea2d7103991462498c5aa421abfae425ffb0fec188d2b",
+        "resultSHA256": "8bd184b28fbde21c12b72e32711e83ce3df51b7a34f516eb501c8fc05a6421ac",
+        "sources": {
+          "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+        },
+        "status": "passed",
+        "nativeSwiftRun": true,
+        "scope": "Unchanged tickWatchdog and W1 segment-end bodies with injected Date clock; replacement result, feed collection and input reset scaffolding. Queue timestamps, retry flags, word counter, recovery count, namespace-break signal and ordered feeds compared. No process, live settings, scheduling, capture or UI acceptance."
+      },
+      "nativeSwiftBytesSHA256": "a4dc260dda9d04a2b894d72689c757a1aea2b5943c03b106650b128a2c32f100",
+      "packageArchiveSHA256": "940c4191ab3180ce708e6af00f833a5f755d1811a537828870d4eeebce8e1110",
+      "jobLogSHA256": "3b73613b8e784297915b56e2df78ebdc2d8781cf560bc6a6a09db56879983581"
+    }
+  },
+  "scope": "Both push/PR runs completed successfully on macOS 15 and Windows 2022. Downloaded PR merge artifacts verify clean checkout, executable hashes, pinned hang-watchdog reference/source hashes, native Swift semantic equality and macOS package archive hash. Not full UI/UX, actual microphone hang recovery, audio playback or Windows native audio/GPU acceptance."
+}

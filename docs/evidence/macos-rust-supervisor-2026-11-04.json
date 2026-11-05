@@ -1,0 +1,42 @@
+{
+  "exitCode": 0,
+  "faults": [],
+  "flushBeforeExit": true,
+  "ownedScratchRemoved": true,
+  "schemaVersion": 1,
+  "scope": "Rust native ASR supervisor with real model and file input; desktop and session executor not connected",
+  "segments": [
+    "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+  ],
+  "status": "passed",
+  "structuredEvents": 26,
+  "wordEvents": 22,
+  "recordedDate": "2026-11-04",
+  "sourceSHA256": {
+    "crates/madi-platform/src/engine_process.rs": "c7192416a07372737097a2418356ba64e46c977978375df884999445c50bf2c7",
+    "crates/madi-platform/examples/engine_file_smoke.rs": "753eebf1d82c6eb227d9126d329ff64623290d6e5d529aded834dca762e9b738"
+  },
+  "fixture": {
+    "path": "out/macos-engine-smoke/jfk.wav",
+    "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  },
+  "engineBinarySHA256": "9ff4bf45da39451bf0460ae23ba0990284b236435321f1480b042c573eda3638",
+  "streamDifferential": {
+    "status": "pass",
+    "cases": 20,
+    "swiftComparison": "live-unmodified-EngineProcess",
+    "sources": {
+      "EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+      "EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+      "EngineEvents.swift": "075b00249483183ce5abee33650fd21a8f05b5683238f6365bc40fe772f05c1f",
+      "EnginePathPolicy.swift": "d441d6cfb62106a8c075365469b1f9f3cfaedc6b56d75e845d81eccbdc9038c8"
+    },
+    "corpusSha256": "35c3bef6b6dc71dca3d02fd165d9c28c9127445b76e0cef73d34e33704b2e96b",
+    "eventStreamSha256": "c6b041cd1d4c5b772beeed0ca85c2f9c232dd1c434fad19834d6d53caf96cb8b",
+    "scope": "Production process supervisor with real child pipes, JSONL barriers and owned-temp cleanup; fixture engine, no recording or inference"
+  },
+  "initialAttempt": {
+    "status": "failed",
+    "cause": "Probe incorrectly set STREAM=0; the engine treats variable presence as streaming mode and exited at stdin EOF without file output. Corrected probe explicitly removes STREAM. Engine source unchanged."
+  }
+}

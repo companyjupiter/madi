@@ -1,0 +1,34 @@
+{
+  "decodedInput": true,
+  "exitCode": 0,
+  "faults": [],
+  "flushBeforeExit": true,
+  "ownedScratchRemoved": true,
+  "preparedWavRemoved": true,
+  "schemaVersion": 1,
+  "scope": "Rust native ASR supervisor with real model and optional native decoding; desktop and session executor not connected",
+  "segments": [
+    "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+  ],
+  "status": "passed",
+  "structuredEvents": 26,
+  "wordEvents": 22,
+  "date": "2026-11-04",
+  "nativeRustTests": 5,
+  "swiftDecodeTests": "passed including default/explicit-directory PCM byte equality",
+  "originalFixtureSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "sources": {
+    "apps/macos/Sovereign/Audio/AudioDecode.swift": "6a10b7c9253788f99deb4e1f58b193f5bc37693e3bba785e95ce2c769445d636",
+    "crates/madi-platform/native/AudioDecodeMain.swift": "11b663ac7ae59aca05b388bedf3fa013a69729829019047e2cdb9eff82e3b516",
+    "crates/madi-platform/src/prepared_audio.rs": "ac56b2e9b3f21199dcfaaf59defb3c4046ea628da5f8b722a9f3cb30f960dc04"
+  },
+  "initialAttempt": {
+    "status": "failed",
+    "cause": "Foundation wrote outside TMPDIR-only scratch; Rust rejected ownership. Added explicit temporaryDirectory parameter with the original Swift default. Two checksum-matched synthetic temporary outputs were removed."
+  },
+  "limits": [
+    "Native helper is a local build artifact and is not yet bundled in Tauri",
+    "Full media-format corpus and Windows decoder remain open",
+    "No microphone capture or complete UI/session executor integration"
+  ]
+}

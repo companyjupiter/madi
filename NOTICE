@@ -1,6 +1,15 @@
 Madi — Apple Silicon (Metal)
 =========================================
 
+Experimental desktop migration: apps/desktop additionally uses React/React DOM
+(Meta Platforms, Inc. and affiliates, MIT) and Tauri (Tauri Programme within The
+Commons Conservancy, MIT OR Apache-2.0). Direct runtime license texts are in
+apps/desktop/licenses, including unicode-segmentation (The Rust Project
+Developers, MIT OR Apache-2.0) used by the Rust protocol compatibility layer.
+Serde and serde_json (MIT OR Apache-2.0) notices are retained there as well.
+The complete locked transitive dependency inventory and
+binary notice bundle remain a release gate; this debug harness is not a release.
+
 This product includes software and machine-learning model weights developed by
 third parties. Their copyright and license notices are reproduced below and the
 full license texts are in THIRD_PARTY_LICENSES.md. These notices must be retained
@@ -133,3 +142,9 @@ The standard Madi application bundle is therefore a mixed-license aggregate, not
 a wholly open-source artifact. Set MADI_BUNDLE_TRANSLATE_ENGINES=0 when building
 to omit those source-unavailable executables; the resulting bundle retains the
 AGPL application and transcription engine but not translation/summary/Q&A.
+
+The experimental macOS device adapter uses objc2 Core Audio/Core Audio Types/Core Foundation
+bindings (Zlib OR Apache-2.0 OR MIT); the upstream licensing statement is in apps/desktop/licenses.
+
+The experimental native process supervisor uses Tokio, tempfile and libc;
+their MIT notices are retained in apps/desktop/licenses.

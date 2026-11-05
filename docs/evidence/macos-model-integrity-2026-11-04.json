@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "reference": "design/parity/asset-manifest-reference.json",
+  "models": [
+    {
+      "name": "model.q8.safetensors",
+      "bytes": 867485320,
+      "sha256": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+      "fullRustIntegrityVerified": true
+    },
+    {
+      "name": "DNA3.0-4B.i1-Q4_K_M.gguf",
+      "bytes": 2783447424,
+      "sha256": "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8",
+      "fullRustIntegrityVerified": true
+    }
+  ],
+  "absentModels": [
+    "DNA3.0-2B.i1-Q4_K_M.gguf"
+  ],
+  "elapsedSeconds": 6.604,
+  "sizeModificationTimeAndIdentityUnchanged": true,
+  "downloads": false,
+  "productionWrites": false,
+  "sourceSHA256": {
+    "crates/madi-core/src/assets.rs": "bf5160f91a91dc5739ea2b6d1070bec6b6c98257eafe9ca128ffee364e70106e",
+    "crates/madi-platform/src/model_assets.rs": "6b642a164d8e29f405f95d08e875cdabe3413e6f775aae671c5c9dc949fe8b1b",
+    "crates/madi-platform/examples/asset_manifest_oracle.rs": "dce6accefa7dc0a1a134ea0e5cba1888199d3a7b2dd6418a0fcece27699e6c02"
+  },
+  "scope": "Read-only full SHA-256 verification of existing Application Support/Madi models; not a Tauri model gate or installer validation"
+}
