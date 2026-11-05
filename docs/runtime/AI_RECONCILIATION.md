@@ -1,12 +1,11 @@
 # AI reconciliation boundaries
 
-The original controller has three distinct steps: ask the shared DNA model for
-conservative speaker/language corrections; validate and apply its plan to the
-captured line IDs; optionally crop retained audio and force a language for that
-line's ASR. The first and third native boundaries, and the validation grammar,
-are now available in Rust. **The FileWorkflow controller and result/undo UI are
-not connected yet.** The existing AI setting does not establish an end-to-end
-feature in the experimental host.
+The shared FileWorkflow now connects the optional AI setting to conservative
+speaker/language plans, revision-checked forced-language ASR, the original result
+card and speaker-only undo. Both file and live sessions use the existing DNA
+broker. The shipping Swift app remains the behavior baseline. Calendar/voice
+identity side effects and final summary/title producers are still separate
+migration work; native screen/interaction acceptance remains unverified.
 
 ## Validated plan and shared DNA client
 
@@ -84,19 +83,88 @@ The public input SHA-256 is
 See `../evidence/macos-reconcile-boundaries-2026-11-05.json` for source pins and
 results. Local probe output is in `out/language-correction-runtime`.
 
-## Next controller integration
+## Connected controller
 
-Preserve the opt-in/model/four-line admission, the 120-second stable-prefix timer
-and caption-pressure gate, snapshot line identities and current acoustic margins.
-Do not overwrite a mid-session request with a final snapshot: defer final work
-until that cycle completes. Mid-session merges stay deferred. Apply explicit
-speaker-name conflict protection and reversible identity changes before replacing
-revision-matched line text. Retain ordered committed segments for audio selection;
-file sessions have no such audio and keep their text with the original note.
+Finalization first saves the uncorrected transcript for durability, then admits
+AI only when enabled, at least four lines exist and native DNA resources are
+available. Failed sessions do not launch correction. Recording on a Mac with at
+least 16 GiB arms the original 120-second timer. A mid pass needs four stable
+lines after excluding the last two, no committed ASR in flight and no caption
+queue/backlog. It may relabel uncertain lines but defers speaker merges to the
+final pass. An in-flight mid snapshot cannot be overwritten by finalization;
+the final request is admitted only when that cycle completes.
 
-Connect correcting/reconciling status, original result/undo presentation, archive
-checkpoints and deferred final summary/title. Reset, replacement and shutdown
-must cancel/join correction work before releasing audio or applying another
-session's replies. Calendar, voice enrollment, summary/rail clients and native
-UI acceptance remain separate unfinished dependencies. These boundaries alone
-do not enable or accept the complete AI workflow.
+Plans resolve captured UUIDs against current transcript lines and current
+acoustic margins. Unknown speaker 255 is excluded from model corrections. Two
+distinct explicit names prevent a merge; surviving names and transcript labels
+change together. Undo restores speaker overlays and saved names while preserving
+language/manual text edits. It uses the original note and undo labels, native
+12-point wand symbol, card padding and color tokens. Native visual comparison is
+still required.
+
+Committed live WAV leases remain ordered by session offset. Each language job
+selects the last retained segment beginning no later than line start + 0.05 s
+(or the first segment), and captures the line revision before queuing. Jobs run
+serially, crop with the existing padding, and apply nonempty output only to that
+same revision and generation. Accepted changes use the shared translation
+invalidation/retranslation path without learning AI text as personal vocabulary.
+Unavailable file-mode audio keeps the original text and the original diagnostic
+note. Progress drives the existing Correcting pipeline status. Final correction
+results checkpoint the owned archive. Reset/replacement/failure cancel and join
+owned ASR work; normal shutdown drains final AI and translation work before
+retiring the broker and audio.
+
+Native process/workflow tests cover immediate and final saves; opt-in/model/line
+admission; failure exclusion; acoustic and Unknown guards; name conflict and undo;
+stale replies; shutdown; mid/final ordering and ASR pressure; selecting two
+separate audio segments; manual edits during correction; stale translations;
+and reset during a real held child. These scripted engines prove controller
+ownership and ordering, not model quality or microphone/UI acceptance.
+
+The opt-in installed-engine workflow probe also passes with public JFK PCM:
+the packaged Metal ASR produces four lines, the shared DNA4B process returns
+`MERGE 1 2 / MERGE 3 4`, and current speaker validation rejects these nonexistent
+IDs. The immediate archive is present before AI admission and the final archive
+matches the current store. Source/model/engine hashes remain unchanged and reset
+releases all owned audio. This exercises real engine transport and finalization;
+it does not establish correction quality or an applied real-model language job.
+Use explicit resource paths to run it without opening an audio device:
+
+```sh
+MADI_PROBE_BIN=/absolute/app/Contents/MacOS \
+MADI_PROBE_ASSETS=/absolute/app/Contents/Resources/assets-small \
+MADI_PROBE_MODELS=/absolute/existing/model/folder \
+MADI_PROBE_SOURCE=/absolute/public-jfk.wav \
+MADI_PROBE_OUTPUT=/absolute/probe-output \
+cargo test --locked -p madi-platform \
+  file_workflow::reconciliation::tests::metal_probe::actual_metal_asr_and_dna_reconciliation_preserve_public_audio_and_final_archive \
+  -- --ignored --exact --nocapture
+```
+
+See `../evidence/macos-reconcile-workflow-2026-11-05.json` for the 210 default
+Rust checks, installed-engine result, five detected mutations, native/portable
+name comparison, app/package checks and Windows checkout fix.
+
+## Name comparison compatibility
+
+macOS uses the original Foundation `caseInsensitiveCompare`. The portable Rust
+comparison retains its conditional UTF-16 folding, canonical decomposition,
+combining-mark collection and 64-scalar buffer boundary. A single normalized
+case-fold key is insufficient: it changes Greek combining-mark and shared-high-
+surrogate cases. The oracle retains those counterexamples. A generated table
+pins 1,552 fold mappings and 2,237 grapheme-extend scalars from Foundation; native
+validation checks the host's unchanged comparison, and portable validation checks
+the captured baseline. Host Unicode version differences are reported separately.
+The CoreFoundation implementation used as algorithm reference is
+[CFString.c](https://github.com/swiftlang/swift-corelibs-foundation/blob/main/Sources/CoreFoundation/CFString.c).
+
+```sh
+cargo test --locked -p madi-platform file_workflow::reconciliation
+python3 scripts/check_reconcile_names_parity.py
+python3 scripts/check_reconcile_names_parity.py --rust-only
+```
+
+Calendar attendee matching, voice enrollment/auto-recognition, coach refresh,
+and deferred final summary/title execution must be connected at the same cycle
+boundary. They are not implemented by this slice. Exact native UI/UX and actual
+simultaneous ASR/DNA acceptance also remain open.

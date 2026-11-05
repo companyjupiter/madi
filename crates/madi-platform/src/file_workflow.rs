@@ -7,6 +7,7 @@ use crate::{
 mod driver;
 #[cfg(target_os = "macos")]
 mod live_preview;
+mod reconciliation;
 pub mod translation;
 use driver::{Driver, Kind as UpdateKind, RunId};
 use madi_core::{
@@ -77,6 +78,13 @@ pub struct Snapshot {
     pub live: Option<LiveSnapshot>,
     pub permission_issue: Option<crate::audio_permissions::Issue>,
     pub admission_pending: bool,
+    #[cfg(test)]
+    #[serde(skip)]
+    pub(crate) reconcile_replies: Vec<Option<String>>,
+    pub reconciling: bool,
+    pub reconcile_note: Option<String>,
+    pub has_speaker_corrections: bool,
+    pub language_corrections_pending: usize,
     pub translation_queue_depth: usize,
     pub translation_queued_lines: usize,
     pub translation_backlog: usize,
@@ -126,6 +134,12 @@ impl Default for Snapshot {
             live: None,
             permission_issue: None,
             admission_pending: false,
+            #[cfg(test)]
+            reconcile_replies: Vec::new(),
+            reconciling: false,
+            reconcile_note: None,
+            has_speaker_corrections: false,
+            language_corrections_pending: 0,
             translation_queue_depth: 0,
             translation_queued_lines: 0,
             translation_backlog: 0,
@@ -140,6 +154,7 @@ impl Default for Snapshot {
     rename_all_fields = "camelCase"
 )]
 pub enum Edit {
+    RevertReconcile,
     Line {
         id: String,
         text: String,
@@ -287,6 +302,7 @@ impl FileWorkflow {
                 preferences: None,
                 preference_updates: None,
                 translations,
+                reconciliation: Default::default(),
                 text_passes: TextPasses::default(),
                 run: None,
                 render: None,
@@ -540,6 +556,7 @@ struct Worker {
     preferences: Option<PreferencesService>,
     preference_updates: Option<watch::Receiver<crate::preferences_service::Snapshot>>,
     translations: translation::Translations,
+    reconciliation: reconciliation::Reconciliation,
     text_passes: TextPasses,
     run: Option<RunId>,
     render: Option<Instant>,
@@ -573,6 +590,7 @@ impl Worker {
         let result = self.run_loop().await;
         self.cancel_admission().await;
         // Keep the async owner alive until native children and owned WAVs exit.
+        self.stop_reconciliation().await;
         let cleanup = self.session.shutdown().await;
         self.stop_translation().await;
         self.translations.broker.shutdown();
@@ -612,9 +630,8 @@ impl Worker {
                 .and_then(|s| s.capture_ended_reason.clone()),
             coverage_gaps: self.coverage_gaps.clone(),
             hang_recoveries: self.hang_recoveries,
-            // Reconcile and forced-language correction remain
-            // separate migration work; never fabricate those producer signals.
-            ..Default::default()
+            reconciling: self.state.reconciling,
+            language_corrections_pending: self.state.language_corrections_pending,
         };
         let language = self
             .preferences
@@ -653,6 +670,7 @@ impl Worker {
             })
             .collect();
         self.state.speaker_numbers = self.store.speaker_numbers.clone();
+        self.state.has_speaker_corrections = self.store.has_speaker_corrections();
         self.state.revision = self.state.revision.wrapping_add(1);
         self.output.send_replace(self.state.clone());
         (self.changed)(self.state.clone());
@@ -666,6 +684,8 @@ impl Worker {
         }
     }
     async fn clear(&mut self) {
+        self.stop_reconciliation().await;
+        self.reconciliation = Default::default();
         self.stop_translation().await;
         self.translations.policy = Default::default();
         self.translations.interim.clear();
@@ -711,6 +731,10 @@ impl Worker {
         };
     }
     async fn finish(&mut self) {
+        self.reconciliation.timer = None;
+        if self.state.phase != ViewPhase::Done {
+            self.stop_reconciliation().await;
+        }
         #[cfg(target_os = "macos")]
         {
             self.live_preview = None;
@@ -733,6 +757,9 @@ impl Worker {
         self.translate_stable(true).await;
         self.translations.interim.clear();
         self.auto_save().await;
+        if self.state.phase == ViewPhase::Done {
+            self.kick_reconcile(false).await;
+        }
         self.publish();
     }
     async fn auto_save(&mut self) {
@@ -829,6 +856,8 @@ impl Worker {
         loop {
             let permission_pending = self.permission.is_some();
             let preference_pending = self.preference_updates.is_some();
+            let correction_pending = self.reconciliation.correction_active();
+            let reconciliation_deadline = self.reconciliation.timer;
             tokio::select! {
                 command=self.input.recv(),if !self.closing=>match command {
                     #[cfg(target_os="macos")]
@@ -908,7 +937,7 @@ impl Worker {
                             if self.state.phase.is_recording() && let Some(run)=self.run {self.session.control(run,LiveControl::Stop)?;}
                             self.closing=true; continue;
                         }
-                        if self.translations.finalized && self.translations.policy.depth > 0 {self.closing=true;continue;}
+                        if self.translations.finalized && self.post_work_pending() {self.closing=true;continue;}
                         return Ok(());
                     },
                 },
@@ -917,6 +946,11 @@ impl Worker {
                     if self.run!=Some(update.run) {continue;}
                     match update.kind {
                         UpdateKind::Output(Output::Stdout(event))=>self.ingest(event).await,
+                        UpdateKind::Output(Output::Structured(madi_protocol::structured::Event::Segment(segment)))=>{
+                            if segment.dropped || segment.fallback!="none" || segment.avg_logprob < -1.0 {
+                                self.reconciliation.risks.push((segment.t0,segment.t1));
+                            }
+                        },
                         UpdateKind::Phase(Phase::Processing)=>{self.state.phase=ViewPhase::Processing;self.publish();},
                         UpdateKind::Phase(phase)=>{
                             if let Phase::Error(failure)=phase {self.pending_failure=Some(failure_message(&failure,&self.state.file_name));}
@@ -924,11 +958,11 @@ impl Worker {
                                 self.state.phase=match phase {Phase::EngineStarting=>ViewPhase::EngineStarting,Phase::Ready=>ViewPhase::Ready,Phase::Recording=>ViewPhase::Recording,Phase::Paused=>ViewPhase::Paused,Phase::Flushing=>ViewPhase::Flushing,_=>self.state.phase.clone()};self.publish();
                             }
                         },
-                        UpdateKind::Finished=>{self.state.phase=ViewPhase::Done;self.finish().await;if self.closing && self.translations.policy.depth==0 {return Ok(());}},
+                        UpdateKind::Finished=>{self.state.phase=ViewPhase::Done;self.finish().await;if self.closing && !self.post_work_pending() {return Ok(());}},
                         UpdateKind::Failed=>{
                             if let Some(message)=self.pending_failure.take() {self.state.phase=ViewPhase::Error {message};}
                             self.finish().await;
-                            if self.closing && self.translations.policy.depth==0 {return Ok(());}
+                            if self.closing && !self.post_work_pending() {return Ok(());}
                         },
                         UpdateKind::Fault(message)=>{
                             self.state.phase=ViewPhase::Error {message:message.clone()};self.finish().await;
@@ -947,10 +981,18 @@ impl Worker {
                     self.pump_preview().await;
                 },
                 event=self.translations.broker.next()=>{
-                    if let Some(event)=event {self.translation_event(event).await;}
+                    if let Some(event)=event {
+                        self.translation_event(&event).await;
+                        self.reconciliation_event(&event).await;
+                    }
                     else {return Err(io::Error::other("translation broker closed"));}
-                    if self.closing && self.translations.finalized && self.translations.policy.depth==0 {return Ok(());}
+                    if self.closing && self.translations.finalized && !self.post_work_pending() {return Ok(());}
                 },
+                result=self.reconciliation.next_correction(),if correction_pending=>{
+                    self.correction_finished(result).await;
+                    if self.closing && self.translations.finalized && !self.post_work_pending() {return Ok(());}
+                },
+                _=deadline(reconciliation_deadline)=>self.reconciliation_tick().await,
                 _=deadline(self.translations.tail.map(|tail|tail.0))=>self.translation_tail().await,
                 _=deadline(self.translations.idle)=>self.translation_idle().await,
                 _=deadline(self.translations.preview_tick)=>{
@@ -1284,7 +1326,11 @@ impl Worker {
                     preview.scheduler.feed(wav, offset);
                 }
             }
+            Live::Segment { offset, wav, .. } => {
+                self.reconciliation.segments.push((offset, wav));
+            }
             Live::RecordingStarted => {
+                self.start_reconciliation_timer();
                 self.checkpoint = Some(Instant::now() + Duration::from_secs(30));
             }
             Live::RecordedSeconds(seconds) => {
@@ -1412,6 +1458,7 @@ impl Worker {
         let mut learn = None;
         let mut retranslate = None;
         match edit {
+            Edit::RevertReconcile => self.revert_reconcile(),
             Edit::Line { id, text } => {
                 let id = id.parse::<Uuid>().map_err(|_| invalid())?;
                 let before = self

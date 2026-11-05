@@ -6,6 +6,7 @@ apps/macos/Sovereign/Transcript/*.swift text eol=lf
 web/fixtures/*.events.jsonl text eol=lf
 apps/macos/Sovereign/SessionController.swift text eol=lf
 apps/macos/Sovereign/Session/SessionArchiveWriter.swift text eol=lf
+apps/macos/Sovereign/Session/SessionOneShotTranscriber.swift text eol=lf
 apps/macos/Sovereign/Model/AssetManifest.swift text eol=lf
 apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift text eol=lf
 apps/macos/Sovereign/UI/ModelGateView.swift text eol=lf
@@ -41,3 +42,5 @@ apps/macos/Sovereign/Session/SessionCoordinator.swift text eol=lf
 tests/parity/CapturePipelineOracle.swift text eol=lf
 # The FAQ oracle pins the copied starter pack's original bytes as well as values.
 crates/madi-core/src/translation/faq_starter.json text eol=lf
+# The portable speaker-name oracle pins this generated Unicode table's bytes.
+crates/madi-core/src/reconcile/name_fold.rs text eol=lf

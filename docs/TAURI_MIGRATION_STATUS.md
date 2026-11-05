@@ -24,25 +24,34 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   clippy pass locally. See
   `evidence/macos-coverage-publication-2026-11-05.json` for the red/green checks.
 
-- AI correction now has native request/validation and owned audio execution
-  components. Reconciliation uses the existing DNA broker's post-session lane,
-  preserving caption pressure, ordered multi-part replies and cancellation.
-  The grammar preserves directional merges, acoustic relabel gates and fixed
-  language constraints. Forced-language ASR owns a padded clip, a 45-second
-  deadline and joined process/audio cleanup. Three hundred sixty unchanged
-  Swift cases include crop bytes and output parsing; six native process tests
-  and five deliberate mutations pass. Local validation passes 201 Rust tests
-  (32 core, 144 platform, 14 protocol, 11 desktop; one opt-in hang probe ignored),
-  strict clippy, native/portable oracles, app build and relocated package checks.
-  Its initial macOS push CI failed in the W1 fixture race documented above;
-  the remaining CI checks were still running when that fix was prepared.
-  An installed Metal probe matches the
-  unchanged Swift one-shot result exactly on the same padded public JFK clip.
-  The source/model/engine remain unchanged. **FileWorkflow application of the
-  correction plan, revision gates, result/undo UI, identity services and
-  final-summary ordering are still unconnected.** This is a prerequisite slice,
-  not full AI workflow acceptance. See `runtime/AI_RECONCILIATION.md` and
-  `evidence/macos-reconcile-boundaries-2026-11-05.json`.
+- FileWorkflow now connects optional AI speaker/language correction for file
+  and live sessions, the original result/undo card, pipeline progress and
+  immediate/final archive checkpoints. Stable-prefix timing, caption/ASR
+  admission, snapshot UUIDs, current acoustic margins, Unknown exclusion,
+  explicit-name conflicts, deferred final requests and revision-checked serial
+  language jobs are implemented. Ordered WAV leases survive completion and are
+  joined on reset/cancellation. Nine native process/workflow checks pass; the
+  portable speaker-name comparison matches 13,993 unchanged Foundation cases.
+  Native names still use the installed Foundation API. The prior 360-case
+  grammar/audio comparison and six boundary process tests remain in the gate.
+  All 210 default Rust tests, strict clippy, formatting, five IPC checks,
+  28 native artwork comparisons, macOS app build and relocated package checks
+  pass locally. An explicit installed Metal ASR/DNA4B probe receives a real
+  response, rejects nonexistent speaker IDs, verifies immediate/final archive
+  content and cleans owned audio; source/model/engine hashes remain unchanged.
+  It does not establish applied model corrections or recognition quality.
+  Five deliberate mutations are detected. See
+  `evidence/macos-reconcile-workflow-2026-11-05.json`.
+  Calendar/voice identity, coach and final summary/title producers are still
+  unconnected; native screen/interaction and real model concurrency acceptance
+  remain open. See `runtime/AI_RECONCILIATION.md`.
+
+- At `2ee92a7`, both macOS push/PR jobs pass. Windows push/PR checks reach the
+  reconciliation oracle but fail its raw-source hash: SessionOneShotTranscriber
+  lacked an LF checkout rule. The downloaded Windows semantic result exactly
+  matches the pinned Swift result. A Windows-style checkout reproduces 77 CRLF
+  lines; the new attribute preserves the original LF bytes. The verifier now
+  retains expected/actual fields on failure. Fresh CI of this fix is pending.
 
 - An opt-in macOS test now compares normal public JFK transcription against an
   actual installed Metal ASR process suspended with SIGSTOP. The unaccelerated

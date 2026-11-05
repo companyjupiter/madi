@@ -105,3 +105,15 @@ impl ReconcileClient {
 
 #[cfg(test)]
 mod tests;
+
+/// Preserve Foundation case-insensitive identity conflicts on the native host.
+pub fn speaker_names_equal(a: &str, b: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_foundation::{NSComparisonResult, NSString};
+        NSString::from_str(a).caseInsensitiveCompare(&NSString::from_str(b))
+            == NSComparisonResult::Same
+    }
+    #[cfg(not(target_os = "macos"))]
+    reconcile::names_equal(a, b)
+}

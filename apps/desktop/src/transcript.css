@@ -131,3 +131,7 @@
 .transcript-gap i { width: 5px; height: 5px; border-radius: 50%; background: #f2994a; }
 .transcript-gap time { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .transcript-gap > span { font-size: 12px; color: var(--text-secondary); }
+
+.transcript-reconcile-bar { display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding: 7px 16px; margin: 5px 20px 0; border-radius: 14px; background: var(--surface-sunken); color: var(--text-primary); font-size: 12px; line-height: normal; }
+.transcript-reconcile-bar .reconcile-wand { color: var(--text-secondary); }
+.transcript-reconcile-bar button { flex-shrink: 0; color: var(--text-primary); font-size: 12px; font-weight: 500; text-decoration: underline; text-decoration-color: var(--text-tertiary); }

@@ -68,6 +68,7 @@ on:
       - 'apps/macos/Sovereign/Model/TranslateModelDownloader.swift'
       - 'web/fixtures/*.events.jsonl'
       - 'design/parity/*reference.json'
+      - 'design/parity/reconcile-name-candidates.json'
       - '.github/workflows/desktop-parity.yml'
   workflow_dispatch:
 
@@ -159,6 +160,7 @@ jobs:
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_coverage_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_hang_watchdog_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_names_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -201,6 +203,7 @@ jobs:
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_coverage_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_hang_watchdog_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_names_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -274,6 +277,9 @@ jobs:
             out/reconcile-parity/report.json
             out/reconcile-parity/result.json
             out/reconcile-parity/swift.json
+            out/reconcile-names-parity/report.json
+            out/reconcile-names-parity/result.json
+            out/reconcile-names-parity/swift.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json

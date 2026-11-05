@@ -1,6 +1,13 @@
 //! Conservative TranscriptReconciler grammar and SummaryEngine batch policy.
 pub mod audio;
 use crate::transcript::{lowercase, trim_whitespace_and_newlines, whitespace};
+mod name_fold;
+
+mod identity;
+/// Portable equality for the pinned Foundation speaker-name comparison.
+pub fn names_equal(a: &str, b: &str) -> bool {
+    identity::equal(a, b)
+}
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use unicode_normalization::UnicodeNormalization;

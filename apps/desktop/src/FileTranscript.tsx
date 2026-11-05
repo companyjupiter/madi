@@ -118,6 +118,11 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
         </div>
       </div>
       {captions.failed && <div className="transcript-error" role="alert">{l('자막 창을 열 수 없습니다.', 'The caption window could not open.', '字幕ウィンドウを開けませんでした。')}</div>}
+      {state.reconcileNote !== null && <div className="transcript-reconcile-bar">
+        <NativeSymbol artwork={artwork} name="reconcileWand" className="reconcile-wand" />
+        <span>{state.reconcileNote}</span><span className="review-spacer" />
+        {state.hasSpeakerCorrections && <button onClick={() => edit({ type: 'revertReconcile' })}>{l('화자 교정 되돌리기', 'Undo speaker correction')}</button>}
+      </div>}
       {reviewVisible && <div className="transcript-review-bar">
         <NativeSymbol artwork={artwork} name="reviewWarning" className="review-warning" />
         <span className="review-count">{l(`검토 필요 ${state.reviewWords.length}개`, `${state.reviewWords.length} to review`, `要確認 ${state.reviewWords.length}件`)}</span>

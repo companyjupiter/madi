@@ -66,6 +66,10 @@ pub fn artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
 pub fn transcript_artwork() -> Result<BTreeMap<String, SymbolImage>, &'static str> {
     Ok(BTreeMap::from([
         (
+            "reconcileWand".into(),
+            render_symbol("wand.and.stars", 12.0, unsafe { NSFontWeightRegular })?,
+        ),
+        (
             "reviewWarning".into(),
             render_symbol("exclamationmark.triangle.fill", 12.0, unsafe {
                 NSFontWeightRegular

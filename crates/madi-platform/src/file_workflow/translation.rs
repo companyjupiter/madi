@@ -67,6 +67,9 @@ pub(super) struct Translations {
     pub last_preview_admit: Option<Instant>,
 }
 impl Translations {
+    pub(super) fn reconcile_launch(&self) -> Option<Launch> {
+        self.resources.as_ref().and_then(Resources::launch)
+    }
     pub fn new(resources: Option<Resources>) -> io::Result<Self> {
         let faq = resources
             .as_ref()
@@ -356,12 +359,12 @@ impl Worker {
         );
         self.submit_translations(jobs).await;
     }
-    pub(super) async fn translation_event(&mut self, event: DnaEvent) {
-        if let DnaEvent::CaptionBusy(busy) = &event {
+    pub(super) async fn translation_event(&mut self, event: &DnaEvent) {
+        if let DnaEvent::CaptionBusy(busy) = event {
             self.translations.dna_busy = *busy;
         }
         if let Some(client) = &mut self.translations.client {
-            let update = client.handle(&self.translations.broker, &event).await;
+            let update = client.handle(&self.translations.broker, event).await;
             self.translation_update(update);
             // Keep the immediate ASR durability save, then checkpoint the final
             // translations too. Only this session's owned archive is written.

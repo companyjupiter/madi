@@ -89,7 +89,11 @@ def main():
   for i,(want,got) in enumerate(zip(expected,actual,strict=True)):assert want==got,(i,data[i],want,got)
  report=dict(cases=len(data),corpusSHA256=hashlib.sha256(payload).hexdigest(),resultSHA256=hashlib.sha256(encoded(actual)).hexdigest(),sources={s.relative_to(ROOT).as_posix():hashlib.sha256(s.read_bytes()).hexdigest() for s in SOURCES})
  if a.write_reference:REFERENCE.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
- else:assert report==json.loads(REFERENCE.read_text(encoding='utf-8')),'Reconcile reference changed'
+ else:
+  expected_report=json.loads(REFERENCE.read_text(encoding='utf-8'))
+  if report!=expected_report:
+   (OUT/'report.json').write_text(json.dumps(dict(report,status='failed',expected=expected_report),indent=2)+'\n',encoding='utf-8')
+   raise AssertionError({k:{'expected':expected_report.get(k),'actual':v} for k,v in report.items() if v!=expected_report.get(k)})
  report.update(status='passed',nativeSwiftRun=not a.rust_only,scope='Unchanged TranscriptReconciler and SummaryEngine reconcile-part completion body. Prompt characters, grammar validation, language gates, ordered replies, canonical PCM cropping and one-shot output parsing; no model, native correction ownership, transcript mutation or UI acceptance.')
  (OUT/'report.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8');print(json.dumps(report,indent=2))
 if __name__=='__main__':main()
