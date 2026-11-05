@@ -22,6 +22,7 @@ on:
       - 'apps/macos/Sovereign/Engine/DNATurnBudget.swift'
       - 'apps/macos/Sovereign/Engine/TranslationTurnQueue.swift'
       - 'apps/macos/Sovereign/Engine/TranslateEngine.swift'
+      - 'apps/macos/Sovereign/Engine/SummaryEngine.swift'
       - 'apps/macos/Sovereign/Engine/EngineProtocol.swift'
       - 'apps/macos/Sovereign/Engine/PreviewEngine.swift'
       - 'apps/macos/Sovereign/Engine/TranslationStability.swift'
@@ -56,6 +57,7 @@ on:
       - 'apps/macos/Sovereign/Audio/AudioSource.swift'
       - 'apps/macos/Sovereign/SessionController.swift'
       - 'apps/macos/Sovereign/Session/SessionArchiveWriter.swift'
+      - 'apps/macos/Sovereign/Session/SessionOneShotTranscriber.swift'
       - 'apps/macos/Sovereign/Model/AssetManifest.swift'
       - 'apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift'
       - 'apps/macos/Sovereign/UI/ModelGateView.swift'
@@ -156,6 +158,7 @@ jobs:
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_pipeline_status_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_coverage_parity.py
           python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_hang_watchdog_parity.py
+          python3 -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_parity.py
           python3 scripts/check_preferences_parity.py
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
@@ -197,6 +200,7 @@ jobs:
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_pipeline_status_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_coverage_parity.py --rust-only
           python -X warn_default_encoding -W error::EncodingWarning scripts/check_hang_watchdog_parity.py --rust-only
+          python -X warn_default_encoding -W error::EncodingWarning scripts/check_reconcile_parity.py --rust-only
           python scripts/check_preferences_parity.py --rust-only
           python scripts/check_glossary_parity.py --rust-only
           python scripts/check_personal_vocabulary_parity.py --rust-only
@@ -267,6 +271,9 @@ jobs:
             out/hang-watchdog-parity/report.json
             out/hang-watchdog-parity/result.json
             out/hang-watchdog-parity/swift.json
+            out/reconcile-parity/report.json
+            out/reconcile-parity/result.json
+            out/reconcile-parity/swift.json
             out/preferences-parity/report.json
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json

@@ -1,0 +1,11 @@
+{
+  "cases": 360,
+  "corpusSHA256": "a28a09f5d48d69de46d6bfd8038e86a3d81fc2067150c765be24cab112a8cf4f",
+  "resultSHA256": "21393db61c32589761f0933e1fd33f78015f5c6a03ef9a4a871b25944ad0d310",
+  "sources": {
+    "apps/macos/Sovereign/Transcript/TranscriptReconciler.swift": "08674cfb8749f6ab0eaed23b5a65aadb28ebf50a89bbaeba4255216e95669c01",
+    "apps/macos/Sovereign/Engine/SummaryEngine.swift": "ba5c23d24df4b8b9d7313bfb5d9feddc24cf1d660b7e16a4557e770013859df7",
+    "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+    "apps/macos/Sovereign/Session/SessionOneShotTranscriber.swift": "ca1f439c32eeadbe94ec7ea23f103cb4e7d25254cbc2210764d3d1e2a30f1022"
+  }
+}

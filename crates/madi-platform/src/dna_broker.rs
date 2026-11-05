@@ -163,12 +163,25 @@ pub enum Event {
     },
 }
 
-struct Attachment {
-    client: ClientId,
-    generation: u64,
+pub(crate) struct ClientLease {
+    pub(crate) client: ClientId,
+    pub(crate) generation: u64,
     cleanup: Option<mpsc::UnboundedSender<Control>>,
 }
-impl Drop for Attachment {
+impl ClientLease {
+    pub(crate) async fn detach(&mut self) -> io::Result<()> {
+        if let Some(commands) = &self.cleanup {
+            let (tx, rx) = oneshot::channel();
+            commands
+                .send(Control::Detach(self.client, tx))
+                .map_err(io::Error::other)?;
+            rx.await.map_err(io::Error::other)?;
+            self.cleanup = None;
+        }
+        Ok(())
+    }
+}
+impl Drop for ClientLease {
     fn drop(&mut self) {
         if let Some(commands) = self.cleanup.take() {
             let (tx, _) = oneshot::channel();
@@ -179,7 +192,7 @@ impl Drop for Attachment {
 struct AttachRequest {
     launch: Launch,
     cleanup: mpsc::UnboundedSender<Control>,
-    reply: oneshot::Sender<io::Result<Attachment>>,
+    reply: oneshot::Sender<io::Result<ClientLease>>,
 }
 enum Control {
     Attach(AttachRequest),
@@ -230,7 +243,7 @@ impl DnaBroker {
             a.client
         })
     }
-    async fn attach_owned(&self, launch: Launch) -> io::Result<Attachment> {
+    pub(crate) async fn attach_owned(&self, launch: Launch) -> io::Result<ClientLease> {
         let (tx, rx) = oneshot::channel();
         self.send(Control::Attach(AttachRequest {
             launch,
@@ -607,7 +620,7 @@ impl Owner {
                 // A cancelled attach must not leave an invisible resident client.
                 let generation = self.process.as_ref().expect("attached process").generation;
                 if reply
-                    .send(Ok(Attachment {
+                    .send(Ok(ClientLease {
                         client,
                         generation,
                         cleanup: Some(cleanup),

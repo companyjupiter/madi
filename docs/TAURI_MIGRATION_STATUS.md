@@ -15,6 +15,24 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- AI correction now has native request/validation and owned audio execution
+  components. Reconciliation uses the existing DNA broker's post-session lane,
+  preserving caption pressure, ordered multi-part replies and cancellation.
+  The grammar preserves directional merges, acoustic relabel gates and fixed
+  language constraints. Forced-language ASR owns a padded clip, a 45-second
+  deadline and joined process/audio cleanup. Three hundred sixty unchanged
+  Swift cases include crop bytes and output parsing; six native process tests
+  and five deliberate mutations pass. Local validation passes 201 Rust tests
+  (32 core, 144 platform, 14 protocol, 11 desktop; one opt-in hang probe ignored),
+  strict clippy, native/portable oracles, app build and relocated package checks.
+  This slice CI is pending. An installed Metal probe matches the
+  unchanged Swift one-shot result exactly on the same padded public JFK clip.
+  The source/model/engine remain unchanged. **FileWorkflow application of the
+  correction plan, revision gates, result/undo UI, identity services and
+  final-summary ordering are still unconnected.** This is a prerequisite slice,
+  not full AI workflow acceptance. See `runtime/AI_RECONCILIATION.md` and
+  `evidence/macos-reconcile-boundaries-2026-11-05.json`.
+
 - An opt-in macOS test now compares normal public JFK transcription against an
   actual installed Metal ASR process suspended with SIGSTOP. The unaccelerated
   watchdog replaces it after 49.828 seconds. All 24 words in four lines, word

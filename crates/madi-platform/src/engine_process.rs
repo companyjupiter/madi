@@ -202,7 +202,7 @@ fn exit_code(status: ExitStatus) -> i32 {
     status.code().unwrap_or(-1)
 }
 
-fn request_termination(child: &mut Child) -> io::Result<()> {
+pub(crate) fn request_termination(child: &mut Child) -> io::Result<()> {
     #[cfg(unix)]
     if let Some(id) = child.id() {
         // SAFETY: the supervisor owns this unreaped child and is the only code

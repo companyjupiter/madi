@@ -9,6 +9,7 @@ pub mod model_setup;
 pub mod personal_vocabulary;
 pub mod preferences;
 pub mod preview;
+pub mod reconcile;
 pub mod review;
 pub mod session;
 pub mod settings;

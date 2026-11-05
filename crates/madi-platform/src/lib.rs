@@ -10,6 +10,7 @@ pub mod engine_process;
 pub mod file_session;
 pub mod file_workflow;
 pub mod glossary_service;
+pub mod language_correction;
 #[cfg(target_os = "macos")]
 pub mod line_playback;
 #[cfg(target_os = "macos")]
@@ -23,6 +24,7 @@ pub mod model_setup_service;
 pub mod preferences;
 pub mod preferences_service;
 pub mod prepared_audio;
+pub mod reconcile_client;
 #[cfg(target_os = "macos")]
 pub mod runtime_bundle;
 pub mod session_archive;

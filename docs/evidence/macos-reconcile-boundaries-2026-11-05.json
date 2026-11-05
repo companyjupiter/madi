@@ -1,0 +1,306 @@
+{
+  "schemaVersion": 1,
+  "verifiedUTC": "2026-11-05T00:30:16.984114+00:00",
+  "status": "AI_CORRECTION_COMPONENTS_AND_PACKAGE_PASS_WORKFLOW_UI_NOT_CONNECTED",
+  "baselineHead": "565c5a06051eeee22b72fadabcab1a379072f8ae",
+  "sourceDirtyAtValidation": true,
+  "sourceSHA256": {
+    ".github/workflows/desktop-parity.yml": "3ab77affbe3610be2d4e96f66587da711857c10265c8b94957fe4988f33b86b7",
+    "crates/madi-core/src/lib.rs": "d595db24104da06570bf4778b07a172859632630e322204834c2bcf6f77f201d",
+    "crates/madi-core/src/reconcile.rs": "4e7922383a76a673a9eb3fa845be79c1b1f22448f18fc95f3691e262cd11869e",
+    "crates/madi-core/src/reconcile/audio.rs": "ace9e1cdb32999361d4b2c7e801856e2e29df2ecbaeb3cb75434563beaa75fef",
+    "crates/madi-core/examples/reconcile_oracle.rs": "1559e814da20dabb1062b4751bee636a4c46196e1b7a81cda91ab91540df0628",
+    "crates/madi-platform/src/lib.rs": "42c74f7e511a22410fca79e972be60cf9ed047845243bbd5f2fa2e731cc835b8",
+    "crates/madi-platform/src/dna_broker.rs": "85de94d5bdf65cc36ad5826807fdc1ac900d6c12117f87b2ac823cf174f1bdc4",
+    "crates/madi-platform/src/engine_process.rs": "aadf51452293e0489cbf75ba2a47cdb51016f576bf8437abf1b9e25722fe7a45",
+    "crates/madi-platform/src/reconcile_client.rs": "c50381a0ab9aec38ca8445c5fbee03a30fe21d6f5759a04d9a30461351acf417",
+    "crates/madi-platform/src/reconcile_client/tests.rs": "83fa5c3ba2d5d0d6e0bdeec1ea512b7bf35ff833c64d1525f32818a063107873",
+    "crates/madi-platform/src/language_correction.rs": "021a9e73772e2ae41d68b446c24c7add6df9337d314851af07c62c483bdfe30b",
+    "crates/madi-platform/src/language_correction/tests.rs": "09d7e5b0a66d8c7d793ab16f0f5fb2bed42e128fad5cdd595b6e92dee8627000",
+    "crates/madi-platform/examples/language_correction_smoke.rs": "b3a6c8d572086b7bd842ae774b2fbe9beaeb488eb8298fe5d04102c07ab18a83",
+    "scripts/check_reconcile_parity.py": "7984d68d18872e7819ea5f6c94641341eaa7c14b6cbf5b8e011d5a8cf80fcef4",
+    "design/parity/reconcile-reference.json": "dbd39eadbe2dc80f261880d3d378d4bc392cf4c7e89e060b87e6e3a6c628b2a2",
+    "tests/parity/LanguageCorrectionProbe.swift": "9715b6894898a351450cf3c54f11eab70e91b0131b6fb0aa442479765610e2a0"
+  },
+  "originalSourceSHA256": {
+    "apps/macos/Sovereign/Transcript/TranscriptReconciler.swift": "08674cfb8749f6ab0eaed23b5a65aadb28ebf50a89bbaeba4255216e95669c01",
+    "apps/macos/Sovereign/Engine/SummaryEngine.swift": "ba5c23d24df4b8b9d7313bfb5d9feddc24cf1d660b7e16a4557e770013859df7",
+    "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+    "apps/macos/Sovereign/Session/SessionOneShotTranscriber.swift": "ca1f439c32eeadbe94ec7ea23f103cb4e7d25254cbc2210764d3d1e2a30f1022"
+  },
+  "environment": {
+    "os": "macOS 27.2",
+    "architecture": "arm64",
+    "screen": "Computer Use confirmed locked; no UI interaction"
+  },
+  "validation": {
+    "rustTestCounts": [
+      32,
+      11,
+      144,
+      14
+    ],
+    "rustTestTotal": 201,
+    "ignoredInstalledMetalHangProbes": 1,
+    "reconcileProcessTests": 3,
+    "correctionProcessTests": 3,
+    "forcedInheritedEnvironment": "Targeted correction tests and STREAM mutation executed with parent STREAM=1 and APP_FILE=1",
+    "rustFmt": "PASS",
+    "strictClippy": "PASS --locked --workspace --all-targets -- -D warnings",
+    "nativeOracle": {
+      "cases": 360,
+      "corpusSHA256": "a28a09f5d48d69de46d6bfd8038e86a3d81fc2067150c765be24cab112a8cf4f",
+      "resultSHA256": "21393db61c32589761f0933e1fd33f78015f5c6a03ef9a4a871b25944ad0d310",
+      "sources": {
+        "apps/macos/Sovereign/Transcript/TranscriptReconciler.swift": "08674cfb8749f6ab0eaed23b5a65aadb28ebf50a89bbaeba4255216e95669c01",
+        "apps/macos/Sovereign/Engine/SummaryEngine.swift": "ba5c23d24df4b8b9d7313bfb5d9feddc24cf1d660b7e16a4557e770013859df7",
+        "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+        "apps/macos/Sovereign/Session/SessionOneShotTranscriber.swift": "ca1f439c32eeadbe94ec7ea23f103cb4e7d25254cbc2210764d3d1e2a30f1022"
+      },
+      "status": "passed",
+      "nativeSwiftRun": true,
+      "scope": "Unchanged TranscriptReconciler and SummaryEngine reconcile-part completion body. Prompt characters, grammar validation, language gates, ordered replies, canonical PCM cropping and one-shot output parsing; no model, native correction ownership, transcript mutation or UI acceptance."
+    },
+    "portableOracle": {
+      "cases": 360,
+      "corpusSHA256": "a28a09f5d48d69de46d6bfd8038e86a3d81fc2067150c765be24cab112a8cf4f",
+      "resultSHA256": "21393db61c32589761f0933e1fd33f78015f5c6a03ef9a4a871b25944ad0d310",
+      "sources": {
+        "apps/macos/Sovereign/Transcript/TranscriptReconciler.swift": "08674cfb8749f6ab0eaed23b5a65aadb28ebf50a89bbaeba4255216e95669c01",
+        "apps/macos/Sovereign/Engine/SummaryEngine.swift": "ba5c23d24df4b8b9d7313bfb5d9feddc24cf1d660b7e16a4557e770013859df7",
+        "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+        "apps/macos/Sovereign/Session/SessionOneShotTranscriber.swift": "ca1f439c32eeadbe94ec7ea23f103cb4e7d25254cbc2210764d3d1e2a30f1022"
+      },
+      "status": "passed",
+      "nativeSwiftRun": false,
+      "scope": "Unchanged TranscriptReconciler and SummaryEngine reconcile-part completion body. Prompt characters, grammar validation, language gates, ordered replies, canonical PCM cropping and one-shot output parsing; no model, native correction ownership, transcript mutation or UI acceptance."
+    },
+    "installedAsrComparison": {
+      "verifiedUTC": "2026-11-05T00:30:06.337052+00:00",
+      "status": "PASS",
+      "rust": {
+        "devicesOpened": false,
+        "end": 5.0,
+        "engineSHA256": "a6448c3cd2bf6d5f8bd911200fbcf21850e39f3ed1b7411378ce50a057dddba1",
+        "inferenceSeconds": 0.966349667,
+        "inputSegmentUnchanged": true,
+        "languageToken": 50259,
+        "modelSHA256": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+        "ownedAudioCleaned": true,
+        "pad": 0.2,
+        "scope": "Actual installed ASR with owned cropped public PCM and forced language; no transcript mutation, user audio, quality or UI acceptance.",
+        "sourceModelEngineUnchanged": true,
+        "sourceSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+        "start": 2.0,
+        "status": "passed",
+        "text": "Ask not. Ask not."
+      },
+      "originalSwift": {
+        "clipBytes": 108844,
+        "sourceUnchanged": true,
+        "text": "Ask not. Ask not."
+      },
+      "driverSHA256": "9715b6894898a351450cf3c54f11eab70e91b0131b6fb0aa442479765610e2a0",
+      "sourceSHA256": {
+        "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+        "apps/macos/Sovereign/Session/SessionOneShotTranscriber.swift": "ca1f439c32eeadbe94ec7ea23f103cb4e7d25254cbc2210764d3d1e2a30f1022"
+      },
+      "scope": "Identical forced-English result for the same 2..5 second public JFK line with 0.2-second padding through original Swift and Rust-owned correction adapters, using the final rebuilt package ASR. No ASR quality, full workflow or UI acceptance."
+    },
+    "mutations": [
+      {
+        "name": "merge-direction",
+        "status": "DETECTED",
+        "exit": 1,
+        "log": "/tmp/madi-reconcile-mutation-merge-direction.log",
+        "logSHA256": "56c82fb0afdb0e30b821dfde06fce49aef8d0695202f51010910a592000a6c0c"
+      },
+      {
+        "name": "acoustic-guard",
+        "status": "DETECTED",
+        "exit": 1,
+        "log": "/tmp/madi-reconcile-mutation-acoustic-guard.log",
+        "logSHA256": "dc83182735371f8b4415f2f834a56140db5aca0aa1787d5e172461efd0ebbd28"
+      },
+      {
+        "name": "retired-reply",
+        "status": "DETECTED",
+        "exit": 101,
+        "log": "/tmp/madi-reconcile-mutation-retired-reply.log",
+        "logSHA256": "a6120fb429f3ab88bd45a7141ee9a4df61c189f92382aad2ebe26ffd3059e40d"
+      },
+      {
+        "name": "inherited-stream",
+        "status": "DETECTED",
+        "exit": 101,
+        "log": "/tmp/madi-reconcile-mutation-inherited-stream.log",
+        "logSHA256": "d8e70f3893dd7425ad1ccf6e5dd0191fa2d3ebde18eaaeb814e1989f8240162b"
+      },
+      {
+        "name": "missing-crop-pad",
+        "status": "DETECTED",
+        "exit": 101,
+        "log": "/tmp/madi-reconcile-mutation-missing-crop-pad.log",
+        "logSHA256": "57c42b0be40a71c173f08140f22aa2be63b0ff10cd8abe7402fcd8828d6c2510"
+      }
+    ],
+    "package": {
+      "schemaVersion": 1,
+      "status": "passed",
+      "bundleIdentifier": "tv.devart.madi.parity",
+      "minimumSystemVersion": "14.0",
+      "signature": "ad-hoc; deep strict verification passed",
+      "captureUsageDescriptionsMatch": [
+        "NSMicrophoneUsageDescription",
+        "NSScreenCaptureUsageDescription",
+        "NSAudioCaptureUsageDescription"
+      ],
+      "captureAudioInputEntitlement": true,
+      "developerLibraryDependenciesAbsent": true,
+      "relocatedNativeCaptureReplay": {
+        "devicesOpened": false,
+        "ownedDirectoryCleaned": true,
+        "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+        "sampleCount": 16000,
+        "segments": [
+          {
+            "hadSpeech": true,
+            "name": "seg00000.wav",
+            "offsetBits": "0000000000000000",
+            "wavBytes": 32044,
+            "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+          }
+        ],
+        "stopped": true
+      },
+      "relocatedLookup": "passed",
+      "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+      "missingHelperFailsClosed": true,
+      "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+      "missingOrLinkedRuntimeFilesRejected": 11,
+      "runtimeAssets": [
+        {
+          "name": "WHISPER_BPE.bin",
+          "bytes": 514525,
+          "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+        },
+        {
+          "name": "kaldi_melbank.bin",
+          "bytes": 82240,
+          "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+        },
+        {
+          "name": "mel_filters.bin",
+          "bytes": 102912,
+          "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+        },
+        {
+          "name": "pyannote_osd.bin",
+          "bytes": 5973428,
+          "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+        },
+        {
+          "name": "resnet34_diar.bin",
+          "bytes": 26522076,
+          "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+        },
+        {
+          "name": "silero_vad.bin",
+          "bytes": 1238776,
+          "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+        },
+        {
+          "name": "suppress_tokens.bin",
+          "bytes": 352,
+          "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+        }
+      ],
+      "engines": {
+        "transcribe": {
+          "bytes": 957888,
+          "sha256": "a6448c3cd2bf6d5f8bd911200fbcf21850e39f3ed1b7411378ce50a057dddba1"
+        },
+        "translate-engine-2b": {
+          "bytes": 1576224,
+          "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+        },
+        "translate-engine-4b": {
+          "bytes": 1576080,
+          "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+        }
+      },
+      "runtimeNoticesPreserved": true,
+      "directRuntimeNotices": {
+        "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+        "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+        "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+        "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+        "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+        "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+        "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+        "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+        "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+        "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+        "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+        "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+        "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+        "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d",
+        "tauri-nspanel-2.1.1-MIT.txt": "35e740d8a0d71739293b136b9f289c6b05f21ff6b0584b9b691dd5de5233d7e8"
+      },
+      "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+      "helperBytes": 151296,
+      "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+      "archiveSHA256": "2fe0246c19dc8103d7d01b166e6381fd043e3b1d5f014658a0cd884a7691ddad",
+      "productRelease": false,
+      "notarized": false,
+      "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+    },
+    "logs": {
+      "fmt": {
+        "path": "/tmp/madi-reconcile-final-fmt.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "tests": {
+        "path": "/tmp/madi-reconcile-final-tests.log",
+        "sha256": "75db81bca9fff642ecb0ecd99afacf43d7c762f0825b9f9d57c6928bf2191bb3"
+      },
+      "clippy": {
+        "path": "/tmp/madi-reconcile-final-clippy.log",
+        "sha256": "2a49c83c8a41c6ad50967025ba29c0096631b6e04cd76f65fdeb28427c21d1a7"
+      },
+      "native": {
+        "path": "/tmp/madi-reconcile-final-native.log",
+        "sha256": "c1c7fa281bd432dc5691414f8e623a89703e7a4e3e1653b2216eaa79364bdcf3"
+      },
+      "portable": {
+        "path": "/tmp/madi-reconcile-final-portable.log",
+        "sha256": "ebca48151f87e4da89dcf2718f0f22a0f2995daecf881909c9b5f84b34c9004e"
+      },
+      "bundle": {
+        "path": "/tmp/madi-reconcile-final-bundle.log",
+        "sha256": "a1d693b60fbc1934da8d49422b9c80b16af3e692e7712393dedf1098a66b9bc2"
+      },
+      "package": {
+        "path": "/tmp/madi-reconcile-final-package.log",
+        "sha256": "7f2ba8cdf1e9dcada191507976a5687b6fb5abf671ca05a06a9c82f2ae1a6fa3"
+      }
+    }
+  },
+  "priorCI": {
+    "head": "565c5a06051eeee22b72fadabcab1a379072f8ae",
+    "successfulDesktopRuns": [
+      41936724879,
+      41936732263
+    ],
+    "scope": "Both macOS/Windows jobs completed successfully; no newly downloaded artifact audit for this test-only prior commit."
+  },
+  "initialHarnessCorrection": "The failed-output test initially assumed one file in an owned capture directory; capture also retains a preview WAV. The corrected test compares pre/post inventory and source bytes and checks each correction clip is gone.",
+  "limits": [
+    "FileWorkflow reconciliation admission, mid/final sequencing, line identity/revision application, undo UI, identity services and deferred summary/title remain unconnected.",
+    "Actual DNA inference through ReconcileClient, complete language correction workflow and native UI/UX are NOT_RUN.",
+    "Installed ASR comparison establishes behavior parity on one public fixture, not recognition quality or performance acceptance.",
+    "Windows application audio/ASR/GPU and this slice CI are not yet validated; release remains disabled."
+  ]
+}
