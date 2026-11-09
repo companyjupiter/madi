@@ -1,0 +1,14 @@
+[package]
+name = "madi-glib-variant-regression"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+glib = { version = "=0.18.5", path = "../../../vendor/glib" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"

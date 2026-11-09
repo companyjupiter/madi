@@ -46,6 +46,15 @@ async fn setup_inner(
     engine: &str,
     attach: bool,
 ) -> (tempfile::TempDir, FileWorkflow, PreferencesService, PathBuf) {
+    setup_with_memory(enabled, model, engine, attach, 16 * (1 << 30)).await
+}
+async fn setup_with_memory(
+    enabled: bool,
+    model: bool,
+    engine: &str,
+    attach: bool,
+    _physical_memory: u64,
+) -> (tempfile::TempDir, FileWorkflow, PreferencesService, PathBuf) {
     let (root, config, source) = fixture("", engine);
     let prefs = PreferencesService::new(
         preferences::Store::load(
@@ -75,6 +84,12 @@ async fn setup_inner(
         model: root.path().into(),
         arguments: vec!["-u".into(), "-c".into(), DNA.into()],
     });
+    // Synthetic children need no model RAM; exercise admission independently
+    // of the host (GitHub's Apple Silicon runners have less than 16 GiB).
+    #[cfg(target_os = "macos")]
+    {
+        resources.test_physical_memory = Some(_physical_memory);
+    }
     let w = FileWorkflow::with_translation(
         config,
         Some(ArchiveSettings {
@@ -340,7 +355,19 @@ for raw in sys.stdin:
         mpsc::UnboundedSender<Capture>,
         mpsc::UnboundedReceiver<Control>,
     ) {
-        let (root, w, prefs, _) = setup_inner(true, true, "", false).await;
+        recording_with_memory(hold, 16 * (1 << 30)).await
+    }
+    async fn recording_with_memory(
+        hold: bool,
+        memory: u64,
+    ) -> (
+        tempfile::TempDir,
+        FileWorkflow,
+        PreferencesService,
+        mpsc::UnboundedSender<Capture>,
+        mpsc::UnboundedReceiver<Control>,
+    ) {
+        let (root, w, prefs, _) = setup_with_memory(true, true, "", false, memory).await;
         std::fs::write(root.path().join("engine fixture.py"), ENGINE).unwrap();
         if hold {
             std::fs::write(root.path().join("hold-segment"), b"hold").unwrap();
@@ -457,9 +484,34 @@ for raw in sys.stdin:
         assert_eq!(crate::file_session::tests::scratch_count(root.path()), 0);
     }
     #[tokio::test]
+    async fn low_memory_disables_mid_session_ai_but_keeps_final_reconciliation() {
+        let (root, w, _prefs, events, mut controls) =
+            recording_with_memory(false, 16 * (1 << 30) - 1).await;
+        until(&w, |s| s.status.activity.as_deref() == Some("듣는 중")).await;
+        tokio::time::pause();
+        tokio::time::advance(Duration::from_secs(121)).await;
+        tokio::time::resume();
+        w.edit(
+            w.snapshot().generation,
+            Edit::SpeakerName {
+                speaker: 1,
+                name: "Named".into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(!w.snapshot().reconciling && !root.path().join("launches").exists());
+        stop(&w, &events, &mut controls).await;
+        marker(&root.path().join("turn-1")).await;
+        answer(root.path(), 1, "OK");
+        until(&w, |s| !s.reconciling).await;
+        w.shutdown().await.unwrap();
+    }
+    #[tokio::test]
     async fn mid_snapshot_excludes_tail_and_defers_merge_and_final_until_its_reply() {
         let (root, w, _prefs, events, mut controls) = recording().await;
         let baseline = w.snapshot();
+        until(&w, |s| s.status.activity.as_deref() == Some("듣는 중")).await;
         tokio::time::pause();
         tokio::time::advance(Duration::from_secs(120)).await;
         tokio::time::resume();

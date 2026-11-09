@@ -107,7 +107,7 @@ impl Worker {
     #[cfg(target_os = "macos")]
     pub(super) fn start_reconciliation_timer(&mut self) {
         self.reconciliation.timer = (self.ai_enabled()
-            && crate::model_presentation::physical_memory() >= 16 * (1 << 30))
+            && self.translations.physical_memory() >= 16 * (1 << 30))
             .then(|| Instant::now() + Duration::from_secs(120));
     }
     pub(super) async fn reconciliation_tick(&mut self) {

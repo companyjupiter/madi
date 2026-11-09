@@ -44,3 +44,6 @@ tests/parity/CapturePipelineOracle.swift text eol=lf
 crates/madi-core/src/translation/faq_starter.json text eol=lf
 # The portable speaker-name oracle pins this generated Unicode table's bytes.
 crates/madi-core/src/reconcile/name_fold.rs text eol=lf
+# Preserve the published crate/official patch byte-for-byte for the backport audit.
+vendor/glib/** -text
+patches/glib-0.18.5-variant-str-iter.patch -text

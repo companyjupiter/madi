@@ -148,3 +148,11 @@ bindings (Zlib OR Apache-2.0 OR MIT); the upstream licensing statement is in app
 
 The experimental native process supervisor uses Tokio, tempfile and libc;
 their MIT notices are retained in apps/desktop/licenses.
+
+Linux GTK compatibility dependency
+
+The experimental Tauri host vendors the MIT-licensed gtk-rs GLib Rust crate
+0.18.5 with upstream commit b5a4071's two-line VariantStrIter safety fix.
+Copyright and license: vendor/glib/LICENSE. Original patch authorship:
+patches/glib-0.18.5-variant-str-iter.patch. Verification and scope:
+docs/runtime/GLIB_BACKPORT.md.

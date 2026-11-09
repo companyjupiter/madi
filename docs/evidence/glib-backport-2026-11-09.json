@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS",
+  "regression": "NOT_RUN",
+  "provenance": {
+    "status": "PASS",
+    "upstreamURL": "https://static.crates.io/crates/glib/glib-0.18.5.crate",
+    "crateSHA256": "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5",
+    "patchSHA256": "a742bf59f1b00af0f434623b34e2fd969dc8697d37c796efdf909dd9eb19b854",
+    "upstreamCommit": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",
+    "filesVerified": 121,
+    "onlyChangedFile": "src/variant_iter.rs",
+    "originalFileSHA256": "1fd02859333761c45321b32f28b24233446b97d0022a90d3a937ed162585b90e",
+    "patchedFileSHA256": "a0f5ee8acb8faa089bcdfbc9a57372609fce7654026ccef7d9a224d05a654ccc",
+    "licenseSHA256": "8cf56d10131ce201cf69ab74b111d3ebac1acca3833d7efb39ae357224b70edb",
+    "lockSelectsLocalPatch": true
+  }
+}

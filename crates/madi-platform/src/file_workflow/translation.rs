@@ -24,6 +24,8 @@ pub struct Resources {
     pub faq_path: Option<PathBuf>,
     #[cfg(test)]
     pub(crate) test_launch: Option<Launch>,
+    #[cfg(all(test, target_os = "macos"))]
+    pub(crate) test_physical_memory: Option<u64>,
 }
 impl Resources {
     pub fn new(locations: Locations, variant: TranslationVariant) -> Self {
@@ -33,6 +35,8 @@ impl Resources {
             faq_path: None,
             #[cfg(test)]
             test_launch: None,
+            #[cfg(all(test, target_os = "macos"))]
+            test_physical_memory: None,
         }
     }
     pub fn with_faq_path(mut self, path: PathBuf) -> Self {
@@ -67,6 +71,14 @@ pub(super) struct Translations {
     pub last_preview_admit: Option<Instant>,
 }
 impl Translations {
+    #[cfg(target_os = "macos")]
+    pub(super) fn physical_memory(&self) -> u64 {
+        #[cfg(test)]
+        if let Some(memory) = self.resources.as_ref().and_then(|r| r.test_physical_memory) {
+            return memory;
+        }
+        crate::model_presentation::physical_memory()
+    }
     pub(super) fn reconcile_launch(&self) -> Option<Launch> {
         self.resources.as_ref().and_then(Resources::launch)
     }

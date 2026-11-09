@@ -1,6 +1,6 @@
 # Tauri migration status
 
-Updated 2026-11-05. **Migration is active, not complete.** macOS and Windows are
+Updated 2026-11-09. **Migration is active, not complete.** macOS and Windows are
 the initial targets; the user has prioritized macOS and deferred Windows GPU
 hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
@@ -14,6 +14,26 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
+
+- The `0d482c4` macOS push/PR jobs failed two mid-session reconciliation tests:
+  the fixture inherited the host RAM gate, so the 7 GB Apple Silicon runner
+  never scheduled the timer that requires 16 GiB. The synthetic fixture now
+  injects its memory budget without changing production admission. A regression
+  just below 16 GiB verifies mid-session AI stays off while final reconciliation
+  still runs; the existing tests exercise the exact 16 GiB boundary. The normal
+  fixture also waits for committed ASR before advancing the timer. All ten
+  reconciliation tests pass locally; the installed-model probe remains opt-in.
+  Fresh CI is required before merging. See the
+  [runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+- The Linux-only `glib 0.18.5` dependency now selects a local backport of the
+  official two-line `VariantStrIter` fix. All 121 published files are checked
+  against the registry archive; only the exact upstream delta is accepted.
+  The original version and MIT license remain intact. The dependency-review
+  job requires optimized native FFI red/green evidence before its normal
+  vulnerability scan. No advisory allow-list or threshold change is added.
+  Local source/lockfile verification passes; Linux runtime and updated CI are
+  pending. This is not Linux product acceptance. See `runtime/GLIB_BACKPORT.md`.
 
 - The `f310e7f` macOS push check exposed a race in the W1 test fixture:
   the reader used file existence as readiness while Python had only opened,
@@ -1049,7 +1069,8 @@ migration acceptance remain open.
    device validation when the user provides the machine. Hardware is explicitly
    deferred, not a current macOS work blocker.
 
-Madi work is in [draft PR #49](https://github.com/companyjupiter/madi/pull/49).
+The experimental migration is tracked in [PR #49](https://github.com/companyjupiter/madi/pull/49).
+Integrating the source does not complete the gates above or enable release builds.
 The working feature branches are `codex/tauri-ui-parity` (Madi) and
 `codex/windows-dna3-engines` (SovereignLLM). Shipping macOS UI, data and the default
 release channel remain the comparison and rollback baseline.

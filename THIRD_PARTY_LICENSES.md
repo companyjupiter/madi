@@ -28,6 +28,10 @@ The transcript model uses uuid 1.29.0 and unicode-normalization 0.1.25
 comparison. Their MIT notices and Unicode normalization copyright attribution
 are retained in the same directory; stored and displayed text is not normalized.
 `Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
+The Linux GTK dependency uses a vendored GLib Rust crate 0.18.5 (MIT), with the
+upstream `VariantStrIter` safety fix backported. Its full license is retained in
+[`vendor/glib/LICENSE`](vendor/glib/LICENSE); provenance and verification are
+documented in [`docs/runtime/GLIB_BACKPORT.md`](docs/runtime/GLIB_BACKPORT.md).
 The complete transitive binary notice bundle is still a migration release gate;
 the current parity harness is debug-only and not a product distribution.
 
