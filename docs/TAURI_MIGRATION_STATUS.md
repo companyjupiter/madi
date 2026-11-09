@@ -23,7 +23,11 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   still runs; the existing tests exercise the exact 16 GiB boundary. The normal
   fixture also waits for committed ASR before advancing the timer. All ten
   reconciliation tests pass locally; the installed-model probe remains opt-in.
-  Fresh CI is required before merging. See the
+  A later push run exposed a separate fixture ordering race: an actor edit
+  reply did not prove that a ready timer branch had run. The fixture now keeps
+  ASR held until a test-only timer inspection observes the next deadline, then
+  releases it. Production scheduling is unchanged. Fresh CI is required before
+  merging. See the
   [runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 - The Linux-only `glib 0.18.5` dependency now selects a local backport of the
@@ -36,7 +40,8 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   all three original runs segfault and all three backport runs pass. GitHub's
   manifest scan initially misidentified the probe's redundant version field as
   a registry dependency; the probe now declares only its audited local path.
-  Fresh dependency review is required. This is not Linux product acceptance.
+  Dependency review and the optimized regression pass at `ad36b0e` in run
+  `42618241256`. This is not Linux product acceptance.
   See `runtime/GLIB_BACKPORT.md`.
 
 - The `f310e7f` macOS push check exposed a race in the W1 test fixture:

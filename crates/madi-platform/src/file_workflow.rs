@@ -175,6 +175,8 @@ pub enum Edit {
     },
 }
 enum Command {
+    #[cfg(all(test, target_os = "macos"))]
+    InspectReconciliationTimer(oneshot::Sender<Option<Instant>>),
     #[cfg(target_os = "macos")]
     StartLive {
         request: crate::live_session::Request,
@@ -930,6 +932,10 @@ impl Worker {
                     Some(Command::Edit {generation,edit,reply})=>{
                         let result=if generation==self.state.generation {self.edit(edit).await} else {Ok(self.state.clone())};
                         let _=reply.send(result);
+                    },
+                    #[cfg(all(test,target_os="macos"))]
+                    Some(Command::InspectReconciliationTimer(reply))=>{
+                        let _=reply.send(self.reconciliation.timer);
                     },
                     Some(Command::Shutdown)|None=>{
                         #[cfg(target_os="macos")]

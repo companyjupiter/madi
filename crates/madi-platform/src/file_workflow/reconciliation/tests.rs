@@ -117,7 +117,12 @@ async fn until(w: &FileWorkflow, ready: impl Fn(&Snapshot) -> bool) -> Snapshot 
         }
     })
     .await
-    .expect("reconciliation workflow deadline")
+    .unwrap_or_else(|_| {
+        panic!(
+            "reconciliation workflow deadline; last snapshot: {:?}",
+            w.snapshot()
+        )
+    })
 }
 fn answer(root: &Path, n: usize, text: &str) {
     std::fs::write(root.join(format!("reply-{n}")), text).unwrap();
@@ -312,6 +317,27 @@ mod live {
             tests::{input, request},
         },
     };
+    async fn timer(w: &FileWorkflow) -> Option<Instant> {
+        let (reply, result) = oneshot::channel();
+        w.owner
+            .commands
+            .send(Command::InspectReconciliationTimer(reply))
+            .unwrap();
+        timeout(Duration::from_secs(8), result)
+            .await
+            .unwrap()
+            .unwrap()
+    }
+    async fn wait_for_next_tick(w: &FileWorkflow) {
+        let elapsed = Instant::now();
+        timeout(Duration::from_secs(8), async {
+            while timer(w).await.is_none_or(|next| next <= elapsed) {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("reconciliation timer did not rearm");
+    }
     const ENGINE: &str = r#"
 import os,sys,pathlib,time,json,wave
 root=pathlib.Path(__file__).parent
@@ -488,6 +514,7 @@ for raw in sys.stdin:
         let (root, w, _prefs, events, mut controls) =
             recording_with_memory(false, 16 * (1 << 30) - 1).await;
         until(&w, |s| s.status.activity.as_deref() == Some("듣는 중")).await;
+        assert!(timer(&w).await.is_none());
         tokio::time::pause();
         tokio::time::advance(Duration::from_secs(121)).await;
         tokio::time::resume();
@@ -616,7 +643,10 @@ for raw in sys.stdin:
         tokio::time::pause();
         tokio::time::advance(Duration::from_secs(120)).await;
         tokio::time::resume();
-        // A round trip through the same actor establishes the timer was drained.
+        // Commands and timers are separate select! branches: an edit reply
+        // does not prove the expired timer ran. Keep ASR held until the timer
+        // has actually rearmed, so this tick must observe pending ASR.
+        wait_for_next_tick(&w).await;
         w.edit(
             w.snapshot().generation,
             Edit::SpeakerName {
