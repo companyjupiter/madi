@@ -69,6 +69,8 @@ def verify(crate):
     selected = [p for p in lock["package"] if p["name"] == "glib"]
     assert len(selected) == 1 and selected[0]["version"] == "0.18.5"
     assert "source" not in selected[0] and "checksum" not in selected[0], "Registry glib still selected"
+    harness = tomllib.loads((HARNESS / "Cargo.toml").read_text(encoding="utf-8"))
+    assert harness["dependencies"]["glib"] == {"path": "../../../vendor/glib"}, "Probe must select only the audited local crate"
     return original, {
         "status": "PASS", "upstreamURL": CRATE_URL, "crateSHA256": CRATE_SHA,
         "patchSHA256": PATCH_SHA, "upstreamCommit": "b5a4071e439bef2b5eea76c3aa25e5ae84839e34",

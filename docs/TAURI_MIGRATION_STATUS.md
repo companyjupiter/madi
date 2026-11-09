@@ -32,8 +32,12 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
   The original version and MIT license remain intact. The dependency-review
   job requires optimized native FFI red/green evidence before its normal
   vulnerability scan. No advisory allow-list or threshold change is added.
-  Local source/lockfile verification passes; Linux runtime and updated CI are
-  pending. This is not Linux product acceptance. See `runtime/GLIB_BACKPORT.md`.
+  Source/lockfile verification and Linux optimized red/green execution pass:
+  all three original runs segfault and all three backport runs pass. GitHub's
+  manifest scan initially misidentified the probe's redundant version field as
+  a registry dependency; the probe now declares only its audited local path.
+  Fresh dependency review is required. This is not Linux product acceptance.
+  See `runtime/GLIB_BACKPORT.md`.
 
 - The `f310e7f` macOS push check exposed a race in the W1 test fixture:
   the reader used file existence as readiness while Python had only opened,

@@ -21,6 +21,11 @@ the official patch hash, every retained file and the exact two-line delta. It
 also rejects a lockfile that still selects the registry copy. Byte-preserving
 Git attributes keep this audit independent of Windows checkout line endings.
 Neither an advisory allow-list nor a severity threshold change is used.
+The regression manifest declares only the local dependency path; a redundant
+registry-version requirement caused GitHub's manifest scan to report the
+unpatched registry release even though Cargo compiled the audited local source.
+The crate's own version remains 0.18.5, and the verifier enforces the path-only
+probe declaration as well as the workspace lockfile selection.
 
 The dependency-review job additionally compiles an optimized, thin-LTO probe
 against the untouched release in a temporary directory, and then against the
@@ -41,4 +46,6 @@ This tests the actual GLib FFI with release optimization; it does not claim
 Linux product or GTK/WebKit UI acceptance. Replace this temporary backport when
 the GTK dependency chain can select an upstream fixed release, and update the
 audit and regression together. See `../evidence/glib-backport-2026-11-09.json`
-for local provenance checks; Linux runtime/CI results are separate evidence.
+for provenance and Linux optimized red/green evidence at `8767be5`. All three
+original runs exit with SIGSEGV and all three backport runs return the expected
+strings. The subsequent manifest correction requires fresh dependency review.

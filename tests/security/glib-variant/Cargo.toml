@@ -7,7 +7,9 @@ publish = false
 [workspace]
 
 [dependencies]
-glib = { version = "=0.18.5", path = "../../../vendor/glib" }
+# The regression always exercises the audited local source, never a registry
+# fallback. Its actual package version is retained in vendor/glib/Cargo.toml.
+glib = { path = "../../../vendor/glib" }
 
 [profile.release]
 opt-level = 3
