@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-file-start"
+description = "Enables the file_start command without any pre-configured scope."
+commands.allow = ["file_start"]
+
+[[permission]]
+identifier = "deny-file-start"
+description = "Denies the file_start command without any pre-configured scope."
+commands.deny = ["file_start"]

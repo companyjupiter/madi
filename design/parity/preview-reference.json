@@ -1,0 +1,14 @@
+{
+  "cases": 1409,
+  "corpusSHA256": "e87d37219cb207a510ddd08e53a56e99e45134ee073ed540b183d3ee32981f44",
+  "resultSHA256": "7af9d48b22bcbab2d8587832f4113378d8afaf58f1e4cbfe983e1d17a77c1360",
+  "sources": {
+    "apps/macos/Sovereign/Engine/PreviewEngine.swift": "4ea2a604d5740a9e832dd1991450dbf9089be4afbf37900aada99f84735eb379",
+    "apps/macos/Sovereign/Transcript/PreviewTrim.swift": "9d3fbbe9d289e5b27e58775f592e50eca79be143ce4000f0e244ac40070f952a",
+    "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d",
+    "apps/macos/Sovereign/Transcript/InterimDedupe.swift": "1845f83893c7e1b5474e45862dd4b1abe31dd35909f1276b279934432a6d8f51",
+    "apps/macos/Sovereign/UI/TranscriptView.swift": "dd7a53f78e029120dbaae5e554bbd891d7a4d21182a8d40e282ccae60655c08f",
+    "apps/macos/Sovereign/Engine/EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2"
+  },
+  "typewriterTickMilliseconds": 24
+}

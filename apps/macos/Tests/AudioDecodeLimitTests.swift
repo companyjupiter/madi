@@ -65,6 +65,13 @@ struct AudioDecodeLimitTests {
             let firstData = try Data(contentsOf: firstURL), secondData = try Data(contentsOf: secondURL)
             check(firstData.count > 44 && secondData.count > 44, "both imports retain PCM")
             check(firstData != secondData, "second import cannot overwrite first audio")
+            let owned = root.appendingPathComponent("rust-owned-scratch", isDirectory: true)
+            try FileManager.default.createDirectory(at: owned, withIntermediateDirectories: false)
+            let ownedURL = try await AudioDecode.toWav16k(a, temporaryDirectory: owned)
+            check(ownedURL.deletingLastPathComponent().resolvingSymlinksInPath() == owned.resolvingSymlinksInPath(),
+                  "explicit scratch directory is honored independently of TMPDIR")
+            check(try Data(contentsOf: ownedURL) == firstData,
+                  "explicit scratch directory preserves default decoded PCM bytes")
             let cancelled = Task.detached {
                 withUnsafeCurrentTask { $0?.cancel() }
                 return try await AudioDecode.toWav16k(a)
@@ -89,6 +96,13 @@ struct AudioDecodeLimitTests {
             } catch { }
             let after = try decodedTemps()
             check(before == after, "failed decode removes its partial WAV")
+            let ownedBefore = try FileManager.default.contentsOfDirectory(atPath: owned.path)
+            do {
+                _ = try await AudioDecode.toWav16k(empty, temporaryDirectory: owned)
+                check(false, "empty import with explicit scratch must fail")
+            } catch { }
+            check(try FileManager.default.contentsOfDirectory(atPath: owned.path) == ownedBefore,
+                  "failed explicit-scratch import removes its partial WAV")
         } catch { check(false, "native decode fixture: \(error)") }
 
         if failures == 0 { print("✅ AudioDecode limits, isolation, cancellation, cleanup: all checks passed") }

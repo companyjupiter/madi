@@ -1,0 +1,15 @@
+{
+  "cases": 193,
+  "queries": 5390,
+  "pairs": 4063,
+  "corpusSHA256": "c999e7d2d20858811cef5df3588cc348df6ff55484c96c95bf72f41cdbfee6d6",
+  "resultSHA256": "63f19949fd5f473d0c0527df07a9c7fb37d161e040b442255359fafd8eaa5801",
+  "canonicalBiasTieCases": [
+    "random-101"
+  ],
+  "sources": {
+    "apps/macos/Sovereign/Transcript/PersonalVocabulary.swift": "eebabc92c01543d73d608da3478977019698785e7fbb4ab726988a605a48340a",
+    "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+    "apps/macos/Sovereign/Transcript/TranscriptStore.swift": "f4d08545b76484906a7cfda7b1c6b37acd54bcfefcae42257ab67bde4b62ce68"
+  }
+}

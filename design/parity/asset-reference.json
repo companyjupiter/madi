@@ -1,0 +1,17 @@
+{
+  "source": "apps/macos/Sovereign/Resources",
+  "sha256": {
+    "arrow-right-up.svg": "45f8c85d156c87c8861f3594cdf66a3440bbe6e2e38cb318ff61d857380c97fc",
+    "chevron-left.svg": "425af48a3fd7bb9796a136b11f694bcb859b9500410ba6d351a1b5f19ed66d5c",
+    "chevron-right.svg": "4ee7f58df994346ee518b5e5c0eae3e52bfe59ddef5f96f89a137b675d75d82e",
+    "close.svg": "2f7f31395fb71fb65711425ef93e5cd984fe3c58625f7bec1182e39f044122d9",
+    "content.svg": "bfed15951c67a35a464d15c442be86a34763f37cdff123935809b20722ad723d",
+    "exclamation-circle.svg": "8f4549e167ad8c9910477ede1c371ef1d1c94f26b4c2bf1692ec38823465a847",
+    "folder-plus.svg": "01b827b95e0a358e74fc751e4cbd9715f0db9bcc09d0de6890ce9adc5679d79b",
+    "folder.svg": "ab01d6242984e0bfd166589e6483d966f2712326214154ad8a61c88319ef7924",
+    "logo_madi.png": "52cf31c72a636b21e9612dbafdf3db59b4beed761dc77910298f2264f6e2ce13",
+    "pen.svg": "825628d1d7ad5e7a2d8e34270523b714dbcf18624b466add92f6d8d11e7b2073",
+    "setting.svg": "5ff38620861eef2dde016406c75509e177bc65c09c3d5c29912a2ae4ddf9ca3b",
+    "squares.svg": "30748fbc094dacf990719acc888093c7f33a3d3d66688c6d8d9c7dfa3eac7529"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "cases": 48,
+  "sources": {
+    "apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift": "ded343aeb76d63cc4981407aed128aeb1321da6a383837a567d1d0522e019387",
+    "apps/macos/Sovereign/Model/AssetManifest.swift": "b080aa2bd7f1894e9c9bc986b492ab769d96594671c2d561a51c1a9489eaa49c"
+  },
+  "corpusSHA256": "dd9c0c204b8fd93697865e267b78a5d5f32f4e77d3b2f04cd1a8d9acac0096ff",
+  "resultSHA256": "8fb75a1640cae9ae8959b065e3bb67d38780942f737917854c74cf4eefb8e05a"
+}

@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "local uncommitted follow candidate on acd4f5c; no native UI interaction",
+  "sourceSHA256": {
+    "apps/desktop/src/transcriptFollow.ts": "b9aa0e8bc8a71a79c88ab6a9496112aeb3b5866ec154a04277c0a439655d15c5",
+    "apps/desktop/src/useTranscriptFollow.ts": "24b0bdd334085d1eb4914a2d343e27b888ddded52bbe63327fdce62580b14457",
+    "apps/desktop/src/FileTranscript.tsx": "ee418c975a223d98392d673aaa99e9a4862839d53054ee7708b336c70e566119",
+    "apps/desktop/src/transcript.css": "103e705e7514c4458d260f798a5b14a470f5276034e923b3f45a1bbb8163410d",
+    "apps/desktop/src-tauri/src/files_host.rs": "37f2e2ffa549e432535344b5a5e332968db0ec4e575048d88ae45de04398f038",
+    "crates/madi-platform/src/model_presentation.rs": "4a45927dc92cca801f1bcb0e7afbbcb89767da1a554a51f67166864aca9c2c0a",
+    "scripts/check_transcript_follow_parity.py": "24aedb6a354f02d55e3149169dc462a35c0da9a821b068f82a820b64e58d5644",
+    "tests/parity/TranscriptFollowOracle.swift": "d4788d5b284b716d8b1ad3dfac3afd0c6dd74cbdc2c3870c2a4c9314a75d2a3d",
+    "tests/parity/transcript_follow_oracle.mjs": "11155b9287d158636206de94860a33bdfb64f8524297fd9518f79b339ee53917"
+  },
+  "follow": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 287,
+    "snapshots": 13294,
+    "swiftComparison": "live-unmodified-follow-model",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranscriptFollowModel.swift": "f8c199b85e9a0abf12ff7cc1d1b8a499f00dfbd8501ed3928776592b28bf7a82"
+    },
+    "corpusSHA256": "856d8990ab4791d0ddcb763e92b662ffa363ae4484bfee66e16d73fb75c6fedf",
+    "resultSHA256": "7653ace387745e286dbfcd8649f1244b2ead5dff185cc8f45e5e7fe096cb8713",
+    "scope": "Pure state/action parity: live/static geometry, wheel intent, merge identity/time, unseen count, pill, reset and threshold boundaries. No native wheel/scrollbar events, layout or animation comparison."
+  },
+  "frontendReferenceCheck": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 287,
+    "snapshots": 13294,
+    "swiftComparison": "not-run",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/TranscriptFollowModel.swift": "f8c199b85e9a0abf12ff7cc1d1b8a499f00dfbd8501ed3928776592b28bf7a82"
+    },
+    "corpusSHA256": "856d8990ab4791d0ddcb763e92b662ffa363ae4484bfee66e16d73fb75c6fedf",
+    "resultSHA256": "7653ace387745e286dbfcd8649f1244b2ead5dff185cc8f45e5e7fe096cb8713",
+    "scope": "Pure state/action parity: live/static geometry, wheel intent, merge identity/time, unseen count, pill, reset and threshold boundaries. No native wheel/scrollbar events, layout or animation comparison."
+  },
+  "nativeArtwork": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "physicalMemory": 51539607552,
+    "sizes": [
+      "Zero KB",
+      "1 byte",
+      "999 bytes",
+      "1 KB",
+      "867.5 MB",
+      "1.31 GB",
+      "2.78 GB",
+      "2.18 GB",
+      "3.65 GB"
+    ],
+    "symbols": {
+      "error": {
+        "width": 14.0,
+        "height": 13.0,
+        "pixelWidth": 28,
+        "pixelHeight": 26,
+        "visiblePixels": 370,
+        "sha256": "fe3bd902beae6352eaf0cd6d2bced2cce2d09be1c00b6abdc5fa4f9fc7fc6823"
+      },
+      "header": {
+        "width": 40.0,
+        "height": 43.0,
+        "pixelWidth": 80,
+        "pixelHeight": 86,
+        "visiblePixels": 1393,
+        "sha256": "19a5287d4fedc773da7915a55cad3072960ff19af94a48b23083277c5bcffdc6"
+      },
+      "privacy": {
+        "width": 12.0,
+        "height": 13.0,
+        "pixelWidth": 24,
+        "pixelHeight": 26,
+        "visiblePixels": 283,
+        "sha256": "cf003eed89614ceba243753834f941557a7ade18c2cf3b78f73ba61fe1b89b28"
+      },
+      "required": {
+        "width": 22.0,
+        "height": 23.0,
+        "pixelWidth": 44,
+        "pixelHeight": 46,
+        "visiblePixels": 704,
+        "sha256": "89a3686d1daf5b58b167e99f30602baba273fea845ec6f4a3ef8e39a179a1f27"
+      },
+      "translation": {
+        "width": 24.0,
+        "height": 22.0,
+        "pixelWidth": 48,
+        "pixelHeight": 44,
+        "visiblePixels": 732,
+        "sha256": "b8a04200c25d65b42bfca7170f22f42fb2e4d20ee1d2eb8bde8eef70553374fe"
+      },
+      "follow": {
+        "width": 12.0,
+        "height": 13.0,
+        "pixelWidth": 24,
+        "pixelHeight": 26,
+        "visiblePixels": 202,
+        "sha256": "0d86968965c38e7f52db2b0cf65ca7994ae33dab025c6d112ccb1a530d18bef0"
+      }
+    },
+    "byteCountCases": 9,
+    "symbolCases": 6,
+    "scope": "Live native Foundation formatting and NSImage symbol dimensions plus nonempty transparent owned PNGs; no SwiftUI/WebView pixel or interaction comparison"
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957392,
+        "sha256": "40df6240a082a1fd1b2ec460d178cbecef3354e8be6a591a0a859078c5450ff2"
+      },
+      "translate-engine-2b": {
+        "bytes": 1575744,
+        "sha256": "34795c20da441bc7baf249f4a2ca12766e04016bad05fd7303b2da4356486de0"
+      },
+      "translate-engine-4b": {
+        "bytes": 1575600,
+        "sha256": "fc0c8687300de8dd51f7a67493a57090eb2a677a730395cbd0e95fe6c21e85eb"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "helperBytes": 150816,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "cbfe99de56f847d963ad11132373ec3a011966febc0535edd4289cecea109bb9",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "localChecks": {
+    "typescriptVite": "passed",
+    "clippyAllTargets": "passed",
+    "formatting": "passed"
+  },
+  "limitations": [
+    "Pure model state/actions compared; React DOM event/resize/animation adapter not exercised on native windows.",
+    "Native generated arrow metadata/owned PNG checked; no WebView/SF Symbol pixel comparison.",
+    "File top anchor, maximum width, insets and fades are source-based candidate implementation, not measured UI proof.",
+    "Full UI/UX parity, capture, settings/data migration, storage, workspace and AI product behavior remain incomplete."
+  ]
+}

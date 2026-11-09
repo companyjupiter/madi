@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41705997661",
+  "head": "cfdeecb29fb43af2591245df8b795ffb419d57dd",
+  "conclusion": "success",
+  "unitTests": {
+    "macOS": 39,
+    "Windows": 33
+  },
+  "records": [
+    {
+      "schemaVersion": 1,
+      "sourceHead": "cfdeecb29fb43af2591245df8b795ffb419d57dd",
+      "sourceDirty": false,
+      "sourceStatus": [],
+      "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+      "binary": "target/debug/madi-desktop",
+      "bytes": 34032464,
+      "sha256": "fed6f6a7eff6e549d3e830329ecb22b9fdf63914e7ad10925d5b4bc32c882f8c",
+      "productRelease": false,
+      "nativeUIParity": "not-verified",
+      "recordingAndInference": "not-connected"
+    },
+    {
+      "schemaVersion": 1,
+      "sourceHead": "cfdeecb29fb43af2591245df8b795ffb419d57dd",
+      "sourceDirty": false,
+      "sourceStatus": [],
+      "host": "Windows-2022Server-10.0.20348-SP0",
+      "binary": "target\\debug\\madi-desktop.exe",
+      "bytes": 12876800,
+      "sha256": "b16c7f4afec5aadeb47f59018e10c348755d50ef04bb0c8058e9b6d45087946f",
+      "productRelease": false,
+      "nativeUIParity": "not-verified",
+      "recordingAndInference": "not-connected"
+    }
+  ],
+  "macOSMediaStagingComparison": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "os": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+    "cases": 39,
+    "source": "apps/macos/Sovereign/UI/ContentView.swift",
+    "sourceSHA256": "b546ea492be43d6c0ef978b4f57d5ad33aec282816bc9a9e37f789085810d511",
+    "extractedMethodsSHA256": "9ed34ad396ae901e19fc5cc0136068a8ce7220fe7736504b4f8cef4fc2b42cdd",
+    "resultSHA256": "9d06d7f84bc5a31015ae52be3a0e20103ff47bcc0f0a651afe27e12282e3841b",
+    "scope": "Native drop type policy and metadata only; picker interaction, drag delivery and visual comparison remain manual gates"
+  },
+  "downloadedBinariesVerified": true,
+  "limitations": [
+    "Picker/drop interaction and staged-card visual parity not yet verified",
+    "Full session executor and inference UI not connected",
+    "Windows native media selection not implemented"
+  ]
+}

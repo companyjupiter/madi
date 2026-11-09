@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T18:50:07.569063+00:00",
+  "baseHead": "fb692240bcfa6f25cb58734588248d7c4685c86d",
+  "status": "LOCAL_PASS_REMOTE_PENDING",
+  "sourceSHA256": {
+    "crates/madi-core/src/translation/cache.rs": "961106c1b10109d81b1cbc638e98eb3419eaac93b2b992de6c50ee6411d0c24f",
+    "crates/madi-platform/src/translation_cache.rs": "9cc1aed0c8eca86cbfa949e2e8053e89344622835f44e71d541baf6018cf8e1a",
+    "crates/madi-platform/native/UnicodeBridge.swift": "a513609145f7f160dae2768c87ade3bc351dc728c639de4823792b22e12e8ace",
+    "crates/madi-platform/build.rs": "aa6b543d3a19efadbf26e001dd087396aa3ad6e952999ce38d239c4774b774d3",
+    "crates/madi-platform/src/session_archive.rs": "6965a77ed28d9ee9c50e676597dd60261d57aedbb84173eef213440fdfc00505",
+    "scripts/check_translation_cache_parity.py": "ef695cf769b2bb951622cf13d43f13ebf1da824c19d1315342e0704fcfb2f228",
+    "design/parity/translation-cache-reference.json": "4a8c0a246b8586ac966a19bc7a72d9970169a9963a44b75eb98909ec62bf0fb4",
+    ".github/workflows/desktop-parity.yml": "93205f016a7bf77642daf800dfca3bbd64fc47c6fda37572ef192bbc0e1db2db",
+    "Cargo.lock": "34edea7a803aaefc9e08ed8d8fdd4ec6287aec38b0012b95fb0f536c3d8eac52",
+    "rust-toolchain.toml": "d13306be0ecda81ce779baa290ffb417380d525928477f16200884b5169cca33"
+  },
+  "checks": {
+    "localRustTests": [
+      28,
+      127,
+      14
+    ],
+    "totalLocalTests": 169,
+    "format": "PASS",
+    "clippy": "PASS",
+    "macOS27NativeCache": "PASS",
+    "pinnedPortableCache": "PASS",
+    "debugAppBundle": "PASS",
+    "package": "PASS",
+    "macOS15CI": "PENDING",
+    "windowsSharedReaderProbe": "NOT_RUN",
+    "windowsConcurrentRepeats": "NOT_RUN"
+  },
+  "failedCI": [
+    {
+      "run": "https://github.com/companyjupiter/madi/actions/runs/41888398966",
+      "head": "6e90399bbf4011c9a1617c82569671b5e930a6f7",
+      "conclusion": "failure",
+      "logSHA256": "6225407fe9a3d40ac0bdd05cdcc2ed3b110c2c913f551f61f30cb6eb7c51f6d6",
+      "macOSFailure": "FAQ native normalization case 10 (U+A000..U+AFFF); pre-fix Rust case mappings do not match this Swift toolchain",
+      "windowsFailure": "Concurrent checkpoint OS error 5; later OS error 2 obscured by panic-triggered test-directory cleanup",
+      "jobs": [
+        {
+          "name": "desktop (windows-2022)",
+          "status": "completed",
+          "conclusion": "failure",
+          "url": "https://github.com/companyjupiter/madi/actions/runs/41888398966/job/126778931906"
+        },
+        {
+          "name": "desktop (macos-15)",
+          "status": "completed",
+          "conclusion": "failure",
+          "url": "https://github.com/companyjupiter/madi/actions/runs/41888398966/job/126778932343"
+        }
+      ]
+    },
+    {
+      "run": "https://github.com/companyjupiter/madi/actions/runs/41889374734",
+      "head": "fb692240bcfa6f25cb58734588248d7c4685c86d",
+      "conclusion": "failure",
+      "logSHA256": "0d115fb3a524ff4d65f0525331cc9473199b5a68cfc4b3f1bbd2c4da82c51e8a",
+      "macOSFailure": "FAQ native normalization case 10 (U+A000..U+AFFF); pre-fix Rust case mappings do not match this Swift toolchain",
+      "windowsFailure": "Concurrent checkpoint OS error 5; later OS error 2 obscured by panic-triggered test-directory cleanup",
+      "jobs": [
+        {
+          "name": "desktop (windows-2022)",
+          "status": "completed",
+          "conclusion": "failure",
+          "url": "https://github.com/companyjupiter/madi/actions/runs/41889374734/job/126782359677"
+        },
+        {
+          "name": "desktop (macos-15)",
+          "status": "completed",
+          "conclusion": "failure",
+          "url": "https://github.com/companyjupiter/madi/actions/runs/41889374734/job/126782360434"
+        }
+      ]
+    }
+  ],
+  "nativeSwift": {
+    "cases": 394,
+    "unicodeScalars": 1112064,
+    "operations": 7200,
+    "corpusSHA256": "9ba6091853d28132acf4354e5b09c0f6b092fa41167b2a2d0803b3b30790dffc",
+    "resultSHA256": "b7b5563f8ef1cf155f91aee33920c447a9d3b665eed430815f172dddf515b745",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/FAQTranslationStore.swift": "a54ba4efbaff3d118602be5a7f98af94a3f762507fbb82b12f37f47b1b8578fd",
+      "apps/macos/Sovereign/Transcript/InterimTranslationCache.swift": "cd75c8c81f51bf47191091d83a1b897ebe6d54caf1085c29351fbf4fa9b33a48"
+    },
+    "starterSHA256": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "nativeResultSHA256": "b7b5563f8ef1cf155f91aee33920c447a9d3b665eed430815f172dddf515b745",
+    "nativeVsPortableDifferenceCases": 0,
+    "scope": "Unchanged FAQTranslationStore and InterimTranslationCache; filesystem persistence tested separately; ambiguous same-normalized columns are not in this corpus",
+    "nativeSwiftVersion": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.2.0",
+    "nativeMacOS": "27.2"
+  },
+  "pinnedReference": {
+    "cases": 394,
+    "unicodeScalars": 1112064,
+    "operations": 7200,
+    "corpusSHA256": "9ba6091853d28132acf4354e5b09c0f6b092fa41167b2a2d0803b3b30790dffc",
+    "resultSHA256": "b7b5563f8ef1cf155f91aee33920c447a9d3b665eed430815f172dddf515b745",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/FAQTranslationStore.swift": "a54ba4efbaff3d118602be5a7f98af94a3f762507fbb82b12f37f47b1b8578fd",
+      "apps/macos/Sovereign/Transcript/InterimTranslationCache.swift": "cd75c8c81f51bf47191091d83a1b897ebe6d54caf1085c29351fbf4fa9b33a48"
+    },
+    "starterSHA256": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "nativeResultSHA256": null,
+    "nativeVsPortableDifferenceCases": null,
+    "scope": "Unchanged FAQTranslationStore and InterimTranslationCache; filesystem persistence tested separately; ambiguous same-normalized columns are not in this corpus",
+    "nativeSwiftVersion": null,
+    "nativeMacOS": null
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "captureUsageDescriptionsMatch": [
+      "NSMicrophoneUsageDescription",
+      "NSScreenCaptureUsageDescription",
+      "NSAudioCaptureUsageDescription"
+    ],
+    "captureAudioInputEntitlement": true,
+    "developerLibraryDependenciesAbsent": true,
+    "relocatedNativeCaptureReplay": {
+      "devicesOpened": false,
+      "ownedDirectoryCleaned": true,
+      "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+      "sampleCount": 16000,
+      "segments": [
+        {
+          "hadSpeech": true,
+          "name": "seg00000.wav",
+          "offsetBits": "0000000000000000",
+          "wavBytes": 32044,
+          "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+        }
+      ],
+      "stopped": true
+    },
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957888,
+        "sha256": "cb9242588b2557148a91af655bfaf0d08b43d77b6d2a71be91c346adfa84e6c6"
+      },
+      "translate-engine-2b": {
+        "bytes": 1576224,
+        "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+      },
+      "translate-engine-4b": {
+        "bytes": 1576080,
+        "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+    "helperBytes": 151296,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "4699474a3d58a14ea8b96f6fca698e7bbf88c70a1538da117dc1bdf4bff7343c",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "logs": {
+    "fmt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests": "56aa9eac92cde63f4c1b70e7d262489ed1c393e9e53f98cd8841e3a9dfec3da4",
+    "clippy": "ca54c08b4c2ed92e26985ddfa942562a0640adfac1f680ccc35e2c552be75855",
+    "native": "2b78298a5468e7038aa3672f34d3ef18f452f5d2aa85aef8d3ce9ca75f1c2d68",
+    "reference": "fd5e3517d3846ce6bb6e232bb3b8f84691ade5bea8629e30c8a9bbaed8eb1b6f",
+    "bundle": "db6bb3fce5cce7454683c93da7bb42c7cc44c4be7f6a6f28339c75fae93f54fa",
+    "package": "5d6dc0eb7566d02bb9d8a8664c3756076cf91946d850b900b0f6c2119ef83885"
+  },
+  "changes": [
+    "Native FAQ lowercase uses a synchronous Swift UTF-8 bridge; Foundation symbol classification and Rust cache policy remain",
+    "All Unicode cases and the portable reference stay unchanged; failed comparisons now expose the first differing code points and preserve Swift results",
+    "Windows owned checkpoints use pinned std::fs::rename with a cleanup guard after normalizing temporary attributes",
+    "Windows shared-reader regression preserves the old handle and requires new destination bytes; original 50 concurrent repetitions remain",
+    "Concurrent archive test joins all workers before propagating a panic"
+  ],
+  "sources": [
+    "https://doc.rust-lang.org/std/fs/fn.rename.html",
+    "https://learn.microsoft.com/en-us/windows/win32/fileio/moving-and-replacing-files"
+  ],
+  "limits": [
+    "Mac 27 local success does not establish corrected Mac 15 behavior; actual CI required",
+    "Windows-only replacement path and new shared-reader probe are not executed on this Mac",
+    "Shared-reader interference is a candidate mechanism, not a traced identity of the original competing handle",
+    "No blind retries, deletes-before-writes or reference weakening were introduced",
+    "Native GUI, live/audio matrix, committed caption overlay and Windows GPU/ASR acceptance remain open"
+  ]
+}

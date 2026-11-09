@@ -1,0 +1,10 @@
+{
+  "cases": 210,
+  "sources": {
+    "apps/macos/Sovereign/UI/ModelGateView.swift": "1162520be2ffb4327a886364d832b1ec7e983b98d10ac0c1567734e0873f22ad",
+    "apps/macos/Sovereign/Model/ModelDownloader.swift": "d91a9d81e70d95aef51b2094fcb4f741f8052ce0e609eb9ccb8f4a42860ea7c4",
+    "apps/macos/Sovereign/Model/TranslateModelDownloader.swift": "38c3fe1f61963320a4c36ca391feb36d49cc6b6012a10fe1f44e0215cbd12b92"
+  },
+  "corpusSHA256": "94e4d096df65a1a9393c07ee3e07eacda7ac0afed3207a1acd5d715e319f511c",
+  "resultSHA256": "1e71ff97a9363e50670307fe7d3ad1527a802253d6b722fa350dc047c4018223"
+}

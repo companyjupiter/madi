@@ -1,0 +1,13 @@
+{
+  "cases": 225,
+  "snapshots": 24347,
+  "segments": 2676,
+  "legacyFragmentationGroups": 16,
+  "corpusSHA256": "e1af048257888ee75fd27f04ccd3e5235ad55c3ebeac9ed9c2f8e3fed2aa72f3",
+  "resultSHA256": "a71f0ae6c77c3d266336f9d7d09eae2609fef5dfc048a21d5a56506307ea4bf6",
+  "sources": {
+    "apps/macos/Sovereign/Audio/Segmenter.swift": "8db64d433f12eb72b5b9da87233687d07258bdd8489474c5c31b7e5a82dab957",
+    "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+    "apps/macos/Tests/SovereignCoreTests/SegmenterEarlyFlushTests.swift": "b197d370f3a227f460534a0a9044f8f09c51ca9453fa5d3ceac8f494a9e7f25a"
+  }
+}

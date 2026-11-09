@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-caption-toggle"
+description = "Enables the caption_toggle command without any pre-configured scope."
+commands.allow = ["caption_toggle"]
+
+[[permission]]
+identifier = "deny-caption-toggle"
+description = "Denies the caption_toggle command without any pre-configured scope."
+commands.deny = ["caption_toggle"]

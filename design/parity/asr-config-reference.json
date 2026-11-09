@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "cases": 601,
+  "sources": {
+    "apps/macos/Sovereign/Engine/EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+    "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+  },
+  "extractedSourceSHA256": "6814a31234e67bc269b231e5744a8ba483e703ddada6de3d372a119cff89800a",
+  "corpusSHA256": "471b323f4e3b20810a0c6688cc61418d257c46e94162e016286d872f74b61872",
+  "resultSHA256": "73691c708495303ba8e24e3a75ccb5bdc2581747f6f5d0f8bfba86a5fca20886",
+  "scope": "File-mode launch construction and setup mapping; no process execution, model admission, live capture or UI integration",
+  "intentionalDifference": "Rust removes unset engine-owned environment keys so inherited STREAM/fixed-K/language/glossary cannot override the setup",
+  "referenceHost": "macOS 27.2 arm64; Swift 6.4.2",
+  "referenceSourceCommit": "c1390c750f2506e556a277421e146d80195ab797",
+  "policy": "Captured after exact live Swift/Rust comparison. Do not update to make a failing check pass."
+}

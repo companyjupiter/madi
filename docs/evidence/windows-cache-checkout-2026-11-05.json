@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T19:00:43.650252+00:00",
+  "baseHead": "885317f9d7c9b3940ebb676290027e0f45f90420",
+  "status": "LOCAL_FIX_PASS_REMOTE_PENDING",
+  "sourceSHA256": {
+    ".gitattributes": "3f29b8d8ab62bb2f0370bbc0c89bd408cf5370f5ea917f0c4c791f9b49bfa3f6",
+    "scripts/check_translation_cache_parity.py": "bab61369cd851a3d19b1057301ceebe943e059cfbc09f7c16c1b3730547a3731",
+    "crates/madi-core/src/translation/faq_starter.json": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+    "design/parity/translation-cache-reference.json": "4a8c0a246b8586ac966a19bc7a72d9970169a9963a44b75eb98909ec62bf0fb4"
+  },
+  "windowsEvidence": {
+    "run": "https://github.com/companyjupiter/madi/actions/runs/41891196315",
+    "job": 126788734743,
+    "head": "885317f9d7c9b3940ebb676290027e0f45f90420",
+    "jobConclusion": "failure",
+    "unitTests": [
+      28,
+      100,
+      14
+    ],
+    "legacySharedReaderError": 5,
+    "newSharedReaderProbe": "PASS",
+    "concurrentArchiveRepetitions": 50,
+    "concurrentArchiveStatus": "PASS",
+    "cacheResultBytesMatchReference": true,
+    "cacheResultSHA256": "b7b5563f8ef1cf155f91aee33920c447a9d3b665eed430815f172dddf515b745",
+    "failure": "Cache reference changed after matching semantic cache results",
+    "logSHA256": "916db24c1e505a54a4504731d0e3ea28ae65aca467c60585a56250c5a73500c8"
+  },
+  "checkoutReproduction": {
+    "command": "git -c core.autocrlf=true checkout-index --prefix=<isolated-temp-directory>/ -- <pinned-sources>",
+    "redStarterSHA256": "424e32037a85a7a2dab6181221584dc87dac0820d923ef96d034b798f47da5e7",
+    "greenStarterSHA256": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+    "CRLFCountBefore": 77,
+    "CRLFCountAfter": 0,
+    "parsedJSONUnchanged": true,
+    "shippingSwiftSourceHashesUnchanged": true
+  },
+  "portableComparison": {
+    "cases": 394,
+    "unicodeScalars": 1112064,
+    "operations": 7200,
+    "corpusSHA256": "9ba6091853d28132acf4354e5b09c0f6b092fa41167b2a2d0803b3b30790dffc",
+    "resultSHA256": "b7b5563f8ef1cf155f91aee33920c447a9d3b665eed430815f172dddf515b745",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/FAQTranslationStore.swift": "a54ba4efbaff3d118602be5a7f98af94a3f762507fbb82b12f37f47b1b8578fd",
+      "apps/macos/Sovereign/Transcript/InterimTranslationCache.swift": "cd75c8c81f51bf47191091d83a1b897ebe6d54caf1085c29351fbf4fa9b33a48"
+    },
+    "starterSHA256": "14eac9c2484eff81e190a215f720aa433f2a15e911c1e23d061345df319723d8",
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "nativeResultSHA256": null,
+    "nativeVsPortableDifferenceCases": null,
+    "scope": "Unchanged FAQTranslationStore and InterimTranslationCache; filesystem persistence tested separately; ambiguous same-normalized columns are not in this corpus",
+    "nativeSwiftVersion": null,
+    "nativeMacOS": null
+  },
+  "logs": {
+    "portableComparison": "66cbd2389da388eb33942b5719d457e41005cab5d8799a93356d2a85cbcefb08"
+  },
+  "limits": [
+    "885317f Windows job remains failed; standalone Windows build was not reached",
+    "The new LF checkout rule requires its own remote CI verdict",
+    "Shared-reader regression proves the supported replacement mechanism; no trace identifies the competing handle in the earlier race",
+    "macOS 15 correction is still awaiting its run verdict",
+    "No native GUI or Windows GPU/ASR acceptance"
+  ]
+}

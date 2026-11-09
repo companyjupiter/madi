@@ -13,6 +13,21 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned Rust compiler and native GLib
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-dev pkg-config
+      - name: Verify the exact upstream backport and optimized regression
+        run: python3 scripts/check_glib_backport.py --exercise-regression
+      - name: Preserve backport evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: glib-backport-evidence
+          path: |
+            out/glib-backport/report.json
+            out/glib-backport/*-build.log
       - name: Reject newly introduced vulnerable dependencies
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:

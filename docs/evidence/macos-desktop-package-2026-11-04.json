@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "bundleIdentifier": "tv.devart.madi.parity",
+  "minimumSystemVersion": "14.0",
+  "signature": "ad-hoc; deep strict verification passed",
+  "relocatedLookup": "passed",
+  "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+  "missingHelperFailsClosed": true,
+  "helperSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+  "helperBytes": 150816,
+  "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+  "archiveSHA256": "fa14c0c33e4676f54d1cab0bcd1f57b88cd0cb8db06d5bb06163a13b7e03dc6f",
+  "productRelease": false,
+  "notarized": false,
+  "scope": "Headless relocated package/helper only; no UI, microphone, model admission, ASR bundle or updater validation",
+  "date": "2026-11-04",
+  "hostArchitecture": "arm64",
+  "sourceStatus": "Local packaging candidate; clean committed CI still required"
+}

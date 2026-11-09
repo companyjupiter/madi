@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T16:57:20.403234+00:00",
+  "baseHead": "672de1e2519319265055e0efc7cbc880603b9a0d",
+  "status": "PASS",
+  "scope": "Pure translation queue, prompt, cleanup and output admission policies; no product client or UI integration",
+  "sourceSHA256": {
+    "crates/madi-core/src/lib.rs": "35814cc2f41525d4d53b82df5265653f8d6f1b1b2d2e398431a4eaa12cf0d886",
+    "crates/madi-core/src/translation/mod.rs": "5f3150164445fbd1f1da48a2570720714271b2ed501b43745fc77e6652874a81",
+    "crates/madi-core/src/translation/output.rs": "03ee8616a8d1fdeb0215c220017e85d3b37dbd9215992ea3b45a2447fd2c7e06",
+    "crates/madi-core/examples/translation_oracle.rs": "be96e8ac2126d044f74600278d251c3f4398c8e52479cd38cb94cdeae199274c",
+    "scripts/check_translation_parity.py": "e7d9a13f75d3d781085755337704a53ad95a6ed8a2581e354bcd7c5129ff9a16",
+    "design/parity/translation-reference.json": "3db185cfdd8322d17402869836444d4bd42a412b031caa730be343fe44414d67",
+    ".github/workflows/desktop-parity.yml": "bf829666865ae860041e6d48ed76cb96adab4e8e1a65aa51b94806efaf46039e",
+    "Cargo.lock": "34edea7a803aaefc9e08ed8d8fdd4ec6287aec38b0012b95fb0f536c3d8eac52",
+    "rust-toolchain.toml": "d13306be0ecda81ce779baa290ffb417380d525928477f16200884b5169cca33"
+  },
+  "nativeSwift": {
+    "cases": 3574,
+    "caseKinds": {
+      "policy": 1839,
+      "prompt": 1366,
+      "shed": 144,
+      "guarantee": 45,
+      "queue": 180
+    },
+    "queueOperations": 6300,
+    "positivePolicyDecisions": {
+      "replay": 21,
+      "mayEcho": 7,
+      "retry": 436
+    },
+    "corpusSHA256": "0043376c3e01199345196c169a3e6500edfd42967330c5c75a4370477d5962ca",
+    "resultSHA256": "ffa71ddcd96f2e3d3f9f77509b4b36a56319f92a67ada009bc44c9ede92925ae",
+    "sources": {
+      "apps/macos/Sovereign/Engine/TranslationTurnQueue.swift": "382eaa929ff9267af6c3982d632975c499b1f9ecfa03dd1d5f6247a4430a197f",
+      "apps/macos/Sovereign/Transcript/TranslationShedPolicy.swift": "a5030e8b430578816ea0e25758075715acac43dcc3cfec07fa6474fc50b8215d",
+      "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true
+  },
+  "pinnedReference": {
+    "cases": 3574,
+    "caseKinds": {
+      "policy": 1839,
+      "prompt": 1366,
+      "shed": 144,
+      "guarantee": 45,
+      "queue": 180
+    },
+    "queueOperations": 6300,
+    "positivePolicyDecisions": {
+      "replay": 21,
+      "mayEcho": 7,
+      "retry": 436
+    },
+    "corpusSHA256": "0043376c3e01199345196c169a3e6500edfd42967330c5c75a4370477d5962ca",
+    "resultSHA256": "ffa71ddcd96f2e3d3f9f77509b4b36a56319f92a67ada009bc44c9ede92925ae",
+    "sources": {
+      "apps/macos/Sovereign/Engine/TranslationTurnQueue.swift": "382eaa929ff9267af6c3982d632975c499b1f9ecfa03dd1d5f6247a4430a197f",
+      "apps/macos/Sovereign/Transcript/TranslationShedPolicy.swift": "a5030e8b430578816ea0e25758075715acac43dcc3cfec07fa6474fc50b8215d",
+      "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d"
+    },
+    "status": "passed",
+    "nativeSwiftRun": false
+  },
+  "mutations": {
+    "mutations": [
+      {
+        "name": "nan_reservation_interval",
+        "exitCode": 1,
+        "referenceMismatch": true,
+        "logSHA256": "3c71c320555ac716f3f56dabe0b7f5888029e3c938c181f5b329a5b373e2b674"
+      },
+      {
+        "name": "reserved_interim_blocked",
+        "exitCode": 1,
+        "referenceMismatch": true,
+        "logSHA256": "1efb76a82824bdd461cb951de5ae55a709cf9ea8de109d487e1fd3bc55c3c90a"
+      },
+      {
+        "name": "narrow_cjk_runaway_limit",
+        "exitCode": 1,
+        "referenceMismatch": true,
+        "logSHA256": "8eec3ab29486d554b99203e583dcae9dd079a2f83d848bdefe440e5818a3ba01"
+      },
+      {
+        "name": "split_combining_tag",
+        "exitCode": 1,
+        "referenceMismatch": true,
+        "logSHA256": "7fbb7d8a849ea50e0f4f275d1004db6b2df0093183f0356e6449fff03bdb98bf"
+      },
+      {
+        "name": "miss_near_example_replay",
+        "exitCode": 1,
+        "referenceMismatch": true,
+        "logSHA256": "36c15b7c7071066d872fec5333111de9d16c08be224d6d2efb0c4c769cb51fa8"
+      },
+      {
+        "name": "leave_arrow_double_spaces",
+        "exitCode": 1,
+        "referenceMismatch": true,
+        "logSHA256": "e09b309554f618d283873d5ffa09b67d8b871896f21fcedcd8cea2d152cf4bdf"
+      }
+    ],
+    "sourcesRestored": true,
+    "sourceSHA256": {
+      "crates/madi-core/src/translation/mod.rs": "5f3150164445fbd1f1da48a2570720714271b2ed501b43745fc77e6652874a81",
+      "crates/madi-core/src/translation/output.rs": "03ee8616a8d1fdeb0215c220017e85d3b37dbd9215992ea3b45a2447fd2c7e06"
+    }
+  },
+  "unitTests": {
+    "core": 23,
+    "platform": 104,
+    "protocol": 14,
+    "total": 141
+  },
+  "checks": {
+    "format": "PASS",
+    "clippy": "PASS",
+    "nativeDifferential": "PASS",
+    "pinnedDifferential": "PASS"
+  },
+  "logs": {
+    "fmt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests": "e28b838618755837bffc2aa9871674141576499a5310e58c5cf206e1b4aa2f4d",
+    "clippy": "0bc5ce602866d51b39a27fc35f54921e67bfa6b0fb9b132df56505208b772c34",
+    "native": "aa9e33ba72f10fe2a07253a235f517879b6acf5ff9d699845384516d7e08209e",
+    "reference": "2c49e9f9ecb6140917b36afd2735c0823c5a2ff82ad645fb37864eaea0ebc54d"
+  },
+  "toolchain": {
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1",
+    "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.2.0",
+    "macOS": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2\nBuildVersion:\t\t26B123"
+  },
+  "limitations": [
+    "This source snapshot has not yet completed its own macOS/Windows CI run",
+    "No translation client, broker prefix lifecycle, transcript revision admission, interim display or stop-time backfill connection",
+    "No model quality, actual-app document corpus, native UI/UX or Windows GPU acceptance",
+    "Only diagnostic internal echo keys are canonically normalized; product result text is compared without normalization"
+  ]
+}

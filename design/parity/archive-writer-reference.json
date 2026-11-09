@@ -1,0 +1,9 @@
+{
+  "cases": 48,
+  "snapshots": 825,
+  "sources": {
+    "apps/macos/Sovereign/Session/SessionArchiveWriter.swift": "4f87bc3a69241235fb7371931ee5bef664eb77d50428c324cc7399740d1f7161"
+  },
+  "corpusSHA256": "91f414ae928df0856a17b49f3771a5081514a981daa7562edb53b8b1f694d810",
+  "resultSHA256": "11ec8b889910ce34ec67b2fe70aad6b98a8738ef0e74fe347a9abe8e50bd6c94"
+}

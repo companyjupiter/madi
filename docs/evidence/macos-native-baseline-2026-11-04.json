@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "recordedDate": "2026-11-04",
+  "status": "native-reference-captured-parity-open",
+  "priority": "macOS; Windows GPU validation deferred by user",
+  "host": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2\nBuildVersion:\t\t26B123",
+  "referenceSource": "c1390c750f2506e556a277421e146d80195ab797",
+  "buildHead": "675ceec44fda113194b13b60e7c45738e3afc1c0",
+  "swiftAndEngineSourceUnchanged": true,
+  "referenceBundle": {
+    "path": "out/parity-baseline-full/Madi.app",
+    "identifier": "com.companyjupiter.madi",
+    "version": "0.4.1",
+    "build": "808",
+    "executable": {
+      "path": "out/parity-baseline-full/Madi.app/Contents/MacOS/Madi",
+      "bytes": 10702752,
+      "sha256": "48ecda2178440c5fdc1acb05b75a0495bc82bd02f4eddfbd57b7d11c47a1fe1f"
+    },
+    "strictAssets": true,
+    "signature": "ad-hoc; codesign --verify --deep --strict passed"
+  },
+  "captures": [
+    {
+      "path": "out/desktop-parity/first-run-dark-native-swift.jpg",
+      "bytes": 174240,
+      "sha256": "0f5af61334b265d5a9ad69268a7d0a08cbddc4a1503e7e32078a122a24bb3587",
+      "appearance": "dark",
+      "uiLanguage": "ko",
+      "scale": 2,
+      "referenceState": "first-run",
+      "captureMethod": "cua native app screenshot",
+      "approvedGolden": false
+    },
+    {
+      "path": "out/desktop-parity/setup-dark-native-swift.jpg",
+      "bytes": 148277,
+      "sha256": "a038fc3e4e75c66eebcf521c64cb6971df7c2f611762289dcd12d9b2932a8f44",
+      "appearance": "dark",
+      "uiLanguage": "ko",
+      "scale": 2,
+      "referenceState": "ready-model setup",
+      "captureMethod": "cua native app screenshot",
+      "approvedGolden": false
+    },
+    {
+      "path": "out/desktop-parity/setup-dark-native-tauri-before.jpg",
+      "bytes": 148778,
+      "sha256": "b39182802954c8c6454edb4a32f7bc1128a556db2cf7532712fad561ef7ea707",
+      "appearance": "dark",
+      "uiLanguage": "ko",
+      "scale": 2,
+      "referenceState": "ready-model setup",
+      "captureMethod": "cua native app screenshot",
+      "approvedGolden": false
+    },
+    {
+      "path": "out/desktop-parity/lecture-ko-native-tauri.jpg",
+      "bytes": 145757,
+      "sha256": "3c2c63512cfab7dd0ced9a83d04b96d9462b915ee83697b0d2ea3a2cf7df9a9b",
+      "appearance": "dark",
+      "uiLanguage": "ko",
+      "scale": 2,
+      "referenceState": "ready-model setup",
+      "captureMethod": "cua native app screenshot",
+      "approvedGolden": false
+    },
+    {
+      "path": "out/desktop-parity/setup-dark-native-tauri-aligned.jpg",
+      "bytes": 140944,
+      "sha256": "0871e24e75cfbcb21879ae5de8e6483ce14e3d91ff180233a2518cb1afe5bcd6",
+      "appearance": "dark",
+      "uiLanguage": "ko",
+      "scale": 2,
+      "referenceState": "ready-model setup",
+      "captureMethod": "cua native app screenshot",
+      "approvedGolden": false
+    }
+  ],
+  "models": [
+    {
+      "name": "model.q8.safetensors",
+      "bytes": 867485320,
+      "sha256": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+      "installedBy": "original native model guide; verified download"
+    },
+    {
+      "name": "DNA3.0-4B.i1-Q4_K_M.gguf",
+      "bytes": 2783447424,
+      "sha256": "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8",
+      "installedBy": "original native model guide; verified download"
+    }
+  ],
+  "engineFiles": [
+    {
+      "path": "out/parity-baseline-full/Madi.app/Contents/Resources/assets-small/WHISPER_BPE.bin",
+      "bytes": 514525,
+      "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+    },
+    {
+      "path": "out/parity-baseline-full/Madi.app/Contents/Resources/assets-small/kaldi_melbank.bin",
+      "bytes": 82240,
+      "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+    },
+    {
+      "path": "out/parity-baseline-full/Madi.app/Contents/Resources/assets-small/mel_filters.bin",
+      "bytes": 102912,
+      "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+    },
+    {
+      "path": "out/parity-baseline-full/Madi.app/Contents/Resources/assets-small/pyannote_osd.bin",
+      "bytes": 5973428,
+      "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+    },
+    {
+      "path": "out/parity-baseline-full/Madi.app/Contents/Resources/assets-small/resnet34_diar.bin",
+      "bytes": 26522076,
+      "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+    },
+    {
+      "path": "out/parity-baseline-full/Madi.app/Contents/Resources/assets-small/silero_vad.bin",
+      "bytes": 1238776,
+      "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+    },
+    {
+      "path": "out/parity-baseline-full/Madi.app/Contents/Resources/assets-small/suppress_tokens.bin",
+      "bytes": 352,
+      "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+    }
+  ],
+  "knownGaps": [
+    "First-run model gate is not ported",
+    "Device enumeration and microphone label remain placeholders",
+    "Titlebar appearance and font/glyph differences remain under comparison",
+    "No full visual or interaction parity pass",
+    "No Tauri audio, inference, lifecycle executor or persistence integration"
+  ],
+  "nativeUIObservations": {
+    "originalOuterPoints": [
+      1150,
+      710
+    ],
+    "tauriBeforeOuterPoints": [
+      1150,
+      743
+    ],
+    "tauriAlignedOuterPoints": [
+      1150,
+      710
+    ],
+    "setupIPC": "input Korean and Lecture observed through native UI; diarization disabled",
+    "systemCaptureIndicator": "present in screenshots; not hidden or masked"
+  },
+  "limits": [
+    "The first-run and setup Swift screenshots came from out/parity-baseline/Madi.app before the strict runtime-asset rebuild; its Swift source is identical. The full bundle is built and signed but inference has not yet run.",
+    "Only dark Korean native setup is compared; browser light/English/Japanese renders are not native parity.",
+    "Screenshot geometry is outer-window pixels at 2x; content/frame semantics differ between SwiftUI and Tauri.",
+    "Model hashes validate artifacts, not model inference quality."
+  ]
+}

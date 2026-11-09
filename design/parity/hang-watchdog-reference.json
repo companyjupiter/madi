@@ -1,0 +1,9 @@
+{
+  "cases": 600,
+  "transitions": 36000,
+  "corpusSHA256": "9feefba3ee419f36a63ea2d7103991462498c5aa421abfae425ffb0fec188d2b",
+  "resultSHA256": "8bd184b28fbde21c12b72e32711e83ce3df51b7a34f516eb501c8fc05a6421ac",
+  "sources": {
+    "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+  }
+}

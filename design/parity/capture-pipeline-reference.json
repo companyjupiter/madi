@@ -1,0 +1,21 @@
+{
+  "cases": 113,
+  "operations": 6337,
+  "levelEvents": 3164,
+  "segments": 727,
+  "previews": 519,
+  "wavBytesCompared": 140680014,
+  "corpusSHA256": "714029b5c2c21976dfefe5a794acc38c2962eed99acf10a9ae928526450399d8",
+  "resultSHA256": "8e2d01166f1af3dd301ba74c55e1071175b49db5621c309b1e31864999370fd1",
+  "sourceSHA256": {
+    "apps/macos/Sovereign/Audio/AudioCapture.swift": "7f57adf99abe6570e2b5edd2f5a163957c731ca766fa5821d5853ef86e6e9a61",
+    "apps/macos/Sovereign/Audio/AudioSource.swift": "d536fe141172773722101886e0330b3c6f1605107ef610ad1a887b2d421f10b5",
+    "apps/macos/Sovereign/Audio/AudioDevices.swift": "66dda50a292dbcf50f67d034252194e9fed079cc0bdf5509ea7cbe1b008fa6fe",
+    "apps/macos/Sovereign/Audio/SystemAudioCapture.swift": "6701a462de6a41177570ecd18277a69cac9fa5708fa8a2ff0a88da9fa5a66440",
+    "apps/macos/Sovereign/Audio/Resampler.swift": "2489496e71e1a364e695e3aa4d002b5194ec528e9732f8d30f39c117bdfef2f8",
+    "apps/macos/Sovereign/Audio/Segmenter.swift": "8db64d433f12eb72b5b9da87233687d07258bdd8489474c5c31b7e5a82dab957",
+    "apps/macos/Sovereign/Audio/WavWriter.swift": "4fdd059ebaa2505343aa4b7c519271b370a54ebf9f175f46dfb7c8420f589916",
+    "apps/macos/Sovereign/Session/SessionCoordinator.swift": "76afa2c46241b6e04003c66673421d23af9b40c86b3f6f78d908f9945ab9619f",
+    "tests/parity/CapturePipelineOracle.swift": "061839e0e83857a27783161bd0df5972b0cb5c12fab0b61f50fe8e42f27f67e3"
+  }
+}

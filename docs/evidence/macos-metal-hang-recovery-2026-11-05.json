@@ -1,0 +1,480 @@
+{
+  "schemaVersion": 1,
+  "verifiedUTC": "2026-11-04T23:48:58.220787+00:00",
+  "status": "ACTUAL_INSTALLED_METAL_SIGSTOP_RECOVERY_PASS_NATIVE_UI_NOT_RUN",
+  "baselineHead": "44115b5d7c6554a72c107a474ceb357264dc35ab",
+  "sourceDirtyAtValidation": true,
+  "sourceSHA256": {
+    "crates/madi-platform/src/file_workflow/live_tests/metal_recovery_probe.rs": "3d9884a2af97a23c291b0779ffa647690ce496f10c6a542fad9fbc225479397c",
+    "crates/madi-platform/src/file_workflow/live_tests.rs": "dbd0e7f0ce46152a022311154b4c60ce582d6d032d1324febd88f3bac5c433ad",
+    "crates/madi-platform/src/file_workflow.rs": "3db7c3276c294b3fd0850681669f92d677dedcb78c164b59dcf2ab5648827839",
+    "crates/madi-platform/src/file_workflow/driver.rs": "00cfa519a891d204fafacc282aade3a57c12f784eedddbf31184c32c562b3d74",
+    "crates/madi-platform/src/live_session.rs": "7112bcf68fe04349d5a409ef73c8ddbf76d516359a56cce0ecf435fe58201cc0",
+    "crates/madi-core/src/coverage.rs": "5b0fc23cd707b802293fe3a33e998bbd5825eddef44a08fda89ab69003b000bb",
+    "crates/madi-core/src/hang_watchdog.rs": "dd2a00b267c91fe3cfdf18846710aa4a02796f3e3a40154862bd529eff360030"
+  },
+  "productionRuntimeChanges": false,
+  "environment": {
+    "os": "macOS 27.2",
+    "architecture": "arm64",
+    "capture": "scripted pinned public JFK PCM; no microphone opened",
+    "clock": "SystemTime wall clock and normal 5-second poll; no injected clock"
+  },
+  "validation": {
+    "defaultRustTestCounts": [
+      32,
+      11,
+      138,
+      14
+    ],
+    "defaultRustTestTotal": 195,
+    "defaultIgnoredMetalProbes": 1,
+    "explicitMetalProbeTests": 1,
+    "rustFmt": "PASS",
+    "strictClippy": "PASS --locked --workspace --all-targets -- -D warnings",
+    "probeReportSHA256": "f9b1c8260f0adb39e78ee6e68a6a0a4f0d7382e3150c91c25172f61a439d6851",
+    "probe": {
+      "baseline": {
+        "Ok": {
+          "archiveMatchesFinalTranscript": true,
+          "archiveSHA256": "7b3d00d4be01c79bbdeb539f7b1a9920222452214bde5aaeed6ac6a152fc6810",
+          "engineLaunches": 1,
+          "injectedSIGSTOP": false,
+          "ownedAudioRemovedAfterReset": true,
+          "recoverySeconds": null,
+          "reopenedTextMatches": true,
+          "resetClearsRecoveryWarning": true,
+          "retainedWavsUnchanged": true,
+          "status": "passed",
+          "transcript": [
+            {
+              "end": 4.28,
+              "speaker": 0,
+              "start": 0.34,
+              "text": "And so, my fellow Americans, ask not.",
+              "words": [
+                {
+                  "conf": 0.83,
+                  "t0": 0.34,
+                  "t1": 0.5,
+                  "text": "And"
+                },
+                {
+                  "conf": 0.59,
+                  "t0": 0.5,
+                  "t1": 0.99,
+                  "text": "so,"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 0.99,
+                  "t1": 1.25,
+                  "text": "my"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 1.37,
+                  "t1": 1.54,
+                  "text": "fellow"
+                },
+                {
+                  "conf": 0.86,
+                  "t0": 1.54,
+                  "t1": 2.11,
+                  "text": "Americans,"
+                },
+                {
+                  "conf": 0.94,
+                  "t0": 2.7,
+                  "t1": 3.66,
+                  "text": "ask"
+                },
+                {
+                  "conf": 0.51,
+                  "t0": 4.03,
+                  "t1": 4.28,
+                  "text": "not."
+                }
+              ]
+            },
+            {
+              "end": 10.33,
+              "speaker": 0,
+              "start": 5.0,
+              "text": "What your country can do for you, ask what you can do for your Country.",
+              "words": [
+                {
+                  "conf": 0.55,
+                  "t0": 5.0,
+                  "t1": 5.08,
+                  "text": "What"
+                },
+                {
+                  "conf": 0.98,
+                  "t0": 5.42,
+                  "t1": 5.55,
+                  "text": "your"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 5.66,
+                  "t1": 6.42,
+                  "text": "country"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 6.51,
+                  "t1": 6.6,
+                  "text": "can"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 6.6,
+                  "t1": 6.68,
+                  "text": "do"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 6.71,
+                  "t1": 6.91,
+                  "text": "for"
+                },
+                {
+                  "conf": 0.76,
+                  "t0": 7.01,
+                  "t1": 7.52,
+                  "text": "you,"
+                },
+                {
+                  "conf": 0.99,
+                  "t0": 7.76,
+                  "t1": 8.48,
+                  "text": "ask"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 8.64,
+                  "t1": 8.76,
+                  "text": "what"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 8.76,
+                  "t1": 9.2,
+                  "text": "you"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 9.2,
+                  "t1": 9.33,
+                  "text": "can"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 9.33,
+                  "t1": 9.41,
+                  "text": "do"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 9.45,
+                  "t1": 9.76,
+                  "text": "for"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 9.76,
+                  "t1": 9.83,
+                  "text": "your"
+                },
+                {
+                  "conf": 0.34,
+                  "t0": 10.0,
+                  "t1": 10.33,
+                  "text": "Country."
+                }
+              ]
+            },
+            {
+              "end": 10.6,
+              "speaker": 0,
+              "start": 10.33,
+              "text": "Country.",
+              "words": [
+                {
+                  "conf": 0.73,
+                  "t0": 10.33,
+                  "t1": 10.6,
+                  "text": "Country."
+                }
+              ]
+            },
+            {
+              "end": 10.8,
+              "speaker": 0,
+              "start": 10.7,
+              "text": "Country.",
+              "words": [
+                {
+                  "conf": 0.91,
+                  "t0": 10.7,
+                  "t1": 10.8,
+                  "text": "Country."
+                }
+              ]
+            }
+          ],
+          "warning": null,
+          "wavSHA256": {
+            "seg00000.wav": "6f7b022b4670ddcad48cf097e3cc60c8ba54bd15d6a73b3ea776cadbf0b8d610",
+            "seg00001.wav": "96cb1f6045a7e13b1255db9ed72f0603773891605de70aadb34dc3f5e2085a35",
+            "seg00002.wav": "ad7a28937c78a6ec205dbcb61f60d29426e25e9d570b1b022b06bb05e1ab3522"
+          }
+        }
+      },
+      "baselineEqualsRecovered": true,
+      "devicesOpened": false,
+      "engineSHA256": "2b6ce1de028513f7f3a59d560bdd327932a648298db4385218038934ae9e9137",
+      "fixtureSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "modelSHA256": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+      "recovered": {
+        "Ok": {
+          "archiveMatchesFinalTranscript": true,
+          "archiveSHA256": "7b3d00d4be01c79bbdeb539f7b1a9920222452214bde5aaeed6ac6a152fc6810",
+          "engineLaunches": 2,
+          "injectedSIGSTOP": true,
+          "ownedAudioRemovedAfterReset": true,
+          "recoverySeconds": 49.82762375,
+          "reopenedTextMatches": true,
+          "resetClearsRecoveryWarning": true,
+          "retainedWavsUnchanged": true,
+          "status": "passed",
+          "transcript": [
+            {
+              "end": 4.28,
+              "speaker": 0,
+              "start": 0.34,
+              "text": "And so, my fellow Americans, ask not.",
+              "words": [
+                {
+                  "conf": 0.83,
+                  "t0": 0.34,
+                  "t1": 0.5,
+                  "text": "And"
+                },
+                {
+                  "conf": 0.59,
+                  "t0": 0.5,
+                  "t1": 0.99,
+                  "text": "so,"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 0.99,
+                  "t1": 1.25,
+                  "text": "my"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 1.37,
+                  "t1": 1.54,
+                  "text": "fellow"
+                },
+                {
+                  "conf": 0.86,
+                  "t0": 1.54,
+                  "t1": 2.11,
+                  "text": "Americans,"
+                },
+                {
+                  "conf": 0.94,
+                  "t0": 2.7,
+                  "t1": 3.66,
+                  "text": "ask"
+                },
+                {
+                  "conf": 0.51,
+                  "t0": 4.03,
+                  "t1": 4.28,
+                  "text": "not."
+                }
+              ]
+            },
+            {
+              "end": 10.33,
+              "speaker": 0,
+              "start": 5.0,
+              "text": "What your country can do for you, ask what you can do for your Country.",
+              "words": [
+                {
+                  "conf": 0.55,
+                  "t0": 5.0,
+                  "t1": 5.08,
+                  "text": "What"
+                },
+                {
+                  "conf": 0.98,
+                  "t0": 5.42,
+                  "t1": 5.55,
+                  "text": "your"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 5.66,
+                  "t1": 6.42,
+                  "text": "country"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 6.51,
+                  "t1": 6.6,
+                  "text": "can"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 6.6,
+                  "t1": 6.68,
+                  "text": "do"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 6.71,
+                  "t1": 6.91,
+                  "text": "for"
+                },
+                {
+                  "conf": 0.76,
+                  "t0": 7.01,
+                  "t1": 7.52,
+                  "text": "you,"
+                },
+                {
+                  "conf": 0.99,
+                  "t0": 7.76,
+                  "t1": 8.48,
+                  "text": "ask"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 8.64,
+                  "t1": 8.76,
+                  "text": "what"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 8.76,
+                  "t1": 9.2,
+                  "text": "you"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 9.2,
+                  "t1": 9.33,
+                  "text": "can"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 9.33,
+                  "t1": 9.41,
+                  "text": "do"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 9.45,
+                  "t1": 9.76,
+                  "text": "for"
+                },
+                {
+                  "conf": 1.0,
+                  "t0": 9.76,
+                  "t1": 9.83,
+                  "text": "your"
+                },
+                {
+                  "conf": 0.34,
+                  "t0": 10.0,
+                  "t1": 10.33,
+                  "text": "Country."
+                }
+              ]
+            },
+            {
+              "end": 10.6,
+              "speaker": 0,
+              "start": 10.33,
+              "text": "Country.",
+              "words": [
+                {
+                  "conf": 0.73,
+                  "t0": 10.33,
+                  "t1": 10.6,
+                  "text": "Country."
+                }
+              ]
+            },
+            {
+              "end": 10.8,
+              "speaker": 0,
+              "start": 10.7,
+              "text": "Country.",
+              "words": [
+                {
+                  "conf": 0.91,
+                  "t0": 10.7,
+                  "t1": 10.8,
+                  "text": "Country."
+                }
+              ]
+            }
+          ],
+          "warning": "복구 1회",
+          "wavSHA256": {
+            "seg00000.wav": "6f7b022b4670ddcad48cf097e3cc60c8ba54bd15d6a73b3ea776cadbf0b8d610",
+            "seg00001.wav": "96cb1f6045a7e13b1255db9ed72f0603773891605de70aadb34dc3f5e2085a35",
+            "seg00002.wav": "ad7a28937c78a6ec205dbcb61f60d29426e25e9d570b1b022b06bb05e1ab3522"
+          }
+        }
+      },
+      "schemaVersion": 1,
+      "scope": "Actual installed macOS ASR/model with native workflow, scripted public PCM, real wall-time SIGSTOP/SIGKILL replacement, transcript/owned-WAV/archive baseline comparison and cleanup; no microphone, WebView, naturally occurring GPU hang or numerical/quality acceptance.",
+      "sourceModelEngineUnchanged": true,
+      "status": "passed"
+    },
+    "logs": {
+      "probe": {
+        "path": "/tmp/madi-real-metal-hang.log",
+        "sha256": "a4964f218daecbe8a64ec03583ed775759a15dd299f4e6ffb173af9a2ffb62e5"
+      },
+      "tests": {
+        "path": "/tmp/madi-metal-recovery-tests.log",
+        "sha256": "b8a4a034c7dcd589fcd68d7bb8dfea69a663ffb867b2517c5578bfa532a1090a"
+      },
+      "clippy": {
+        "path": "/tmp/madi-metal-recovery-clippy.log",
+        "sha256": "c8ca6199fc36a4926285ac2047c31d5006535308a2d2c34132248fb56f388f47"
+      }
+    }
+  },
+  "failedHarnessAttempts": [
+    {
+      "report": "out/metal-hang-recovery/report-invalid-owner.json",
+      "reportSHA256": "f9afa3469b07a4b94315a636f5f72efb653e5ef79df198aab8e901d397c6a3b1",
+      "reason": "Harness compared /var temporary path with its canonical /private/var engine root; normalized the scratch root.",
+      "baselineError": "unexpected WAV owner",
+      "recoveredError": "baseline failed"
+    },
+    {
+      "report": "out/metal-hang-recovery/report-silence-wait.json",
+      "reportSHA256": "3c907ce9a1188a645e9f110ccb65d9634e21464bcea4aa9ec430b824338c0fc9",
+      "reason": "Harness waited for Listening after a single PCM delivery; normal >15-second silence hides that indicator during the 45-second stall. Wait for actual words and drain Stop/FLUSH instead; exact final comparisons remain required.",
+      "baselineError": null,
+      "recoveredError": "deadline has elapsed"
+    }
+  ],
+  "limits": [
+    "A controlled SIGSTOP establishes process-hang replacement, not diagnosis or recovery of every naturally occurring Metal/GPU hang.",
+    "No microphone/system audio, WebView clicks, warning rendering, playback, Windows device/GPU or full UI/UX acceptance.",
+    "No ASR numerical accuracy or performance acceptance.",
+    "No production runtime change or package rebuild in this probe-only slice; 44115b5 CI/package evidence is separate."
+  ]
+}

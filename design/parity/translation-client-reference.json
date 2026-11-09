@@ -1,0 +1,12 @@
+{
+  "cases": 165,
+  "operations": 6767,
+  "corpusSHA256": "c738cb40bda6c9cf47eae09e9f249a9587457663909f44c1dd93114c4071eff0",
+  "resultSHA256": "a5906a0c07da47049c916f34fd52d4ad68ed40b2f30a7a2fda5d91dec27f4320",
+  "sources": {
+    "apps/macos/Sovereign/Engine/TranslateEngine.swift": "cb7203c697757c07b7a720b8850d361bd720fd9570e2a53135562586f9542c85",
+    "apps/macos/Sovereign/Engine/TranslationTurnQueue.swift": "382eaa929ff9267af6c3982d632975c499b1f9ecfa03dd1d5f6247a4430a197f",
+    "apps/macos/Sovereign/Transcript/TranslationShedPolicy.swift": "a5030e8b430578816ea0e25758075715acac43dcc3cfec07fa6474fc50b8215d",
+    "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d"
+  }
+}

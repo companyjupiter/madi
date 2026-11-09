@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "sourceHead": "d12687ba2271f152b953f605aebcfc760acf564c",
+  "sourceDirty": true,
+  "sourceSHA256": {
+    "crates/madi-core/src/glossary.rs": "a147aa2c84cd073e69212291854c0d827e42a2dcbccb7d29599830de03539ca0",
+    "crates/madi-core/src/lib.rs": "7af3387e8d692ed142bce713c9a5e53eeb96525b7824e864c11e366b37495e93",
+    "crates/madi-core/Cargo.toml": "b61c460d6a2821e6cd0f8bf903bc60de848e612cd88e28240ccf32837e8f41c7",
+    "crates/madi-core/examples/glossary_oracle.rs": "e8feb0f417e78c665156b03e12dbaba8fce6f5f521b492d617e94de828ade8e4",
+    "tests/parity/GlossaryOracle.swift": "4c09b88e60a18e77adf4d35bb7fcc1d67ca5277068bad810a432b7f77fac3af4",
+    "scripts/check_glossary_parity.py": "4e96b9b7057ede134257309594c2bad74b2ab9b68ab31d909288e668650f5384",
+    "design/parity/glossary-reference.json": "24ede8847a137ed569d0b6d01e39b6054daae3611ee8c68571c512d5ec0f9e98",
+    ".gitattributes": "e50bc87021858971deac10e21dd7c12ccc5a894e0e6fc3ed3b6955f3748345b9",
+    ".github/workflows/desktop-parity.yml": "5dd5090a2780a4861896e4e97061d8a4a15067a729b94687ac3c8b8ce22dd914"
+  },
+  "native": {
+    "cases": 254,
+    "states": 4799,
+    "corpusSHA256": "060e11c60a39d94913fd1817b30961ed126a54479df6378a05018205e5483c93",
+    "resultSHA256": "690aabb4ba69e0e18e47a041ea685091965f73e61a4ca1cba44627f4fa5b87c2",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+      "apps/macos/Sovereign/UI/GlossarySettingsView.swift": "8b2bfcc01e2d49c3a65ff684d49889f1e75098e4f5fc2bcab16270e2d66e34b1"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "Glossary storage, schema restoration and mutations only; no matcher, learning integration, persistent owner or Settings UI"
+  },
+  "portable": {
+    "cases": 254,
+    "states": 4799,
+    "corpusSHA256": "060e11c60a39d94913fd1817b30961ed126a54479df6378a05018205e5483c93",
+    "resultSHA256": "690aabb4ba69e0e18e47a041ea685091965f73e61a4ca1cba44627f4fa5b87c2",
+    "sources": {
+      "apps/macos/Sovereign/Transcript/GlossaryStore.swift": "26b144cc80ac4d5c23e050f252baad08174c0925c57203599fb188f5049228c7",
+      "apps/macos/Sovereign/UI/GlossarySettingsView.swift": "8b2bfcc01e2d49c3a65ff684d49889f1e75098e4f5fc2bcab16270e2d66e34b1"
+    },
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "scope": "Glossary storage, schema restoration and mutations only; no matcher, learning integration, persistent owner or Settings UI"
+  },
+  "checks": {
+    "coreTests": 12,
+    "workspaceClippy": "PASS",
+    "rustfmt": "PASS"
+  },
+  "intentionalDifference": "Int64.max hit-count learning returns an error without mutation; original Swift traps",
+  "notRun": [
+    "PersonalVocabulary matcher, edit learning and prompt integration",
+    "Native legacy preference read and isolated persistent owner",
+    "Settings UI and native pixel/interaction acceptance",
+    "Application rebuild for this unconnected value-only slice"
+  ]
+}

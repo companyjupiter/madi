@@ -1,0 +1,16 @@
+[package]
+name = "madi-glib-variant-regression"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+# The regression always exercises the audited local source, never a registry
+# fallback. Its actual package version is retained in vendor/glib/Cargo.toml.
+glib = { path = "../../../vendor/glib" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"

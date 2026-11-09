@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41700106422",
+  "head": "5af3c19beadf6366b15b768618f4cbb143d4e21e",
+  "conclusion": "success",
+  "unitTests": {
+    "macOS": 26,
+    "Windows": 25
+  },
+  "records": [
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "5af3c19beadf6366b15b768618f4cbb143d4e21e",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "binary": "target/debug/madi-desktop",
+        "bytes": 32673632,
+        "sha256": "d19e61a2e796d177a72ed691d46a04a8eb6759679993622c53cc1f4e7f0b0ba0",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "audioDeviceComparison": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "os": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "source": "apps/macos/Sovereign/Audio/AudioDevices.swift",
+        "sourceSHA256": "66dda50a292dbcf50f67d034252194e9fed079cc0bdf5509ea7cbe1b008fa6fe",
+        "deviceCount": 2,
+        "defaultPresent": true,
+        "snapshotSHA256": "71050711683d68747a877d5e085faab97ff71056b417ffa35760b296201295ec",
+        "scope": "Live read-only enumeration and default input only; no capture, hot-swap or permission validation"
+      }
+    },
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "5af3c19beadf6366b15b768618f4cbb143d4e21e",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "binary": "target\\debug\\madi-desktop.exe",
+        "bytes": 12509184,
+        "sha256": "3693312cbd6698398cec86f667ed4845cf86b81373dfc28e57b3a34cc5382df1",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      }
+    }
+  ],
+  "downloadedBinariesVerified": true,
+  "limitations": [
+    "Read-only device discovery; no capture",
+    "Precedes new native process supervisor",
+    "Full native UI parity remains open"
+  ]
+}

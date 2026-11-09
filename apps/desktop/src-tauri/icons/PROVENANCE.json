@@ -1,0 +1,7 @@
+{
+  "source": "apps/macos/Sovereign/Resources/icon_app_madi.png",
+  "sourceSHA256": "94c033a2597db9a1ba3e1abd581475da18cd5cc2c4dfe074879f237ab0180f5f",
+  "tool": "@tauri-apps/cli 2.12.4 icon",
+  "outputSHA256": "d12978748694609741b81f0800b01c3ce12a69b401dc9d389ae8f4f12887161d",
+  "change": "Container and resolution conversion for Windows resources; no new artwork."
+}

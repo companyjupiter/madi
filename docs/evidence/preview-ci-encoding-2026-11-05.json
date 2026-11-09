@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T15:55:43.361208+00:00",
+  "baseHead": "a29470d7747c42e5720a8d29930fa6797fabcc26",
+  "failedJob": "https://github.com/companyjupiter/madi/actions/runs/41861317608/job/126683558567",
+  "cause": "Python 3.12 on Windows used cp1252 to read UTF-8 Swift source; UnicodeDecodeError at byte 119 in TranslationStability.swift",
+  "change": "Explicit UTF-8 for every preview-oracle text read/write; EncodingWarning fails this oracle in both CI jobs",
+  "sourceSHA256": {
+    "scripts/check_preview_parity.py": "2e7b202c9e16caf9a1047bb9c91cab6ae345dc797842c0bb0d5406413012dc04",
+    ".github/workflows/desktop-parity.yml": "3e24dfbbce3f44b5076fb10dcc9ed9af5b9719216838b2a4d36ce671d5b29686"
+  },
+  "validation": {
+    "cp1252DefaultBefore": "FAIL: same UnicodeDecodeError at byte 119",
+    "cp1252DefaultAfter": "PASS: 1409 pinned cases",
+    "implicitEncodingGuardNative": "PASS: 1409 cases against unchanged shipping Swift",
+    "implicitEncodingGuardPortable": "PASS: 1409 pinned cases",
+    "logSHA256": {
+      "madi-preview-cp1252-reproduction.log": "5a0a9933e7e47af538cb0268c1cc36678ca41943a00d24684434079906bf3b77",
+      "madi-preview-utf8-native.log": "b168a8ee0e53295bbb704c88f397e7a73b731f872230e301fccbd914743145a9",
+      "madi-preview-utf8-reference.log": "b0cfa4cb36dd183ea4676b466ec96e0a07eea26e806a00e969d9a5420d12f6a8"
+    }
+  },
+  "limitations": [
+    "Windows CI and package result for the corrected revision are pending",
+    "No product behavior or native Swift baseline changed",
+    "Actual preview UI and device validation remain open"
+  ]
+}

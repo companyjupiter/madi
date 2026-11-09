@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41712443094",
+  "head": "a882fbd16382370beb54d627c256f0415ebaa844",
+  "conclusion": "success",
+  "records": [
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "a882fbd16382370beb54d627c256f0415ebaa844",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "binary": "target/debug/madi-desktop",
+        "bytes": 34072032,
+        "sha256": "f18b02b7aa47e8ed2ef24d098df27fc1e3ddee04a8d19926295b4d48d14b3245",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "firstRunPolicy": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 48,
+        "swiftComparison": "live-unmodified-source",
+        "sources": {
+          "apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift": "ded343aeb76d63cc4981407aed128aeb1321da6a383837a567d1d0522e019387",
+          "apps/macos/Sovereign/Model/AssetManifest.swift": "b080aa2bd7f1894e9c9bc986b492ab769d96594671c2d561a51c1a9489eaa49c"
+        },
+        "corpusSHA256": "dd9c0c204b8fd93697865e267b78a5d5f32f4e77d3b2f04cd1a8d9acac0096ff",
+        "resultSHA256": "8fb75a1640cae9ae8959b065e3bb67d38780942f737917854c74cf4eefb8e05a",
+        "scope": "Existing-install entry, explicit first-run choice, engine absence and missing-only download totals; no download or UI execution"
+      }
+    },
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "a882fbd16382370beb54d627c256f0415ebaa844",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "binary": "target\\debug\\madi-desktop.exe",
+        "bytes": 12881408,
+        "sha256": "98a56be4a330a7972a93aaac768c7bc3665620c13e1f62bc2c6fec9f75e33cd1",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "firstRunPolicy": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 48,
+        "swiftComparison": "not-run",
+        "sources": {
+          "apps/macos/Sovereign/AppInfo/FirstRunModelSetupPolicy.swift": "ded343aeb76d63cc4981407aed128aeb1321da6a383837a567d1d0522e019387",
+          "apps/macos/Sovereign/Model/AssetManifest.swift": "b080aa2bd7f1894e9c9bc986b492ab769d96594671c2d561a51c1a9489eaa49c"
+        },
+        "corpusSHA256": "dd9c0c204b8fd93697865e267b78a5d5f32f4e77d3b2f04cd1a8d9acac0096ff",
+        "resultSHA256": "8fb75a1640cae9ae8959b065e3bb67d38780942f737917854c74cf4eefb8e05a",
+        "scope": "Existing-install entry, explicit first-run choice, engine absence and missing-only download totals; no download or UI execution"
+      }
+    }
+  ],
+  "downloadedBinariesVerified": true,
+  "limitations": [
+    "Pure policy and pinned Swift reference; no native first-run UI or installer execution",
+    "Precedes inference runtime package"
+  ]
+}

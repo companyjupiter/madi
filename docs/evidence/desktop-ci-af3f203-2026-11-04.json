@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41708512521",
+  "head": "af3f2036f604551e3fbc8796592b1ea7c660de2f",
+  "conclusion": "success",
+  "unitTests": {
+    "macOS": 46,
+    "Windows": 40
+  },
+  "records": [
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "af3f2036f604551e3fbc8796592b1ea7c660de2f",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "binary": "target/debug/madi-desktop",
+        "bytes": 34057616,
+        "sha256": "85232f28142ff8f239a88c25bfdbb5309fd1395b78e48f72037b680f248e4c68",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "asrConfiguration": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 601,
+        "swiftComparison": "live-extracted-unmodified-source",
+        "sources": {
+          "apps/macos/Sovereign/Engine/EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+          "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+        },
+        "extractedSourceSHA256": "6814a31234e67bc269b231e5744a8ba483e703ddada6de3d372a119cff89800a",
+        "corpusSHA256": "471b323f4e3b20810a0c6688cc61418d257c46e94162e016286d872f74b61872",
+        "resultSHA256": "73691c708495303ba8e24e3a75ccb5bdc2581747f6f5d0f8bfba86a5fca20886",
+        "scope": "File-mode launch construction and setup mapping; no process execution, model admission, live capture or UI integration",
+        "intentionalDifference": "Rust removes unset engine-owned environment keys so inherited STREAM/fixed-K/language/glossary cannot override the setup"
+      }
+    },
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "af3f2036f604551e3fbc8796592b1ea7c660de2f",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "binary": "target\\debug\\madi-desktop.exe",
+        "bytes": 12881408,
+        "sha256": "7c7f57244f2caf9dab260f5b4d36546b46396710dfe4546146b1b8809942acbf",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "asrConfiguration": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "cases": 601,
+        "swiftComparison": "not-run",
+        "sources": {
+          "apps/macos/Sovereign/Engine/EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+          "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+        },
+        "extractedSourceSHA256": "6814a31234e67bc269b231e5744a8ba483e703ddada6de3d372a119cff89800a",
+        "corpusSHA256": "471b323f4e3b20810a0c6688cc61418d257c46e94162e016286d872f74b61872",
+        "resultSHA256": "73691c708495303ba8e24e3a75ccb5bdc2581747f6f5d0f8bfba86a5fca20886",
+        "scope": "File-mode launch construction and setup mapping; no process execution, model admission, live capture or UI integration",
+        "intentionalDifference": "Rust removes unset engine-owned environment keys so inherited STREAM/fixed-K/language/glossary cannot override the setup"
+      }
+    }
+  ],
+  "downloadedBinariesVerified": true,
+  "limitations": [
+    "Native picker/staged-card UI parity remains unverified",
+    "No full Tauri inference view or live capture connection",
+    "Precedes bundled native decoder package checks"
+  ]
+}

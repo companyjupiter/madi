@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T17:32:22.136990+00:00",
+  "baseHead": "138a74178b530381c06224700b126daabd9181ae",
+  "status": "PASS",
+  "scope": "Native translation client state and shared broker connection; product session scheduling/display still unconnected",
+  "sourceSHA256": {
+    "crates/madi-core/src/translation/mod.rs": "06098aa19f13e948e48717d511441e4051262311279837c246793abec81529fd",
+    "crates/madi-core/src/translation/client.rs": "77b54983c661bb617203bea06e1a0a4b14de91e0f036beaa3d9cdfd3048f2881",
+    "crates/madi-core/examples/translation_client_oracle.rs": "4da8820e63e478466e734170476dbdef0e80d11887dd96f5e6e559f737f54e51",
+    "crates/madi-platform/src/lib.rs": "a49c415999b1b9796782a692e022af043f00cfadca73a9651a40800ba13b5755",
+    "crates/madi-platform/src/dna_broker.rs": "45cef6accf832a7d5a4c268a0f8822511e80bb94a2d0b4cdb1dc25709eec3292",
+    "crates/madi-platform/src/dna_broker/tests.rs": "4a513bbe79ab02ec7e53d1286616092c23592b3b3d7b13a0deeceea0935800ce",
+    "crates/madi-platform/src/translation_client.rs": "fd662f4dfc255516f249788457c65bc7003d380b26a80e9eb217411be3a7b9ad",
+    "crates/madi-platform/src/translation_client/tests.rs": "9e1a35c12b784c807e0ce3d6cd5287abaa8ab93e4ce1060e579a930a011a1553",
+    "crates/madi-platform/examples/translation_client_smoke.rs": "6aa9293a0cc2c0b2d5c489c8bc5da3de6e2e2eb51a5cbd7bfaef342c68ab0113",
+    "scripts/check_translation_client_parity.py": "7e19d8a9eab325062f51b83ca7bf521e5e727bca407e3d5cc38d6911db0c9ce1",
+    "design/parity/translation-client-reference.json": "203030b364ec586f369309ab5f0a89210fd95553d60ef3600b329941da040e7b",
+    ".github/workflows/desktop-parity.yml": "285b9aae10c37da178a893d8c053797a17003be5c9a87c5315308167608604e6",
+    "Cargo.lock": "34edea7a803aaefc9e08ed8d8fdd4ec6287aec38b0012b95fb0f536c3d8eac52",
+    "rust-toolchain.toml": "d13306be0ecda81ce779baa290ffb417380d525928477f16200884b5169cca33"
+  },
+  "nativeSwift": {
+    "cases": 165,
+    "operations": 6767,
+    "corpusSHA256": "c738cb40bda6c9cf47eae09e9f249a9587457663909f44c1dd93114c4071eff0",
+    "resultSHA256": "a5906a0c07da47049c916f34fd52d4ad68ed40b2f30a7a2fda5d91dec27f4320",
+    "sources": {
+      "apps/macos/Sovereign/Engine/TranslateEngine.swift": "cb7203c697757c07b7a720b8850d361bd720fd9570e2a53135562586f9542c85",
+      "apps/macos/Sovereign/Engine/TranslationTurnQueue.swift": "382eaa929ff9267af6c3982d632975c499b1f9ecfa03dd1d5f6247a4430a197f",
+      "apps/macos/Sovereign/Transcript/TranslationShedPolicy.swift": "a5030e8b430578816ea0e25758075715acac43dcc3cfec07fa6474fc50b8215d",
+      "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d"
+    },
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "scope": "Unchanged TranslateEngine with deterministic broker callbacks and clocks; actual process transport checked separately"
+  },
+  "pinnedReference": {
+    "cases": 165,
+    "operations": 6767,
+    "corpusSHA256": "c738cb40bda6c9cf47eae09e9f249a9587457663909f44c1dd93114c4071eff0",
+    "resultSHA256": "a5906a0c07da47049c916f34fd52d4ad68ed40b2f30a7a2fda5d91dec27f4320",
+    "sources": {
+      "apps/macos/Sovereign/Engine/TranslateEngine.swift": "cb7203c697757c07b7a720b8850d361bd720fd9570e2a53135562586f9542c85",
+      "apps/macos/Sovereign/Engine/TranslationTurnQueue.swift": "382eaa929ff9267af6c3982d632975c499b1f9ecfa03dd1d5f6247a4430a197f",
+      "apps/macos/Sovereign/Transcript/TranslationShedPolicy.swift": "a5030e8b430578816ea0e25758075715acac43dcc3cfec07fa6474fc50b8215d",
+      "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d"
+    },
+    "status": "passed",
+    "nativeSwiftRun": false,
+    "scope": "Unchanged TranslateEngine with deterministic broker callbacks and clocks; actual process transport checked separately"
+  },
+  "existingPolicies": {
+    "translation": {
+      "cases": 3574,
+      "caseKinds": {
+        "policy": 1839,
+        "prompt": 1366,
+        "shed": 144,
+        "guarantee": 45,
+        "queue": 180
+      },
+      "queueOperations": 6300,
+      "positivePolicyDecisions": {
+        "replay": 21,
+        "mayEcho": 7,
+        "retry": 436
+      },
+      "corpusSHA256": "0043376c3e01199345196c169a3e6500edfd42967330c5c75a4370477d5962ca",
+      "resultSHA256": "ffa71ddcd96f2e3d3f9f77509b4b36a56319f92a67ada009bc44c9ede92925ae",
+      "sources": {
+        "apps/macos/Sovereign/Engine/TranslationTurnQueue.swift": "382eaa929ff9267af6c3982d632975c499b1f9ecfa03dd1d5f6247a4430a197f",
+        "apps/macos/Sovereign/Transcript/TranslationShedPolicy.swift": "a5030e8b430578816ea0e25758075715acac43dcc3cfec07fa6474fc50b8215d",
+        "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d"
+      },
+      "status": "passed",
+      "nativeSwiftRun": true
+    },
+    "broker": {
+      "cases": 760,
+      "corpusSHA256": "41758416ab8d570edd37e4c41a734ca9242e6619cc6bc9889c8da5709b99cb17",
+      "resultSHA256": "7334085b60749bdbf7ec2667da1369ce7c1d05cc13b5b3e35e14bc7d2b165cc3",
+      "sources": {
+        "apps/macos/Sovereign/Engine/DNAEngineBroker.swift": "72f09bd90a23edc962b3db51e4c27e87ef769aad112ed8f3f0e52a493bb1ebb1",
+        "apps/macos/Sovereign/Engine/DNATurnBudget.swift": "3da57199338246aa0b5df540be0ef84c1674849fcfd6379718fab5b434776267",
+        "apps/macos/Sovereign/Engine/TranslateStreamParser.swift": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6"
+      },
+      "status": "passed",
+      "nativeSwiftRun": true,
+      "scope": "Broker priority/pressure/FIFO selection, normalized wire text and watchdog budgets; process lifetime tested separately"
+    }
+  },
+  "unitTests": {
+    "core": 23,
+    "platform": 114,
+    "protocol": 14,
+    "total": 151,
+    "translationProcessTests": 10
+  },
+  "checks": {
+    "format": "PASS",
+    "clippy": "PASS",
+    "nativeDifferential": "PASS",
+    "pinnedDifferential": "PASS"
+  },
+  "cancellationRegression": {
+    "redExitCode": 101,
+    "greenExitCode": 0,
+    "redLogSHA256": "0b43700e26ad089cef2e8b75e7c735b6211c31b7917fdc688221e998c97df146",
+    "greenLogSHA256": "0cf1b3d7ed1569d4f27061337c08521a38af077e216ce8128f26e95e3f091a41",
+    "trigger": "Attachment reply queued while the receiving future remains unpolled; receiver cancelled before claim",
+    "fix": "Reply retains an automatic detach guard until ownership reaches the caption lease"
+  },
+  "mutations": {
+    "mutations": [
+      {
+        "name": "retry_replaces_new_revision",
+        "test": "old_echo_cannot_retry_over_new_revision_and_invalid_replies_terminate",
+        "exitCode": 101,
+        "assertionDetected": true,
+        "logSHA256": "1ec0712e9a956220150a2a69eed03f288786ab168835d2d755a694c6c3265055"
+      },
+      {
+        "name": "old_stop_drains_new_client",
+        "test": "replacement_ignores_retained_stop_from_previous_process_generation",
+        "exitCode": 101,
+        "assertionDetected": true,
+        "logSHA256": "f30afd37bb4a5910993262105d61d37683450107c3e4a87fa8c3a11a233ec7c7"
+      }
+    ],
+    "sourcesRestored": true,
+    "sourceSHA256": {
+      "crates/madi-core/src/translation/client.rs": "77b54983c661bb617203bea06e1a0a4b14de91e0f036beaa3d9cdfd3048f2881",
+      "crates/madi-platform/src/translation_client.rs": "fd662f4dfc255516f249788457c65bc7003d380b26a80e9eb217411be3a7b9ad"
+    }
+  },
+  "nativeModelProbe": {
+    "report": {
+      "background": "Alpha",
+      "clients": 2,
+      "completions": 5,
+      "depth": 0,
+      "engine": "out/desktop-native/translate-engine-4b-aarch64-apple-darwin",
+      "model": "/Users/jupitersong/Library/Application Support/Madi/DNA3.0-4B.i1-Q4_K_M.gguf",
+      "reapedProcesses": 1,
+      "runaways": 0,
+      "scope": "Public-text native caption client, real model, shared broker; no product UI or quality acceptance",
+      "startedProcesses": 1,
+      "status": "PASS",
+      "translations": [
+        {
+          "source": "안녕하세요.",
+          "target": "English",
+          "text": "Hello."
+        },
+        {
+          "source": "오늘 날씨가 좋습니다.",
+          "target": "English",
+          "text": "Today the weather is good."
+        },
+        {
+          "source": "안녕하세요. 반갑습니다.",
+          "target": "English",
+          "text": "Hello. Nice to meet you."
+        }
+      ]
+    },
+    "buildSnapshot": {
+      "binarySHA256": "54ffcadb6de3bacd04c3d8f01e9fd79cb5867bcf65595d3adfb993dd3efc7d17",
+      "sourceSHA256": {
+        "crates/madi-core/src/translation/client.rs": "77b54983c661bb617203bea06e1a0a4b14de91e0f036beaa3d9cdfd3048f2881",
+        "crates/madi-core/src/translation/mod.rs": "06098aa19f13e948e48717d511441e4051262311279837c246793abec81529fd",
+        "crates/madi-core/src/translation/output.rs": "03ee8616a8d1fdeb0215c220017e85d3b37dbd9215992ea3b45a2447fd2c7e06",
+        "crates/madi-platform/src/dna_broker.rs": "45cef6accf832a7d5a4c268a0f8822511e80bb94a2d0b4cdb1dc25709eec3292",
+        "crates/madi-platform/src/translation_client.rs": "fd662f4dfc255516f249788457c65bc7003d380b26a80e9eb217411be3a7b9ad",
+        "crates/madi-platform/examples/translation_client_smoke.rs": "6aa9293a0cc2c0b2d5c489c8bc5da3de6e2e2eb51a5cbd7bfaef342c68ab0113"
+      }
+    },
+    "inputSHA256BeforeAndAfter": {
+      "out/desktop-native/translate-engine-4b-aarch64-apple-darwin": "64be74aed0e23a650ede70ae7951f131b44f0c229e82d2ee68a74d089ff78a0e",
+      "/Users/jupitersong/Library/Application Support/Madi/DNA3.0-4B.i1-Q4_K_M.gguf": "a00a837a797d95b23c31e2821855e89d6b931b9c80c59d7dd5dd219554590fd8"
+    },
+    "inputsUnchanged": true,
+    "modelBytes": 2783447424,
+    "binaryHashScope": "Executable captured after this native run; later cargo checks may relink the path. Runtime source hashes are verified unchanged."
+  },
+  "logs": {
+    "fmt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests": "cceff7cf67dcb148a1a84aa4ab12bc67a578ab69d6f45139695feba400060c44",
+    "clippy": "d5446b53d56f2beacece4678aeff519fad143c0d67d2d5b22178ab4e05d109d8",
+    "native": "65c21af81a7f30915ca846b5131b9d3bba8ce9b001d9493b058495a73c682346",
+    "reference": "1eb05cb435c98fe77a3c58dab18b5506a65e3c560e441bfe5719b01124c8d265",
+    "policy": "3904ec5007a4eec22f2f7190ee5a6c5aecac5a8a2bbc3902607ebb7ce9905cb1",
+    "broker": "3b9bd646c076b1b170e074c1b803b25c26129a7a5169fdffd9bc0122969f096f"
+  },
+  "toolchain": {
+    "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1",
+    "swift": "Apple Swift version 6.4.2 (swiftlang-6.4.2.1.9 clang-2100.4.1.1)\nTarget: arm64-apple-macosx27.2.0",
+    "macOS": "ProductName:\t\tmacOS\nProductVersion:\t\t27.2\nBuildVersion:\t\t26B123"
+  },
+  "limitations": [
+    "Own macOS/Windows CI is not yet complete at this uncommitted snapshot",
+    "Session model admission, coalesced/stable-line scheduling, revision acceptance, interim display, tail timers and backfill remain unconnected",
+    "Mock-broker differential uses the native parser LF-flattening reply contract; actual process lifetime tested separately",
+    "No native UI/UX, actual-document application, model quality or Windows GPU acceptance"
+  ]
+}

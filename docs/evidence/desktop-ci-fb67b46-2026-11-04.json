@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "run": "https://github.com/companyjupiter/madi/actions/runs/41713919046",
+  "head": "fb67b46c048f9ba2b488368c94a8ad8aa77b2e14",
+  "conclusion": "success",
+  "records": [
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "fb67b46c048f9ba2b488368c94a8ad8aa77b2e14",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "macOS-15.8.2-arm64-arm-64bit-Mach-O",
+        "binary": "target/debug/madi-desktop",
+        "bytes": 34098528,
+        "sha256": "e50394a73b86ed8c664fcc368fac373a25dc7aa79f65a0dd3b25574390a7ae43",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      },
+      "package": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "bundleIdentifier": "tv.devart.madi.parity",
+        "minimumSystemVersion": "14.0",
+        "signature": "ad-hoc; deep strict verification passed",
+        "relocatedLookup": "passed",
+        "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+        "missingHelperFailsClosed": true,
+        "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+        "missingOrLinkedRuntimeFilesRejected": 11,
+        "runtimeAssets": [
+          {
+            "name": "WHISPER_BPE.bin",
+            "bytes": 514525,
+            "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+          },
+          {
+            "name": "kaldi_melbank.bin",
+            "bytes": 82240,
+            "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+          },
+          {
+            "name": "mel_filters.bin",
+            "bytes": 102912,
+            "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+          },
+          {
+            "name": "pyannote_osd.bin",
+            "bytes": 5973428,
+            "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+          },
+          {
+            "name": "resnet34_diar.bin",
+            "bytes": 26522076,
+            "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+          },
+          {
+            "name": "silero_vad.bin",
+            "bytes": 1238776,
+            "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+          },
+          {
+            "name": "suppress_tokens.bin",
+            "bytes": 352,
+            "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+          }
+        ],
+        "engines": {
+          "transcribe": {
+            "bytes": 912720,
+            "sha256": "67568a300b1c05726d1db71acebc0548374f5a5398f78aa3d9427fa45d7f0b42"
+          },
+          "translate-engine-2b": {
+            "bytes": 1602944,
+            "sha256": "2e2a7a526db96f48c9c62f6ce6911d2992453481e3d2b52a48874d8ffd07d33a"
+          },
+          "translate-engine-4b": {
+            "bytes": 1602800,
+            "sha256": "282af3ea81e94619bc26b9801a89c90e12a6a6ca00ceed899e1caed4c529f463"
+          }
+        },
+        "runtimeNoticesPreserved": true,
+        "helperSHA256": "b8a5b37227a639793c1ef57990b62ded6e250c14a70f560ab036225f14dcda45",
+        "helperBytes": 145024,
+        "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+        "archiveSHA256": "b46bf615ef1b2765d3a5175ecdb6d8fab943812275c6852a28ac4a179d20aa7e",
+        "productRelease": false,
+        "notarized": false,
+        "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+      }
+    },
+    {
+      "build": {
+        "schemaVersion": 1,
+        "sourceHead": "fb67b46c048f9ba2b488368c94a8ad8aa77b2e14",
+        "sourceDirty": false,
+        "sourceStatus": [],
+        "host": "Windows-2022Server-10.0.20348-SP0",
+        "binary": "target\\debug\\madi-desktop.exe",
+        "bytes": 12880896,
+        "sha256": "7c8a32796ed73113478132d5e91d06f2f2ef42e3313069025efccac6721a9a23",
+        "productRelease": false,
+        "nativeUIParity": "not-verified",
+        "recordingAndInference": "not-connected"
+      }
+    }
+  ],
+  "downloadedBinariesAndInnerRuntimeVerified": true,
+  "limitations": [
+    "Build/package evidence only; no UI, GPU or model inference in CI",
+    "Precedes native model downloader and model-guide integration"
+  ]
+}

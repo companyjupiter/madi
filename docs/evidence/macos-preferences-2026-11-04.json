@@ -1,0 +1,409 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-04",
+  "sourceHead": "caf062c536b0fd713d3affe376682a3cc40af5f4",
+  "sourceDirty": true,
+  "evidenceKind": "Local uncommitted setup/presentation preference candidate on caf062c; not CI or native UI acceptance",
+  "sourceSHA256": {
+    ".github/workflows/desktop-parity.yml": "83259b3620ca893103edaf32b601e2d2bf7cde5f730eb222284b7f22ba026a5d",
+    "apps/desktop/src-tauri/src/files_host.rs": "673769df95cc5057572e6e3bb23e9a7b7c4bb144b3de2ccaa46e234775c62569",
+    "apps/desktop/src-tauri/src/main.rs": "7d0452766a6e0956cde53f1cbf1216061a2bb8c816cb5cb000096595326d9c7a",
+    "apps/desktop/src-tauri/src/models_host.rs": "d6c729d0776151b1146c656e6d76bda4b46009cf254e2b328970e376b3d4a38e",
+    "apps/desktop/src-tauri/src/setup_host.rs": "e41f685e0c5bf834067f4fb2241fa36879eb20d073438caddf1bbcdb96bafe04",
+    "apps/desktop/src/FileTranscript.tsx": "2af15263316a5e0dc64f7719711627f0443557d8e498fdc7c21f3f1a664cde03",
+    "apps/desktop/src/bridge.ts": "c54ef2d9937bc5ee63807286090069e061067af33908efbf017bc82d76d2f2f0",
+    "apps/desktop/src/main.tsx": "87cbca868fec08f7457f73000d2154bf622dd1fd61bae92abb3d5f9b9122fa7a",
+    "apps/desktop/src/preferences.tsx": "3d4ce67b488a89d00551390dc89b6004326b01e12259b9cee3ec3f3a25c6d006",
+    "crates/madi-core/src/lib.rs": "506f125390fbe529966e8015e223ce622ad3a3e76376e2a953c299c6ba300b30",
+    "crates/madi-core/src/preferences.rs": "0b6fbca2ed5c5fe191dc989bc9a7a371642704a62b7503832b6c0f2b0de25a80",
+    "crates/madi-core/src/setup.rs": "95c34338a0af6e7a958befc3221fa434c99c3e2ca419482e1c5535754c033fd1",
+    "crates/madi-core/src/transcript/store.rs": "d723aa0daec6266b971d790f0c3f6be07924fc1d90d20e5e705a3f6201dc4150",
+    "crates/madi-platform/Cargo.toml": "4e6864527a78fd21fae54507fe97db3faedc213bf601b1a9c33d36532836ab9b",
+    "crates/madi-platform/examples/file_workflow_smoke.rs": "dc9797cd2379ede0bb92015a69c4618d445da56b9048fc5d14cad39c52fd97ca",
+    "crates/madi-platform/examples/preferences_oracle.rs": "b9b3f18fa6f7f84a69b9a29a1724e152cfce05f45310afc8eed5ec1e85e74c4e",
+    "crates/madi-platform/src/asr_config.rs": "014592283d3f3b184b8cdc183c0905ea2fc0e38221ddf6055dc10320e30dceb8",
+    "crates/madi-platform/src/lib.rs": "0bba3bae6fc083deb6be65904c8ee82c822dcb31e123e3ad50ff4d6bc33bb7f4",
+    "crates/madi-platform/src/preferences.rs": "a7360bd89044abbb750dbc2d6aa03b3ab8aa839445ac7f881a206de1c491e4f6",
+    "crates/madi-platform/src/preferences_service.rs": "558ceaa446a7ecba10bc9da45eb09a677b391175a8010cdee5448c847a13903e",
+    "design/parity/preferences-reference.json": "7128719744fd25f8e50a676ec0e7f5a9b38f360ca554809261798b127ca2cd2b",
+    "scripts/check_preferences_parity.py": "cbb44ae661492d077c1de8a84f13d4f6f02ad96fdd03c32f2d8627f857127d05",
+    "scripts/record_desktop_build.py": "46d4ae63b2fe4a5c916784927ed183de01a56e6882ccb141106df1dab4cdf3c1"
+  },
+  "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "checks": {
+    "rustTests": [
+      11,
+      59,
+      14
+    ],
+    "totalTests": 84,
+    "clippy": "PASS",
+    "rustfmt": "PASS",
+    "frontendBuild": "PASS",
+    "debugAppBuild": "PASS",
+    "nativeRelocationPackage": "PASS",
+    "portablePreferences": "PASS"
+  },
+  "preferences": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 432,
+    "fontStepSnapshots": 3024,
+    "sources": {
+      "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518",
+      "apps/macos/Sovereign/UI/ContentView.swift": "b546ea492be43d6c0ef978b4f57d5ad33aec282816bc9a9e37f789085810d511",
+      "apps/macos/Sovereign/UI/L10n.swift": "78050a1a0859e22edfda7c37aa0a4754267411e4020e1db2ef9c8bbc5b434410",
+      "apps/macos/Sovereign/SovereignApp.swift": "78e57ec6ba500686dc410c938bd1f583d112e00e29bad6276c5cdb363fba9c29",
+      "apps/macos/Sovereign/Audio/AudioSource.swift": "d536fe141172773722101886e0330b3c6f1605107ef610ad1a887b2d421f10b5",
+      "apps/macos/Sovereign/Transcript/MeetingMode.swift": "f8b2c4ec52a84703ab5ff7345b5d3b09ec80557b103084d001b6eeab2719266b"
+    },
+    "corpusSHA256": "de9e47124396622441011b80a1979cc4a25e472d43c09ce02e867bd140c9b91d",
+    "resultSHA256": "87a63cfd77b7b9e4ae77a9481fb9c0de42441c86158a19518174a986a6de7e65",
+    "comparison": "live-swift-and-native-foundation",
+    "nativeFoundationBridgeRun": true,
+    "scope": "Original Swift initializers and SwiftUI AppStorage getters, read-only native Foundation bridge, portable restoration and font buttons. Volatile synthetic domains only. No original preferences changed; real-user migration and native UI NOT_RUN."
+  },
+  "asrConfiguration": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "cases": 601,
+    "swiftComparison": "live-extracted-unmodified-source",
+    "sources": {
+      "apps/macos/Sovereign/Engine/EngineProcess.swift": "9b360a00fff9df34a0cf271d0e4d39f5747315ff6e8d03ad9e1af200eb58edca",
+      "apps/macos/Sovereign/SessionController.swift": "5cc5adf16db26a29264383f8dfa54092d7cd144775fc0c65bdee55bbcd6b0518"
+    },
+    "extractedSourceSHA256": "6814a31234e67bc269b231e5744a8ba483e703ddada6de3d372a119cff89800a",
+    "corpusSHA256": "471b323f4e3b20810a0c6688cc61418d257c46e94162e016286d872f74b61872",
+    "resultSHA256": "73691c708495303ba8e24e3a75ccb5bdc2581747f6f5d0f8bfba86a5fca20886",
+    "scope": "File-mode launch construction and setup mapping; no process execution, model admission, live capture or UI integration",
+    "intentionalDifference": "Rust removes unset engine-owned environment keys so inherited STREAM/fixed-K/language/glossary cannot override the setup"
+  },
+  "nativeWorkflow": {
+    "cleanAtShutdown": true,
+    "modelSizeMtimeUnchanged": true,
+    "passed": true,
+    "preferences": {
+      "isolatedRelaunch": true,
+      "nativeFileAdmission": true,
+      "restored": {
+        "presentation": {
+          "appearance": "system",
+          "contentMode": false,
+          "fontSize": 18.0,
+          "uiLanguage": "ja"
+        },
+        "revision": 0,
+        "setup": {
+          "audioSource": "mic",
+          "diarize": true,
+          "inputDeviceId": null,
+          "inputLanguage": "English",
+          "meetingMode": "lecture",
+          "revision": 0,
+          "speakerCount": 0,
+          "stagedFile": null,
+          "translateTargets": [
+            "Chinese",
+            "English",
+            "Japanese",
+            "Korean"
+          ]
+        }
+      }
+    },
+    "schema": 3,
+    "sourcePreserved": true,
+    "sourceSha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "workflow": {
+      "observations": [
+        {
+          "elapsed": 0.001477334,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 1,
+          "words": 0
+        },
+        {
+          "elapsed": 0.0014815,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 2,
+          "words": 0
+        },
+        {
+          "elapsed": 0.107075292,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 3,
+          "words": 0
+        },
+        {
+          "elapsed": 0.463785209,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 4,
+          "words": 0
+        },
+        {
+          "elapsed": 0.532732917,
+          "lines": 0,
+          "phase": {
+            "kind": "processing"
+          },
+          "revision": 5,
+          "words": 0
+        },
+        {
+          "elapsed": 1.30444625,
+          "lines": 1,
+          "phase": {
+            "kind": "done"
+          },
+          "revision": 6,
+          "words": 22
+        }
+      ],
+      "staleEditIgnored": true,
+      "cleanAtCompletion": true,
+      "workspace": {
+        "entries": 1,
+        "exports": [
+          {
+            "bytes": 247,
+            "format": "md",
+            "sha256": "15eb2230a9c34a620f37c73da12265066d1db696b6eb269298a78622f37bc581"
+          },
+          {
+            "bytes": 188,
+            "format": "srt",
+            "sha256": "63f69ff27621486034bd09d2ecc308b593c3e189708a12390b806ffea17d13df"
+          },
+          {
+            "bytes": 196,
+            "format": "vtt",
+            "sha256": "b6310a5b6d1bbc4044280bb3319da2faef02476ad1929f90e7547536e643a86e"
+          },
+          {
+            "bytes": 141,
+            "format": "txt",
+            "sha256": "57d0dea64101984d13dbe45a7151994885a7319b531dac5ebbce8ea3f072124c"
+          },
+          {
+            "bytes": 4135,
+            "format": "json",
+            "sha256": "6a5f40b7bdcc3fc0e8ca999c64b7b9e27bbc4fb645707067756fddd02c1037c0"
+          }
+        ],
+        "isolatedPreferencePersisted": true,
+        "staleRowRejected": true,
+        "stats": {
+          "avgSeconds": 0.0,
+          "avgSpeakers": 1.0,
+          "meetingCount": 1,
+          "speakerSum": 1,
+          "thisWeekCount": 1,
+          "totalSeconds": 0.0,
+          "totalWords": 22,
+          "weeklyTrend": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        }
+      },
+      "archive": {
+        "bytes": 234,
+        "inlineEditDidNotAutosave": true,
+        "reopenDidNotClaimWritableTarget": true,
+        "sha256": "59490bcaadf8cf1d119e8f7f7c1f251ff524aa6505dd8db2909c8df96aa1b63d",
+        "sourcePreserved": true
+      }
+    },
+    "words": 22,
+    "transcript": [
+      "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    ],
+    "elapsedSeconds": 1.87,
+    "runtimeLayout": {
+      "decoder": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-5gailkdb/Madi UI Parity.app/Contents/MacOS/madi-audio-decode",
+      "transcribe": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-5gailkdb/Madi UI Parity.app/Contents/MacOS/transcribe",
+      "translate2b": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-5gailkdb/Madi UI Parity.app/Contents/MacOS/translate-engine-2b",
+      "translate4b": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-5gailkdb/Madi UI Parity.app/Contents/MacOS/translate-engine-4b",
+      "assetsDirectory": "/private/var/folders/kn/5t3db_2j3h99kwzhw4k21hlh0000gn/T/madi-workspace-relocated-5gailkdb/Madi UI Parity.app/Contents/Resources/assets-small"
+    },
+    "sourceSHA256Before": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "sourceSHA256After": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "engineSHA256": "5face6b49615ca61aa77c4468d9b01618c74c7dad6efc331b9ba2ea3e383cd42",
+    "decoderSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "relocatedOutsideRepository": true,
+    "sourceHead": "caf062c536b0fd713d3affe376682a3cc40af5f4",
+    "sourceDirty": true,
+    "evidenceKind": "Local uncommitted preferences candidate; isolated preference owner relaunch and native admission into relocated decoder/Metal ASR, archive/workspace and exports. No renderer IPC/native UI acceptance.",
+    "ownedTemporaryFoldersRemoved": true
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957392,
+        "sha256": "5face6b49615ca61aa77c4468d9b01618c74c7dad6efc331b9ba2ea3e383cd42"
+      },
+      "translate-engine-2b": {
+        "bytes": 1575744,
+        "sha256": "34795c20da441bc7baf249f4a2ca12766e04016bad05fd7303b2da4356486de0"
+      },
+      "translate-engine-4b": {
+        "bytes": 1575600,
+        "sha256": "fc0c8687300de8dd51f7a67493a57090eb2a677a730395cbd0e95fe6c21e85eb"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "7ef1e9a03904a042e6cdb1bfd2fd17cc6ec28297ab55ea2fdbe2d4a0d6843568",
+    "helperBytes": 150816,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "c6cecace28688fbbf6253efc4dd6921b0037c99fd5cf77857df518a81579d7e0",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout and decoder; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "signedDesktopBinary": {
+    "bytes": 58768992,
+    "sha256": "51e1c3bb870422071e92b90f0e24f3f4b783bd650e360183e412fe224ce22f9e",
+    "retainedArchiveMatch": true
+  },
+  "build": {
+    "schemaVersion": 1,
+    "sourceHead": "caf062c536b0fd713d3affe376682a3cc40af5f4",
+    "sourceDirty": true,
+    "sourceStatus": [
+      " M .github/workflows/desktop-parity.yml",
+      " M apps/desktop/src-tauri/src/files_host.rs",
+      " M apps/desktop/src-tauri/src/main.rs",
+      " M apps/desktop/src-tauri/src/models_host.rs",
+      " M apps/desktop/src-tauri/src/setup_host.rs",
+      " M apps/desktop/src/FileTranscript.tsx",
+      " M apps/desktop/src/bridge.ts",
+      " M apps/desktop/src/main.tsx",
+      " M crates/madi-core/src/lib.rs",
+      " M crates/madi-core/src/setup.rs",
+      " M crates/madi-core/src/transcript/store.rs",
+      " M crates/madi-platform/Cargo.toml",
+      " M crates/madi-platform/examples/file_workflow_smoke.rs",
+      " M crates/madi-platform/src/asr_config.rs",
+      " M crates/madi-platform/src/lib.rs",
+      " M docs/TAURI_MIGRATION_STATUS.md",
+      " M scripts/record_desktop_build.py",
+      "?? apps/desktop/src/preferences.tsx",
+      "?? crates/madi-core/src/preferences.rs",
+      "?? crates/madi-platform/examples/preferences_oracle.rs",
+      "?? crates/madi-platform/src/preferences.rs",
+      "?? crates/madi-platform/src/preferences_service.rs",
+      "?? design/parity/preferences-reference.json",
+      "?? docs/evidence/desktop-ci-caf062c-2026-11-04.json",
+      "?? docs/runtime/PREFERENCES.md",
+      "?? scripts/check_preferences_parity.py"
+    ],
+    "host": "macOS-27.2-arm64-arm-64bit-Mach-O",
+    "binary": "target/debug/madi-desktop",
+    "bytes": 59112544,
+    "sha256": "7bc08b5373dba5ba24c6ea599299fe39381bf6ead508d9df813a70a7a3ac9c65",
+    "productRelease": false,
+    "nativeUIParity": "not-verified",
+    "fileTranscription": "native timed owner connected; native screen interaction not verified",
+    "recording": "not-connected",
+    "preferences": "native isolated setup/presentation restoration connected; real-user migration and native UI not verified",
+    "workspace": "macOS panel, isolated preferences, native scan/open/export connected; native UI not verified"
+  },
+  "notRun": [
+    "Native first-paint, appearance transitions, WKWebView versus SwiftUI pixel and interaction comparison",
+    "Real-user preference import/relaunch and full Settings UI",
+    "Native file/folder/export panel interactions",
+    "Windows GPU/ASR/native product adapters",
+    "Live capture, playback, AI tools and full product acceptance"
+  ],
+  "relatedCI": {
+    "head": "caf062c536b0fd713d3affe376682a3cc40af5f4",
+    "run": "https://github.com/companyjupiter/madi/actions/runs/41744113022",
+    "tests": {
+      "macOS": 79,
+      "Windows": 71
+    },
+    "artifactHashesVerified": true,
+    "separateDependencyReview": "FAIL: Linux glib 0.18.5 / GHSA-wrw7-89jp-8q8g"
+  }
+}

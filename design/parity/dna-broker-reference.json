@@ -1,0 +1,10 @@
+{
+  "cases": 760,
+  "corpusSHA256": "41758416ab8d570edd37e4c41a734ca9242e6619cc6bc9889c8da5709b99cb17",
+  "resultSHA256": "7334085b60749bdbf7ec2667da1369ce7c1d05cc13b5b3e35e14bc7d2b165cc3",
+  "sources": {
+    "apps/macos/Sovereign/Engine/DNAEngineBroker.swift": "72f09bd90a23edc962b3db51e4c27e87ef769aad112ed8f3f0e52a493bb1ebb1",
+    "apps/macos/Sovereign/Engine/DNATurnBudget.swift": "3da57199338246aa0b5df540be0ef84c1674849fcfd6379718fab5b434776267",
+    "apps/macos/Sovereign/Engine/TranslateStreamParser.swift": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6"
+  }
+}

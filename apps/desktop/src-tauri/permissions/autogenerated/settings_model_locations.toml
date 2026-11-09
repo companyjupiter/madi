@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-settings-model-locations"
+description = "Enables the settings_model_locations command without any pre-configured scope."
+commands.allow = ["settings_model_locations"]
+
+[[permission]]
+identifier = "deny-settings-model-locations"
+description = "Denies the settings_model_locations command without any pre-configured scope."
+commands.deny = ["settings_model_locations"]

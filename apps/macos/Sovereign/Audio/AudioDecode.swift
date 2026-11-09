@@ -66,9 +66,12 @@ enum AudioDecode {
     /// Transcode `src` → temp 16 kHz mono PCM16 WAV; returns the temp URL.
     /// Audio-only files go through AVAudioFile; anything it rejects (video
     /// containers) falls back to the AVAssetReader audio-track path.
-    static func toWav16k(_ src: URL) async throws -> URL {
+    static func toWav16k(_ src: URL, temporaryDirectory: URL = FileManager.default.temporaryDirectory) async throws -> URL {
         try Task.checkCancellation()
-        let dst = FileManager.default.temporaryDirectory.appendingPathComponent("sovereign-decode-\(UUID().uuidString).wav")
+        // The desktop native bridge supplies its owned scratch directory. Keep
+        // the original default for the shipping Swift app; TMPDIR alone does
+        // not reliably control Foundation's temporaryDirectory on macOS.
+        let dst = temporaryDirectory.appendingPathComponent("sovereign-decode-\(UUID().uuidString).wav")
         var succeeded = false
         defer { if !succeeded { try? FileManager.default.removeItem(at: dst) } }
         let out = try WavWriter.Streaming(url: dst)

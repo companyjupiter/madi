@@ -1,0 +1,8 @@
+{
+  "assets": 3,
+  "selectionCases": 70,
+  "integrityCases": 27,
+  "sourceSHA256": "b080aa2bd7f1894e9c9bc986b492ab769d96594671c2d561a51c1a9489eaa49c",
+  "corpusSHA256": "90162cdb562a0363ed52b04e0a5a00116028a688cc42d605413db821da9d98e1",
+  "resultSHA256": "b6f6c04db25aa6a8ec009578e6321571506547a436ee59667cd09d8c47360eb6"
+}

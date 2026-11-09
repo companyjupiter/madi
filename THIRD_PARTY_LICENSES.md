@@ -4,6 +4,37 @@ This project reuses the third-party machine-learning models listed below and emb
 the Sparkle update framework. The full
 license texts are reproduced below; a summary of components and changes is in [`NOTICE`](NOTICE).
 
+The experimental Tauri migration in `apps/desktop` additionally depends on React
+and React DOM 19.3.1 (MIT) and Tauri 2.12.5 (MIT OR Apache-2.0). Their direct
+runtime MIT notices are retained in [`apps/desktop/licenses`](apps/desktop/licenses).
+The Rust protocol compatibility layer also uses unicode-segmentation 1.13.3
+(MIT OR Apache-2.0); its MIT license and copyright attribution are retained there.
+Serde 1.0.229 and serde_json 1.0.154 (MIT OR Apache-2.0) provide the Rust state
+and structured event serialization; their MIT notices are retained there too.
+The macOS device and file-selection adapters use objc2 0.6.5, objc2-app-kit,
+objc2-foundation, objc2-uniform-type-identifiers, objc2-core-audio,
+objc2-core-audio-types and objc2-core-foundation 0.3.2
+(Zlib OR Apache-2.0 OR MIT). Their upstream licensing
+statement, including the Apple SDK note, is retained in
+`apps/desktop/licenses/Objc2-LICENSE.md`; the full distribution audit remains open.
+The native process supervisor uses Tokio 1.54.1 (MIT), tempfile 3.27.0
+and libc (MIT OR Apache-2.0); their MIT notices are retained in the same directory.
+Read-only model integrity verification uses sha2 0.10.9 (MIT OR Apache-2.0);
+its MIT copyright and license are retained in `apps/desktop/licenses/Sha2-MIT.txt`.
+Explicit model downloads use reqwest 0.13.5 (MIT OR Apache-2.0) with native OS TLS;
+its MIT notice is retained in `apps/desktop/licenses/Reqwest-MIT.txt`.
+The transcript model uses uuid 1.29.0 and unicode-normalization 0.1.25
+(MIT OR Apache-2.0) for stable identities and Swift-compatible canonical text
+comparison. Their MIT notices and Unicode normalization copyright attribution
+are retained in the same directory; stored and displayed text is not normalized.
+`Cargo.lock` and `apps/desktop/package-lock.json` identify the dependency graph.
+The Linux GTK dependency uses a vendored GLib Rust crate 0.18.5 (MIT), with the
+upstream `VariantStrIter` safety fix backported. Its full license is retained in
+[`vendor/glib/LICENSE`](vendor/glib/LICENSE); provenance and verification are
+documented in [`docs/runtime/GLIB_BACKPORT.md`](docs/runtime/GLIB_BACKPORT.md).
+The complete transitive binary notice bundle is still a migration release gate;
+the current parity harness is debug-only and not a product distribution.
+
 | Component | Use | License |
 |---|---|---|
 | **DNA3.0-2B / 4B** (dnotitia; Qwen3.5-2B / 4B base) — translation + summary/Q&A | downloaded GGUF · `Contents/MacOS/translate-engine-{2b,4b}` | Apache-2.0 (§A) |

@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-04",
+  "nativeBundle": "out/parity-baseline-full/Madi.app",
+  "sourceBaseline": "c1390c750f2506e556a277421e146d80195ab797",
+  "asr": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "scope": "original bundled Metal ASR file-mode smoke; not Tauri integration or accuracy benchmark",
+    "sourceURL": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/4da27c41cebadb3cbbcd2563e9c7cbc8d84bdcad/samples/jfk.wav",
+    "fixtureBytes": 352078,
+    "fixtureSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "binarySHA256": "9ff4bf45da39451bf0460ae23ba0990284b236435321f1480b042c573eda3638",
+    "exitCode": 0,
+    "wallSeconds": 2.513,
+    "stdoutSHA256": "92c26ac7c49cbcc84247286bd89413d2e25e16863f1501e669daf8a1e8f7c425",
+    "stdoutBytes": 1931,
+    "stderrBytes": 0,
+    "eventCount": 26,
+    "eventTypes": [
+      "diar",
+      "meta",
+      "seg",
+      "spk_seg",
+      "word"
+    ],
+    "segments": [
+      {
+        "t": "seg",
+        "idx": 0,
+        "t0": 0.0,
+        "t1": 11.0,
+        "dropped": false,
+        "avg_logprob": -0.055,
+        "fallback": "none",
+        "temp": 0.0,
+        "lang": 50259,
+        "lang_margin": 4.422,
+        "tok_s": 327.6,
+        "enc_ms": 733,
+        "dec_ms": 79,
+        "passes": 1,
+        "text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+      }
+    ],
+    "configuration": {
+      "APP_FILE": "1",
+      "DIAR": "1",
+      "OSD": "1",
+      "CONF": "1",
+      "DIAR_MAXK": "8"
+    }
+  },
+  "translation": {
+    "schemaVersion": 1,
+    "scope": "original bundled DNA4B Metal engine real-model translation smoke; not Tauri integration or quality/performance benchmark",
+    "exitCode": 0,
+    "wallSeconds": 5.204,
+    "binarySHA256": "5b2d88fe80880689e1cfbd2517b0a6dab8d2e660e8555022117ae95f8ee6be99",
+    "stdoutSHA256": "9a803978a701caf32e552bcc0499e1eb14246cb8e9a1317d809b9411cc14e040",
+    "stdoutBytes": 495,
+    "stderrBytes": 0,
+    "prompt": "Translate the following into English. Reply with only the translation in English, no notes. Example — Hello => Hello . 오늘 회의는 오후 세 시에 시작합니다. => %%MAX 64",
+    "hasReady": true,
+    "hasCompletedTurn": true,
+    "status": "passed",
+    "parsedReply": "The meeting today starts at 3 PM."
+  },
+  "capturedOutputParity": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "comparisons": [
+      {
+        "parser": "transcribe",
+        "sourceSHA256": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2",
+        "payloadSHA256": "ce13117c143c6ce2063059e89732cdb042e7febfb315b7ad5f6d2c5865d19b6b",
+        "eventSHA256": "67e50571bcc25da225b885f9aaf2d2fe32bf006886c9e4b38a853979535f41ac",
+        "compatibilityArguments": []
+      },
+      {
+        "parser": "structured",
+        "sourceSHA256": "075b00249483183ce5abee33650fd21a8f05b5683238f6365bc40fe772f05c1f",
+        "payloadSHA256": "157bab0d955aa9cce6053cd5ffa1a42730a0fd822eb50a4bec91f5b94fbc2c32",
+        "eventSHA256": "622f62b4165c5bac45f359713240bb43b37bf8ff8e677640a6ccbaa05830ff12",
+        "compatibilityArguments": []
+      },
+      {
+        "parser": "translate",
+        "sourceSHA256": "72552c93ec987064e447e6cb2bbe7e5a26d4eb411e4e4adffcd1ee9ac5a253b6",
+        "payloadSHA256": "c58ba0d313a296ed9af09c792b245ee192a543c1cb8e9e131a7581b3b6c3fd99",
+        "eventSHA256": "d532e24f0a0357daf339aebd459148460126c23c8a38ca41bbe212c083a51555",
+        "compatibilityArguments": []
+      }
+    ],
+    "structuredEvents": 26,
+    "transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+    "translation": "The meeting today starts at 3 PM.",
+    "translationChunkSizes": [
+      1,
+      7,
+      31,
+      4096
+    ],
+    "scope": "Captured real ASR/DNA4B output, not Tauri product integration or a quality/performance benchmark"
+  },
+  "limitations": [
+    "Original native engine binaries, not Tauri UI execution",
+    "One public audio clip and one authored translation sentence; not an accuracy or performance benchmark",
+    "No microphone capture, pause/stop or full product persistence validation",
+    "Windows GPU validation explicitly deferred by user"
+  ]
+}

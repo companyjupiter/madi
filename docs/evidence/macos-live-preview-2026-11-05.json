@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "createdUTC": "2026-11-04T15:45:58.274091+00:00",
+  "baseHead": "8cb5f541f978fbed36c5af66335bfbbfe3b71167",
+  "scope": "Connected macOS live preview workflow and frontend policy; source hashes identify the tested working tree",
+  "sourceSHA256": {
+    ".gitattributes": "369010a811681ad3f7f1f0354564402d2616ab0cb20980dd7b985451f8b30bcf",
+    ".github/workflows/desktop-parity.yml": "b93d8baa4341938f9667a5c8883845572d91f79042be190ee330da9823af58ef",
+    "apps/desktop/src/FileTranscript.tsx": "62cc116bf68f02ebad7b8284e3f328ba62e7875b7c43b992e521481a3e5c498f",
+    "apps/desktop/src/previewText.ts": "cc48f900c86ef1fcba23219732a52ca3d3e6951b22a19b95f131659b1910a805",
+    "apps/desktop/src/transcript.css": "56a21c0d5bee1c98ef883fbd8fbde07099f1692ec0939b147774880af0413e41",
+    "apps/desktop/src/useShownInterim.ts": "1c1ee287a5d4bbb3190c04afa4e5565c44d95840ed15393b7c0130d8e99db93c",
+    "crates/madi-core/examples/preview_oracle.rs": "fbf45ca3b9b786ad31c13479516fa76421575176df2f75e9c48fa1da72adeda1",
+    "crates/madi-core/src/lib.rs": "b3518ad3de1ba3c42362564fc03831d6c915268ff6d5a4a28ee7ffc52c38a9dc",
+    "crates/madi-core/src/preview.rs": "35fb56e8b03d56dadc7934669de2b8b413393a3f7d30f7ebeeb2520523ac9409",
+    "crates/madi-platform/examples/live_preview_smoke.rs": "8cfdf0816430f99ddd1bf734d7985173d5e060fd753a500e53776d743ff151e8",
+    "crates/madi-platform/src/file_workflow.rs": "2aaf31ec1c2c1a70cb19590e910037e08db0448c660e7bea81f1373a0a7ecfcf",
+    "crates/madi-platform/src/file_workflow/driver.rs": "7dfe3eb4a717927c355fbdbfb96eccffa5c80c080bea1e174f6a53fd30b5309e",
+    "crates/madi-platform/src/file_workflow/live_preview.rs": "a72c2a7a20d4aa6a1c9a694b475fbcff61180c6f130082161906fc2d8f5ff880",
+    "crates/madi-platform/src/file_workflow/live_tests.rs": "d5ed90a85e7635098bda236ee69dc8293d62d30f00163daeefa33cb05980f710",
+    "crates/madi-platform/src/live_session.rs": "37b4915c2b7d60e04d41902ed45ff7e39b56b195212d4dc5770f206a1376e15f",
+    "crates/madi-platform/src/live_session/tests.rs": "6381e79e0e6a5828e02a783a0092492d76b8c5c9728babcbac107e2c24b86c7c",
+    "design/parity/preview-reference.json": "bfc680c8b1a1bafdf29ebd2934e830bc6f665670f971a1c3a6b53aa2b941c4a1",
+    "scripts/check_preview_parity.py": "e54e2932c1aa30bf25c7ea65b38f1987c3c0eb1ad61762996214a91125aac084",
+    "tests/parity/preview_frontend_oracle.mjs": "d5f652d6729a0e865107ae0da5ec366dddf00b1da9c07f83b2660d09b769d4f2"
+  },
+  "originalSwiftSourcesUnchanged": true,
+  "rustUnitTests": {
+    "core": 23,
+    "platform": 90,
+    "protocol": 14,
+    "total": 127
+  },
+  "frontendIPCQueueTests": 4,
+  "formatClippyTypeScriptVite": "PASS",
+  "executionBatchExitCode": 0,
+  "previewParity": {
+    "cases": 1409,
+    "corpusSHA256": "e87d37219cb207a510ddd08e53a56e99e45134ee073ed540b183d3ee32981f44",
+    "resultSHA256": "7af9d48b22bcbab2d8587832f4113378d8afaf58f1e4cbfe983e1d17a77c1360",
+    "sources": {
+      "apps/macos/Sovereign/Engine/PreviewEngine.swift": "4ea2a604d5740a9e832dd1991450dbf9089be4afbf37900aada99f84735eb379",
+      "apps/macos/Sovereign/Transcript/PreviewTrim.swift": "9d3fbbe9d289e5b27e58775f592e50eca79be143ce4000f0e244ac40070f952a",
+      "apps/macos/Sovereign/Engine/TranslationStability.swift": "dbd484df2cfb3367b2dc9f72a80421db1efb98c8a846899735887040097bfb9d",
+      "apps/macos/Sovereign/Transcript/InterimDedupe.swift": "1845f83893c7e1b5474e45862dd4b1abe31dd35909f1276b279934432a6d8f51",
+      "apps/macos/Sovereign/UI/TranscriptView.swift": "dd7a53f78e029120dbaae5e554bbd891d7a4d21182a8d40e282ccae60655c08f",
+      "apps/macos/Sovereign/Engine/EngineProtocol.swift": "175e4b0e4237433f826c6170a9127b6dc7f3049ea453515ed238f085c3d2c9c2"
+    },
+    "typewriterTickMilliseconds": 24,
+    "status": "passed",
+    "nativeSwiftRun": true,
+    "frontendRun": true
+  },
+  "windowsCheckoutSourceHashes": "PASS: 6/6 under core.autocrlf=true",
+  "mutations": [
+    {
+      "mutation": "committed-priority",
+      "exitCode": 101,
+      "targetedTestRejected": true,
+      "logSHA256": "5415e1967e1fe22513999743fba640f2b40a28c432ed66179bba6c3a301a08f0",
+      "restoredSourceSHA256": "37b4915c2b7d60e04d41902ed45ff7e39b56b195212d4dc5770f206a1376e15f"
+    },
+    {
+      "mutation": "forced-echo",
+      "exitCode": 101,
+      "targetedTestRejected": true,
+      "logSHA256": "40a6a56452013ebe76da1f327bdbaf4eeb07afd1c4348f1ab72247818279fdc1",
+      "restoredSourceSHA256": "35fb56e8b03d56dadc7934669de2b8b413393a3f7d30f7ebeeb2520523ac9409"
+    }
+  ],
+  "nativePreview": {
+    "committedLines": 1,
+    "committedText": [
+      "And so, my fellow Americans, ask not what your country is."
+    ],
+    "exitCode": 0,
+    "fixtureSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "modelSizeMtimeUnchanged": true,
+    "ownedScratchEmpty": true,
+    "previews": [
+      {
+        "committedLines": 0,
+        "forced": "",
+        "isolated": true,
+        "tail": "And so, my fellow Americans, ask not what your country is.",
+        "words": 11
+      },
+      {
+        "committedLines": 0,
+        "forced": "And so,",
+        "isolated": true,
+        "tail": "my fellow Americans, ask not what your country is.",
+        "words": 11
+      }
+    ],
+    "scope": "Real native converter and Metal PREVIEW/forced-prefix/committed decode; no devices or WebView acceptance",
+    "sourceUnchanged": true,
+    "status": "passed"
+  },
+  "nativeWorkflow": {
+    "archiveFileName": "회의 2026-11-05 0043.md",
+    "archiveMatchesFinalTranscript": true,
+    "devicesOpened": false,
+    "exports": [
+      {
+        "bytes": 266,
+        "containsEdit": true,
+        "format": "md",
+        "sha256": "180ec142f22a3ada5a926f5336e533fb1ee61359924f8a01beffaa0597d89113"
+      },
+      {
+        "bytes": 185,
+        "containsEdit": true,
+        "format": "srt",
+        "sha256": "3a0deb7f19a194de164088e529ffab0f37ee443bd70e9d622c608c918977671e"
+      },
+      {
+        "bytes": 193,
+        "containsEdit": true,
+        "format": "vtt",
+        "sha256": "71219bc320ad3f8ac4274bbdb502794fbf5c9267dd8299f0d9adeffd655d8da9"
+      },
+      {
+        "bytes": 155,
+        "containsEdit": true,
+        "format": "txt",
+        "sha256": "dc938eac10cccd8c343588101fe60e6018c4252521430ed39cd426b33db60c2d"
+      },
+      {
+        "bytes": 4380,
+        "containsEdit": true,
+        "format": "json",
+        "sha256": "99a2f6c7b5161903c24aa24a0c2ff1d34a279e8dd6d4f452869ffa683c38b0c8"
+      }
+    ],
+    "fixtureSHA256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "levelPublished": true,
+    "lines": 2,
+    "modelSizeMtimeUnchanged": true,
+    "originalUnchanged": true,
+    "phases": [
+      {
+        "kind": "idle"
+      },
+      {
+        "kind": "countingDown",
+        "remaining": 3
+      },
+      {
+        "kind": "countingDown",
+        "remaining": 2
+      },
+      {
+        "kind": "countingDown",
+        "remaining": 1
+      },
+      {
+        "kind": "engineStarting"
+      },
+      {
+        "kind": "ready"
+      },
+      {
+        "kind": "recording"
+      },
+      {
+        "kind": "flushing"
+      },
+      {
+        "kind": "done"
+      }
+    ],
+    "reopenedArchiveMatches": true,
+    "schemaVersion": 1,
+    "scope": "Real native replay and resident Metal ASR through the shared timed transcript owner, automatic archive, editing, five exports and archive reopen; no microphone/TCC or WebView acceptance",
+    "scratchEmptyAfterShutdown": true,
+    "status": "passed",
+    "timestampedArchiveName": true,
+    "transcript": [
+      "And so, my fellow Americans, ask not what your country can do for you.",
+      "Ask what you can do for your country."
+    ]
+  },
+  "package": {
+    "schemaVersion": 1,
+    "status": "passed",
+    "bundleIdentifier": "tv.devart.madi.parity",
+    "minimumSystemVersion": "14.0",
+    "signature": "ad-hoc; deep strict verification passed",
+    "captureUsageDescriptionsMatch": [
+      "NSMicrophoneUsageDescription",
+      "NSScreenCaptureUsageDescription",
+      "NSAudioCaptureUsageDescription"
+    ],
+    "captureAudioInputEntitlement": true,
+    "developerLibraryDependenciesAbsent": true,
+    "relocatedNativeCaptureReplay": {
+      "devicesOpened": false,
+      "ownedDirectoryCleaned": true,
+      "pcmSHA256": "46cfc99dcb32ec087c2c34625e3746135332c7e62b55fa5a805884e2d7781c79",
+      "sampleCount": 16000,
+      "segments": [
+        {
+          "hadSpeech": true,
+          "name": "seg00000.wav",
+          "offsetBits": "0000000000000000",
+          "wavBytes": 32044,
+          "wavSHA256": "d46938baf1fc1019581e15818aac59d87cb4b5c18d1e0c88f40d3e815dedc149"
+        }
+      ],
+      "stopped": true
+    },
+    "relocatedLookup": "passed",
+    "relocatedDecode": "16000 Hz mono PCM16, one second; original preserved",
+    "missingHelperFailsClosed": true,
+    "runtimeLayout": "all four executables and seven assets resolved inside the relocated app",
+    "missingOrLinkedRuntimeFilesRejected": 11,
+    "runtimeAssets": [
+      {
+        "name": "WHISPER_BPE.bin",
+        "bytes": 514525,
+        "sha256": "bc4cd7d7e98659baf61c6140d68e032cd5a890e572828cfa0da4a88f79676e77"
+      },
+      {
+        "name": "kaldi_melbank.bin",
+        "bytes": 82240,
+        "sha256": "6971fb56fbd4a23b5c56df099fda1aa34a6e1daa060a7437f47d07d1663ce355"
+      },
+      {
+        "name": "mel_filters.bin",
+        "bytes": 102912,
+        "sha256": "c342ed6d06c90b42990bf9e4a3a07ca54f3f1422f7bc3c66b3177a774395df5a"
+      },
+      {
+        "name": "pyannote_osd.bin",
+        "bytes": 5973428,
+        "sha256": "a5fb2d19ffce727c503cd29cc52cab70b37e1a078f148a6d863f66201ad3f152"
+      },
+      {
+        "name": "resnet34_diar.bin",
+        "bytes": 26522076,
+        "sha256": "e8d930f809bbc7b5f4a605e912f2907ed528f75bdb77cb6fd3117af6dd2aa479"
+      },
+      {
+        "name": "silero_vad.bin",
+        "bytes": 1238776,
+        "sha256": "581659ba9fe25dcd047673c0e7baf5784dd32fef7a55595e0895e20e632fae5f"
+      },
+      {
+        "name": "suppress_tokens.bin",
+        "bytes": 352,
+        "sha256": "0235cfdc944d5fd0d9643e238626355ac693ef3e076bcb2a26840fabd947842f"
+      }
+    ],
+    "engines": {
+      "transcribe": {
+        "bytes": 957888,
+        "sha256": "84ae207085d659a625945cb245f4239ccae5c0892064c8121c8532c2a5495656"
+      },
+      "translate-engine-2b": {
+        "bytes": 1576224,
+        "sha256": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+      },
+      "translate-engine-4b": {
+        "bytes": 1576080,
+        "sha256": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13"
+      }
+    },
+    "runtimeNoticesPreserved": true,
+    "directRuntimeNotices": {
+      "Libc-MIT.txt": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
+      "Objc2-LICENSE.md": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+      "React-MIT.txt": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "Regex-MIT.txt": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb",
+      "Reqwest-MIT.txt": "dd87e27dfbaa888cb77ea34592648a7743636b8dce07e49543bddda0fcfc73bc",
+      "Serde-JSON-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Serde-MIT.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "Sha2-MIT.txt": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+      "Tauri-MIT.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+      "Tempfile-MIT.txt": "8b427f5bc501764575e52ba4f9d95673cf8f6d80a86d0d06599852e1a9a20a36",
+      "Tokio-MIT.txt": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "Unicode-Normalization-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Normalization-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Unicode-Segmentation-COPYRIGHT.txt": "23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d",
+      "Unicode-Segmentation-MIT.txt": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+      "Uuid-MIT.txt": "436bc5a105d8e57dcd8778730f3754f7bf39c14d2f530e4cde4bd2d17a83ec3d"
+    },
+    "helperSHA256": "77325bcaccba33bcc753334560439e49103d9b4fbff5f6a27007273f8e9320e0",
+    "helperBytes": 151296,
+    "archive": "out/desktop-package/Madi-UI-Parity.app.zip",
+    "archiveSHA256": "8973f9c11e7b40cdb54dcd68085c0227475c36adc2f65d9ec37761ed10f6a80f",
+    "productRelease": false,
+    "notarized": false,
+    "scope": "Headless relocated package/runtime layout, decoder and native capture-to-owned-WAV replay; no UI, microphone, full model inference, model admission or updater validation"
+  },
+  "logSHA256": {
+    "final-tests": "09a61f52f7bbd5a094ef5db7b8d9c35899d1b3693491269d0aba8bb8216cc1a4",
+    "final-clippy": "155e18f9fdeb4b9e2a6a39c1fa31762be29419c057fd230e35e63586e1d28dfa",
+    "final-frontend": "452723a3275ee09441de707d8d1defda745138b0e4ffb69efe5a52e37d867e68",
+    "final-parity": "c995e5e69d73c0f36bbe3ef61dc18ab54b9af48772b335d6c4c959f32a6c04e4",
+    "final-reference": "d61759a3c5a909281afc77507dfbc28f6de4f7d9d9c4713d8ae166f7d31decad",
+    "final-native": "c71abb6fe1759360cbae0b3afd54bd0d6d19c5a2d61df8e6ba24a9e040ad7621",
+    "final-workflow": "7d3658e6a544f8f7fef50b751b32aeefa064ca535d83f2934ee1895d62daadfd",
+    "final-app": "b9891fab3d4427aa81e0eff3df99ef447db84c1d4691a62e94cd7c8d377ed986",
+    "final-package": "b738d46a6cea32d884eef8b78ccd4f1f8e95a629798423fbb2088db55e31e409",
+    "restored-transport": "a423b5bcad7cbf7161a2c8d4efc9a05b6bf9e699cb7787e29bae2be8d94a5164"
+  },
+  "limitations": [
+    "Experimental debug candidate; release remains disabled and no notarization is claimed",
+    "Actual preview WebView/native pixel and interaction parity remains NOT_RUN",
+    "DNA caption busy/aging admission and the rest of AI are not yet connected",
+    "Watchdog, audio retention, full system/mixed hardware and Windows capture/ASR/GPU integration remain open",
+    "The separate Linux glib dependency review finding and prior Windows archive-race root cause remain open",
+    "External Development SSD was not mounted; corpus app acceptance was not performed"
+  ]
+}
