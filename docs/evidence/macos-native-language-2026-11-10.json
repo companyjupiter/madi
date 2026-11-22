@@ -1,0 +1,609 @@
+{
+  "date": "2026-11-10",
+  "baseCommit": "08814465cf2078d1a1dfa0dece467bbc6baf1bf0",
+  "branch": "codex/macos-native-ui-audio",
+  "previousReceipt": "macos-native-ui-audio-2026-11-09.json",
+  "scope": "Actual Metal engine with installed model and captured PCM; rebuilt native debug app with embedded frontend. No fake native IPC.",
+  "fixes": [
+    "Do not confirm an auto language from a failed provisional decode; re-probe subsequent committed segments.",
+    "Publish only complete UTF-8 partial prefixes on JSONL and stdout.",
+    "Reload the workspace after successful manual export.",
+    "Render whole-line edits instead of stale acoustic words in detail view (previous receipt)."
+  ],
+  "runtime": {
+    "modelFile": "model.q8.safetensors",
+    "modelBytes": 867485320,
+    "modelSha256": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+    "modelsModified": false,
+    "beforeEngineSha256": "b92ba0a3df5aea278351a859cebcc4da72bafac8d87e9e962109add446ee57f5",
+    "afterBundledEngineSha256": "56e5162cf1bd878f73841005b5912d8194d961874f849a07f5468379b27d9b99",
+    "desktopSha256": "59bcd07a4e4e6c54beee7e82b5c2fad893597e50bf3b6a99464133a57a3d5edd",
+    "signing": "ad-hoc",
+    "deepStrictSignatureVerification": "passed",
+    "notarized": false,
+    "sourceNote": "Only comment/indentation cleanup in transcribe.zig followed the successful build; executable behavior is the tested version."
+  },
+  "engineComparison": {
+    "caseCount": 8,
+    "execution": "serial, before and after, same model and inputs",
+    "languageTokens": {
+      "50259": "English",
+      "50264": "Korean",
+      "50272": "Arabic"
+    },
+    "cases": [
+      {
+        "name": "jfk_fresh",
+        "before": {
+          "name": "jfk_fresh",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50259 margin 4.24 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50259,
+              "lang_margin": 4.237,
+              "avg_logprob": -0.049,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": true
+        },
+        "after": {
+          "name": "jfk_fresh",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50259 margin 4.24 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50259,
+              "lang_margin": 4.237,
+              "avg_logprob": -0.049,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": true
+        }
+      },
+      {
+        "name": "captured_prefix_then_jfk",
+        "before": {
+          "name": "captured_prefix_then_jfk",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50272 margin 2.31 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50272,
+              "lang_margin": 2.31,
+              "avg_logprob": -1.508,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50272,
+              "lang_margin": 0.0,
+              "avg_logprob": -1.327,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50272,
+              "lang_margin": 0.0,
+              "avg_logprob": -0.906,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50272,
+              "lang_margin": 0.0,
+              "avg_logprob": -0.972,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false,
+            false,
+            false,
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": false
+        },
+        "after": {
+          "name": "captured_prefix_then_jfk",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] deferred token 50272: decode quality -1.508; staying open",
+            "[lang] locked token 50259 margin 4.12 after 2 probe(s) (en=50259 ko=50264)",
+            "[lang] locked token 50264 margin 5.69 after 3 probe(s) (en=50259 ko=50264)",
+            "[lang] locked token 50259 margin 4.24 after 4 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50272,
+              "lang_margin": 2.31,
+              "avg_logprob": -1.508,
+              "dropped": true
+            },
+            {
+              "idx": 0,
+              "lang": 50259,
+              "lang_margin": 4.122,
+              "avg_logprob": -0.163,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50259,
+              "lang_margin": 4.245,
+              "avg_logprob": -0.049,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            true,
+            false,
+            false,
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": true
+        }
+      },
+      {
+        "name": "captured_segment2_fresh",
+        "before": {
+          "name": "captured_segment2_fresh",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50264 margin 5.69 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false
+          ],
+          "invalidUtf8Bytes": 1,
+          "lastContainsJfk": false
+        },
+        "after": {
+          "name": "captured_segment2_fresh",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50264 margin 5.69 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": false
+        }
+      },
+      {
+        "name": "bad_opening_then_jfk",
+        "before": {
+          "name": "bad_opening_then_jfk",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50272 margin 2.31 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50272,
+              "lang_margin": 2.31,
+              "avg_logprob": -1.508,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50272,
+              "lang_margin": 0.0,
+              "avg_logprob": -0.972,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false,
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": false
+        },
+        "after": {
+          "name": "bad_opening_then_jfk",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] deferred token 50272: decode quality -1.508; staying open",
+            "[lang] locked token 50259 margin 4.24 after 2 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50272,
+              "lang_margin": 2.31,
+              "avg_logprob": -1.508,
+              "dropped": true
+            },
+            {
+              "idx": 0,
+              "lang": 50259,
+              "lang_margin": 4.237,
+              "avg_logprob": -0.049,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            true,
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": true
+        }
+      },
+      {
+        "name": "silence_then_jfk",
+        "before": {
+          "name": "silence_then_jfk",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50259 margin 4.24 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50259,
+              "lang_margin": 4.237,
+              "avg_logprob": -0.049,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": true
+        },
+        "after": {
+          "name": "silence_then_jfk",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50259 margin 4.24 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50259,
+              "lang_margin": 4.237,
+              "avg_logprob": -0.049,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": true
+        }
+      },
+      {
+        "name": "korean_twice",
+        "before": {
+          "name": "korean_twice",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50264 margin 5.69 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 0.0,
+              "avg_logprob": -0.5,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false,
+            false
+          ],
+          "invalidUtf8Bytes": 2,
+          "lastContainsJfk": false
+        },
+        "after": {
+          "name": "korean_twice",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50264 margin 5.69 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false,
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": false
+        }
+      },
+      {
+        "name": "auto_ko_en_ko",
+        "before": {
+          "name": "auto_ko_en_ko",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50264 margin 5.69 after 1 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 0.0,
+              "avg_logprob": -1.821,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 0.0,
+              "avg_logprob": -0.5,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false,
+            false,
+            false
+          ],
+          "invalidUtf8Bytes": 4,
+          "lastContainsJfk": false
+        },
+        "after": {
+          "name": "auto_ko_en_ko",
+          "returncode": 0,
+          "languageMessages": [
+            "[lang] locked token 50264 margin 5.69 after 1 probe(s) (en=50259 ko=50264)",
+            "[lang] locked token 50259 margin 4.24 after 2 probe(s) (en=50259 ko=50264)",
+            "[lang] locked token 50264 margin 5.69 after 3 probe(s) (en=50259 ko=50264)"
+          ],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50259,
+              "lang_margin": 4.237,
+              "avg_logprob": -0.049,
+              "dropped": false
+            },
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 5.685,
+              "avg_logprob": -0.5,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false,
+            false,
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": false
+        }
+      },
+      {
+        "name": "explicit_korean",
+        "before": {
+          "name": "explicit_korean",
+          "returncode": 0,
+          "languageMessages": [],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 0.0,
+              "avg_logprob": -1.821,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false
+          ],
+          "invalidUtf8Bytes": 2,
+          "lastContainsJfk": false
+        },
+        "after": {
+          "name": "explicit_korean",
+          "returncode": 0,
+          "languageMessages": [],
+          "segments": [
+            {
+              "idx": 0,
+              "lang": 50264,
+              "lang_margin": 0.0,
+              "avg_logprob": -1.821,
+              "dropped": false
+            }
+          ],
+          "textsEmpty": [
+            false
+          ],
+          "invalidUtf8Bytes": 0,
+          "lastContainsJfk": false
+        }
+      }
+    ],
+    "assertions": "all passed; dropped provisional segments are not published text, even though diagnostic metadata retains the candidate language"
+  },
+  "nativeUi": [
+    {
+      "check": "Previously blocked JFK Markdown save/reopen",
+      "result": "passed"
+    },
+    {
+      "check": "Pre-fix actual microphone countdown, input activity, capture, pause at 0:41, stop and auto archive",
+      "result": "passed lifecycle; language quality failed, prompting the engine correction"
+    },
+    {
+      "check": "Post-fix actual microphone capture",
+      "result": "blocked",
+      "detail": "Existing TCC code requirement mismatched rebuilt ad-hoc signature. User already authorized microphone access. Settings refresh did not resolve it; computer-use tool denied access to com.apple.UserNotificationCenter. App stopped; no post-fix hardware claim."
+    },
+    {
+      "check": "Post-fix native Korean file transcription",
+      "result": "passed",
+      "detail": "All three synthetic fixture sentences displayed exactly; 0:07 duration."
+    },
+    {
+      "check": "Manual Markdown save, immediate workspace list refresh and reopen",
+      "result": "passed",
+      "detail": "korean-export-verified.md appeared without another session/reload action and reopened with identical Korean sentences."
+    }
+  ],
+  "fixture": {
+    "kind": "local macOS Yuna speech synthesis",
+    "text": "안녕하세요. 지금 마디의 마이크 녹음 기능을 테스트하고 있습니다. 한국어가 정확하게 표시되는지 확인합니다.",
+    "seconds": 7.8110625,
+    "format": "16 kHz mono PCM16 WAV",
+    "sha256": "c7fecd9478e3e7270a5343b46cfadf3e5ef5a7ed2a5ce563233df6ef22359532",
+    "publicJfkSha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  },
+  "validation": {
+    "rustTests": {
+      "passed": 211,
+      "ignored": 2,
+      "failed": 0
+    },
+    "clippy": "passed --locked --workspace --all-targets -- -D warnings",
+    "zigPolicyTests": {
+      "passed": 3,
+      "failed": 0,
+      "command": "zig test engine/metal/live_decode_policy.zig -lc -target aarch64-macos.14.0",
+      "initialAttempt": "without libc/explicit deployment target failed linker resolution; corrected command passed"
+    },
+    "uiRenderTests": {
+      "passed": 3,
+      "failed": 0
+    },
+    "ipcQueueTests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "frontendAndDebugAppBuild": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "sources": {
+    "engine/metal/transcribe.zig": "02bd467de9499dd347d97321e991c660056ea73100cda99549662fcccf098876",
+    "engine/metal/live_decode_policy.zig": "3f515d9aeb524058397c39c49b7727d1bf0fa94b01a35ad74c814e2a657c463d",
+    "apps/desktop/src-tauri/src/workspace_host.rs": "5aef997a460244ec1743c25063157d124d4e8842430f8344f19e234789b12269",
+    "apps/desktop/src/TranscriptLineText.tsx": "3322fcae3b3b2ee685db94bd4fd65ce3cb4ff66727f4136e35a67ae841c5a3ac",
+    "apps/desktop/src/FileTranscript.tsx": "98ebb95b00e824e4b8b28c42dfc48b69ca9ce3202e309a274654efd7ac139207",
+    "apps/desktop/tests/transcript_line_text.test.mjs": "cecb69e19e5ad2b61b79dbf062462eb659dcf186fb0639a1bbf5bceddfe9cd90"
+  },
+  "localEvidence": {
+    "directory": "out/native-validation-20261109",
+    "files": {
+      "language-probe-before-summary.json": "da0d5e27d7baaeb3d006743b705307d2d87c0dde44f7f34aedbf419978c86543",
+      "language-probe-after-summary.json": "6a9e7529aa45d9ed5f7908514cf91648697db0c2dc6650cc67610c3a9f971980",
+      "probe_language.py": "184e001d184eb449dda6643739c40d6175aa2789cf34a28a89ae5e6bdffe83c2",
+      "build-language-fix.log": "2270d1749e06bacc705a5afc44982501cf7576ce36238bfa1f66f92bc561a5cc",
+      "rust-tests-after.log": "55234fb4f577b78f158784f1a48f290041b3b2f8fd3a78417c32e150b4126a48",
+      "clippy-after.log": "e6282168ac48fff1e4aed041dfe3225289b2664d3336ae573ef40ee10bd54e86",
+      "korean-file-after.png": "97b344d89a597c0b86eb8049bdc9a669828d7fa281de7393fc28df362060fcec",
+      "korean-export-reopened.png": "3554b6f198db4e786f37f41c423c6df7fe422352cfe25dc513df54e00a017d40",
+      "meetings/korean-export-verified.md": "8daaf4f54dea6c8a60086bcc8ade38580d45dfc9480321a64ca508d18afed1b3"
+    },
+    "privacy": "Raw microphone PCM, transcript content, preferences and process output remain ignored local evidence; no private speech content is included in this receipt."
+  },
+  "preservation": {
+    "originalCheckout": "untouched",
+    "testFolder": "out/native-validation-20261109/meetings",
+    "preferencesWorkspaceGlossary": "restored byte-for-byte with app stopped",
+    "microphonePermission": "user-authorized; no broader permission granted",
+    "appRunningAtFinish": false
+  },
+  "notAccepted": [
+    "Post-fix hardware microphone capture and resume",
+    "Human speaker listening quality",
+    "System/mixed capture",
+    "Complete ko/en/ja light/dark native interaction matrix",
+    "Captions/fullscreen/multi-display",
+    "General ASR quality and complete live preview/latency acceptance",
+    "Windows hardware",
+    "Release signing/notarization/installer/updater"
+  ]
+}

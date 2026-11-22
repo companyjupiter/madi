@@ -1,0 +1,220 @@
+{
+  "date": "2026-11-22",
+  "baseCommit": "b11488fcc03f81c63f8ae45d259770101418e873",
+  "scope": "Recorded audio through actual Metal STREAM protocol; real native file import/edit/export/reopen. No hardware microphone acceptance.",
+  "engine": {
+    "model_sha256": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+    "engine_sha256": "b2ee976a233390ceb18158ad86d540cf4ce15f4a1108f368c1fb1cc8f0667694",
+    "baseline_sha256": "b92ba0a3df5aea278351a859cebcc4da72bafac8d87e9e962109add446ee57f5",
+    "manifest_sha256": "36d2de8facb655db201d39b269687baad14fe2f8d1a67ca0ba3bb982e8d44198"
+  },
+  "publicCorpus": {
+    "source": "https://openslr.org/40/",
+    "mirror": "https://huggingface.co/datasets/kresnik/zeroth_korean",
+    "revision": "1fe9378",
+    "license": "CC-BY-4.0",
+    "selection": "First two rows for each speaker, in the published test parquet order, selected before inference",
+    "parquet_sha256": "2f6382b902622ede1bf35e5a167a9b06b0f1b8c896e1947324b8b5180fca7502",
+    "sampleIds": [
+      "105_003_0029",
+      "105_003_0478",
+      "126_003_0095",
+      "126_003_0149",
+      "132_003_0014",
+      "132_003_0037",
+      "104_003_0019",
+      "104_003_0193",
+      "147_003_0097",
+      "147_003_0165",
+      "137_003_0008",
+      "137_003_0029",
+      "149_003_0057",
+      "149_003_0164",
+      "112_003_0107",
+      "112_003_0108",
+      "121_003_0017",
+      "121_003_0037",
+      "118_003_0037",
+      "118_003_0046"
+    ]
+  },
+  "comparison": {
+    "cases": 27,
+    "publicUtterances": 20,
+    "speakers": 10,
+    "publicSeconds": 195.69412499999999,
+    "baselineInvalidUtf8Cases": 18,
+    "candidateInvalidUtf8Cases": 0,
+    "candidateFailures": 0,
+    "baselinePublicCER": {
+      "errors": 91,
+      "characters": 782,
+      "rate": 0.11636828644501279
+    },
+    "candidatePublicCER": {
+      "errors": 91,
+      "characters": 782,
+      "rate": 0.11636828644501279
+    },
+    "regressionScenarios": [
+      {
+        "name": "bad_opening_then_korean",
+        "languages": [
+          50272,
+          50264
+        ],
+        "partialEvents": 0,
+        "textPresent": [
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bad_opening_then_english",
+        "languages": [
+          50272,
+          50259
+        ],
+        "partialEvents": 0,
+        "textPresent": [
+          false,
+          true
+        ]
+      },
+      {
+        "name": "repeated_korean",
+        "languages": [
+          50264,
+          50264
+        ],
+        "partialEvents": 2,
+        "textPresent": [
+          true,
+          true
+        ]
+      },
+      {
+        "name": "ko_en_ko",
+        "languages": [
+          50264,
+          50259,
+          50264
+        ],
+        "partialEvents": 0,
+        "textPresent": [
+          true,
+          true,
+          true
+        ]
+      },
+      {
+        "name": "auto_with_translation_candidates",
+        "languages": [
+          50259,
+          50264,
+          50259
+        ],
+        "partialEvents": 0,
+        "textPresent": [
+          true,
+          true,
+          true
+        ]
+      },
+      {
+        "name": "explicit_korean",
+        "languages": [
+          50264,
+          50264
+        ],
+        "partialEvents": 4,
+        "textPresent": [
+          true,
+          true
+        ]
+      },
+      {
+        "name": "silence_then_korean",
+        "languages": [
+          50264
+        ],
+        "partialEvents": 0,
+        "textPresent": [
+          true
+        ]
+      }
+    ]
+  },
+  "nativeUI": {
+    "checks": [
+      "M4A native file selection and decoding",
+      "Actual Korean transcription",
+      "Whole-line edit visible in detail mode",
+      "Automatic Markdown archive",
+      "Manual Markdown export appears immediately",
+      "Reopen preserves corrected Korean text"
+    ],
+    "settingsRestored": true,
+    "status": "PASS",
+    "build": "Fresh debug bundle built from these source hashes on 2026-11-22",
+    "bundle": "out/korean-validation-20261122/Madi UI Parity.app",
+    "buildCommand": "npm --prefix apps/desktop run tauri build -- --debug --bundles app",
+    "signature": "Ad-hoc codesign --verify --deep --strict passed; not a release signature",
+    "executables": {
+      "Contents/MacOS/madi-desktop": "e9130b469c285364ba32b7a12dc1c994d8b8d04c8b7ba1d6110605352f881b36",
+      "Contents/MacOS/translate-engine-4b": "16306937d164b541fff7934fe2236e835a7e3a309dd0e99a72fd2322ab9e0f13",
+      "Contents/MacOS/transcribe": "f2abea238f44a5ef62141475911488b81b0ea29dbdd3f977e1b012b1f1f67583",
+      "Contents/MacOS/madi-audio-decode": "404c3e9914c79484403c424c4a08104f1023bae91e8803e54ddd5b32d731d92a",
+      "Contents/MacOS/translate-engine-2b": "7853cc9f6a000c62c9b6c56657d8371a34f0fc1bd98845d50474e7aaf08269f3"
+    },
+    "savedMarkdownSha256": "5d6d7edced00d685f972e7e3856d989f62b81fd8c2892954977da01e417c33df"
+  },
+  "notAccepted": [
+    "Hardware microphone capture/resume",
+    "System or mixed audio capture",
+    "Human listening quality",
+    "Full live preview/latency and UI parity matrix",
+    "Windows hardware",
+    "Release signing/notarization/installer/updater"
+  ],
+  "privacy": "No private audio, transcript, preferences or raw process output is included in this receipt.",
+  "sources": {
+    "engine/metal/transcribe.zig": "02bd467de9499dd347d97321e991c660056ea73100cda99549662fcccf098876",
+    "engine/metal/live_decode_policy.zig": "3f515d9aeb524058397c39c49b7727d1bf0fa94b01a35ad74c814e2a657c463d",
+    "apps/desktop/src-tauri/src/workspace_host.rs": "5aef997a460244ec1743c25063157d124d4e8842430f8344f19e234789b12269",
+    "apps/desktop/src/TranscriptLineText.tsx": "3322fcae3b3b2ee685db94bd4fd65ce3cb4ff66727f4136e35a67ae841c5a3ac",
+    "apps/desktop/src/FileTranscript.tsx": "98ebb95b00e824e4b8b28c42dfc48b69ca9ce3202e309a274654efd7ac139207",
+    "scripts/probe_live_language.py": "ce197ef273f24377189f954afcbd8e45e55f9cb293e6927bab2aeb480f84db44",
+    "scripts/test_probe_live_language.py": "b77a3a79e4b1713be77f49d3086815d344a67e282d67ec237ba54e97d4d4e60f"
+  },
+  "localEvidence": {
+    "directory": "out/korean-validation-20261122",
+    "files": {
+      "comparison-final/summary.json": "e976ead13c7985e361a8ad2683d66e62ec8862df9892641c75e423debfd60944",
+      "cases-final.json": "36d2de8facb655db201d39b269687baad14fe2f8d1a67ca0ba3bb982e8d44198",
+      "public-samples.json": "4fcd83389dc68e289b833db09a34423a344192727ba4990acac3a377dace2905",
+      "engine-build.log": "a76bff53b9ecfb2141751ba75416530c895ceb5d7267624be5681f5ea6591660",
+      "native-app-build.log": "49d0ebfbe1d1cb292e3c39a0867232df7e3215f5840719ef72a2c450efbd811f",
+      "rust-tests.log": "99b07b1e6aec4f996f6eed71f51ab5157fc83426d6f44ddb42dcc99946b8f1d2",
+      "clippy.log": "f37c096d66e525402235aaa625e6c56ad6cd66b0f2d36e056cbb9bb2792f458a"
+    }
+  },
+  "validation": {
+    "rust": {
+      "passed": 211,
+      "ignored": 2
+    },
+    "clippy": "PASS --locked --workspace --all-targets -- -D warnings",
+    "rustfmt": "PASS --all --check",
+    "frontend": "PASS typecheck and production asset build",
+    "renderTests": 3,
+    "ipcTests": 5,
+    "zigPolicyTests": 3,
+    "probeHarnessTests": 4,
+    "recordedComparison": {
+      "passed": 27,
+      "failed": 0
+    },
+    "modelUnchanged": true
+  }
+}

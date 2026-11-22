@@ -44,7 +44,7 @@ a debug macOS build and does not certify audible output or screen interaction.
 cargo run --locked -p madi-platform --example line_playback_probe -- /path/to/silent-four-seconds.wav
 ```
 
-On the current locked Mac (2026-11-05), all four automatic boundary checks
+On the locked Mac on 2026-11-05, all four automatic boundary checks
 **FAIL**: the playback clock does not advance. Tap-again, explicit stop, pending
 drop and nonfinite-input checks pass. An independently compiled unchanged
 LinePlayer and a minimal AVPlayer without seek or boundary observers reproduce
@@ -54,9 +54,29 @@ by `kAudioQueueErr_CannotStart` (-66681) and `PlaybackFailed` on the built-in sp
 route. The SDK header confirms the error constant. The screen is locked, but
 the causal relationship between locking and the audio failure is unproven.
 
-Native playback acceptance remains **FAIL**, and native UI/UX comparison remains
-**NOT_RUN**. No retry, forced playback policy or audio-service restart hides this
-result. Recheck the device/output environment, repeat the actual probe, then
-compare source and candidate UI interactions when the Mac is unlocked. App builds
-and lifecycle tests do not close that gate. See the source-pinned receipt in
+That historical failure is retained in
 `../evidence/macos-line-playback-2026-11-05.json`.
+
+On 2026-11-09, with the Mac accessible, the same actual AVPlayer probe passes all
+three spans and the rapid A/B/A boundary. Measured span completion is 1.922,
+0.406 and 0.505 seconds; tap-again, pending stop/drop and invalid-span checks
+also pass. No playback policy, audio service or system output device was changed.
+The earlier zero-clock/CoreAudio failure is not reproduced; its cause remains
+unproven.
+
+The actual Tauri `.app` also transcribes the public JFK WAV, displays its line
+playback state, returns to stopped at the boundary, and stops on a second click.
+The rebuilt candidate repeats play/stop after a transcript edit. These are
+bounded native UI and playback checks, not speaker audibility/quality acceptance.
+The latter still needs a human listening observation. See
+`../evidence/macos-native-ui-audio-2026-11-09.json` for that day's evidence.
+
+On 2026-11-10 a user-authorized microphone session exercised countdown, capture,
+pause, stop and automatic archive. The resulting language-lock and partial-UTF-8
+defects were reproduced with its captured PCM and corrected in the engine; see
+`LIVE_LANGUAGE_DETECTION.md`. The rebuilt app passes Korean file transcription,
+Markdown save, immediate workspace refresh and reopen. Post-fix microphone
+hardware acceptance is still pending OS permission interaction after the ad-hoc
+signature change; the computer-use tool cannot operate the permission-alert app.
+Microphone resume, system/mixed capture and subjective speaker quality remain
+unverified. See `../evidence/macos-native-language-2026-11-10.json`.

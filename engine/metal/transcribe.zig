@@ -14,6 +14,7 @@
 //   diar_resnet.zig. Full license texts: ../NOTICE, ../THIRD_PARTY_LICENSES.md
 // ───────────────────────────────────────────────────────────────────────────
 const std = @import("std");
+const live_decode_policy = @import("live_decode_policy.zig");
 const mtl = @import("metal_backend.zig");
 const mel = @import("mel.zig");
 const enc = @import("encoder.zig");
@@ -79,7 +80,8 @@ var g_dec_int4: u8 = 0;
 // whitelist the SOT probe (1-token forward, ~2-4 ms — cross-KV is built per
 // chunk anyway) runs EVERY segment and picks the argmax among candidates
 // only, so flapping is structurally limited to the session's language pair.
-// Unset → legacy single-lock behavior, bit-exact.
+// With explicit input language this retains the bounded whitelist behavior.
+// Auto input now probes the full range and confirms changes after decoding.
 var g_lang_cands: [4]u32 = undefined;
 var g_lang_ncands: usize = 0;
 fn audioCtx(got_samples: usize, raw_peak: f32) u32 {
@@ -1418,16 +1420,17 @@ pub fn main() !void {
     const cemb = try alloc.alloc(f32, max_win * diar.EMB);
     const crms = try alloc.alloc(f32, max_win);
     // language token for the SEED: env WHISPER_LANG_ID overrides; else 0 = auto.
-    // Detected ONCE (on the first speech segment) and reused for the rest of the
-    // session — in stream mode this also kills per-segment language flapping.
+    // Auto detection holds a confirmed language through ambiguous probes but
+    // rechecks subsequent speech. An explicit input token remains fixed.
     // P5: how many times the auto-detector has probed without locking (see the
     // LANG_LOCK_MARGIN gate) — bounds "stay open" so a permanently ambiguous
-    // source still commits to a language.
+    // source can still commit once it produces a credible decode.
     var lang_probes: u32 = 0;
     var lang_tok: u32 = blk: {
         if (std.posix.getenv("WHISPER_LANG_ID")) |s| break :blk std.fmt.parseInt(u32, s, 10) catch 0;
         break :blk 0;
     };
+    const auto_language = lang_tok == 0;
     // task token: <|transcribe|>=50360 (default) or <|translate|>=50359 (X→English,
     // Whisper-native). TRANSLATE=1 → on-device live translation; source language
     // is still detected/forced via lang_tok, only the OUTPUT becomes English.
@@ -2455,7 +2458,7 @@ pub fn main() !void {
 
         // SOT probe (every chunk): the prediction at the <|sot|> position
         // carries TWO model-side signals from one cheap forward —
-        //   · language token arg-max [50259..50358] (detected once per file)
+        //   · language token arg-max [50259..50358] (rechecked in auto mode)
         //   · P(<|nospeech|>=50363): the model's own speech/non-speech verdict.
         //     Energy cannot make this call — measured: pqmho's music has
         //     HIGHER window RMS (p25 0.154) than the KO 2-spk clip's speech (med 0.052)
@@ -2468,7 +2471,8 @@ pub fn main() !void {
         // staff line and the JA patient's reply each decode with their own token.
         var seg_lang: u32 = lang_tok;
         var lang_margin: f32 = 0;
-        if (!preview_job and (lang_tok == 0 or g_lang_ncands > 0)) {
+        var pending_lang_lock: u32 = 0;
+        if (!preview_job and (auto_language or g_lang_ncands > 0)) {
             d_pos[0] = 0;
             // P6: the probe reads whatever the previous pass left in slot 0 — with a
             // glossary prompt that is <|startofprev|>, not <|startoftranscript|>, so
@@ -2485,13 +2489,13 @@ pub fn main() !void {
             try kLogitGemv(f_logit, d_logits, tok_emb.qs, tok_emb.scales, dscr.xb, VOCAB, D);
             try mtl.commitCommandBuffer();
             try mtl.sync();
-            if (lang_tok == 0) {
-                // First detection (auto): FULL-range argmax even when a candidate
+            if (auto_language) {
+                // Auto input: FULL-range argmax even when a candidate
                 // whitelist is set — the whitelist is built from the TRANSLATE
                 // TARGETS, and the actually-spoken language can sit OUTSIDE it
                 // (EN speech with {中,韓} targets → forced-KO decode produced the
                 // "일요일…/이 시각 세계였습니다" hallucinations, 2026-07-13 폭파).
-                // The detected session language then joins the whitelist below.
+                // A clear later source-language change must also remain eligible.
                 var bl: u32 = 50259;
                 var bv: f32 = d_logits[50259];
                 var second: f32 = -1e30;
@@ -2500,24 +2504,20 @@ pub fn main() !void {
                     if (d_logits[lt] > bv) { second = bv; bv = d_logits[lt]; bl = lt; }
                     else if (lt != bl and d_logits[lt] > second) second = d_logits[lt];
                 }
-                // P5: the lock used to be unconditional on segment 0. One
-                // ambiguous opening segment (music bed, applause, a title card)
-                // therefore decided the WHOLE session, and because the
-                // per-segment re-probe below only searches {lock} ∪ candidates,
-                // a wrong lock could never be corrected — the true language is
-                // not in the search set. Require the winner to clear the runner-up
-                // by LANG_LOCK_MARGIN; below that, decode this segment with the
-                // best guess but leave lang_tok unlocked so the next segment
-                // decides again. lang_probes bounds that to LANG_LOCK_TRIES.
+                // Keep the confirmed language through ambiguous probes. First
+                // detection can use its best guess without locking; neither a
+                // high language margin nor exhausting the initial probe budget
+                // can commit a decode below the rescue quality floor.
                 lang_margin = bv - second;
-                seg_lang = bl;
+                seg_lang = live_decode_policy.autoLanguage(lang_tok, bl, lang_margin, envF("LANG_SWITCH_MARGIN", 1.0));
                 lang_probes += 1;
-                if (lang_margin >= envF("LANG_LOCK_MARGIN", 1.0) or
-                    lang_probes >= envU("LANG_LOCK_TRIES", 4))
+                if ((lang_tok == 0 and (lang_margin >= envF("LANG_LOCK_MARGIN", 1.0) or
+                    lang_probes >= envU("LANG_LOCK_TRIES", 4))) or (seg_lang != lang_tok and lang_tok != 0))
                 {
-                    lang_tok = bl;
-                    try out.print("[lang] locked token {d} margin {d:.2} after {d} probe(s) (en=50259 ko=50264)\n", .{ lang_tok, lang_margin, lang_probes });
-                } else {
+                    // A confident probe is only a candidate. A weak decode
+                    // must not anchor every subsequent microphone segment.
+                    pending_lang_lock = seg_lang;
+                } else if (lang_tok == 0) {
                     try out.print("[lang] probe {d} token {d} margin {d:.2} — below lock margin, staying open\n", .{ lang_probes, bl, lang_margin });
                 }
             } else {
@@ -2550,6 +2550,8 @@ pub fn main() !void {
                 }
             }
         }
+        const provisional_language = auto_language and (lang_tok == 0 or pending_lang_lock != 0);
+        var language_decode_rejected = false;
         d_tokens[1] = seg_lang;
         out_tokens[1] = seg_lang;
         d_tokens[2] = task_tok; // transcribe(50360) / translate(50359)
@@ -2666,7 +2668,7 @@ pub fn main() !void {
                 for (g_prompt) |t| { d_tokens[PL] = t; PL += 1; }
             }
             d_tokens[PL] = SEED[0]; // sot
-            d_tokens[PL + 1] = seg_lang; // per-segment language (== lang_tok unless LANG_CANDIDATES)
+            d_tokens[PL + 1] = seg_lang; // per-segment language candidate
             d_tokens[PL + 2] = task_tok; // transcribe(50360) / translate(50359)
             PL += 3;
             if (!ts_mode) { d_tokens[PL] = 50364; PL += 1; } // <|notimestamps|>
@@ -2827,7 +2829,7 @@ pub fn main() !void {
                 // hypothesis trips the SAME collapse predicate the rescue uses, or
                 // exceeds a token budget (~½ MAX_TOK) — keep the last good preview;
                 // the rescue still lands the clean committed text.
-                if (g_partials and !dropped and n_text > 0 and !partial_frozen) {
+                if (g_partials and !provisional_language and !dropped and n_text > 0 and !partial_frozen) {
                     if (tokenCollapse(out_tokens[PL .. PL + n_text]) or
                         tokenDiversityCollapse(out_tokens[PL .. PL + n_text]) or
                         n_text > envU("PARTIAL_MAX_TOK", 224))
@@ -2838,8 +2840,9 @@ pub fn main() !void {
                         // M3: this was never freed — one page_allocator page per
                         // «partial» emission, the residual ~2 MB/min of live growth.
                         defer if (ptext.len > 0) alloc.free(ptext);
-                        evPartial(t_off + pass_off, ptext);
-                        if (stream) try out.print("\u{00AB}partial {d:.2}\u{00BB} {s}\n", .{ t_off + pass_off, std.mem.trim(u8, ptext, " \n") });
+                        const complete = live_decode_policy.completeUtf8Prefix(ptext);
+                        evPartial(t_off + pass_off, complete);
+                        if (stream) try out.print("\u{00AB}partial {d:.2}\u{00BB} {s}\n", .{ t_off + pass_off, std.mem.trim(u8, complete, " \n") });
                     }
                 }
             }
@@ -2931,13 +2934,20 @@ pub fn main() !void {
                 try out.print("[rescue] chunk {d}: re-decode still degenerate — segment dropped\n", .{cchunk + 1});
             if (!dropped and n_text > 0 and !pass_garbage) {
                 sum_lp += pass_lp; n_lp += pass_nlp; // accumulate for the seg event
-                var ht = try std.time.Timer.start();
-                const text = try bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]);
-                defer alloc.free(text);
-                try chunk_text.appendSlice(text);
-                const env_off = @min(@as(usize, seek_fr) * 20, senv.len);
-                try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, PL, t_off + pass_off, pass_got, senv[env_off..], d_conf, !stream and diar_on);
-                host_ns += ht.read();
+                if (provisional_language and !live_decode_policy.canLockLanguage(false, pass_nlp, n_text, @floatCast(pass_avg_lp), envF("LOGPROB_RESCUE", -1.0))) {
+                    // Do not publish an unconfirmed language's failed rescue
+                    // as words (or as a partial above). A later speech segment
+                    // will probe again instead of inheriting this guess.
+                    language_decode_rejected = true;
+                } else {
+                    var ht = try std.time.Timer.start();
+                    const text = try bpeDecode(bpe_path, out_tokens[PL .. PL + n_text]);
+                    defer alloc.free(text);
+                    try chunk_text.appendSlice(text);
+                    const env_off = @min(@as(usize, seek_fr) * 20, senv.len);
+                    try wordTimestamps(out, bpe_path, d_ca.ptr, out_tokens, n_text, PL, t_off + pass_off, pass_got, senv[env_off..], d_conf, !stream and diar_on);
+                    host_ns += ht.read();
+                }
             }
             if (pass_garbage) break :seek; // garbage timestamps — don't seek into junk
             if (!ts_mode) { // plain mode: single pass, no seek — except the F2 split's second half
@@ -2999,7 +3009,15 @@ pub fn main() !void {
         const dec_ms = @as(f64, @floatFromInt(dec_gpu_ns)) / 1e6; // word-DTW/BPE moved inside the loop; keep tok/s comparable
         try out.print("[perf] chunk {d}: conv {d:.0}ms | encoder {d:.0}ms (batch {d}) | decode {d} tok {d:.0}ms ({d:.1} tok/s)  [cpu-rec {d:.0}ms | gpu-sync {d:.0}ms | passes {d}]\n", .{ cchunk + 1, conv_ms, enc_ms, nb, n_tok_total, dec_ms, @as(f64, @floatFromInt(n_tok_total)) / (dec_ms / 1000.0), @as(f64, @floatFromInt(enc_ns)) / 1e6, @as(f64, @floatFromInt(sync_ns)) / 1e6, total_passes });
         const avg_lp: f32 = if (n_lp > 0) @floatCast(sum_lp / @as(f64, @floatFromInt(n_lp))) else 0;
-        evSeg(@intCast(cchunk), t_off, t_off + @as(f32, @floatFromInt(cgot)) / 16000.0, chunk_text.items, @as(f32, @floatFromInt(n_tok_total)) / @as(f32, @floatCast(dec_ms / 1000.0)), @floatCast(enc_ms), @floatCast(dec_ms), total_passes, dropped, avg_lp, fb_reason, seg_lang, lang_margin);
+        if (pending_lang_lock != 0) {
+            if (live_decode_policy.canLockLanguage(dropped or language_decode_rejected, n_lp, chunk_text.items.len, avg_lp, envF("LOGPROB_RESCUE", -1.0))) {
+                lang_tok = pending_lang_lock;
+                try out.print("[lang] locked token {d} margin {d:.2} after {d} probe(s) (en=50259 ko=50264)\n", .{ lang_tok, lang_margin, lang_probes });
+            } else {
+                try out.print("[lang] deferred token {d}: decode quality {d:.3}; staying open\n", .{ pending_lang_lock, avg_lp });
+            }
+        }
+        evSeg(@intCast(cchunk), t_off, t_off + @as(f32, @floatFromInt(cgot)) / 16000.0, chunk_text.items, @as(f32, @floatFromInt(n_tok_total)) / @as(f32, @floatCast(dec_ms / 1000.0)), @floatCast(enc_ms), @floatCast(dec_ms), total_passes, dropped or (language_decode_rejected and chunk_text.items.len == 0), avg_lp, fb_reason, seg_lang, lang_margin);
         if (dropped) {
             if (n_chunks > 1) try out.print("\n[chunk {d}/{d} @ {d:.0}s] (low-energy — hallucination guard, rms {d:.3})\n", .{ cchunk + 1, n_chunks, t_off, seg_rms2 });
         } else {

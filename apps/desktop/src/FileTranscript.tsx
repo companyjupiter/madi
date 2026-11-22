@@ -3,6 +3,7 @@ import { interimContinuation } from './previewText';
 import { useShownInterim } from './useShownInterim';
 import type { FileArtwork, FileEdit, FileSnapshot, LiveControl, TranscriptLine } from './files';
 import { MiddleText } from './MiddleText';
+import { hasReviewLinks, TranscriptLineText } from './TranscriptLineText';
 import { useTranscriptFollow } from './useTranscriptFollow';
 import './transcript.css';
 import { usePreferences } from './preferences';
@@ -158,7 +159,7 @@ export function FileTranscript({ workspace, snapshot: state, artwork, language, 
               {editing === line.id ? <><textarea autoFocus ref={editor} value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => {
                 if (event.key === 'Escape') { event.preventDefault(); setEditing(null); }
                 if (event.key === 'Enter' && event.metaKey) { event.preventDefault(); saveEdit(); }
-              }} /><div className="transcript-edit-actions"><button onClick={saveEdit}>{text('Save')}</button><button onClick={() => setEditing(null)}>{text('Cancel')}</button></div></> : <p className={`transcript-body${line.words.some(word => word.conf < (preferences.settings.vadConfThreshold ?? .55)) ? ' has-review-words' : ''}`} onDoubleClick={() => beginEdit(line)}>{line.words.map((word, wi) => <span key={word.id}>{line.wordSpacing[wi] ? ' ' : ''}{word.conf < (preferences.settings.vadConfThreshold ?? .55) ? <button className="review-word" onClick={() => wordReview.open(line.id, wi)}>{word.text}</button> : word.text}</span>)}{line.overlapSpeakers.map(speaker => <span key={speaker} className="transcript-overlap" style={{ color: speakerColor(speaker) }}>{l(`  ⟨+${name(speaker)} 겹침⟩`, `  ⟨+${name(speaker)} overlap⟩`, `  ⟨+${name(speaker)} 重なり⟩`)}</span>)}{liveTail(index === state.lines.length - 1)}</p>}
+              }} /><div className="transcript-edit-actions"><button onClick={saveEdit}>{text('Save')}</button><button onClick={() => setEditing(null)}>{text('Cancel')}</button></div></> : <p className={`transcript-body${hasReviewLinks(line, preferences.settings.vadConfThreshold ?? .55) ? ' has-review-words' : ''}`} onDoubleClick={() => beginEdit(line)}><TranscriptLineText line={line} threshold={preferences.settings.vadConfThreshold ?? .55} review={wordReview.open} />{line.overlapSpeakers.map(speaker => <span key={speaker} className="transcript-overlap" style={{ color: speakerColor(speaker) }}>{l(`  ⟨+${name(speaker)} 겹침⟩`, `  ⟨+${name(speaker)} overlap⟩`, `  ⟨+${name(speaker)} 重なり⟩`)}</span>)}{liveTail(index === state.lines.length - 1)}</p>}
               {Object.entries(line.translations).map(([lang, value]) => <p className="transcript-translation" key={lang}>{value}</p>)}
               {Object.entries(line.staleTranslations).filter(([lang]) => !line.translations[lang]).map(([lang, value]) => <p className="transcript-translation stale" key={lang}>{value}</p>)}
             </article>;
