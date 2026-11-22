@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-22",
+  "status": "PASS_WITH_OPEN_GATES",
+  "scope": "Native YouTube system-only capture, Korean transcription, pause/resume, stop/archive/reopen; separate short captured-file English translation. Not full UI/UX or release acceptance.",
+  "source": {
+    "url": "https://www.youtube.com/watch?v=rKTpAeYJjJE",
+    "channel": "EBS 컬렉션 - 사이언스",
+    "title": "양자역학 탄생 100주년, 혁명은 이렇게 시작됐다 (feat. 김상욱 교수) [취미는 과학/ 62화 확장판]",
+    "playback": "Native Google Chrome, seek URL at 120 seconds; player observed unmuted and advancing. No source download or subtitle import."
+  },
+  "candidate": {
+    "runtimeSourceMerge": "6d5d08a6cd7417ed12bac98a96dc5e6809708beb",
+    "reportBaseCommit": "80a2f4defba6eb4b3ee7e31b2ce2e27e8b9dd5fb",
+    "bundle": "Madi UI Parity.app",
+    "applicationSHA256": "e9130b469c285364ba32b7a12dc1c994d8b8d04c8b7ba1d6110605352f881b36",
+    "engineSHA256": "f2abea238f44a5ef62141475911488b81b0ea29dbdd3f977e1b012b1f1f67583",
+    "modelSHA256": "1014fd3ad4450a2e43e473eebbab485b165fd68cbe932372071d86c522bb5c8e",
+    "macOS": "27.2",
+    "buildKind": "ad-hoc debug; release/notarization not accepted"
+  },
+  "nativeObservations": {
+    "systemAudioPermission": "PASS - user-granted switch observed on; agent did not enter credentials or change TCC",
+    "input": "System, automatic input language, translation off",
+    "microphoneStarted": false,
+    "microphoneBasis": "Selected System input maps to native source 1; bridge skips startMic for source 1. No physical microphone acceptance claimed.",
+    "captureStartAttribution": "External interaction advanced the app to recording before the agent start click; stale click was rejected. Countdown and initiator are not claimed.",
+    "koreanLiveText": "PASS - nonempty Korean transcript visibly matched the selected discussion topic; recognition errors remain",
+    "pause": "PASS - elapsed display held at 1:02 with Resume available while browser playback continued",
+    "resume": "PASS - new Korean text and elapsed 1:59 observed",
+    "stop": "PASS - Stop clicked at 2:16; finishing retired to an archived, non-recording view",
+    "archiveReopen": "PASS - workspace entry reopened the Korean body; lossy Markdown timing/speaker renumbering is not exact state restoration",
+    "reopenedElapsed": "2:15",
+    "normalQuit": "PASS - native Quit followed by absence of the tested application process; recording-time quit not exercised"
+  },
+  "retainedEngineEvents": {
+    "sha256": "32fe854c2f8bdd90f66e37509ba17c59142785d42cbb1217967d7173479c47d8",
+    "bytes": 35304,
+    "rows": 347,
+    "types": {
+      "meta": 1,
+      "ready": 1,
+      "word": 239,
+      "seg": 16,
+      "seg_end": 16,
+      "partial": 74
+    },
+    "validUtf8": true,
+    "replacementCharacters": 0,
+    "segments": 16,
+    "nonemptySegments": 16,
+    "droppedSegments": 0,
+    "languageTokens": {
+      "50264": 16
+    },
+    "completeFinalStream": false,
+    "captureLimitation": "Read-only polling retained 16 committed segment events and 17 input WAVs; last engine event may have raced normal scratch cleanup."
+  },
+  "retainedPCM": {
+    "count": 17,
+    "allMono16kS16": true,
+    "allNonSilent": true,
+    "overlapIncludedDurationSeconds": 182.799625,
+    "durationNote": "Sum includes overlapping segment context; it is not wall-clock recording duration."
+  },
+  "archive": {
+    "bytes": 3073,
+    "sha256": "e115f03914884871362f82467015bc63fe8b1ca785d8754da57f245825472ad9",
+    "transcriptRows": 33,
+    "validUtf8": true,
+    "replacementCharacters": 0,
+    "hangulSyllables": 575
+  },
+  "capturedFileTranslation": {
+    "status": "PASS",
+    "source": "seg00014.wav from the same system capture",
+    "sourceSHA256": "93c11faaa78e8573ba8faf510ca11305528f1634c351a793f59a7f5b937d0f39",
+    "sourceSeconds": 13,
+    "inputLanguage": "automatic",
+    "target": "English",
+    "observedTranslatedRows": 4,
+    "nativeDisplay": "Nonempty Korean and English text; translation backlog retired; detail/content switching worked",
+    "manualMarkdownExportSHA256": "9dfa1aeaca032b5ca490242e0aa25e534e5eaaeebda5a2150a0f75479f15821a",
+    "manualMarkdownExportBytes": 722,
+    "captionToggle": "On/off passed after restart; not proof of separate panel rendering",
+    "captionPanelAcceptance": "NOT_RUN - native tool exposed the main window, not the nonactivating caption panel. An earlier minimize/restore attempt stopped responding to content clicks; clean restart without minimization did not reproduce it.",
+    "concurrentLiveASRDNA": "NOT_RUN - this was a short file workflow, not sustained live concurrency"
+  },
+  "cleanup": {
+    "appAndCaptureEngineExited": true,
+    "preferencesWorkspaceGlossaryRestoredByteForByte": true,
+    "sourceWAVUnchanged": true,
+    "modelUnchanged": true,
+    "OSCaptureGrantRetained": true,
+    "browserTabClose": "UNCONFIRMED - Cmd+W attempted; later Chrome AX/screenshot requests timed out",
+    "rawEvidence": "Ignored local out/system-audio-20261122 only; no raw audio, transcript, preferences or event content committed"
+  },
+  "findings": [
+    "Debug capture setting is persisted but is not connected to a Tauri session diagnostic sink. Evidence used a read-only polling observer, not that setting.",
+    "Observer started after capture began, copied already-owned immutable segments, and retained a complete UTF-8 snapshot. Final tail events may have raced cleanup; do not interpret 16 segments as the full session total.",
+    "Setup media selection of the saved Markdown reached the unsupported-media error. Workspace archive opening passed. Both native implementations configure the setup picker for audiovisual types; generic Markdown import is not accepted.",
+    "No human reference transcript or CER was measured for this video; valid Korean UTF-8 is not an accuracy certification."
+  ],
+  "notAccepted": [
+    "Post-fix physical microphone and mixed input",
+    "Fresh-install denied/granted/restart TCC matrix",
+    "Input hot-swap/disconnect and self-audio exclusion on hardware",
+    "Quit while actively recording and sustained live ASR/DNA load",
+    "Separate caption/patient panel visual, focus, minimize/restore and monitor behavior",
+    "Complete UI/UX parity, AI workflows, debug bundle feature and release readiness",
+    "Windows GPU/device acceptance (user deferred)"
+  ]
+}

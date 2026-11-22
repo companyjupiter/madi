@@ -110,8 +110,16 @@ No real microphone transcript or audio is included in repository evidence.
   admission verified the visible countdown followed by Escape cancellation.
   Main close with Settings visible kept Settings open; closing that last window
   exited the app. No new OS permission was granted by the agent.
-- Fresh-install denied/granted/restart TCC scenarios, system/mixed hardware,
-  deterministic native resume/hot-swap/quit-during-recording, full pixel parity,
+- On 2026-11-22 native Chrome YouTube playback passes system-only capture,
+  Korean live transcription, pause/resume, stop, auto-save and workspace reopen.
+  The elapsed clock holds at 1:02 on pause and stops at 2:16. The retained event
+  snapshot has 16 Korean segments and 74 partials without invalid UTF-8; a
+  polling/cleanup race means final event coverage is not certified. Start was
+  already underway when the agent attempted admission, so countdown/action
+  attribution is not claimed. See `SYSTEM_AUDIO_VALIDATION.md` for evidence and
+  the separate short captured-file English translation check.
+- Fresh-install denied/granted/restart TCC scenarios, post-fix microphone/mixed
+  hardware, native hot-swap/quit-during-recording, full pixel parity,
   live-preview visual/timing acceptance, DNA admission, watchdog, audio retention,
   AI and Windows capture remain
   **NOT_RUN / incomplete**. This is an experimental debug candidate, not a
