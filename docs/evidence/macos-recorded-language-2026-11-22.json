@@ -185,7 +185,8 @@
     "apps/desktop/src/TranscriptLineText.tsx": "3322fcae3b3b2ee685db94bd4fd65ce3cb4ff66727f4136e35a67ae841c5a3ac",
     "apps/desktop/src/FileTranscript.tsx": "98ebb95b00e824e4b8b28c42dfc48b69ca9ce3202e309a274654efd7ac139207",
     "scripts/probe_live_language.py": "ce197ef273f24377189f954afcbd8e45e55f9cb293e6927bab2aeb480f84db44",
-    "scripts/test_probe_live_language.py": "b77a3a79e4b1713be77f49d3086815d344a67e282d67ec237ba54e97d4d4e60f"
+    "scripts/test_probe_live_language.py": "b77a3a79e4b1713be77f49d3086815d344a67e282d67ec237ba54e97d4d4e60f",
+    "apps/desktop/tests/transcript_line_text.test.mjs": "7f0c9117b199bd44d702dd56e7870aa44cd46bd99468879cc104bfc8ec59c52e"
   },
   "localEvidence": {
     "directory": "out/korean-validation-20261122",

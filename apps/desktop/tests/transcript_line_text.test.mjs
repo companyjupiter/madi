@@ -32,7 +32,7 @@ test('a whole-line correction replaces stale ASR words and their review links', 
 
 test('unedited ASR retains native punctuation spacing and low-confidence links', () => {
   const html = render(line);
-  assert.equal(html.replace(/<[^>]+>/g, ''), 'Original, words');
+  assert.equal(html, '<span><button class="review-word">Original</button></span><span>,</span><span> words</span>');
   assert.match(html, /<button class="review-word">Original<\/button>/);
   assert.equal((html.match(/<button/g) ?? []).length, 1);
 });
@@ -41,7 +41,7 @@ test('an individual word correction keeps other words available for review', () 
   const edited = 'Original, corrected';
   const value = { ...line, text: edited, editedText: edited, words: [...words.slice(0, 2), { ...words[2], text: 'corrected' }] };
   const html = render(value);
-  assert.equal(html.replace(/<[^>]+>/g, ''), edited);
+  assert.equal(html, '<span><button class="review-word">Original</button></span><span>,</span><span> corrected</span>');
   assert.match(html, /<button class="review-word">Original<\/button>/);
   assert.equal(hasReviewLinks(value, .55), true);
 });
