@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "cases": 4029,
+  "mismatches": 0,
+  "corpusSHA256": "c1c881f60d11e3f7769c69addd1b61a719b8a37a246520a1855161cc3385f000",
+  "resultSHA256": "73eb5c5ce69c536a252c8093c2c933512fd477c41dddbbc4f7387bdbbdd9bc3a",
+  "sources": {
+    "apps/macos/Sovereign/Transcript/TitleGenerator.swift": "3c47d52e7ed08a24e52bf66432705bdb22317ecacecb83dfbae1f58f6178124d",
+    "tests/parity/TitleOracle.swift": "84d797646eaaef6274a841bd60b3064661f1578e82baf454cd694fbd730b56a5",
+    "crates/madi-core/src/title.rs": "bc6510b6ba7942b2bec8268c77cb5945da4dc2fdeccd85814d08a1a3dbf7d3aa",
+    "crates/madi-platform/src/title.rs": "2eb07cd0ec9f0e16b9b59eb1d7b6d739b322511f5b7a6e1ed83dc062bc95baa6"
+  },
+  "scope": "Native macOS title sanitization and prompt only; final AI generation/rename are not connected.",
+  "date": "2026-11-22",
+  "baseCommit": "6d5d08a6cd7417ed12bac98a96dc5e6809708beb",
+  "rustTests": {
+    "passed": 213,
+    "ignored": 2
+  },
+  "clippy": "PASS -p madi-core -p madi-platform --all-targets -- -D warnings",
+  "rustfmt": "PASS",
+  "negativeCheck": "24-to-23 cap mutation fails; original source restored",
+  "notAccepted": [
+    "AI title generation and post-session integration",
+    "Final summary and generation-safe rename",
+    "Native system audio; OS authentication is pending"
+  ],
+  "localEvidence": {
+    "title-rust-tests.log": "a363f7d20bc60da67ada31dbae40c6e593bb19ef6c6e506b50890ac1a42d7a0a",
+    "title-clippy.log": "b78e316065cb5621702e160d56ea902dbac0aa25b7549a338830a7f23adca529",
+    "title-negative.log": "329b9e17b4a60ed785cb14455c697b9fe9fc0703879d8a00c17134602cde7354"
+  }
+}

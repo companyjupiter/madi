@@ -170,6 +170,7 @@ jobs:
           python3 scripts/check_glossary_parity.py
           python3 scripts/check_personal_vocabulary_parity.py
           python3 scripts/check_korean_numbers_parity.py
+          python3 scripts/check_title_parity.py
           python3 scripts/check_text_passes_parity.py
           python3 scripts/check_segmenter_parity.py
           python3 scripts/check_capture_bridge_parity.py
@@ -289,6 +290,7 @@ jobs:
             out/glossary-parity/report.json
             out/personal-vocabulary-parity/report.json
             out/korean-numbers-parity/report.json
+            out/title-parity/report.json
             out/text-passes-parity/report.json
             out/segmenter-parity/report.json
             out/capture-bridge-parity/report.json

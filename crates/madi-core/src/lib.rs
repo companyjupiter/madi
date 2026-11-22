@@ -15,6 +15,7 @@ pub mod session;
 pub mod settings;
 pub mod setup;
 pub mod text_passes;
+pub mod title;
 pub mod transcript;
 pub mod translation;
 pub mod workspace;

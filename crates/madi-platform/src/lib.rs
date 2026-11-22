@@ -40,3 +40,4 @@ pub mod workspace_service;
 
 #[cfg(target_os = "macos")]
 pub mod settings_toolbar;
+pub mod title;
