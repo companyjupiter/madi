@@ -1,6 +1,6 @@
 # Tauri migration status
 
-Updated 2026-11-09. **Migration is active, not complete.** macOS and Windows are
+Updated 2026-11-22. **Migration is active, not complete.** macOS and Windows are
 the initial targets; the user has prioritized macOS and deferred Windows GPU
 hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
@@ -14,6 +14,61 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 | G5 release | Experimental host is isolated and release builds are disabled | Licensing/package audit, signing, installer/update migration, rollback and all earlier gates |
 
 ## Measured checks
+
+- The 2026-11-22 recorded-audio campaign validates Korean fixes without new
+  microphone capture: 27 serial installed-model comparisons pass, including
+  20 predetermined public utterances from ten speakers. Baseline and candidate
+  have identical aggregate character errors (91/782); malformed UTF-8 cases
+  fall from 18 to zero, while required partial output remains present. Rejected
+  opening-language guesses recover and Korean/English switching passes. The
+  native M4A file workflow passes transcription, detail editing, automatic and
+  manual Markdown storage, immediate list refresh and reopen. Device microphone,
+  system/mixed capture and complete live-latency acceptance remain open.
+  See `evidence/macos-recorded-language-2026-11-22.json` and
+  `runtime/LIVE_LANGUAGE_DETECTION.md`. Test data and private logs stay local.
+
+- On 2026-11-10 the unlocked Mac completed the previously blocked Markdown
+  save/reopen. A real microphone session exercised countdown, capture, input
+  activity, pause (clock held at 0:41), stop and automatic archive. It also
+  exposed the user's reported language corruption: an ambiguous opening locked
+  all subsequent segments to Arabic, and incomplete UTF-8 BPE prefixes corrupted
+  Korean interim output. Auto input now rechecks each committed segment, confirms
+  a language change only after a credible decode, and withholds rejected guesses;
+  partial output emits complete Unicode scalars. Eight installed-model before/
+  after probes cover the actual captured PCM, Korean/English switches, silence,
+  public JFK and explicit Korean. All after cases exit successfully with valid
+  UTF-8. See `runtime/LIVE_LANGUAGE_DETECTION.md` and
+  `evidence/macos-native-language-2026-11-10.json`.
+  The rebuilt native app also transcribes a local Korean speech fixture exactly,
+  exports Markdown, immediately refreshes the workspace list (another corrected
+  defect), and reopens the same Korean text. Rust tests (211 passed, 2 ignored),
+  strict Clippy, frontend/render tests, Zig policy tests and bundle verification
+  pass. The post-fix hardware microphone attempt remains unaccepted: macOS
+  rejects the prior ad-hoc signature's grant, and the computer-use tool blocks
+  access to its permission-alert app. User permission was already granted;
+  manual OS interaction is still required. Resume, system/mixed capture and
+  human listening remain open. Test preferences/workspace/glossary were restored
+  byte-for-byte with the app stopped; raw microphone material stays local.
+
+- Native macOS validation on 2026-11-09 starts from merged main `0881446`.
+  The actual `.app` passes public JFK file selection, Metal transcription,
+  automatic Markdown creation, detailed-row playback/automatic stop/tap-again,
+  sentence editing and manual plain-text export. The previous AVPlayer boundary
+  failure no longer reproduces: all real silent-file probe checks pass without
+  audio-service or output-device changes. Audible quality is not certified.
+  A native interaction exposed a detail-view bug: editing a sentence changed
+  content mode and exports but detail mode kept rendering the original words.
+  The candidate now renders the committed correction when acoustic words differ,
+  retaining review links for untouched/individually corrected words. The rebuilt
+  app visibly passes the same edit; three rendering regressions (including a
+  failing mutation), five IPC/queue checks and the frontend/app build pass.
+  This is an intentional correction of a behavior also present in the unchanged
+  Swift detail renderer, not a claim of exact parity with that bug. Korean dark
+  setup/Settings and English light transcript were observed; the full UI matrix
+  remains open. The new ad-hoc signature requires microphone reconfirmation.
+  The Mac subsequently locked during Markdown export, so that save/reopen flow,
+  permission confirmation, microphone/system/mixed capture and remaining UI
+  coverage are pending. See `evidence/macos-native-ui-audio-2026-11-09.json`.
 
 - The `0d482c4` macOS push/PR jobs failed two mid-session reconciliation tests:
   the fixture inherited the host RAM gate, so the 7 GB Apple Silicon runner

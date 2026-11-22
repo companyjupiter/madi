@@ -242,7 +242,8 @@ pub async fn workspace_export(
     if current.generation != file_generation || current.lines.is_empty() {
         return Ok(());
     }
-    let workspace = service(&app)?.snapshot();
+    let workspace_service = service(&app)?;
+    let workspace = workspace_service.snapshot();
     let settings = workspace.editor_settings;
     let host = app.state::<WorkspaceHost>();
     if host.dialog_open.swap(true, Ordering::AcqRel) {
@@ -271,7 +272,13 @@ pub async fn workspace_export(
                 files
                     .export_to(file_generation, path, format, settings)
                     .await
-                    .map_err(|error| error.to_string())
+                    .map_err(|error| error.to_string())?;
+                // A manual Markdown export can create or replace a file in
+                // the workspace just as an automatic checkpoint does.
+                if let Err(error) = workspace_service.reload() {
+                    eprintln!("workspace refresh after export: {error}");
+                }
+                Ok(())
             }
             .await;
             let _ = sender.try_send(result);

@@ -2,9 +2,12 @@
 
 This is an **isolated, debug-only UI parity harness**, not the Madi product.
 The existing `apps/macos` app remains the shipping implementation.
-The host has its own `tv.devart.madi.parity` identifier and only in-memory setup
-state. On macOS it now reads the original model locations and exposes explicit
-model downloads. It does not migrate settings or read/write meetings.
+The host has its own `tv.devart.madi.parity` identifier and persists its settings
+separately. On macOS it reads the original model locations and initial settings,
+exposes explicit model downloads, and connects file/live transcription,
+translation, transcript editing, archives, exports, playback and captions.
+The archive folder can initially inherit the shipping app's folder; choose a
+separate test folder before validation against existing user data.
 
 ## Run
 
@@ -28,6 +31,8 @@ npm ci
 npm run tauri dev -- --no-watch
 ```
 
+For the focused transcript-rendering regressions, run `npm run test:ui`.
+
 For an executable with embedded frontend assets (no Vite server):
 
 ```sh
@@ -38,10 +43,11 @@ cargo build --locked -p madi-desktop --features custom-protocol
 ```
 
 Release builds deliberately fail until product runtime and migration gates are
-implemented. The debug executable has no connected recording, transcription,
-saving or updater. Start buttons currently emit a
-`madi-parity-intent` DOM event for the visual harness only; they do not pretend to
-start an inference session. Do not distribute this as a working Madi release.
+implemented. In the native macOS host, Start buttons call the real Rust workflow
+and installed inference engines. The browser fixture remains read-only. Final
+summary/title, coach, calendar/voice identity, Windows native audio/ASR and
+installer/update migration remain incomplete. Do not distribute this debug
+candidate as a working Madi release.
 
 macOS dev/build hooks stage the Cargo-built decoder, original ASR engine,
 checksum-verified DNA2B/4B engines, seven runtime assets and their notices.

@@ -1,0 +1,177 @@
+{
+  "date": "2026-11-09",
+  "baseCommit": "08814465cf2078d1a1dfa0dece467bbc6baf1bf0",
+  "branch": "codex/macos-native-ui-audio",
+  "environment": {
+    "platform": "macOS",
+    "version": "27.2",
+    "build": "26B123",
+    "architecture": "arm64",
+    "defaultInput": "MacBook Pro Microphone",
+    "defaultOutput": "MacBook Pro Speakers"
+  },
+  "scope": "Actual debug Tauri .app with embedded frontend, native file panels, installed Metal ASR and AVPlayer. No browser fixture or fake native IPC.",
+  "fixture": {
+    "source": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/4da27c41cebadb3cbbcd2563e9c7cbc8d84bdcad/samples/jfk.wav",
+    "bytes": 352078,
+    "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  },
+  "playback": {
+    "boundaries": [
+      {
+        "elapsed": 1.9222937500000001,
+        "from": 0.0,
+        "passed": true,
+        "to": 0.3
+      },
+      {
+        "elapsed": 0.405910375,
+        "from": 0.5,
+        "passed": true,
+        "to": 0.5
+      },
+      {
+        "elapsed": 0.505018333,
+        "from": -0.1,
+        "passed": true,
+        "to": 0.4
+      }
+    ],
+    "dropPendingSeek": true,
+    "events": [
+      null,
+      "00000000-0000-0000-0000-000000000001",
+      null,
+      "00000000-0000-0000-0000-000000000001",
+      null,
+      "00000000-0000-0000-0000-000000000001",
+      null,
+      "00000000-0000-0000-0000-000000000001",
+      null,
+      "00000000-0000-0000-0000-000000000001",
+      "00000000-0000-0000-0000-000000000002",
+      "00000000-0000-0000-0000-000000000001",
+      null,
+      "00000000-0000-0000-0000-000000000002",
+      null,
+      "00000000-0000-0000-0000-000000000001",
+      null
+    ],
+    "invalidSpanRejected": true,
+    "rapidSameLineBoundary": true,
+    "scope": "Actual AVPlayer with silent file; no UI or microphone input; output-device playback quality not certified",
+    "status": "passed",
+    "stopPendingSeek": true,
+    "tapAgainStops": true
+  },
+  "nativeUi": [
+    {
+      "check": "Korean dark setup and Recording settings comparison",
+      "result": "observed",
+      "note": "Shipping Swift app and candidate screenshots inspected. Full pixel/action matrix remains open."
+    },
+    {
+      "check": "Native file chooser, staging, actual JFK transcription and automatic Markdown archive",
+      "result": "passed",
+      "runs": 2,
+      "note": "Separate test folder; second run created jfk 2.md without replacing jfk.md."
+    },
+    {
+      "check": "Detail-row playback and natural boundary stop",
+      "result": "passed"
+    },
+    {
+      "check": "Rebuilt candidate playback and second-click stop after edit",
+      "result": "passed"
+    },
+    {
+      "check": "Whole-line edit in detail view",
+      "before": "failed: original words remained visible while content mode and exported text changed",
+      "after": "passed: rebuilt app visibly displays the corrected sentence"
+    },
+    {
+      "check": "Manual plain-text export includes latest edit",
+      "result": "passed"
+    },
+    {
+      "check": "English appearance controls, Settings scrolling, main-window light appearance",
+      "result": "passed",
+      "note": "Settings intentionally follows system appearance, matching the original standalone Swift Settings scene."
+    },
+    {
+      "check": "Manual Markdown export and reopen after fix",
+      "result": "blocked",
+      "note": "Mac locked while entering the output filename; Save was not confirmed."
+    },
+    {
+      "check": "Microphone admission",
+      "result": "blocked",
+      "note": "New ad-hoc code signature no longer matches existing TCC microphone grant. OS log shows deferred permission prompt. User confirmation requested; no new grant made."
+    }
+  ],
+  "change": {
+    "problem": "Detail view mapped acoustic words even when a whole-line edit had replaced the committed text.",
+    "fix": "Use committed text when it differs from retained acoustic words; retain confidence links when word-level corrections still match rendered words.",
+    "nativeReference": "Unchanged Swift TranscriptView.attributed also maps line.words; this is a deliberate candidate bug fix, not exact parity with the stale-text behavior.",
+    "sources": {
+      "apps/desktop/src/FileTranscript.tsx": "98ebb95b00e824e4b8b28c42dfc48b69ca9ce3202e309a274654efd7ac139207",
+      "apps/desktop/src/TranscriptLineText.tsx": "3322fcae3b3b2ee685db94bd4fd65ce3cb4ff66727f4136e35a67ae841c5a3ac",
+      "apps/macos/Sovereign/UI/TranscriptView.swift": "dd7a53f78e029120dbaae5e554bbd891d7a4d21182a8d40e282ccae60655c08f"
+    }
+  },
+  "validation": {
+    "renderTests": {
+      "passed": 3,
+      "failed": 0
+    },
+    "mutation": "Removing the committed-text branch fails the whole-line regression; two unaffected cases pass. Source restored and all three pass.",
+    "ipcAndQueueTests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "frontendBuild": "passed",
+    "macosDebugAppBundle": "passed",
+    "rustSuite": "not rerun: no Rust/native implementation changed",
+    "gitDiffCheck": "passed"
+  },
+  "bundle": {
+    "executableSha256": "d438607256886cb7af2dca2ac3e0e6c3b72e9adc24f0d4b0e27225c7399e36bc",
+    "signing": "ad-hoc",
+    "notarization": false
+  },
+  "localEvidence": {
+    "directory": "out/native-validation-20261109",
+    "files": {
+      "build-after.log": "fde0448af1c9d2c5fcedfabb6f556f10072d681ba55d1447e9946333a9cde9c9",
+      "build-before.log": "7f18bd2a6af264fb5a42a7cf9b7f4e1a0f1ae86a83b7fb95059c9d618b2c9f2e",
+      "edit-detail-after.png": "ec46470f978531f085f621310e4f8f31fc1b8cc9f9e5c5c110de627cac2ca67d",
+      "edit-render-green.log": "395b9cc1444e6972cf6180418c8d7300156dd0d9081a9528f64b17c3b64a2af7",
+      "edit-render-mutant.log": "cabf040cff6a8d10ec84d54a7ae52bb22712fe3eca40a726419f7ba39f4857ab",
+      "edit-render-red.log": "7f79c06b19766bcafde42daa2e861d21319d5d041f00506b7134a14880cbffce",
+      "file-playback.png": "e48134fae03d4a18a2c3b200e0d96680b397b81117235353fec5e5a51a2923f7",
+      "native-settings-ko-dark.png": "ca2f64d9b689e955463c04a1d6cf6b9e0c9daf8ec9deb3de4ab2a3e752c4157e",
+      "native-setup-ko-dark.png": "d64585efa69bac39078932df645abbb49352e4584dfbda07e3f0c0cf02177266",
+      "playback-before.log": "7db2e235b32d48d81f81331173b6a6e256194553d02f97f84017a75947a6e24a",
+      "tauri-settings-ko-dark.png": "2c2fa5e5dd66bf5cd6663af3c6d34bd2011b3597404cbb79395f16c3c59a03e2",
+      "tauri-setup-ko-dark.png": "5f39df0a2b1070fb91e71edd9f916ea85228377e2bbe429c3fd07d2ed9fd70ca",
+      "transcript-en-light.png": "e2019eefb57fce71411a5ef95eca9dd3114d25ec6f53b7926a1f0892ba8902e4"
+    }
+  },
+  "notAccepted": [
+    "Human listening/actual speaker quality",
+    "New microphone permission and capture",
+    "System/mixed capture",
+    "Full ko/en/ja and light/dark action matrix",
+    "Japanese UI",
+    "Captions/fullscreen/multi-display acceptance",
+    "Windows native audio/ASR",
+    "Release signing, installer and updater"
+  ],
+  "preservation": {
+    "originalCheckout": "untouched",
+    "models": "reused; not modified",
+    "testFolder": "out/native-validation-20261109/meetings",
+    "preferenceBackups": "preferences-before.json, workspace-before.json and glossary-before.json retained locally under evidence directory; excluded from repository",
+    "restoration": "pending: app remains at native Save panel while Mac is locked; do not replace preferences under the running owner"
+  }
+}
