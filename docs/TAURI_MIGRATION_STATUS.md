@@ -15,6 +15,15 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- The 2026-11-22 title-policy slice matches unchanged Swift title sanitization
+  and prompts across 4,029 deterministic native cases, including Korean NFD,
+  extended graphemes, filename characters and whitespace. Rust regressions
+  pass (213 tests, 2 ignored), strict shared-code Clippy passes, and a deliberate
+  24-to-23 length-limit mutation fails. The macOS adapter uses the installed
+  Foundation alphanumeric classifier. Final AI title/summary requests and rename
+  wiring remain unconnected; this is a policy gate only. See
+  `runtime/TITLE_POLICY.md` and `evidence/macos-title-policy-2026-11-22.json`.
+
 - The 2026-11-22 recorded-audio campaign validates Korean fixes without new
   microphone capture: 27 serial installed-model comparisons pass, including
   20 predetermined public utterances from ten speakers. Baseline and candidate
