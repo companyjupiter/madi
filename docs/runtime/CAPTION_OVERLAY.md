@@ -69,7 +69,17 @@ When AppKit artwork is unavailable, the toolbar uses the same provisional SVG
 caption motif as the overlay instead of an empty, zero-width button. This does
 not establish Windows icon parity with the original SF Symbol.
 
-Native visual/UX acceptance is **NOT_RUN** while the Mac is locked. Exact text
+On 2026-11-22 the unlocked Mac completed Korean transcription and English
+translation of a 13-second WAV captured from YouTube system audio. All four
+translated rows reached the native main view and a local Markdown export.
+Caption on/off and detail/content toggling passed after a clean restart.
+The computer-use tool exposed the main window rather than the nonactivating
+caption panel. An earlier minimize/restore attempt left main content clicks
+unresponsive; a restart without minimization did not reproduce it. Separate
+panel rendering and this minimize/restore path remain unaccepted, rather than
+being inferred from the toggle state. See `SYSTEM_AUDIO_VALIDATION.md`.
+
+Native visual/UX acceptance remains **NOT_RUN**. Exact text
 wrapping/minimum scaling, native content-height behavior, focus retention,
 dragging, Spaces/fullscreen, screen hot-plug and patient enable/disable need
 comparison in the original and candidate apps. Actual native release/recreate

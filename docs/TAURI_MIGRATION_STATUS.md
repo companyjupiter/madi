@@ -15,6 +15,21 @@ hardware until later. The source baseline is Madi `c1390c7` / 0.4.1.
 
 ## Measured checks
 
+- The 2026-11-22 native YouTube check passes system-only capture through
+  ScreenCaptureKit, Korean live transcription, pause at 1:02, resume, stop at
+  2:16, automatic Markdown storage and workspace reopen. User-granted system
+  audio permission was observed on. The retained event snapshot contains 16
+  nonempty Korean segments and 74 partials with valid UTF-8; it may omit final
+  tail events and is not a complete event ledger or ASR accuracy measurement.
+  A separate 13-second captured WAV also passes native Korean-to-English
+  translation and Markdown export. Caption toggling passes after restart;
+  separate panel rendering and minimize/restore remain unaccepted. Test settings
+  were restored byte-for-byte after exit. Physical microphone/mixed capture,
+  full TCC/hardware matrices, sustained live ASR/DNA concurrency and full UI/UX
+  remain open. The debug-capture setting has no Tauri diagnostic sink yet.
+  See `runtime/SYSTEM_AUDIO_VALIDATION.md` and
+  `evidence/macos-youtube-system-audio-2026-11-22.json`.
+
 - The 2026-11-22 title-policy slice matches unchanged Swift title sanitization
   and prompts across 4,029 deterministic native cases, including Korean NFD,
   extended graphemes, filename characters and whitespace. Rust regressions
